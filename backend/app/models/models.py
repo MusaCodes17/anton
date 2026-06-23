@@ -19,6 +19,8 @@ class Shoe(Base):
     # Size intentionally removed: we track a model across ALL sizes so the
     # scraper isn't restricted to one exact size that may be out of stock.
     target_price = Column(Float, nullable=False)  # Price we want to pay
+    msrp = Column(Float, nullable=True)  # Manufacturer's list price — kept separate
+    # from target_price so "at target" and "actually below MSRP" can't be confused.
     notes = Column(Text, nullable=True)  # Any additional notes
     is_active = Column(Boolean, default=True)  # Whether to actively monitor this shoe
     created_at = Column(DateTime(timezone=True), server_default=func.now())

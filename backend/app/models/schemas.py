@@ -13,6 +13,7 @@ class ShoeBase(BaseModel):
     brand: str = Field(..., min_length=1, max_length=100, description="Shoe brand")
     model: str = Field(..., min_length=1, max_length=200, description="Shoe model")
     target_price: float = Field(..., gt=0, description="Target price we want to pay")
+    msrp: Optional[float] = Field(None, gt=0, description="Manufacturer's list price")
     notes: Optional[str] = Field(None, description="Additional notes")
     is_active: bool = Field(True, description="Whether to actively monitor this shoe")
 
@@ -27,6 +28,7 @@ class ShoeUpdate(BaseModel):
     brand: Optional[str] = Field(None, min_length=1, max_length=100)
     model: Optional[str] = Field(None, min_length=1, max_length=200)
     target_price: Optional[float] = Field(None, gt=0)
+    msrp: Optional[float] = Field(None, gt=0)
     notes: Optional[str] = None
     is_active: Optional[bool] = None
 

@@ -2,6 +2,7 @@
 API routes for managing shoes
 """
 from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 from typing import List
 
@@ -9,7 +10,7 @@ from app.database import get_db
 from app.models import (
     Shoe, ShoeCreate, ShoeUpdate, ShoeResponse, ShoeTestRequest
 )
-from app.models.models import Deal
+from app.models.models import Deal, PriceRecord
 from app.scrapers.scraper_manager import ScraperManager
 
 router = APIRouter(prefix="/shoes", tags=["shoes"])
@@ -58,6 +59,65 @@ def get_shoes(
     
     shoes = query.offset(skip).limit(limit).all()
     return shoes
+
+
+@router.get("/summary", response_model=List[dict])
+def get_shoes_summary(db: Session = Depends(get_db)):
+    """
+    Bulk per-shoe summary for the Shoes list page: a default price, image,
+    and retailer count derived from the LATEST price record per retailer —
+    regardless of whether that price is currently a "deal". Without this,
+    shoes with no active deal would show a blank price/image/retailer count
+    even though we've successfully scraped them. One query for all shoes
+    (not per-shoe) to avoid an N+1 fetch from the list page.
+    """
+    rn = (
+        func.row_number()
+        .over(
+            partition_by=[PriceRecord.shoe_id, PriceRecord.retailer_id],
+            order_by=PriceRecord.scraped_at.desc(),
+        )
+        .label("rn")
+    )
+    ranked = db.query(
+        PriceRecord.shoe_id.label("shoe_id"),
+        PriceRecord.retailer_id.label("retailer_id"),
+        PriceRecord.price.label("price"),
+        PriceRecord.image_url.label("image_url"),
+        rn,
+    ).subquery()
+    latest = db.query(ranked).filter(ranked.c.rn == 1).subquery()
+
+    aggregates = (
+        db.query(
+            latest.c.shoe_id,
+            func.min(latest.c.price).label("default_price"),
+            func.count(latest.c.retailer_id).label("retailers_scraped"),
+        )
+        .group_by(latest.c.shoe_id)
+        .all()
+    )
+
+    # Any real product image is fine ("any colorway") — use the cheapest
+    # retailer's image so it lines up with default_price above.
+    image_by_shoe = {}
+    for shoe_id, price, image_url in (
+        db.query(latest.c.shoe_id, latest.c.price, latest.c.image_url)
+        .filter(latest.c.image_url.isnot(None))
+        .order_by(latest.c.shoe_id, latest.c.price.asc())
+        .all()
+    ):
+        image_by_shoe.setdefault(shoe_id, image_url)
+
+    return [
+        {
+            "shoe_id": shoe_id,
+            "default_price": default_price,
+            "retailers_scraped": retailers_scraped,
+            "image_url": image_by_shoe.get(shoe_id),
+        }
+        for shoe_id, default_price, retailers_scraped in aggregates
+    ]
 
 
 @router.get("/{shoe_id}", response_model=ShoeResponse)

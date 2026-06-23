@@ -68,7 +68,8 @@ def get_recent_deals(limit: int = 10, db: Session = Depends(get_db)):
         "id": deal.id,
         "shoe": {
             "brand": deal.shoe.brand,
-            "model": deal.shoe.model
+            "model": deal.shoe.model,
+            "msrp": deal.shoe.msrp
         },
         "retailer": deal.retailer.name,
         "current_price": deal.current_price,
@@ -96,7 +97,8 @@ def get_best_deals(limit: int = 10, db: Session = Depends(get_db)):
         "id": deal.id,
         "shoe": {
             "brand": deal.shoe.brand,
-            "model": deal.shoe.model
+            "model": deal.shoe.model,
+            "msrp": deal.shoe.msrp
         },
         "retailer": deal.retailer.name,
         "current_price": deal.current_price,
