@@ -41,7 +41,7 @@ export default function ScrapeButton({ className, ...props }) {
       {...props}
     >
       <RefreshCw className={cn('h-4 w-4', scrape.isPending && 'animate-spin')} />
-      {scrape.isPending ? 'Scraping…' : 'Scrape Now'}
+      {scrape.isPending ? 'Scanning…' : 'Run scan'}
     </Button>
   )
 }

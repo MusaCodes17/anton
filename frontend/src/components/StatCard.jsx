@@ -1,34 +1,20 @@
-import { Card, CardContent } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
-import { cn } from '@/lib/utils'
 
-/** Compact metric tile for the dashboard. */
-export default function StatCard({ label, value, icon: Icon, hint, loading, accent }) {
+/** Compact metric tile for the dashboard ("Velocity" stat-tile style). */
+export default function StatCard({ label, value, hint, loading }) {
   return (
-    <Card>
-      <CardContent className="flex items-center gap-4 p-5">
-        {Icon && (
-          <div
-            className={cn(
-              'flex h-11 w-11 shrink-0 items-center justify-center rounded-lg',
-              accent || 'bg-primary/10 text-primary'
-            )}
-          >
-            <Icon className="h-5 w-5" />
-          </div>
-        )}
-        <div className="min-w-0">
-          <p className="text-sm text-muted-foreground">{label}</p>
-          {loading ? (
-            <Skeleton className="mt-1 h-7 w-16" />
-          ) : (
-            <p className="truncate text-2xl font-bold">{value}</p>
-          )}
-          {hint && !loading && (
-            <p className="text-xs text-muted-foreground">{hint}</p>
-          )}
+    <div className="rounded-[13px] border border-border bg-surface p-[17px]">
+      <div className="text-[11px] font-semibold uppercase tracking-[0.1em] text-muted-foreground">
+        {label}
+      </div>
+      {loading ? (
+        <Skeleton className="mt-2 h-8 w-16" />
+      ) : (
+        <div className="mt-2 font-heading text-[32px] font-extrabold leading-none text-foreground">
+          {value}
         </div>
-      </CardContent>
-    </Card>
+      )}
+      {hint && !loading && <div className="mt-1.5 text-xs text-muted-foreground">{hint}</div>}
+    </div>
   )
 }

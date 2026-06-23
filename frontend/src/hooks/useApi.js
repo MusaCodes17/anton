@@ -10,6 +10,7 @@ import {
 // Centralized query keys so mutations can invalidate precisely.
 export const queryKeys = {
   shoes: (params) => ['shoes', params ?? {}],
+  shoesSummary: () => ['shoes', 'summary'],
   shoe: (id) => ['shoes', 'detail', id],
   shoePrices: (id) => ['shoes', id, 'prices'],
   retailers: (params) => ['retailers', params ?? {}],
@@ -24,6 +25,13 @@ export function useShoes(params) {
   return useQuery({
     queryKey: queryKeys.shoes(params),
     queryFn: () => shoesApi.list(params),
+  })
+}
+
+export function useShoesSummary() {
+  return useQuery({
+    queryKey: queryKeys.shoesSummary(),
+    queryFn: () => shoesApi.summary(),
   })
 }
 

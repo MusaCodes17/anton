@@ -13,8 +13,9 @@ import { formatCurrency, formatDate } from '@/lib/utils'
 import { EmptyState } from '@/components/StatusViews'
 import { LineChart as LineChartIcon } from 'lucide-react'
 
-// Distinct colors per retailer line.
-const COLORS = ['#16a34a', '#2563eb', '#db2777', '#d97706', '#7c3aed', '#0891b2']
+// Distinct colors per retailer line (the first, primary green, is reserved
+// visually for the "Velocity" accent elsewhere, so retailer lines start at blue).
+const COLORS = ['#3B6FE0', '#E0186E', '#C8F032', '#7c3aed', '#0891b2', '#d97706']
 
 /**
  * Line chart of price over time, one line per retailer.
@@ -60,30 +61,39 @@ export default function PriceChart({ records = [], targetPrice }) {
   return (
     <ResponsiveContainer width="100%" height={300}>
       <LineChart data={data} margin={{ top: 10, right: 16, left: 0, bottom: 0 }}>
-        <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
-        <XAxis dataKey="date" tick={{ fontSize: 12 }} stroke="currentColor" />
+        <CartesianGrid strokeDasharray="3 3" stroke="#1E2126" />
+        <XAxis
+          dataKey="date"
+          tick={{ fontSize: 11, fill: '#6A6F76' }}
+          stroke="#1E2126"
+          fontFamily="JetBrains Mono, monospace"
+        />
         <YAxis
-          tick={{ fontSize: 12 }}
-          stroke="currentColor"
+          tick={{ fontSize: 11, fill: '#6A6F76' }}
+          stroke="#1E2126"
+          fontFamily="JetBrains Mono, monospace"
           tickFormatter={(v) => `$${v}`}
           width={56}
         />
         <Tooltip
           formatter={(value) => formatCurrency(value)}
           contentStyle={{
-            borderRadius: 8,
-            border: '1px solid hsl(var(--border))',
-            background: 'hsl(var(--background))',
+            borderRadius: 10,
+            border: '1px solid var(--border)',
+            background: 'var(--popover)',
             fontSize: 12,
+            color: 'var(--foreground)',
           }}
+          labelStyle={{ color: 'var(--muted-foreground)' }}
         />
-        <Legend wrapperStyle={{ fontSize: 12 }} />
+        <Legend wrapperStyle={{ fontSize: 12, color: 'var(--muted-foreground)' }} />
         {targetPrice != null && (
           <Line
             type="monotone"
             dataKey={() => targetPrice}
             name="Target"
-            stroke="hsl(var(--muted-foreground))"
+            stroke="oklch(0.74 0.17 153)"
+            strokeOpacity={0.5}
             strokeDasharray="6 4"
             dot={false}
             isAnimationActive={false}

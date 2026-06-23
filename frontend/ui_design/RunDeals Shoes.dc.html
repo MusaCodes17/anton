@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700;800;900&family=Hanken+Grotesk:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; }
+  html,body { height:100%; }
+  body { background:#0E0F11; }
+  ::-webkit-scrollbar { width:10px; }
+  ::-webkit-scrollbar-thumb { background:#2A2E34; border-radius:6px; border:3px solid #0E0F11; }
+</style>
+</helmet>
+
+<div style="display:flex;height:100vh;background:#0E0F11;font-family:'Hanken Grotesk',sans-serif;color:#F2F2F0;overflow:hidden;">
+
+  <!-- ============ SIDEBAR ============ -->
+  <div style="width:236px;flex:none;background:#101215;border-right:1px solid #1E2126;padding:24px 16px;display:flex;flex-direction:column;">
+    <div style="display:flex;align-items:center;gap:11px;padding:0 8px 30px;">
+      <span style="width:28px;height:28px;border-radius:8px;background:oklch(0.74 0.17 153);display:flex;align-items:center;justify-content:center;"><span style="width:11px;height:11px;background:#0E0F11;border-radius:2px;transform:rotate(45deg);"></span></span>
+      <span style="font-family:'Archivo',sans-serif;font-weight:800;font-size:19px;letter-spacing:-0.02em;color:#F2F2F0;">RunDeals</span>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:4px;">
+      <a href="RunDeals Velocity.dc.html" style="text-decoration:none;display:flex;align-items:center;gap:12px;padding:11px 12px;border-radius:9px;color:#8A8F96;font-weight:500;font-size:14px;"><span style="width:7px;height:7px;border-radius:2px;background:#3A3E44;transform:rotate(45deg);"></span>Dashboard</a>
+      <a href="RunDeals Deals.dc.html" style="text-decoration:none;display:flex;align-items:center;gap:12px;padding:11px 12px;border-radius:9px;color:#8A8F96;font-weight:500;font-size:14px;"><span style="width:7px;height:7px;border-radius:2px;background:#3A3E44;transform:rotate(45deg);"></span>Deals</a>
+      <a href="RunDeals Shoes.dc.html" style="text-decoration:none;display:flex;align-items:center;gap:12px;padding:11px 12px;border-radius:9px;background:oklch(0.74 0.17 153 / 0.13);color:oklch(0.8 0.16 153);font-weight:700;font-size:14px;"><span style="width:7px;height:7px;border-radius:2px;background:oklch(0.74 0.17 153);transform:rotate(45deg);"></span>Shoes</a>
+      <a href="RunDeals Retailers.dc.html" style="text-decoration:none;display:flex;align-items:center;gap:12px;padding:11px 12px;border-radius:9px;color:#8A8F96;font-weight:500;font-size:14px;"><span style="width:7px;height:7px;border-radius:2px;background:#3A3E44;transform:rotate(45deg);"></span>Retailers</a>
+    </div>
+    <div style="margin-top:auto;display:flex;align-items:center;gap:9px;padding:12px 10px;border-top:1px solid #1E2126;">
+      <span style="width:8px;height:8px;border-radius:50%;background:oklch(0.74 0.17 153);box-shadow:0 0 0 3px oklch(0.74 0.17 153 / 0.18);"></span>
+      <span style="font-size:12px;color:#6A6F76;">Last scraped 8 min ago</span>
+    </div>
+  </div>
+
+  <!-- ============ CONTENT ============ -->
+  <div style="flex:1;padding:30px 34px;display:flex;flex-direction:column;overflow-y:auto;">
+
+    <!-- header -->
+    <div style="display:flex;align-items:flex-end;justify-content:space-between;margin-bottom:24px;">
+      <div>
+        <div style="font-family:'JetBrains Mono',monospace;font-size:12px;letter-spacing:0.14em;color:oklch(0.78 0.16 153);font-weight:600;">SHOES</div>
+        <div style="font-family:'Archivo',sans-serif;font-size:30px;font-weight:800;color:#F2F2F0;margin-top:6px;letter-spacing:-0.01em;">Tracked shoes <span style="color:#6A6F76;font-weight:600;font-size:22px;">36</span></div>
+      </div>
+      <div style="display:flex;gap:12px;align-items:center;">
+        <div style="display:flex;align-items:center;gap:9px;background:#16181B;border:1px solid #23262B;border-radius:10px;padding:10px 14px;width:200px;">
+          <span style="width:12px;height:12px;border-radius:50%;border:2px solid #565B62;"></span>
+          <span style="font-size:13px;color:#6A6F76;">Search shoes…</span>
+        </div>
+        <div style="background:oklch(0.74 0.17 153);color:#0E0F11;font-family:'Archivo',sans-serif;font-weight:800;font-size:14px;padding:11px 18px;border-radius:10px;display:flex;align-items:center;gap:7px;"><span style="font-size:17px;line-height:0.7;">+</span> Add shoe</div>
+      </div>
+    </div>
+
+    <!-- shoes grid -->
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:14px;">
+
+      <!-- card -->
+      <a href="RunDeals Shoe Detail.dc.html" style="text-decoration:none;background:#16181B;border:1px solid #23262B;border-radius:14px;overflow:hidden;display:flex;flex-direction:column;">
+        <div style="display:flex;gap:14px;padding:16px;">
+          <div style="width:74px;height:74px;flex:none;border-radius:11px;background:repeating-linear-gradient(135deg,#202327,#202327 6px,#26292E 6px,#26292E 12px);"></div>
+          <div style="flex:1;min-width:0;">
+            <div style="font-size:11px;letter-spacing:0.08em;text-transform:uppercase;color:oklch(0.78 0.16 153);font-weight:700;">Saucony</div>
+            <div style="font-family:'Archivo',sans-serif;font-size:17px;font-weight:700;color:#F2F2F0;line-height:1.2;margin-top:2px;">Endorphin Speed 4</div>
+            <div style="display:inline-flex;align-items:center;gap:6px;margin-top:8px;background:oklch(0.74 0.17 153 / 0.13);border-radius:6px;padding:3px 8px;"><span style="width:6px;height:6px;border-radius:50%;background:oklch(0.74 0.17 153);"></span><span style="font-size:11px;font-weight:700;color:oklch(0.8 0.16 153);">On sale now</span></div>
+          </div>
+        </div>
+        <div style="display:flex;border-top:1px solid #1E2126;">
+          <div style="flex:1;padding:12px 16px;border-right:1px solid #1E2126;"><div style="font-size:11px;color:#6A6F76;text-transform:uppercase;letter-spacing:0.06em;">Lowest seen</div><div style="font-family:'Archivo',sans-serif;font-size:17px;font-weight:800;color:#F2F2F0;margin-top:3px;">$134.39</div></div>
+          <div style="flex:1;padding:12px 16px;"><div style="font-size:11px;color:#6A6F76;text-transform:uppercase;letter-spacing:0.06em;">Retailers</div><div style="font-family:'Archivo',sans-serif;font-size:17px;font-weight:800;color:#F2F2F0;margin-top:3px;">6</div></div>
+        </div>
+        <div style="display:flex;border-top:1px solid #1E2126;">
+          <div style="flex:1;text-align:center;padding:11px;font-size:13px;font-weight:700;color:#C4C8CE;border-right:1px solid #1E2126;">Edit</div>
+          <div style="flex:1;text-align:center;padding:11px;font-size:13px;font-weight:700;color:#8A8F96;">Remove</div>
+        </div>
+      </a>
+
+      <a href="RunDeals Shoe Detail.dc.html" style="text-decoration:none;background:#16181B;border:1px solid #23262B;border-radius:14px;overflow:hidden;display:flex;flex-direction:column;">
+        <div style="display:flex;gap:14px;padding:16px;">
+          <div style="width:74px;height:74px;flex:none;border-radius:11px;background:repeating-linear-gradient(135deg,#202327,#202327 6px,#26292E 6px,#26292E 12px);"></div>
+          <div style="flex:1;min-width:0;">
+            <div style="font-size:11px;letter-spacing:0.08em;text-transform:uppercase;color:oklch(0.78 0.16 153);font-weight:700;">Brooks</div>
+            <div style="font-family:'Archivo',sans-serif;font-size:17px;font-weight:700;color:#F2F2F0;line-height:1.2;margin-top:2px;">Ghost 16</div>
+            <div style="display:inline-flex;align-items:center;gap:6px;margin-top:8px;background:oklch(0.74 0.17 153 / 0.13);border-radius:6px;padding:3px 8px;"><span style="width:6px;height:6px;border-radius:50%;background:oklch(0.74 0.17 153);"></span><span style="font-size:11px;font-weight:700;color:oklch(0.8 0.16 153);">On sale now</span></div>
+          </div>
+        </div>
+        <div style="display:flex;border-top:1px solid #1E2126;">
+          <div style="flex:1;padding:12px 16px;border-right:1px solid #1E2126;"><div style="font-size:11px;color:#6A6F76;text-transform:uppercase;letter-spacing:0.06em;">Lowest seen</div><div style="font-family:'Archivo',sans-serif;font-size:17px;font-weight:800;color:#F2F2F0;margin-top:3px;">$107.99</div></div>
+          <div style="flex:1;padding:12px 16px;"><div style="font-size:11px;color:#6A6F76;text-transform:uppercase;letter-spacing:0.06em;">Retailers</div><div style="font-family:'Archivo',sans-serif;font-size:17px;font-weight:800;color:#F2F2F0;margin-top:3px;">7</div></div>
+        </div>
+        <div style="display:flex;border-top:1px solid #1E2126;">
+          <div style="flex:1;text-align:center;padding:11px;font-size:13px;font-weight:700;color:#C4C8CE;border-right:1px solid #1E2126;">Edit</div>
+          <div style="flex:1;text-align:center;padding:11px;font-size:13px;font-weight:700;color:#8A8F96;">Remove</div>
+        </div>
+      </a>
+
+      <a href="RunDeals Shoe Detail.dc.html" style="text-decoration:none;background:#16181B;border:1px solid #23262B;border-radius:14px;overflow:hidden;display:flex;flex-direction:column;">
+        <div style="display:flex;gap:14px;padding:16px;">
+          <div style="width:74px;height:74px;flex:none;border-radius:11px;background:repeating-linear-gradient(135deg,#202327,#202327 6px,#26292E 6px,#26292E 12px);"></div>
+          <div style="flex:1;min-width:0;">
+            <div style="font-size:11px;letter-spacing:0.08em;text-transform:uppercase;color:oklch(0.78 0.16 153);font-weight:700;">Hoka</div>
+            <div style="font-family:'Archivo',sans-serif;font-size:17px;font-weight:700;color:#F2F2F0;line-height:1.2;margin-top:2px;">Clifton 9</div>
+            <div style="display:inline-flex;align-items:center;gap:6px;margin-top:8px;background:#202327;border-radius:6px;padding:3px 8px;"><span style="width:6px;height:6px;border-radius:50%;background:#565B62;"></span><span style="font-size:11px;font-weight:700;color:#8A8F96;">No deal yet</span></div>
+          </div>
+        </div>
+        <div style="display:flex;border-top:1px solid #1E2126;">
+          <div style="flex:1;padding:12px 16px;border-right:1px solid #1E2126;"><div style="font-size:11px;color:#6A6F76;text-transform:uppercase;letter-spacing:0.06em;">Lowest seen</div><div style="font-family:'Archivo',sans-serif;font-size:17px;font-weight:800;color:#F2F2F0;margin-top:3px;">$129.99</div></div>
+          <div style="flex:1;padding:12px 16px;"><div style="font-size:11px;color:#6A6F76;text-transform:uppercase;letter-spacing:0.06em;">Retailers</div><div style="font-family:'Archivo',sans-serif;font-size:17px;font-weight:800;color:#F2F2F0;margin-top:3px;">5</div></div>
+        </div>
+        <div style="display:flex;border-top:1px solid #1E2126;">
+          <div style="flex:1;text-align:center;padding:11px;font-size:13px;font-weight:700;color:#C4C8CE;border-right:1px solid #1E2126;">Edit</div>
+          <div style="flex:1;text-align:center;padding:11px;font-size:13px;font-weight:700;color:#8A8F96;">Remove</div>
+        </div>
+      </a>
+
+      <a href="RunDeals Shoe Detail.dc.html" style="text-decoration:none;background:#16181B;border:1px solid #23262B;border-radius:14px;overflow:hidden;display:flex;flex-direction:column;">
+        <div style="display:flex;gap:14px;padding:16px;">
+          <div style="width:74px;height:74px;flex:none;border-radius:11px;background:repeating-linear-gradient(135deg,#202327,#202327 6px,#26292E 6px,#26292E 12px);"></div>
+          <div style="flex:1;min-width:0;">
+            <div style="font-size:11px;letter-spacing:0.08em;text-transform:uppercase;color:oklch(0.78 0.16 153);font-weight:700;">Asics</div>
+            <div style="font-family:'Archivo',sans-serif;font-size:17px;font-weight:700;color:#F2F2F0;line-height:1.2;margin-top:2px;">Gel-Nimbus 26</div>
+            <div style="display:inline-flex;align-items:center;gap:6px;margin-top:8px;background:oklch(0.74 0.17 153 / 0.13);border-radius:6px;padding:3px 8px;"><span style="width:6px;height:6px;border-radius:50%;background:oklch(0.74 0.17 153);"></span><span style="font-size:11px;font-weight:700;color:oklch(0.8 0.16 153);">On sale now</span></div>
+          </div>
+        </div>
+        <div style="display:flex;border-top:1px solid #1E2126;">
+          <div style="flex:1;padding:12px 16px;border-right:1px solid #1E2126;"><div style="font-size:11px;color:#6A6F76;text-transform:uppercase;letter-spacing:0.06em;">Lowest seen</div><div style="font-family:'Archivo',sans-serif;font-size:17px;font-weight:800;color:#F2F2F0;margin-top:3px;">$155.99</div></div>
+          <div style="flex:1;padding:12px 16px;"><div style="font-size:11px;color:#6A6F76;text-transform:uppercase;letter-spacing:0.06em;">Retailers</div><div style="font-family:'Archivo',sans-serif;font-size:17px;font-weight:800;color:#F2F2F0;margin-top:3px;">6</div></div>
+        </div>
+        <div style="display:flex;border-top:1px solid #1E2126;">
+          <div style="flex:1;text-align:center;padding:11px;font-size:13px;font-weight:700;color:#C4C8CE;border-right:1px solid #1E2126;">Edit</div>
+          <div style="flex:1;text-align:center;padding:11px;font-size:13px;font-weight:700;color:#8A8F96;">Remove</div>
+        </div>
+      </a>
+
+      <a href="RunDeals Shoe Detail.dc.html" style="text-decoration:none;background:#16181B;border:1px solid #23262B;border-radius:14px;overflow:hidden;display:flex;flex-direction:column;">
+        <div style="display:flex;gap:14px;padding:16px;">
+          <div style="width:74px;height:74px;flex:none;border-radius:11px;background:repeating-linear-gradient(135deg,#202327,#202327 6px,#26292E 6px,#26292E 12px);"></div>
+          <div style="flex:1;min-width:0;">
+            <div style="font-size:11px;letter-spacing:0.08em;text-transform:uppercase;color:oklch(0.78 0.16 153);font-weight:700;">Nike</div>
+            <div style="font-family:'Archivo',sans-serif;font-size:17px;font-weight:700;color:#F2F2F0;line-height:1.2;margin-top:2px;">Pegasus 41</div>
+            <div style="display:inline-flex;align-items:center;gap:6px;margin-top:8px;background:#202327;border-radius:6px;padding:3px 8px;"><span style="width:6px;height:6px;border-radius:50%;background:#565B62;"></span><span style="font-size:11px;font-weight:700;color:#8A8F96;">No deal yet</span></div>
+          </div>
+        </div>
+        <div style="display:flex;border-top:1px solid #1E2126;">
+          <div style="flex:1;padding:12px 16px;border-right:1px solid #1E2126;"><div style="font-size:11px;color:#6A6F76;text-transform:uppercase;letter-spacing:0.06em;">Lowest seen</div><div style="font-family:'Archivo',sans-serif;font-size:17px;font-weight:800;color:#F2F2F0;margin-top:3px;">$132.99</div></div>
+          <div style="flex:1;padding:12px 16px;"><div style="font-size:11px;color:#6A6F76;text-transform:uppercase;letter-spacing:0.06em;">Retailers</div><div style="font-family:'Archivo',sans-serif;font-size:17px;font-weight:800;color:#F2F2F0;margin-top:3px;">4</div></div>
+        </div>
+        <div style="display:flex;border-top:1px solid #1E2126;">
+          <div style="flex:1;text-align:center;padding:11px;font-size:13px;font-weight:700;color:#C4C8CE;border-right:1px solid #1E2126;">Edit</div>
+          <div style="flex:1;text-align:center;padding:11px;font-size:13px;font-weight:700;color:#8A8F96;">Remove</div>
+        </div>
+      </a>
+
+      <a href="RunDeals Shoe Detail.dc.html" style="text-decoration:none;background:#16181B;border:1px solid #23262B;border-radius:14px;overflow:hidden;display:flex;flex-direction:column;">
+        <div style="display:flex;gap:14px;padding:16px;">
+          <div style="width:74px;height:74px;flex:none;border-radius:11px;background:repeating-linear-gradient(135deg,#202327,#202327 6px,#26292E 6px,#26292E 12px);"></div>
+          <div style="flex:1;min-width:0;">
+            <div style="font-size:11px;letter-spacing:0.08em;text-transform:uppercase;color:oklch(0.78 0.16 153);font-weight:700;">New Balance</div>
+            <div style="font-family:'Archivo',sans-serif;font-size:17px;font-weight:700;color:#F2F2F0;line-height:1.2;margin-top:2px;">Fresh Foam 1080v13</div>
+            <div style="display:inline-flex;align-items:center;gap:6px;margin-top:8px;background:oklch(0.74 0.17 153 / 0.13);border-radius:6px;padding:3px 8px;"><span style="width:6px;height:6px;border-radius:50%;background:oklch(0.74 0.17 153);"></span><span style="font-size:11px;font-weight:700;color:oklch(0.8 0.16 153);">On sale now</span></div>
+          </div>
+        </div>
+        <div style="display:flex;border-top:1px solid #1E2126;">
+          <div style="flex:1;padding:12px 16px;border-right:1px solid #1E2126;"><div style="font-size:11px;color:#6A6F76;text-transform:uppercase;letter-spacing:0.06em;">Lowest seen</div><div style="font-family:'Archivo',sans-serif;font-size:17px;font-weight:800;color:#F2F2F0;margin-top:3px;">$153.99</div></div>
+          <div style="flex:1;padding:12px 16px;"><div style="font-size:11px;color:#6A6F76;text-transform:uppercase;letter-spacing:0.06em;">Retailers</div><div style="font-family:'Archivo',sans-serif;font-size:17px;font-weight:800;color:#F2F2F0;margin-top:3px;">5</div></div>
+        </div>
+        <div style="display:flex;border-top:1px solid #1E2126;">
+          <div style="flex:1;text-align:center;padding:11px;font-size:13px;font-weight:700;color:#C4C8CE;border-right:1px solid #1E2126;">Edit</div>
+          <div style="flex:1;text-align:center;padding:11px;font-size:13px;font-weight:700;color:#8A8F96;">Remove</div>
+        </div>
+      </a>
+
+      <!-- add new tile -->
+      <div style="border:1.5px dashed #2E3239;border-radius:14px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;min-height:200px;color:#6A6F76;">
+        <span style="width:42px;height:42px;border-radius:11px;background:#16181B;border:1px solid #23262B;display:flex;align-items:center;justify-content:center;font-size:22px;color:oklch(0.78 0.16 153);line-height:0.7;">+</span>
+        <span style="font-size:14px;font-weight:700;color:#C4C8CE;">Add a shoe to track</span>
+        <span style="font-size:12px;color:#6A6F76;">Brand + model, then pick retailers</span>
+      </div>
+
+    </div>
+  </div>
+</div>
+</x-dc>
+</body>
+</html>

@@ -1,0 +1,239 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700;800;900&family=Hanken+Grotesk:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; }
+  html,body { height:100%; }
+  body { background:#0E0F11; }
+  ::-webkit-scrollbar { width:10px; }
+  ::-webkit-scrollbar-thumb { background:#2A2E34; border-radius:6px; border:3px solid #0E0F11; }
+</style>
+</helmet>
+
+<div style="display:flex;height:100vh;background:#0E0F11;font-family:'Hanken Grotesk',sans-serif;color:#F2F2F0;overflow:hidden;">
+
+  <!-- ============ SIDEBAR ============ -->
+  <div style="width:236px;flex:none;background:#101215;border-right:1px solid #1E2126;padding:24px 16px;display:flex;flex-direction:column;">
+    <div style="display:flex;align-items:center;gap:11px;padding:0 8px 30px;">
+      <span style="width:28px;height:28px;border-radius:8px;background:oklch(0.74 0.17 153);display:flex;align-items:center;justify-content:center;"><span style="width:11px;height:11px;background:#0E0F11;border-radius:2px;transform:rotate(45deg);"></span></span>
+      <span style="font-family:'Archivo',sans-serif;font-weight:800;font-size:19px;letter-spacing:-0.02em;color:#F2F2F0;">RunDeals</span>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:4px;">
+      <a href="RunDeals Velocity.dc.html" style="text-decoration:none;display:flex;align-items:center;gap:12px;padding:11px 12px;border-radius:9px;background:oklch(0.74 0.17 153 / 0.13);color:oklch(0.8 0.16 153);font-weight:700;font-size:14px;"><span style="width:7px;height:7px;border-radius:2px;background:oklch(0.74 0.17 153);transform:rotate(45deg);"></span>Dashboard</a>
+      <a href="RunDeals Deals.dc.html" style="text-decoration:none;display:flex;align-items:center;gap:12px;padding:11px 12px;border-radius:9px;color:#8A8F96;font-weight:500;font-size:14px;"><span style="width:7px;height:7px;border-radius:2px;background:#3A3E44;transform:rotate(45deg);"></span>Deals</a>
+      <a href="RunDeals Shoes.dc.html" style="text-decoration:none;display:flex;align-items:center;gap:12px;padding:11px 12px;border-radius:9px;color:#8A8F96;font-weight:500;font-size:14px;"><span style="width:7px;height:7px;border-radius:2px;background:#3A3E44;transform:rotate(45deg);"></span>Shoes</a>
+      <a href="RunDeals Retailers.dc.html" style="text-decoration:none;display:flex;align-items:center;gap:12px;padding:11px 12px;border-radius:9px;color:#8A8F96;font-weight:500;font-size:14px;"><span style="width:7px;height:7px;border-radius:2px;background:#3A3E44;transform:rotate(45deg);"></span>Retailers</a>
+    </div>
+    <div style="margin-top:auto;display:flex;align-items:center;gap:9px;padding:12px 10px;border-top:1px solid #1E2126;">
+      <span style="width:8px;height:8px;border-radius:50%;background:oklch(0.74 0.17 153);box-shadow:0 0 0 3px oklch(0.74 0.17 153 / 0.18);"></span>
+      <span style="font-size:12px;color:#6A6F76;">Last scraped 8 min ago</span>
+    </div>
+  </div>
+
+  <!-- ============ CONTENT ============ -->
+  <div style="flex:1;padding:30px 34px;display:flex;flex-direction:column;overflow-y:auto;">
+
+    <!-- header -->
+    <div style="display:flex;align-items:flex-end;justify-content:space-between;margin-bottom:26px;">
+      <div>
+        <div style="font-family:'JetBrains Mono',monospace;font-size:12px;letter-spacing:0.14em;color:oklch(0.78 0.16 153);font-weight:600;">DASHBOARD</div>
+        <div style="font-family:'Archivo',sans-serif;font-size:30px;font-weight:800;color:#F2F2F0;margin-top:6px;letter-spacing:-0.01em;">Top deals today</div>
+      </div>
+      <div style="display:flex;gap:12px;align-items:center;">
+        <div style="display:flex;align-items:center;gap:9px;background:#16181B;border:1px solid #23262B;border-radius:10px;padding:10px 14px;width:220px;">
+          <span style="width:12px;height:12px;border-radius:50%;border:2px solid #565B62;"></span>
+          <span style="font-size:13px;color:#6A6F76;">Search shoes…</span>
+        </div>
+        <div style="background:oklch(0.74 0.17 153);color:#0E0F11;font-family:'Archivo',sans-serif;font-weight:800;font-size:14px;padding:11px 18px;border-radius:10px;">Run scan</div>
+      </div>
+    </div>
+
+    <!-- stats -->
+    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:28px;">
+      <div style="background:#16181B;border:1px solid #23262B;border-radius:13px;padding:17px;">
+        <div style="font-size:11px;letter-spacing:0.1em;text-transform:uppercase;color:#8A8F96;font-weight:600;">Deals today</div>
+        <div style="font-family:'Archivo',sans-serif;font-size:32px;font-weight:800;color:#F2F2F0;line-height:1;margin-top:8px;">142</div>
+        <div style="font-size:12px;color:oklch(0.78 0.16 153);font-weight:600;margin-top:6px;">▲ 23 vs yesterday</div>
+      </div>
+      <div style="background:#16181B;border:1px solid #23262B;border-radius:13px;padding:17px;">
+        <div style="font-size:11px;letter-spacing:0.1em;text-transform:uppercase;color:#8A8F96;font-weight:600;">Biggest discount</div>
+        <div style="font-family:'Archivo',sans-serif;font-size:32px;font-weight:800;color:#F2F2F0;line-height:1;margin-top:8px;">52%</div>
+        <div style="font-size:12px;color:#6A6F76;margin-top:6px;">Saucony · The Last Hunt</div>
+      </div>
+      <div style="background:#16181B;border:1px solid #23262B;border-radius:13px;padding:17px;">
+        <div style="font-size:11px;letter-spacing:0.1em;text-transform:uppercase;color:#8A8F96;font-weight:600;">Avg discount</div>
+        <div style="font-family:'Archivo',sans-serif;font-size:32px;font-weight:800;color:#F2F2F0;line-height:1;margin-top:8px;">31%</div>
+        <div style="font-size:12px;color:#6A6F76;margin-top:6px;">across 248 deals</div>
+      </div>
+      <div style="background:#16181B;border:1px solid #23262B;border-radius:13px;padding:17px;">
+        <div style="font-size:11px;letter-spacing:0.1em;text-transform:uppercase;color:#8A8F96;font-weight:600;">Retailers</div>
+        <div style="font-family:'Archivo',sans-serif;font-size:32px;font-weight:800;color:#F2F2F0;line-height:1;margin-top:8px;">9</div>
+        <div style="font-size:12px;color:#6A6F76;margin-top:6px;">all tracking</div>
+      </div>
+    </div>
+
+    <!-- highest deals (full width) -->
+    <div style="margin-bottom:30px;">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
+        <div style="font-family:'Archivo',sans-serif;font-size:17px;font-weight:700;color:#F2F2F0;">Highest deals</div>
+        <div style="display:flex;align-items:center;gap:8px;background:#16181B;border:1px solid #23262B;border-radius:8px;padding:7px 12px;font-size:12px;color:#8A8F96;font-weight:600;">Sort: Discount ▾</div>
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:14px;">
+
+          <div style="background:#16181B;border:1px solid #23262B;border-radius:14px;overflow:hidden;display:flex;flex-direction:column;">
+            <div style="position:relative;height:140px;background:repeating-linear-gradient(135deg,#202327,#202327 7px,#26292E 7px,#26292E 14px);display:flex;align-items:center;justify-content:center;">
+              <span style="font-family:'JetBrains Mono',monospace;font-size:11px;letter-spacing:0.06em;color:#565B62;">product shot</span>
+              <span style="position:absolute;top:11px;left:11px;background:oklch(0.74 0.17 153);color:#0E0F11;font-family:'Archivo',sans-serif;font-weight:800;font-size:13px;padding:5px 9px;border-radius:7px;">52% OFF</span>
+            </div>
+            <div style="padding:15px 16px;display:flex;flex-direction:column;gap:3px;flex:1;">
+              <span style="font-size:11px;letter-spacing:0.1em;text-transform:uppercase;color:oklch(0.78 0.16 153);font-weight:700;">Saucony</span>
+              <span style="font-family:'Archivo',sans-serif;font-size:16px;font-weight:700;color:#F2F2F0;">Endorphin Speed 4</span>
+              <span style="font-size:13px;color:#8A8F96;">The Last Hunt</span>
+              <div style="margin-top:auto;display:flex;align-items:baseline;gap:9px;padding-top:12px;">
+                <span style="font-family:'Archivo',sans-serif;font-size:23px;font-weight:800;color:#F2F2F0;">$134.39</span>
+                <span style="font-size:13px;color:#6A6F76;text-decoration:line-through;">$279.99</span>
+              </div>
+            </div>
+          </div>
+
+          <div style="background:#16181B;border:1px solid #23262B;border-radius:14px;overflow:hidden;display:flex;flex-direction:column;">
+            <div style="position:relative;height:140px;background:repeating-linear-gradient(135deg,#202327,#202327 7px,#26292E 7px,#26292E 14px);display:flex;align-items:center;justify-content:center;">
+              <span style="font-family:'JetBrains Mono',monospace;font-size:11px;letter-spacing:0.06em;color:#565B62;">product shot</span>
+              <span style="position:absolute;top:11px;left:11px;background:oklch(0.74 0.17 153);color:#0E0F11;font-family:'Archivo',sans-serif;font-weight:800;font-size:13px;padding:5px 9px;border-radius:7px;">40% OFF</span>
+            </div>
+            <div style="padding:15px 16px;display:flex;flex-direction:column;gap:3px;flex:1;">
+              <span style="font-size:11px;letter-spacing:0.1em;text-transform:uppercase;color:oklch(0.78 0.16 153);font-weight:700;">Brooks</span>
+              <span style="font-family:'Archivo',sans-serif;font-size:16px;font-weight:700;color:#F2F2F0;">Ghost 16</span>
+              <span style="font-size:13px;color:#8A8F96;">Running Room</span>
+              <div style="margin-top:auto;display:flex;align-items:baseline;gap:9px;padding-top:12px;">
+                <span style="font-family:'Archivo',sans-serif;font-size:23px;font-weight:800;color:#F2F2F0;">$107.99</span>
+                <span style="font-size:13px;color:#6A6F76;text-decoration:line-through;">$179.99</span>
+              </div>
+            </div>
+          </div>
+
+          <div style="background:#16181B;border:1px solid #23262B;border-radius:14px;overflow:hidden;display:flex;flex-direction:column;">
+            <div style="position:relative;height:140px;background:repeating-linear-gradient(135deg,#202327,#202327 7px,#26292E 7px,#26292E 14px);display:flex;align-items:center;justify-content:center;">
+              <span style="font-family:'JetBrains Mono',monospace;font-size:11px;letter-spacing:0.06em;color:#565B62;">product shot</span>
+              <span style="position:absolute;top:11px;left:11px;background:oklch(0.74 0.17 153);color:#0E0F11;font-family:'Archivo',sans-serif;font-weight:800;font-size:13px;padding:5px 9px;border-radius:7px;">40% OFF</span>
+            </div>
+            <div style="padding:15px 16px;display:flex;flex-direction:column;gap:3px;flex:1;">
+              <span style="font-size:11px;letter-spacing:0.1em;text-transform:uppercase;color:oklch(0.78 0.16 153);font-weight:700;">Asics</span>
+              <span style="font-family:'Archivo',sans-serif;font-size:16px;font-weight:700;color:#F2F2F0;">Gel-Nimbus 26</span>
+              <span style="font-size:13px;color:#8A8F96;">Altitude Sports</span>
+              <div style="margin-top:auto;display:flex;align-items:baseline;gap:9px;padding-top:12px;">
+                <span style="font-family:'Archivo',sans-serif;font-size:23px;font-weight:800;color:#F2F2F0;">$155.99</span>
+                <span style="font-size:13px;color:#6A6F76;text-decoration:line-through;">$259.99</span>
+              </div>
+            </div>
+          </div>
+
+          <div style="background:#16181B;border:1px solid #23262B;border-radius:14px;overflow:hidden;display:flex;flex-direction:column;">
+            <div style="position:relative;height:140px;background:repeating-linear-gradient(135deg,#202327,#202327 7px,#26292E 7px,#26292E 14px);display:flex;align-items:center;justify-content:center;">
+              <span style="font-family:'JetBrains Mono',monospace;font-size:11px;letter-spacing:0.06em;color:#565B62;">product shot</span>
+              <span style="position:absolute;top:11px;left:11px;background:oklch(0.74 0.17 153);color:#0E0F11;font-family:'Archivo',sans-serif;font-weight:800;font-size:13px;padding:5px 9px;border-radius:7px;">35% OFF</span>
+            </div>
+            <div style="padding:15px 16px;display:flex;flex-direction:column;gap:3px;flex:1;">
+              <span style="font-size:11px;letter-spacing:0.1em;text-transform:uppercase;color:oklch(0.78 0.16 153);font-weight:700;">Hoka</span>
+              <span style="font-family:'Archivo',sans-serif;font-size:16px;font-weight:700;color:#F2F2F0;">Clifton 9</span>
+              <span style="font-size:13px;color:#8A8F96;">SportChek</span>
+              <div style="margin-top:auto;display:flex;align-items:baseline;gap:9px;padding-top:12px;">
+                <span style="font-family:'Archivo',sans-serif;font-size:23px;font-weight:800;color:#F2F2F0;">$129.99</span>
+                <span style="font-size:13px;color:#6A6F76;text-decoration:line-through;">$199.99</span>
+              </div>
+            </div>
+          </div>
+
+      </div>
+    </div>
+
+    <!-- recently detected (full width, bottom) -->
+    <div style="background:#13151A;border:1px solid #23262B;border-radius:16px;overflow:hidden;">
+      <div style="display:flex;align-items:center;justify-content:space-between;padding:18px 20px 14px;border-bottom:1px solid #1E2126;">
+        <div style="display:flex;align-items:center;gap:9px;">
+          <span style="width:8px;height:8px;border-radius:50%;background:oklch(0.74 0.17 153);box-shadow:0 0 0 3px oklch(0.74 0.17 153 / 0.18);"></span>
+          <span style="font-family:'Archivo',sans-serif;font-size:15px;font-weight:700;color:#F2F2F0;">Recently detected</span>
+        </div>
+        <span style="font-family:'JetBrains Mono',monospace;font-size:11px;color:#6A6F76;">live</span>
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);">
+
+          <div style="display:flex;align-items:center;gap:13px;padding:13px 18px;border-bottom:1px solid #1A1D22;">
+            <div style="width:44px;height:44px;flex:none;border-radius:9px;background:repeating-linear-gradient(135deg,#202327,#202327 5px,#26292E 5px,#26292E 10px);"></div>
+            <div style="flex:1;min-width:0;">
+              <div style="display:flex;align-items:baseline;gap:6px;"><span style="font-size:11px;letter-spacing:0.06em;text-transform:uppercase;color:oklch(0.78 0.16 153);font-weight:700;">Hoka</span><span style="font-family:'JetBrains Mono',monospace;font-size:10px;color:#565B62;">2m</span></div>
+              <div style="font-size:14px;font-weight:600;color:#F2F2F0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">Mach 6</div>
+              <div style="font-size:12px;color:#6A6F76;">SportChek</div>
+            </div>
+            <div style="text-align:right;flex:none;"><div style="font-family:'Archivo',sans-serif;font-size:15px;font-weight:800;color:#F2F2F0;">$125.99</div><div style="font-size:11px;font-weight:700;color:oklch(0.78 0.16 153);">−30%</div></div>
+          </div>
+
+          <div style="display:flex;align-items:center;gap:13px;padding:13px 18px;border-bottom:1px solid #1A1D22;">
+            <div style="width:44px;height:44px;flex:none;border-radius:9px;background:repeating-linear-gradient(135deg,#202327,#202327 5px,#26292E 5px,#26292E 10px);"></div>
+            <div style="flex:1;min-width:0;">
+              <div style="display:flex;align-items:baseline;gap:6px;"><span style="font-size:11px;letter-spacing:0.06em;text-transform:uppercase;color:oklch(0.78 0.16 153);font-weight:700;">Adidas</span><span style="font-family:'JetBrains Mono',monospace;font-size:10px;color:#565B62;">6m</span></div>
+              <div style="font-size:14px;font-weight:600;color:#F2F2F0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">Adizero Boston 12</div>
+              <div style="font-size:12px;color:#6A6F76;">Sporting Life</div>
+            </div>
+            <div style="text-align:right;flex:none;"><div style="font-family:'Archivo',sans-serif;font-size:15px;font-weight:800;color:#F2F2F0;">$139.99</div><div style="font-size:11px;font-weight:700;color:oklch(0.78 0.16 153);">−30%</div></div>
+          </div>
+
+          <div style="display:flex;align-items:center;gap:13px;padding:13px 18px;border-bottom:1px solid #1A1D22;">
+            <div style="width:44px;height:44px;flex:none;border-radius:9px;background:repeating-linear-gradient(135deg,#202327,#202327 5px,#26292E 5px,#26292E 10px);"></div>
+            <div style="flex:1;min-width:0;">
+              <div style="display:flex;align-items:baseline;gap:6px;"><span style="font-size:11px;letter-spacing:0.06em;text-transform:uppercase;color:oklch(0.78 0.16 153);font-weight:700;">On</span><span style="font-family:'JetBrains Mono',monospace;font-size:10px;color:#565B62;">11m</span></div>
+              <div style="font-size:14px;font-weight:600;color:#F2F2F0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">Cloudsurfer</div>
+              <div style="font-size:12px;color:#6A6F76;">Altitude Sports</div>
+            </div>
+            <div style="text-align:right;flex:none;"><div style="font-family:'Archivo',sans-serif;font-size:15px;font-weight:800;color:#F2F2F0;">$157.49</div><div style="font-size:11px;font-weight:700;color:oklch(0.78 0.16 153);">−25%</div></div>
+          </div>
+
+          <div style="display:flex;align-items:center;gap:13px;padding:13px 18px;border-bottom:1px solid #1A1D22;">
+            <div style="width:44px;height:44px;flex:none;border-radius:9px;background:repeating-linear-gradient(135deg,#202327,#202327 5px,#26292E 5px,#26292E 10px);"></div>
+            <div style="flex:1;min-width:0;">
+              <div style="display:flex;align-items:baseline;gap:6px;"><span style="font-size:11px;letter-spacing:0.06em;text-transform:uppercase;color:oklch(0.78 0.16 153);font-weight:700;">Brooks</span><span style="font-family:'JetBrains Mono',monospace;font-size:10px;color:#565B62;">18m</span></div>
+              <div style="font-size:14px;font-weight:600;color:#F2F2F0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">Glycerin 21</div>
+              <div style="font-size:12px;color:#6A6F76;">Running Room</div>
+            </div>
+            <div style="text-align:right;flex:none;"><div style="font-family:'Archivo',sans-serif;font-size:15px;font-weight:800;color:#F2F2F0;">$119.99</div><div style="font-size:11px;font-weight:700;color:oklch(0.78 0.16 153);">−40%</div></div>
+          </div>
+
+          <div style="display:flex;align-items:center;gap:13px;padding:13px 18px;border-bottom:1px solid #1A1D22;">
+            <div style="width:44px;height:44px;flex:none;border-radius:9px;background:repeating-linear-gradient(135deg,#202327,#202327 5px,#26292E 5px,#26292E 10px);"></div>
+            <div style="flex:1;min-width:0;">
+              <div style="display:flex;align-items:baseline;gap:6px;"><span style="font-size:11px;letter-spacing:0.06em;text-transform:uppercase;color:oklch(0.78 0.16 153);font-weight:700;">Asics</span><span style="font-family:'JetBrains Mono',monospace;font-size:10px;color:#565B62;">24m</span></div>
+              <div style="font-size:14px;font-weight:600;color:#F2F2F0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">Novablast 4</div>
+              <div style="font-size:12px;color:#6A6F76;">Atmosphere</div>
+            </div>
+            <div style="text-align:right;flex:none;"><div style="font-family:'Archivo',sans-serif;font-size:15px;font-weight:800;color:#F2F2F0;">$118.99</div><div style="font-size:11px;font-weight:700;color:oklch(0.78 0.16 153);">−30%</div></div>
+          </div>
+
+          <div style="display:flex;align-items:center;gap:13px;padding:13px 18px;border-bottom:1px solid #1A1D22;">
+            <div style="width:44px;height:44px;flex:none;border-radius:9px;background:repeating-linear-gradient(135deg,#202327,#202327 5px,#26292E 5px,#26292E 10px);"></div>
+            <div style="flex:1;min-width:0;">
+              <div style="display:flex;align-items:baseline;gap:6px;"><span style="font-size:11px;letter-spacing:0.06em;text-transform:uppercase;color:oklch(0.78 0.16 153);font-weight:700;">Nike</span><span style="font-family:'JetBrains Mono',monospace;font-size:10px;color:#565B62;">33m</span></div>
+              <div style="font-size:14px;font-weight:600;color:#F2F2F0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">Vomero 17</div>
+              <div style="font-size:12px;color:#6A6F76;">SportChek</div>
+            </div>
+            <div style="text-align:right;flex:none;"><div style="font-family:'Archivo',sans-serif;font-size:15px;font-weight:800;color:#F2F2F0;">$146.99</div><div style="font-size:11px;font-weight:700;color:oklch(0.78 0.16 153);">−30%</div></div>
+          </div>
+
+        </div>
+        <div style="padding:14px 18px;text-align:center;font-size:13px;font-weight:600;color:#8A8F96;border-top:1px solid #1E2126;">View all activity →</div>
+      </div>
+
+  </div>
+</div>
+</x-dc>
+</body>
+</html>

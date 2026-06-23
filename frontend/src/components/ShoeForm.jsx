@@ -13,6 +13,7 @@ const empty = {
   brand: '',
   model: '',
   target_price: '',
+  msrp: '',
   notes: '',
   is_active: true,
 }
@@ -30,6 +31,7 @@ export default function ShoeForm({ initial, onSubmit, onCancel, submitting }) {
           brand: initial.brand ?? '',
           model: initial.model ?? '',
           target_price: initial.target_price ?? '',
+          msrp: initial.msrp ?? '',
           notes: initial.notes ?? '',
           is_active: initial.is_active ?? true,
         }
@@ -49,6 +51,10 @@ export default function ShoeForm({ initial, onSubmit, onCancel, submitting }) {
     const price = parseFloat(values.target_price)
     if (!values.target_price || Number.isNaN(price) || price <= 0)
       next.target_price = 'Enter a price greater than 0'
+    if (values.msrp) {
+      const msrp = parseFloat(values.msrp)
+      if (Number.isNaN(msrp) || msrp <= 0) next.msrp = 'Enter a price greater than 0'
+    }
     setErrors(next)
     return Object.keys(next).length === 0
   }
@@ -57,6 +63,7 @@ export default function ShoeForm({ initial, onSubmit, onCancel, submitting }) {
     brand: values.brand.trim(),
     model: values.model.trim(),
     target_price: parseFloat(values.target_price),
+    msrp: values.msrp ? parseFloat(values.msrp) : null,
     notes: values.notes.trim() || null,
     is_active: values.is_active,
   })
@@ -106,6 +113,16 @@ export default function ShoeForm({ initial, onSubmit, onCancel, submitting }) {
             value={values.target_price}
             onChange={set('target_price')}
             placeholder="180"
+          />
+        </Field>
+        <Field label="Retail price (CAD)" error={errors.msrp} hint="Optional — manufacturer's list price">
+          <Input
+            type="number"
+            step="0.01"
+            min="0"
+            value={values.msrp}
+            onChange={set('msrp')}
+            placeholder="220"
           />
         </Field>
       </div>
@@ -168,12 +185,16 @@ export default function ShoeForm({ initial, onSubmit, onCancel, submitting }) {
   )
 }
 
-function Field({ label, error, children }) {
+function Field({ label, error, hint, children }) {
   return (
     <div className="space-y-1.5">
       <Label>{label}</Label>
       {children}
-      {error && <p className="text-xs text-destructive">{error}</p>}
+      {error ? (
+        <p className="text-xs text-destructive">{error}</p>
+      ) : (
+        hint && <p className="text-xs text-muted-foreground">{hint}</p>
+      )}
     </div>
   )
 }

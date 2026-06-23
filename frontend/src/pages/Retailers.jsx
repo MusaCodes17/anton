@@ -1,13 +1,9 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { Store, ExternalLink, Plus, Pencil, Trash2, Tag } from 'lucide-react'
 import PageHeader from '@/components/PageHeader'
 import RetailerForm from '@/components/RetailerForm'
-import PromoBadge from '@/components/PromoBadge'
 import PromoManagerDialog from '@/components/PromoManagerDialog'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Badge } from '@/components/ui/badge'
 import { Switch } from '@/components/ui/switch'
-import { Label } from '@/components/ui/label'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -17,18 +13,42 @@ import {
   DialogDescription,
   DialogFooter,
 } from '@/components/ui/dialog'
-import { ErrorState, EmptyState, CardSkeletonGrid } from '@/components/StatusViews'
+import { ErrorState, EmptyState, RowSkeleton } from '@/components/StatusViews'
 import { useToast } from '@/components/ui/toast'
 import {
   useRetailers,
+  useDeals,
   useCreateRetailer,
   useUpdateRetailer,
   useDeleteRetailer,
 } from '@/hooks/useApi'
-import { formatRelativeTime } from '@/lib/utils'
+import { cn, formatRelativeTime } from '@/lib/utils'
+
+// Status is derived from data we actually have — scraping_enabled and
+// last_scraped_at — rather than a fabricated health check the backend
+// doesn't track. "Stale" means it's enabled but hasn't scraped in >24h.
+function retailerStatus(retailer) {
+  if (!retailer.scraping_enabled) return { label: 'Disabled', tone: 'muted' }
+  if (!retailer.last_scraped_at) return { label: 'Not scraped yet', tone: 'warning' }
+  const hours = (Date.now() - new Date(retailer.last_scraped_at).getTime()) / 36e5
+  if (hours > 24) return { label: 'Stale', tone: 'warning' }
+  return { label: 'Active', tone: 'success' }
+}
+
+const STATUS_DOT = {
+  success: 'bg-primary shadow-[0_0_0_4px_oklch(0.74_0.17_153_/_0.16)]',
+  warning: 'bg-warning shadow-[0_0_0_4px_oklch(0.8_0.15_75_/_0.16)]',
+  muted: 'bg-faint shadow-[0_0_0_4px_rgba(106,111,118,0.16)]',
+}
+const STATUS_PILL = {
+  success: 'bg-primary/[0.13] text-accent-foreground',
+  warning: 'bg-warning/[0.13] text-warning',
+  muted: 'bg-secondary text-muted-foreground',
+}
 
 export default function Retailers() {
   const retailers = useRetailers()
+  const activeDeals = useDeals({ is_active: true })
   const create = useCreateRetailer()
   const update = useUpdateRetailer()
   const remove = useDeleteRetailer()
@@ -37,6 +57,22 @@ export default function Retailers() {
   const [formState, setFormState] = useState(null) // null | { retailer?: r }
   const [deleting, setDeleting] = useState(null)
   const [promosFor, setPromosFor] = useState(null)
+
+  // Deals currently active per retailer — an honest proxy for "deals found"
+  // (we don't persist a separate scrape-run history to count from).
+  const dealsByRetailer = useMemo(() => {
+    const map = new Map()
+    for (const d of activeDeals.data || []) {
+      map.set(d.retailer_id, (map.get(d.retailer_id) || 0) + 1)
+    }
+    return map
+  }, [activeDeals.data])
+
+  const statusCounts = useMemo(() => {
+    const counts = { success: 0, warning: 0, muted: 0 }
+    for (const r of retailers.data || []) counts[retailerStatus(r).tone]++
+    return counts
+  }, [retailers.data])
 
   const toggleScraping = (retailer, enabled) => {
     update.mutate(
@@ -60,10 +96,7 @@ export default function Retailers() {
     const args = editing ? { id: editing.id, data: payload } : payload
     mutation.mutate(args, {
       onSuccess: () => {
-        toast({
-          variant: 'success',
-          title: editing ? 'Retailer updated' : 'Retailer added',
-        })
+        toast({ variant: 'success', title: editing ? 'Retailer updated' : 'Retailer added' })
         setFormState(null)
       },
       onError: (err) =>
@@ -83,129 +116,121 @@ export default function Retailers() {
   }
 
   // Keep the open promo dialog's data fresh as the retailers query refetches.
-  const promoRetailer =
-    promosFor && (retailers.data || []).find((r) => r.id === promosFor.id)
+  const promoRetailer = promosFor && (retailers.data || []).find((r) => r.id === promosFor.id)
 
   return (
     <div className="space-y-6">
-      <PageHeader
-        title="Retailers"
-        description="Sources scraped for deals and discount codes."
-      >
+      <PageHeader eyebrow="RETAILERS" title="Retailers" count={retailers.data?.length}>
         <Button onClick={() => setFormState({})}>
           <Plus className="h-4 w-4" /> Add retailer
         </Button>
       </PageHeader>
 
+      {!retailers.isLoading && !retailers.isError && retailers.data?.length > 0 && (
+        <div className="grid grid-cols-3 gap-3.5">
+          <StatusTile count={statusCounts.success} label="Active" tone="success" />
+          <StatusTile count={statusCounts.warning} label="Stale / not yet scraped" tone="warning" />
+          <StatusTile count={statusCounts.muted} label="Disabled" tone="muted" />
+        </div>
+      )}
+
       {retailers.isLoading ? (
-        <CardSkeletonGrid count={6} />
+        <RowSkeleton count={6} />
       ) : retailers.isError ? (
         <ErrorState error={retailers.error} onRetry={retailers.refetch} />
       ) : retailers.data?.length ? (
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        <div className="overflow-hidden rounded-[14px] border border-border bg-card">
+          <div className="grid grid-cols-[2fr_1.1fr_1fr_1.2fr_1.6fr] gap-3.5 border-b border-border px-5 py-3 font-mono text-[11px] uppercase tracking-[0.08em] text-faint">
+            <span>Retailer</span>
+            <span>Status</span>
+            <span>Active deals</span>
+            <span>Last scraped</span>
+            <span className="text-right">Actions</span>
+          </div>
           {retailers.data.map((retailer) => {
-            const promos = retailer.active_promo_codes || []
+            const status = retailerStatus(retailer)
+            const initials = retailer.name
+              .split(' ')
+              .map((w) => w[0])
+              .slice(0, 2)
+              .join('')
+              .toUpperCase()
             return (
-              <Card key={retailer.id} className="flex flex-col">
-                <CardHeader className="pb-3">
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="flex items-center gap-2">
-                      <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/10 text-primary">
-                        <Store className="h-4 w-4" />
-                      </div>
-                      <CardTitle className="text-base">{retailer.name}</CardTitle>
+              <div
+                key={retailer.id}
+                className="grid grid-cols-[2fr_1.1fr_1fr_1.2fr_1.6fr] items-center gap-3.5 border-b border-[#1A1D22] px-5 py-3.5 last:border-b-0"
+              >
+                <div className="flex min-w-0 items-center gap-3">
+                  <div className="flex h-[42px] w-[42px] shrink-0 items-center justify-center rounded-[9px] bg-secondary font-heading text-[15px] font-extrabold text-secondary-foreground">
+                    {initials}
+                  </div>
+                  <div className="min-w-0">
+                    <div className="truncate text-[15px] font-bold text-foreground">
+                      {retailer.name}
                     </div>
-                    {retailer.is_active ? (
-                      <Badge variant="success">Active</Badge>
-                    ) : (
-                      <Badge variant="secondary">Inactive</Badge>
+                    {retailer.base_url && (
+                      <a
+                        href={retailer.base_url}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="inline-flex items-center gap-1 truncate font-mono text-[11px] text-faint hover:text-muted-foreground"
+                      >
+                        {retailer.base_url.replace(/^https?:\/\//, '')}
+                        <ExternalLink className="h-3 w-3 shrink-0" />
+                      </a>
                     )}
                   </div>
-                </CardHeader>
-                <CardContent className="flex flex-1 flex-col gap-4">
-                  {retailer.base_url && (
-                    <a
-                      href={retailer.base_url}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="inline-flex items-center gap-1 truncate text-sm text-muted-foreground hover:text-primary"
-                    >
-                      {retailer.base_url.replace(/^https?:\/\//, '')}
-                      <ExternalLink className="h-3.5 w-3.5 shrink-0" />
-                    </a>
-                  )}
-
-                  {/* Discount codes */}
-                  <div className="space-y-2">
-                    <div className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
-                      <Tag className="h-3.5 w-3.5" />
-                      Discount codes
-                    </div>
-                    {promos.length ? (
-                      <div className="space-y-1.5">
-                        {promos.slice(0, 2).map((promo) => (
-                          <PromoBadge key={promo.id} promo={promo} />
-                        ))}
-                        {promos.length > 2 && (
-                          <p className="text-xs text-muted-foreground">
-                            +{promos.length - 2} more
-                          </p>
-                        )}
-                      </div>
-                    ) : (
-                      <p className="text-xs text-muted-foreground">
-                        None yet — detect or add in Manage codes.
-                      </p>
+                </div>
+                <div>
+                  <span
+                    className={cn(
+                      'inline-flex items-center gap-1.5 rounded-[6px] px-2.5 py-1',
+                      STATUS_PILL[status.tone]
                     )}
-                  </div>
-
-                  <div className="text-xs text-muted-foreground">
-                    Last scraped: {formatRelativeTime(retailer.last_scraped_at)}
-                  </div>
-
-                  <div className="flex items-center justify-between rounded-md border p-3">
-                    <Label
-                      htmlFor={`scrape-${retailer.id}`}
-                      className="text-sm font-medium"
-                    >
-                      Scraping enabled
-                    </Label>
-                    <Switch
-                      id={`scrape-${retailer.id}`}
-                      checked={retailer.scraping_enabled}
-                      disabled={update.isPending}
-                      onCheckedChange={(checked) => toggleScraping(retailer, checked)}
-                    />
-                  </div>
-
-                  <div className="mt-auto flex flex-wrap gap-2 border-t pt-3">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => setPromosFor(retailer)}
-                    >
-                      <Tag className="h-4 w-4" /> Manage codes
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      title="Edit"
-                      onClick={() => setFormState({ retailer })}
-                    >
-                      <Pencil className="h-4 w-4" />
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      title="Delete"
-                      className="text-destructive hover:text-destructive"
-                      onClick={() => setDeleting(retailer)}
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
-                  </div>
-                </CardContent>
-              </Card>
+                  >
+                    <span className={cn('h-1.5 w-1.5 rounded-full', STATUS_DOT[status.tone])} />
+                    <span className="text-xs font-bold">{status.label}</span>
+                  </span>
+                </div>
+                <div className="font-heading text-base font-extrabold text-foreground">
+                  {dealsByRetailer.get(retailer.id) ?? 0}
+                </div>
+                <div className="font-mono text-xs text-muted-foreground">
+                  {formatRelativeTime(retailer.last_scraped_at)}
+                </div>
+                <div className="flex items-center justify-end gap-3">
+                  <Switch
+                    checked={retailer.scraping_enabled}
+                    disabled={update.isPending}
+                    onCheckedChange={(checked) => toggleScraping(retailer, checked)}
+                    aria-label="Scraping enabled"
+                  />
+                  <button
+                    type="button"
+                    title="Manage discount codes"
+                    onClick={() => setPromosFor(retailer)}
+                    className="text-secondary-foreground hover:text-foreground"
+                  >
+                    <Tag className="h-4 w-4" />
+                  </button>
+                  <button
+                    type="button"
+                    title="Edit"
+                    onClick={() => setFormState({ retailer })}
+                    className="text-secondary-foreground hover:text-foreground"
+                  >
+                    <Pencil className="h-4 w-4" />
+                  </button>
+                  <button
+                    type="button"
+                    title="Delete"
+                    onClick={() => setDeleting(retailer)}
+                    className="text-muted-foreground hover:text-destructive"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </button>
+                </div>
+              </div>
             )
           })}
         </div>
@@ -226,9 +251,7 @@ export default function Retailers() {
       <Dialog open={!!formState} onOpenChange={(o) => !o && setFormState(null)}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>
-              {formState?.retailer ? 'Edit retailer' : 'Add a retailer'}
-            </DialogTitle>
+            <DialogTitle>{formState?.retailer ? 'Edit retailer' : 'Add a retailer'}</DialogTitle>
             <DialogDescription>
               {formState?.retailer
                 ? 'Update this retailer’s details.'
@@ -267,16 +290,26 @@ export default function Retailers() {
             <Button variant="outline" onClick={() => setDeleting(null)}>
               Cancel
             </Button>
-            <Button
-              variant="destructive"
-              onClick={confirmDelete}
-              disabled={remove.isPending}
-            >
+            <Button variant="destructive" onClick={confirmDelete} disabled={remove.isPending}>
               {remove.isPending ? 'Deleting…' : 'Delete'}
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
+    </div>
+  )
+}
+
+function StatusTile({ count, label, tone }) {
+  return (
+    <div className="flex items-center gap-3.5 rounded-[13px] border border-border bg-surface p-[17px]">
+      <span className={cn('h-2.5 w-2.5 shrink-0 rounded-full', STATUS_DOT[tone])} />
+      <div>
+        <div className="font-heading text-2xl font-extrabold leading-none text-foreground">
+          {count}
+        </div>
+        <div className="mt-1 text-xs text-muted-foreground">{label}</div>
+      </div>
     </div>
   )
 }

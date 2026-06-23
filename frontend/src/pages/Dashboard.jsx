@@ -1,145 +1,243 @@
 import { Link } from 'react-router-dom'
-import {
-  Footprints,
-  Store,
-  Tag,
-  PiggyBank,
-  Clock,
-  ArrowRight,
-} from 'lucide-react'
+import { Tag, Footprints, ArrowRight } from 'lucide-react'
 import PageHeader from '@/components/PageHeader'
 import StatCard from '@/components/StatCard'
-import DealCard from '@/components/DealCard'
 import ScrapeButton from '@/components/ScrapeButton'
-import { Card, CardContent } from '@/components/ui/card'
+import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { ErrorState, EmptyState, CardSkeletonGrid } from '@/components/StatusViews'
-import {
-  useDashboardStats,
-  useRecentDeals,
-  useBestDeals,
-} from '@/hooks/useApi'
-import { formatCurrency, formatRelativeTime } from '@/lib/utils'
+import { ErrorState, EmptyState, CardSkeletonGrid, RowSkeleton } from '@/components/StatusViews'
+import { useDashboardStats, useRecentDeals, useBestDeals } from '@/hooks/useApi'
+import { formatCurrency, formatPercent, formatRelativeTime } from '@/lib/utils'
 
 export default function Dashboard() {
   const stats = useDashboardStats()
   const recent = useRecentDeals(6)
-  const best = useBestDeals(6)
+  const best = useBestDeals(4)
   const s = stats.data
+  const biggest = best.data?.[0]
 
   return (
-    <div className="space-y-8">
-      <PageHeader
-        title="Dashboard"
-        description="Overview of tracked shoes, retailers, and the latest deals."
-      >
+    <div className="space-y-7">
+      <PageHeader eyebrow="DASHBOARD" title="Top deals">
         <ScrapeButton />
       </PageHeader>
 
       {stats.isError ? (
         <ErrorState error={stats.error} onRetry={stats.refetch} />
       ) : (
-        <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-          <StatCard
-            label="Tracked shoes"
-            value={s?.total_shoes ?? 0}
-            hint={s ? `${s.active_shoes} active` : undefined}
-            icon={Footprints}
-            loading={stats.isLoading}
-          />
+        <div className="grid grid-cols-2 gap-3.5 lg:grid-cols-4">
           <StatCard
             label="Active deals"
             value={s?.active_deals ?? 0}
-            icon={Tag}
-            accent="bg-success/10 text-success"
+            hint={s ? `${s.total_shoes} shoes tracked` : undefined}
             loading={stats.isLoading}
+          />
+          <StatCard
+            label="Biggest discount"
+            value={biggest ? `${formatPercent(biggest.savings_percent)}` : '—'}
+            hint={
+              biggest
+                ? `${biggest.shoe?.brand ?? ''} · ${
+                    typeof biggest.retailer === 'string' ? biggest.retailer : biggest.retailer?.name
+                  }`
+                : undefined
+            }
+            loading={best.isLoading}
           />
           <StatCard
             label="Avg. savings"
             value={s?.average_savings != null ? formatCurrency(s.average_savings) : '—'}
-            icon={PiggyBank}
+            hint="per active deal"
             loading={stats.isLoading}
           />
           <StatCard
             label="Retailers"
             value={s?.total_retailers ?? 0}
             hint={s ? `${s.active_retailers} active` : undefined}
-            icon={Store}
             loading={stats.isLoading}
           />
         </div>
       )}
 
-      {/* Last scrape banner */}
-      {s && (
-        <Card>
-          <CardContent className="flex flex-col items-start justify-between gap-3 p-5 sm:flex-row sm:items-center">
-            <div className="flex items-center gap-3 text-sm">
-              <Clock className="h-5 w-5 text-muted-foreground" />
-              <div>
-                <p className="font-medium">
-                  Last scrape: {formatRelativeTime(s.last_scrape)}
-                </p>
-                <p className="text-muted-foreground">
-                  {s.total_price_records} price records collected
-                </p>
-              </div>
+      {/* Highest deals */}
+      <section>
+        <div className="mb-3.5 flex items-center justify-between">
+          <h2 className="font-heading text-[17px] font-bold text-foreground">Highest deals</h2>
+          <Button variant="ghost" size="sm" asChild>
+            <Link to="/deals">
+              View all <ArrowRight className="h-4 w-4" />
+            </Link>
+          </Button>
+        </div>
+
+        {best.isLoading ? (
+          <CardSkeletonGrid count={4} />
+        ) : best.isError ? (
+          <ErrorState error={best.error} onRetry={best.refetch} />
+        ) : best.data?.length ? (
+          <div className="grid grid-cols-1 gap-3.5 sm:grid-cols-2 lg:grid-cols-4">
+            {best.data.map((deal) => (
+              <HighestDealTile key={deal.id} deal={deal} />
+            ))}
+          </div>
+        ) : (
+          <EmptyState
+            icon={Tag}
+            title="No deals yet"
+            description="Run a scrape to find deals on your tracked shoes."
+          />
+        )}
+      </section>
+
+      {/* Recently detected */}
+      <section className="overflow-hidden rounded-2xl border border-border bg-card">
+        <div className="flex items-center justify-between border-b border-border px-5 py-3.5">
+          <div className="flex items-center gap-2.5">
+            <span className="h-2 w-2 rounded-full bg-primary shadow-[0_0_0_3px_oklch(0.74_0.17_153_/_0.18)]" />
+            <span className="font-heading text-[15px] font-bold text-foreground">
+              Recently detected
+            </span>
+          </div>
+          <span className="font-mono text-[11px] text-faint">live</span>
+        </div>
+
+        {recent.isLoading ? (
+          <div className="p-4">
+            <RowSkeleton count={4} />
+          </div>
+        ) : recent.isError ? (
+          <div className="p-4">
+            <ErrorState error={recent.error} onRetry={recent.refetch} />
+          </div>
+        ) : recent.data?.length ? (
+          <>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
+              {recent.data.map((deal) => (
+                <RecentDealRow key={deal.id} deal={deal} />
+              ))}
             </div>
-            <ScrapeButton variant="outline" />
-          </CardContent>
-        </Card>
-      )}
-
-      {/* Best deals */}
-      <DealSection
-        title="Best deals"
-        query={best}
-        to="/deals"
-        emptyTitle="No deals yet"
-        emptyDescription="Run a scrape to find deals on your tracked shoes."
-      />
-
-      {/* Recent deals */}
-      <DealSection
-        title="Recently detected"
-        query={recent}
-        to="/deals"
-        emptyTitle="Nothing detected recently"
-        emptyDescription="New deals will appear here after the next scrape."
-      />
+            <Link
+              to="/deals"
+              className="block border-t border-border py-3.5 text-center text-sm font-semibold text-muted-foreground hover:text-foreground"
+            >
+              View all activity →
+            </Link>
+          </>
+        ) : (
+          <div className="p-4">
+            <EmptyState
+              icon={Tag}
+              title="Nothing detected recently"
+              description="New deals will appear here after the next scrape."
+            />
+          </div>
+        )}
+      </section>
     </div>
   )
 }
 
-function DealSection({ title, query, to, emptyTitle, emptyDescription }) {
-  return (
-    <section className="space-y-4">
-      <div className="flex items-center justify-between">
-        <h2 className="text-lg font-semibold">{title}</h2>
-        <Button variant="ghost" size="sm" asChild>
-          <Link to={to}>
-            View all <ArrowRight className="h-4 w-4" />
-          </Link>
-        </Button>
-      </div>
+function HighestDealTile({ deal }) {
+  const shoe = deal.shoe || {}
+  const retailerName = typeof deal.retailer === 'string' ? deal.retailer : deal.retailer?.name
 
-      {query.isLoading ? (
-        <CardSkeletonGrid count={3} />
-      ) : query.isError ? (
-        <ErrorState error={query.error} onRetry={query.refetch} />
-      ) : query.data?.length ? (
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {query.data.map((deal) => (
-            <DealCard key={deal.id} deal={deal} />
-          ))}
+  return (
+    <Link
+      to="/deals"
+      className="flex flex-col overflow-hidden rounded-[14px] border border-border bg-surface"
+    >
+      <div className="relative flex h-[140px] items-center justify-center bg-[repeating-linear-gradient(135deg,#202327,#202327_7px,#26292E_7px,#26292E_14px)]">
+        {deal.image_url ? (
+          <img src={deal.image_url} alt={shoe.model} className="h-full w-full object-contain" />
+        ) : (
+          <Footprints className="h-8 w-8 text-faint" />
+        )}
+        {deal.savings_percent != null && (
+          <Badge className="absolute left-[11px] top-[11px] rounded-[7px] bg-primary px-[9px] py-[5px] font-heading text-[13px] font-extrabold text-primary-foreground">
+            {formatPercent(deal.savings_percent)} OFF
+          </Badge>
+        )}
+      </div>
+      <div className="flex flex-1 flex-col gap-0.5 p-4">
+        <span className="text-[11px] font-bold uppercase tracking-[0.1em] text-accent-foreground">
+          {shoe.brand}
+        </span>
+        <span className="font-heading text-base font-bold text-foreground">{shoe.model}</span>
+        <span className="text-[13px] text-muted-foreground">{retailerName}</span>
+        <div className="mt-auto pt-3">
+          <div className="flex items-baseline gap-2">
+            <span className="font-heading text-[23px] font-extrabold text-foreground">
+              {formatCurrency(deal.current_price)}
+            </span>
+            {shoe.msrp != null && (
+              <span
+                className="text-sm text-faint line-through"
+                title={`Retail price ${formatCurrency(shoe.msrp)}`}
+              >
+                {formatCurrency(shoe.msrp)}
+              </span>
+            )}
+          </div>
+          <p className="text-[13px] text-faint">
+            {[
+              shoe.msrp != null && `Retail price ${formatCurrency(shoe.msrp)}`,
+              deal.target_price != null && `Target ${formatCurrency(deal.target_price)}`,
+            ]
+              .filter(Boolean)
+              .join(' · ')}
+          </p>
         </div>
-      ) : (
-        <EmptyState
-          icon={Tag}
-          title={emptyTitle}
-          description={emptyDescription}
-        />
-      )}
-    </section>
+      </div>
+    </Link>
+  )
+}
+
+function RecentDealRow({ deal }) {
+  const shoe = deal.shoe || {}
+  const retailerName = typeof deal.retailer === 'string' ? deal.retailer : deal.retailer?.name
+
+  return (
+    <Link
+      to="/deals"
+      className="flex items-center gap-[13px] border-b border-[#1A1D22] px-[18px] py-[13px] last:border-b-0"
+    >
+      <div className="flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-[9px] bg-[repeating-linear-gradient(135deg,#202327,#202327_5px,#26292E_5px,#26292E_10px)]">
+        {deal.image_url && (
+          <img src={deal.image_url} alt={shoe.model} className="h-full w-full object-contain" />
+        )}
+      </div>
+      <div className="min-w-0 flex-1">
+        <div className="flex items-baseline gap-1.5">
+          <span className="text-[11px] font-bold uppercase tracking-[0.06em] text-accent-foreground">
+            {shoe.brand}
+          </span>
+          <span className="font-mono text-[10px] text-faint">
+            {formatRelativeTime(deal.detected_at)}
+          </span>
+        </div>
+        <div className="truncate text-sm font-semibold text-foreground">{shoe.model}</div>
+        <div className="text-xs text-muted-foreground">{retailerName}</div>
+      </div>
+      <div className="shrink-0 text-right">
+        <div className="flex items-baseline justify-end gap-1.5">
+          <span className="font-heading text-[15px] font-extrabold text-foreground">
+            {formatCurrency(deal.current_price)}
+          </span>
+          {shoe.msrp != null && (
+            <span
+              className="text-xs text-faint line-through"
+              title={`Retail price ${formatCurrency(shoe.msrp)}`}
+            >
+              {formatCurrency(shoe.msrp)}
+            </span>
+          )}
+        </div>
+        {deal.savings_percent != null && (
+          <div className="text-[11px] font-bold text-accent-foreground">
+            −{formatPercent(deal.savings_percent)}
+          </div>
+        )}
+      </div>
+    </Link>
   )
 }

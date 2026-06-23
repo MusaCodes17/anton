@@ -66,8 +66,11 @@ export default function DealDetailModal({ deal, open, onOpenChange }) {
           />
         )}
 
-        <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+        <div className="grid grid-cols-2 gap-4 sm:grid-cols-5">
           <Metric label="Current" value={formatCurrency(deal.current_price)} />
+          {shoe.msrp != null && (
+            <Metric label="Retail price" value={formatCurrency(shoe.msrp)} />
+          )}
           <Metric label="Target" value={formatCurrency(deal.target_price)} />
           <Metric label="You save" value={formatCurrency(deal.savings_amount)} />
           <Metric

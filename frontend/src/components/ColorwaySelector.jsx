@@ -10,7 +10,7 @@ export default function ColorwaySelector({ options, selectedId, onSelect }) {
   if (!options || options.length <= 1) return null
 
   return (
-    <div className="flex flex-wrap gap-2">
+    <div className="flex flex-wrap gap-[7px]">
       {options.map((opt) => {
         const retailerName =
           typeof opt.retailer === 'string' ? opt.retailer : opt.retailer?.name
@@ -25,10 +25,8 @@ export default function ColorwaySelector({ options, selectedId, onSelect }) {
             aria-pressed={selected}
             onClick={() => onSelect(opt.id)}
             className={cn(
-              'relative h-16 w-16 shrink-0 overflow-hidden rounded-md border bg-muted transition',
-              selected
-                ? 'ring-2 ring-primary ring-offset-1 ring-offset-background'
-                : 'hover:border-primary/50',
+              'relative h-[34px] w-[34px] shrink-0 overflow-hidden rounded-[8px] border bg-secondary transition',
+              selected ? 'border-2 border-primary' : 'border-border hover:border-primary/50',
               opt.in_stock === false && 'opacity-50'
             )}
           >
@@ -41,7 +39,7 @@ export default function ColorwaySelector({ options, selectedId, onSelect }) {
               />
             ) : (
               <div className="flex h-full w-full items-center justify-center text-muted-foreground">
-                <Footprints className="h-5 w-5" />
+                <Footprints className="h-4 w-4" />
               </div>
             )}
           </button>

@@ -109,10 +109,7 @@ export default function Deals() {
 
   return (
     <div className="space-y-6">
-      <PageHeader
-        title="Deals"
-        description="Active deals across all tracked shoes and retailers."
-      >
+      <PageHeader eyebrow="DEALS" title="All deals" count={deals.data?.length}>
         <ScrapeButton variant="outline" />
       </PageHeader>
 

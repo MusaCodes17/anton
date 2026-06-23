@@ -31,6 +31,7 @@ client.interceptors.response.use(
 // ============== SHOES ==============
 export const shoesApi = {
   list: (params) => client.get('/api/shoes/', { params }).then((r) => r.data),
+  summary: () => client.get('/api/shoes/summary').then((r) => r.data),
   get: (id) => client.get(`/api/shoes/${id}`).then((r) => r.data),
   create: (data) => client.post('/api/shoes/', data).then((r) => r.data),
   update: (id, data) => client.put(`/api/shoes/${id}`, data).then((r) => r.data),
