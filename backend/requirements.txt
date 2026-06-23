@@ -1,7 +1,18 @@
 # Web Framework
 fastapi==0.109.0
-uvicorn[standard]==0.27.0
+# uvicorn bumped from 0.27.0: mcp[cli] requires uvicorn>=0.31.1
+uvicorn[standard]==0.34.0
 python-multipart==0.0.6
+
+# MCP server (exposes app functionality as tools, mounted at /mcp).
+# starlette/sse-starlette pinned explicitly: mcp[cli] pulls sse-starlette
+# (used for an SSE transport this app doesn't use), and recent sse-starlette
+# releases require starlette>=0.49, which conflicts with fastapi==0.109.0's
+# starlette<0.36 ceiling. Pinning an older sse-starlette (no starlette
+# constraint) avoids the conflict without touching fastapi/starlette.
+mcp[cli]==1.28.0
+starlette==0.35.1
+sse-starlette==1.8.2
 
 # Database
 sqlalchemy==2.0.25
@@ -12,7 +23,7 @@ playwright==1.41.0
 beautifulsoup4==4.12.3
 lxml==5.1.0
 html5lib==1.1
-httpx==0.26.0
+httpx==0.28.1  # bumped from 0.26.0: mcp[cli] requires httpx>=0.27.1
 requests==2.31.0
 
 # Task Scheduling

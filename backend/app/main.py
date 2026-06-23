@@ -1,22 +1,41 @@
 """
 Main FastAPI application
 """
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 import os
 from dotenv import load_dotenv
 
 from app.database import init_db
+from app.mcp_server import mcp
 from app.routers import shoes, retailers, deals, dashboard, scraping, export
 
 # Load environment variables
 load_dotenv()
 
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """
+    Initialize the database, then run the MCP server's session manager for
+    the lifetime of the app. Streamable HTTP transport needs that session
+    manager's task group active — mounting mcp.streamable_http_app() alone
+    doesn't run a sub-app's lifespan, so it's merged in here instead.
+    """
+    init_db()
+    print("✅ Database initialized")
+    async with mcp.session_manager.run():
+        yield
+
+
 # Create FastAPI app
 app = FastAPI(
     title="Running Shoe Deal Finder",
     description="API for finding deals on running shoes from Canadian retailers",
-    version="1.0.0"
+    version="1.0.0",
+    lifespan=lifespan,
 )
 
 # Configure CORS
@@ -30,14 +49,6 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Initialize database on startup
-@app.on_event("startup")
-def startup_event():
-    """Initialize database tables on application startup"""
-    init_db()
-    print("✅ Database initialized")
-
-
 # Include routers
 app.include_router(shoes.router, prefix="/api")
 app.include_router(retailers.router, prefix="/api")
@@ -45,6 +56,9 @@ app.include_router(deals.router, prefix="/api")
 app.include_router(dashboard.router, prefix="/api")
 app.include_router(scraping.router, prefix="/api")
 app.include_router(export.router, prefix="/api")
+
+# Mount the MCP server (Streamable HTTP transport) at /mcp
+app.mount("/mcp", mcp.streamable_http_app())
 
 
 # Root endpoint
