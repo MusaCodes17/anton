@@ -101,7 +101,16 @@
       "Bash(grep -oE 'alt=\"[^\"]{5,80}\"' /tmp/enroute_search.html)",
       "Skill(update-config)",
       "Skill(update-config:*)",
-      "Bash(grep -n '\"playwright\"' -A6 /Users/musasouled/.claude.json | head -20)"
+      "Bash(grep -n '\"playwright\"' -A6 /Users/musasouled/.claude.json | head -20)",
+      "Bash(cat src/index.css)",
+      "Bash(cat tailwind.config.js)",
+      "Bash(cat tailwind.config.ts)",
+      "Bash(cat src/App.jsx)",
+      "Bash(npx @playwright/mcp install-browser webkit)",
+      "Bash(npx @playwright/mcp install-browser msedge)",
+      "Bash(node -e ' *)",
+      "Bash(git add *)",
+      "Bash(git commit -m ' *)"
     ]
   }
 }
