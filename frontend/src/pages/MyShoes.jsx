@@ -25,6 +25,7 @@ import {
   useUpdateOwnedShoe,
   useDeleteOwnedShoe,
   useLogRun,
+  useDeleteShoeRun,
 } from '@/hooks/useApi'
 import { cn, formatDate } from '@/lib/utils'
 
@@ -44,10 +45,13 @@ export default function MyShoes() {
   const [search, setSearch] = useState('')
   const [formState, setFormState] = useState(null) // null | { shoe?: shoe }
   const [deleting, setDeleting] = useState(null)
-  const [detailShoe, setDetailShoe] = useState(null)
+  const [detailShoeId, setDetailShoeId] = useState(null)
   const [logRunShoe, setLogRunShoe] = useState(null)
 
   const shoes = useOwnedShoes()
+  // Looked up live (not a snapshot) so the dialog reflects mileage/run-count
+  // updates — e.g. from deleting a run — without needing to be re-opened.
+  const detailShoe = shoes.data?.find((s) => s.id === detailShoeId) || null
   const create = useCreateOwnedShoe()
   const update = useUpdateOwnedShoe()
   const remove = useDeleteOwnedShoe()
@@ -134,7 +138,7 @@ export default function MyShoes() {
               <ShoeCard
                 key={shoe.id}
                 shoe={shoe}
-                onOpenDetail={() => setDetailShoe(shoe)}
+                onOpenDetail={() => setDetailShoeId(shoe.id)}
                 onLogRun={() => setLogRunShoe(shoe)}
                 onEdit={() => setFormState({ shoe })}
                 onDelete={() => setDeleting(shoe)}
@@ -163,7 +167,7 @@ export default function MyShoes() {
                   <ShoeCard
                     key={shoe.id}
                     shoe={shoe}
-                    onOpenDetail={() => setDetailShoe(shoe)}
+                    onOpenDetail={() => setDetailShoeId(shoe.id)}
                     onLogRun={() => setLogRunShoe(shoe)}
                     onEdit={() => setFormState({ shoe })}
                     onDelete={() => setDeleting(shoe)}
@@ -233,7 +237,7 @@ export default function MyShoes() {
       </Dialog>
 
       {/* Detail / run history dialog */}
-      <ShoeDetailDialog shoe={detailShoe} onOpenChange={(o) => !o && setDetailShoe(null)} />
+      <ShoeDetailDialog shoe={detailShoe} onOpenChange={(o) => !o && setDetailShoeId(null)} />
 
       {/* Delete confirmation */}
       <Dialog open={!!deleting} onOpenChange={(o) => !o && setDeleting(null)}>
@@ -319,72 +323,132 @@ function ShoeCard({ shoe, onOpenDetail, onLogRun, onEdit, onDelete }) {
   )
 }
 
+function lifetimeStatsLine(shoe) {
+  if (!shoe?.total_runs) return null
+  const parts = []
+  if (shoe.lifetime_avg_pace) parts.push(`Avg pace ${shoe.lifetime_avg_pace}`)
+  if (shoe.lifetime_avg_hr) parts.push(`Avg HR ${shoe.lifetime_avg_hr} bpm`)
+  parts.push(`${shoe.total_runs} run${shoe.total_runs === 1 ? '' : 's'}`)
+  return parts.join(' · ')
+}
+
 function ShoeDetailDialog({ shoe, onOpenChange }) {
   const runs = useShoeRuns(shoe?.id)
+  const deleteRun = useDeleteShoeRun()
+  const [deletingRun, setDeletingRun] = useState(null)
+  const { toast } = useToast()
+
+  const confirmDeleteRun = () => {
+    deleteRun.mutate(deletingRun, {
+      onSuccess: () => {
+        toast({ variant: 'success', title: 'Run removed' })
+        setDeletingRun(null)
+      },
+      onError: (err) =>
+        toast({ variant: 'destructive', title: 'Failed to remove run', description: err.message }),
+    })
+  }
 
   return (
-    <Dialog open={!!shoe} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl">
-        <DialogHeader>
-          <DialogTitle>{shoe ? `${shoe.brand} ${shoe.model}` : ''}</DialogTitle>
-          <DialogDescription>
-            {shoe &&
-              [
-                shoe.shoe_type,
-                shoe.purchase_date && `Purchased ${formatDate(shoe.purchase_date)}`,
-              ]
-                .filter(Boolean)
-                .join(' · ')}
-          </DialogDescription>
-        </DialogHeader>
-        {shoe && (
-          <div className="space-y-4">
-            <MileageProgressBar mileage={shoe.current_mileage} />
-            {shoe.notes && (
-              <p className="rounded-md bg-secondary p-3 text-sm text-secondary-foreground">
-                {shoe.notes}
-              </p>
-            )}
-            <div>
-              <div className="mb-2 text-[11px] font-bold uppercase tracking-[0.08em] text-faint">
-                Run history
-              </div>
-              {runs.isError ? (
-                <ErrorState error={runs.error} onRetry={runs.refetch} />
-              ) : runs.isLoading ? (
-                <div className="h-[120px] animate-pulse rounded-md bg-muted" />
-              ) : runs.data?.length ? (
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Date</TableHead>
-                      <TableHead>Distance</TableHead>
-                      <TableHead>Pace</TableHead>
-                      <TableHead>Avg HR</TableHead>
-                      <TableHead>Source</TableHead>
-                      <TableHead>Notes</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {runs.data.map((run) => (
-                      <TableRow key={run.id}>
-                        <TableCell>{formatDate(run.run_date)}</TableCell>
-                        <TableCell>{run.distance_km} km</TableCell>
-                        <TableCell>{run.avg_pace || '—'}</TableCell>
-                        <TableCell>{run.avg_hr || '—'}</TableCell>
-                        <TableCell className="capitalize">{run.source}</TableCell>
-                        <TableCell className="max-w-[160px] truncate">{run.notes || '—'}</TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              ) : (
-                <p className="text-sm text-muted-foreground">No runs logged yet.</p>
+    <>
+      <Dialog open={!!shoe} onOpenChange={onOpenChange}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>{shoe ? `${shoe.brand} ${shoe.model}` : ''}</DialogTitle>
+            <DialogDescription>
+              {shoe &&
+                [
+                  shoe.shoe_type,
+                  shoe.purchase_date && `Purchased ${formatDate(shoe.purchase_date)}`,
+                ]
+                  .filter(Boolean)
+                  .join(' · ')}
+            </DialogDescription>
+          </DialogHeader>
+          {shoe && (
+            <div className="space-y-4">
+              <MileageProgressBar mileage={shoe.current_mileage} />
+              {lifetimeStatsLine(shoe) && (
+                <div className="text-[11px] text-faint">{lifetimeStatsLine(shoe)}</div>
               )}
+              {shoe.notes && (
+                <p className="rounded-md bg-secondary p-3 text-sm text-secondary-foreground">
+                  {shoe.notes}
+                </p>
+              )}
+              <div>
+                <div className="mb-2 text-[11px] font-bold uppercase tracking-[0.08em] text-faint">
+                  Run history
+                </div>
+                {runs.isError ? (
+                  <ErrorState error={runs.error} onRetry={runs.refetch} />
+                ) : runs.isLoading ? (
+                  <div className="h-[120px] animate-pulse rounded-md bg-muted" />
+                ) : runs.data?.length ? (
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Date</TableHead>
+                        <TableHead>Distance</TableHead>
+                        <TableHead>Pace</TableHead>
+                        <TableHead>Avg HR</TableHead>
+                        <TableHead>Source</TableHead>
+                        <TableHead>Notes</TableHead>
+                        <TableHead className="w-0" />
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {runs.data.map((run) => (
+                        <TableRow key={run.id}>
+                          <TableCell>{formatDate(run.run_date)}</TableCell>
+                          <TableCell>{run.distance_km} km</TableCell>
+                          <TableCell>{run.avg_pace || '—'}</TableCell>
+                          <TableCell>{run.avg_hr || '—'}</TableCell>
+                          <TableCell className="capitalize">{run.source}</TableCell>
+                          <TableCell className="max-w-[160px] truncate">{run.notes || '—'}</TableCell>
+                          <TableCell>
+                            <button
+                              type="button"
+                              onClick={() => setDeletingRun(run)}
+                              aria-label="Remove run"
+                              className="text-muted-foreground hover:text-destructive"
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </button>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                ) : (
+                  <p className="text-sm text-muted-foreground">No runs logged yet.</p>
+                )}
+              </div>
             </div>
-          </div>
-        )}
-      </DialogContent>
-    </Dialog>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Remove run confirmation */}
+      <Dialog open={!!deletingRun} onOpenChange={(o) => !o && setDeletingRun(null)}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Remove this run?</DialogTitle>
+            <DialogDescription>
+              {deletingRun &&
+                `This will subtract ${deletingRun.distance_km} km from your shoe mileage. This cannot be undone.`}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDeletingRun(null)}>
+              Cancel
+            </Button>
+            <Button variant="destructive" onClick={confirmDeleteRun} disabled={deleteRun.isPending}>
+              {deleteRun.isPending ? 'Removing…' : 'Remove'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
   )
 }

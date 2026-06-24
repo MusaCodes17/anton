@@ -150,7 +150,8 @@
       "Bash(ssh -T git@github.com)",
       "Bash(chmod 644 ~/.ssh/known_hosts)",
       "Bash(ssh-keyscan -t ed25519,rsa github.com)",
-      "Bash(ssh-keygen -F github.com)"
+      "Bash(ssh-keygen -F github.com)",
+      "Bash(gh pr create --title 'Add \"My Shoes\" personal rotation tracker' --body ' *)"
     ]
   }
 }

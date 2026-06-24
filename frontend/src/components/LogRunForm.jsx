@@ -6,9 +6,16 @@ import { Textarea } from '@/components/ui/textarea'
 import { DialogFooter } from '@/components/ui/dialog'
 
 const today = () => new Date().toISOString().slice(0, 10)
+const PACE_PATTERN = /^\d{1,2}:\d{2}\/km$/
 
 export default function LogRunForm({ onSubmit, onCancel, submitting }) {
-  const [values, setValues] = useState({ distance_km: '', run_date: today(), notes: '' })
+  const [values, setValues] = useState({
+    distance_km: '',
+    run_date: today(),
+    avg_pace: '',
+    avg_hr: '',
+    notes: '',
+  })
   const [errors, setErrors] = useState({})
 
   const set = (key) => (e) => setValues((v) => ({ ...v, [key]: e.target.value }))
@@ -19,6 +26,12 @@ export default function LogRunForm({ onSubmit, onCancel, submitting }) {
     if (!values.distance_km || Number.isNaN(distance) || distance <= 0)
       next.distance_km = 'Enter a distance greater than 0'
     if (!values.run_date) next.run_date = 'Run date is required'
+    if (values.avg_pace && !PACE_PATTERN.test(values.avg_pace.trim()))
+      next.avg_pace = 'Use the format M:SS/km, e.g. 3:52/km'
+    if (values.avg_hr) {
+      const hr = parseInt(values.avg_hr, 10)
+      if (Number.isNaN(hr) || hr <= 0) next.avg_hr = 'Enter a heart rate greater than 0'
+    }
     setErrors(next)
     return Object.keys(next).length === 0
   }
@@ -29,6 +42,8 @@ export default function LogRunForm({ onSubmit, onCancel, submitting }) {
     onSubmit({
       distance_km: parseFloat(values.distance_km),
       run_date: values.run_date,
+      avg_pace: values.avg_pace.trim() || null,
+      avg_hr: values.avg_hr ? parseInt(values.avg_hr, 10) : null,
       notes: values.notes.trim() || null,
     })
   }
@@ -48,6 +63,19 @@ export default function LogRunForm({ onSubmit, onCancel, submitting }) {
         </Field>
         <Field label="Run date" error={errors.run_date}>
           <Input type="date" value={values.run_date} onChange={set('run_date')} />
+        </Field>
+        <Field label="Avg pace" error={errors.avg_pace} hint="Optional — format M:SS/km">
+          <Input value={values.avg_pace} onChange={set('avg_pace')} placeholder="3:52/km" />
+        </Field>
+        <Field label="Avg HR (bpm)" error={errors.avg_hr} hint="Optional">
+          <Input
+            type="number"
+            step="1"
+            min="0"
+            value={values.avg_hr}
+            onChange={set('avg_hr')}
+            placeholder="161"
+          />
         </Field>
       </div>
       <Field label="Notes" hint="Optional">

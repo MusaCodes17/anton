@@ -245,6 +245,38 @@ export function useLogRun() {
   })
 }
 
+// Takes the full run object (not just its id) so it can optimistically patch
+// the run list + the shoe's mileage before the server responds.
+export function useDeleteShoeRun() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (run) => ownedShoesApi.deleteRun(run.id),
+    onMutate: (run) => {
+      qc.setQueryData(queryKeys.shoeRuns(run.owned_shoe_id), (old) =>
+        (old || []).filter((r) => r.id !== run.id)
+      )
+      qc.setQueriesData({ queryKey: ['owned-shoes'] }, (old) => {
+        if (!Array.isArray(old)) return old
+        return old.map((s) =>
+          s.id === run.owned_shoe_id
+            ? {
+                ...s,
+                current_mileage: Math.max(0, s.current_mileage - run.distance_km),
+                total_runs: Math.max(0, (s.total_runs || 0) - 1),
+              }
+            : s
+        )
+      })
+    },
+    onSettled: (_data, _err, run) => {
+      // Re-sync with the server either way — confirms the optimistic update
+      // on success, or quietly corrects it if the delete failed.
+      qc.invalidateQueries({ queryKey: ['owned-shoes'] })
+      qc.invalidateQueries({ queryKey: queryKeys.shoeRuns(run.owned_shoe_id) })
+    },
+  })
+}
+
 // ============== SCRAPING ==============
 export function useScrapeAll() {
   const qc = useQueryClient()

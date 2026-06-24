@@ -20,6 +20,7 @@ from datetime import date as date_type
 
 from app.database import SessionLocal
 from app.models.models import Deal, OwnedShoe, PriceRecord, Retailer, Shoe, ShoeRun
+from app.routers.owned_shoes import _compute_lifetime_stats
 from app.scrapers.scraper_manager import ScraperManager
 
 # streamable_http_path="/" because the app this is mounted under (see
@@ -289,7 +290,8 @@ def get_price_history(shoe_id: int, limit: int = 50) -> List[dict]:
         ]
 
 
-def _owned_shoe_to_dict(shoe: OwnedShoe) -> dict:
+def _owned_shoe_to_dict(shoe: OwnedShoe, lifetime_stats: Optional[dict] = None) -> dict:
+    stats = lifetime_stats or {}
     return {
         "id": shoe.id,
         "brand": shoe.brand,
@@ -301,6 +303,9 @@ def _owned_shoe_to_dict(shoe: OwnedShoe) -> dict:
         "current_mileage": shoe.current_mileage,
         "status": shoe.status,
         "notes": shoe.notes,
+        "lifetime_avg_pace": stats.get("lifetime_avg_pace"),
+        "lifetime_avg_hr": stats.get("lifetime_avg_hr"),
+        "total_runs": stats.get("total_runs", 0),
     }
 
 
@@ -333,13 +338,14 @@ def get_owned_shoes(status_filter: Optional[str] = None) -> List[dict]:
         if status_filter:
             query = query.filter(OwnedShoe.status == status_filter)
         shoes = query.order_by(OwnedShoe.created_at.desc()).all()
-        return [_owned_shoe_to_dict(s) for s in shoes]
+        return [_owned_shoe_to_dict(s, _compute_lifetime_stats(db, s.id)) for s in shoes]
 
 
 @mcp.tool()
-def get_shoe_runs(owned_shoe_id: int) -> List[dict]:
+def get_shoe_runs(owned_shoe_id: int) -> dict:
     """
-    Get the run history logged against an owned shoe, newest first.
+    Get the run history logged against an owned shoe (newest first), plus
+    that shoe's lifetime average pace, average heart rate, and run count.
 
     Args:
         owned_shoe_id: ID of the owned shoe (from get_owned_shoes).
@@ -351,7 +357,12 @@ def get_shoe_runs(owned_shoe_id: int) -> List[dict]:
             .order_by(desc(ShoeRun.run_date), desc(ShoeRun.created_at))
             .all()
         )
-        return [_shoe_run_to_dict(r) for r in runs]
+        stats = _compute_lifetime_stats(db, owned_shoe_id)
+        return {
+            "owned_shoe_id": owned_shoe_id,
+            "runs": [_shoe_run_to_dict(r) for r in runs],
+            **stats,
+        }
 
 
 @mcp.tool()
@@ -359,6 +370,8 @@ def log_run_to_shoe(
     owned_shoe_id: int,
     distance_km: float,
     run_date: str,
+    avg_pace: Optional[str] = None,
+    avg_hr: Optional[int] = None,
     notes: Optional[str] = None,
 ) -> dict:
     """
@@ -368,6 +381,9 @@ def log_run_to_shoe(
         owned_shoe_id: ID of the owned shoe (from get_owned_shoes).
         distance_km: Distance covered in this run, in kilometers.
         run_date: Date of the run, in YYYY-MM-DD format.
+        avg_pace: Optional average pace for the run, format "M:SS/km"
+            (e.g. "3:52/km").
+        avg_hr: Optional average heart rate for the run, in beats per minute.
         notes: Optional notes about the run.
     """
     with get_session() as db:
@@ -380,13 +396,43 @@ def log_run_to_shoe(
             distance_km=distance_km,
             run_date=date_type.fromisoformat(run_date),
             source="manual",
+            avg_pace=avg_pace,
+            avg_hr=avg_hr,
             notes=notes,
         )
         db.add(run)
         shoe.current_mileage += distance_km
         db.commit()
         db.refresh(shoe)
-        return {"success": True, "shoe": _owned_shoe_to_dict(shoe)}
+        return {"success": True, "shoe": _owned_shoe_to_dict(shoe, _compute_lifetime_stats(db, shoe.id))}
+
+
+@mcp.tool()
+def delete_shoe_run(run_id: int) -> dict:
+    """
+    Delete a logged run, subtracting its distance back out of the parent
+    shoe's current mileage.
+
+    Args:
+        run_id: ID of the run to delete (from get_shoe_runs).
+    """
+    with get_session() as db:
+        run = db.query(ShoeRun).filter(ShoeRun.id == run_id).first()
+        if not run:
+            return {"success": False, "error": f"Run with id {run_id} not found"}
+
+        shoe = db.query(OwnedShoe).filter(OwnedShoe.id == run.owned_shoe_id).first()
+        distance = run.distance_km
+        db.delete(run)
+        if shoe:
+            shoe.current_mileage = max(0, shoe.current_mileage - distance)
+        db.commit()
+
+        if not shoe:
+            return {"success": True, "shoe": None}
+
+        db.refresh(shoe)
+        return {"success": True, "shoe": _owned_shoe_to_dict(shoe, _compute_lifetime_stats(db, shoe.id))}
 
 
 @mcp.tool()
