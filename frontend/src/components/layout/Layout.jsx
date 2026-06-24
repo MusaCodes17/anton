@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { NavLink, Outlet } from 'react-router-dom'
-import { LayoutDashboard, Tag, Footprints, Store, Menu, X } from 'lucide-react'
+import { LayoutDashboard, Tag, Footprints, Store, Menu, X, PersonStanding } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { useDashboardStats } from '@/hooks/useApi'
@@ -9,8 +9,9 @@ import { formatRelativeTime } from '@/lib/utils'
 const navItems = [
   { to: '/', label: 'Dashboard', icon: LayoutDashboard, end: true },
   { to: '/deals', label: 'Deals', icon: Tag },
-  { to: '/shoes', label: 'Shoes', icon: Footprints },
+  { to: '/shoes', label: 'Tracked Shoes', icon: Footprints },
   { to: '/retailers', label: 'Retailers', icon: Store },
+  { to: '/my-shoes', label: 'My Shoes', icon: PersonStanding },
 ]
 
 function NavLinks({ onNavigate }) {

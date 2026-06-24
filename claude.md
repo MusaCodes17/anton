@@ -1,8 +1,62 @@
 # Running Shoe Deal Finder - Project State 📋
 
-**Last Updated:** 2026-06-22  
+**Last Updated:** 2026-06-24  
 **Project Status:** Phase 5 In Progress  
 **Current Focus:** Product images, colorway consolidation, scraper durability + coverage
+
+---
+
+## 🆕 My Shoes UI polish — 2026-06-24
+
+**[ADDED] Search, active/retired split, compact mileage text, and product images on owned shoe cards.**
+- Renamed the "Shoes" nav tab to **"Tracked Shoes"** (`Layout.jsx`) to disambiguate from "My Shoes".
+- My Shoes page (`MyShoes.jsx`) now has a client-side search bar (brand/model/nickname, no API
+  call) and splits cards into an **Active** section (active + for_sale) and a **Retired** section
+  below a divider — same card component (`ShoeCard`) for both, just filtered into two grids.
+- `MileageProgressBar` gained a `compact` prop: cards now show "Current Mileage: X km" instead of
+  "X km" + "Y km limit" (the bar color already communicates the limit). The detail dialog keeps
+  the full non-compact version.
+- **Images on owned shoe cards**, same placeholder pattern as the Tracked Shoes page (repeating-
+  gradient grey box + Footprints icon when there's no image — never a broken `<img>`). Priority:
+  manual `image_url` (new nullable column on `owned_shoes`, migration
+  `backend/migrate_add_owned_shoe_image.py`) → best-effort `matched_image_url` → placeholder.
+  `OwnedShoeForm` gained an "Image URL" field as the manual-upload mechanism — consistent with
+  every other image field in this app (`price_records.image_url`, `deals.image_url`), which are
+  all CDN URL strings; there's no file-upload backend anywhere to extend instead.
+- `matched_image_url` is computed in `owned_shoes.py`'s `GET /` and `GET /{id}` only (not on
+  create/update — the list refetch after a mutation picks it up): best-effort lookup against
+  `price_records.image_url` where the colorway text contains the owned shoe's model, OR the
+  record's `shoe_id` points to a tracked `Shoe` whose brand+model both match (case-insensitive
+  substring). No FK between `owned_shoes` and `shoes`, so this is a heuristic, not a join — skipped
+  entirely if a manual `image_url` is already set.
+- Verified live: an owned "Adidas Adizero Boston 13" picked up a real scraped CDN image; a made-up
+  brand/model got `null` (no broken image); a shoe with a manual `image_url` set correctly skipped
+  the lookup. Frontend production build passes clean.
+
+---
+
+## 🆕 "My Shoes" personal rotation tracker — 2026-06-24
+
+**[ADDED] Track owned shoes (mileage, notes, run history) — separate from deal tracking.**
+- New tables `owned_shoes` + `shoe_runs` (`models.py`), created automatically by `init_db()` on
+  next backend start (brand-new tables, so no `ALTER TABLE` migration script was needed —
+  `Base.metadata.create_all` only creates what's missing). Deliberately **not** the same table
+  as `Shoe` (deal tracking) — owning a shoe and watching it for deals are independent concepts.
+- Backend: `app/routers/owned_shoes.py` — full CRUD + `POST /{id}/log-run` (accumulates
+  `current_mileage`) + `GET /{id}/runs` (history). `current_mileage` starts equal to
+  `starting_mileage` on create, so a partially-worn shoe can be added directly (e.g. 400km in).
+  `shoe_runs.source` is `"manual"` for now; `"coros"` is reserved for the not-yet-built COROS
+  sync (next session) so it can slot in without a schema change.
+- MCP: 5 new tools in `mcp_server.py` — `get_owned_shoes`, `get_shoe_runs`, `log_run_to_shoe`,
+  `update_shoe_notes`, `retire_shoe` — same thin-wrapper-over-the-DB pattern as existing tools.
+- Frontend: new "My Shoes" page (`pages/MyShoes.jsx`) + nav item, `OwnedShoeForm.jsx`,
+  `LogRunForm.jsx`, `MileageProgressBar.jsx` (green <500km / yellow 500–800km / red >800km —
+  800km is a hardcoded personal limit, not yet user-configurable). Card grid mirrors the
+  existing Shoes page's card pattern; detail dialog shows notes + a run-history table.
+- Verified live end-to-end: added Adidas Adizero Adios Pro 4 at 400km starting mileage, logged a
+  21.1km run, confirmed `current_mileage` updated to 421.1 and the run appeared in history via
+  both the REST API and the MCP tool list (12 tools total, 5 new). Frontend production build
+  passes clean.
 
 ---
 

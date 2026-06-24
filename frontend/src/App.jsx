@@ -4,6 +4,7 @@ import Dashboard from '@/pages/Dashboard'
 import Deals from '@/pages/Deals'
 import Shoes from '@/pages/Shoes'
 import Retailers from '@/pages/Retailers'
+import MyShoes from '@/pages/MyShoes'
 
 export default function App() {
   return (
@@ -13,6 +14,7 @@ export default function App() {
         <Route path="deals" element={<Deals />} />
         <Route path="shoes" element={<Shoes />} />
         <Route path="retailers" element={<Retailers />} />
+        <Route path="my-shoes" element={<MyShoes />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Route>
     </Routes>

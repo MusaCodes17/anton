@@ -1,7 +1,7 @@
 """
 Database models using SQLAlchemy ORM
 """
-from sqlalchemy import Column, Integer, String, Float, Boolean, DateTime, ForeignKey, Text, JSON
+from sqlalchemy import Column, Integer, String, Float, Boolean, DateTime, Date, ForeignKey, Text, JSON
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from app.database import Base
@@ -159,3 +159,59 @@ class PromoCode(Base):
 
     def __repr__(self):
         return f"<PromoCode {self.code} @ {self.retailer_id}>"
+
+
+class OwnedShoe(Base):
+    """
+    A shoe in the user's personal rotation — separate from `Shoe` (which is
+    for deal-tracking). Owning a shoe and watching it for deals are
+    independent: an owned shoe may have no corresponding tracked `Shoe` row,
+    and vice versa.
+    """
+    __tablename__ = "owned_shoes"
+
+    id = Column(Integer, primary_key=True, index=True)
+    brand = Column(String(100), nullable=False, index=True)
+    model = Column(String(200), nullable=False, index=True)
+    nickname = Column(String(100), nullable=True)  # e.g. "Race day Adios"
+    shoe_type = Column(String(50), nullable=True)  # e.g. "Tempo shoe"
+    purchase_date = Column(Date, nullable=True)
+    starting_mileage = Column(Float, nullable=False, default=0)  # km already on the shoe when added
+    current_mileage = Column(Float, nullable=False, default=0)  # starting_mileage + sum(runs)
+    status = Column(String(20), nullable=False, default="active")  # active | retired | for_sale
+    notes = Column(Text, nullable=True)
+    image_url = Column(Text, nullable=True)  # manually-set product image; overrides any auto-matched image
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+
+    # Relationships
+    runs = relationship("ShoeRun", back_populates="owned_shoe", cascade="all, delete-orphan")
+
+    def __repr__(self):
+        return f"<OwnedShoe {self.brand} {self.model} ({self.current_mileage}km)>"
+
+
+class ShoeRun(Base):
+    """
+    A single run logged against an owned shoe, accumulating its mileage.
+    `source` distinguishes manually-logged runs from ones pulled in from
+    COROS (not wired up yet — the column exists so that can slot in later
+    without a schema change).
+    """
+    __tablename__ = "shoe_runs"
+
+    id = Column(Integer, primary_key=True, index=True)
+    owned_shoe_id = Column(Integer, ForeignKey("owned_shoes.id"), nullable=False, index=True)
+    distance_km = Column(Float, nullable=False)
+    run_date = Column(Date, nullable=False)
+    source = Column(String(20), nullable=False, default="manual")  # manual | coros
+    avg_pace = Column(String(20), nullable=True)  # e.g. "4:35/km"
+    avg_hr = Column(Integer, nullable=True)
+    notes = Column(Text, nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    # Relationships
+    owned_shoe = relationship("OwnedShoe", back_populates="runs")
+
+    def __repr__(self):
+        return f"<ShoeRun {self.distance_km}km on {self.run_date} (shoe {self.owned_shoe_id})>"
