@@ -243,7 +243,7 @@ class OwnedShoeBase(BaseModel):
     purchase_date: Optional[date] = Field(None, description="When the shoe was purchased")
     starting_mileage: float = Field(0, ge=0, description="km already on the shoe when added")
     status: str = Field("active", description="active | retired | for_sale")
-    notes: Optional[str] = Field(None, description="Personal notes, feel, observations")
+    purchase_price: Optional[float] = Field(None, gt=0, description="What was paid for the shoe")
     image_url: Optional[str] = Field(None, description="Manually-set product image URL")
 
 
@@ -262,7 +262,7 @@ class OwnedShoeUpdate(BaseModel):
     starting_mileage: Optional[float] = Field(None, ge=0)
     current_mileage: Optional[float] = Field(None, ge=0)
     status: Optional[str] = None
-    notes: Optional[str] = None
+    purchase_price: Optional[float] = Field(None, gt=0)
     image_url: Optional[str] = None
 
 
@@ -280,6 +280,9 @@ class OwnedShoeResponse(OwnedShoeBase):
         None, description="Lifetime average heart rate across all logged runs with a recorded HR (bpm)"
     )
     total_runs: int = Field(0, description="Count of runs logged against this shoe")
+    cost_per_km: Optional[float] = Field(
+        None, description="purchase_price / current_mileage, rounded to 2 decimals — only when both are set"
+    )
     created_at: datetime
     updated_at: Optional[datetime] = None
 
@@ -308,6 +311,40 @@ class ShoeRunResponse(ShoeRunBase):
     id: int
     owned_shoe_id: int
     source: str
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+class LogRunResponse(BaseModel):
+    """
+    Response for POST /owned-shoes/{id}/log-run. Carries the updated shoe
+    plus a checkpoint flag so the frontend can prompt for a notes-journal
+    entry when a logged run crosses a 100km boundary (100, 200, 300...).
+    """
+    run_logged: bool = True
+    updated_mileage: float
+    checkpoint_reached: bool = False
+    checkpoint_km: Optional[int] = None
+    shoe: OwnedShoeResponse
+
+
+# ============== SHOE NOTE SCHEMAS ==============
+
+class ShoeNoteCreate(BaseModel):
+    """Schema for adding a journal entry to an owned shoe"""
+    body: str = Field(..., min_length=1, description="The note content")
+    triggered_by: str = Field("manual", description="manual | checkpoint")
+
+
+class ShoeNoteResponse(BaseModel):
+    """Schema for a shoe journal entry"""
+    id: int
+    owned_shoe_id: int
+    body: str
+    mileage_at_note: float
+    triggered_by: str
     created_at: datetime
 
     class Config:

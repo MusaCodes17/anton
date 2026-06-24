@@ -22,6 +22,7 @@ export const queryKeys = {
   ownedShoes: (params) => ['owned-shoes', params ?? {}],
   ownedShoe: (id) => ['owned-shoes', 'detail', id],
   shoeRuns: (id) => ['owned-shoes', id, 'runs'],
+  shoeNotes: (id) => ['owned-shoes', id, 'notes'],
 }
 
 // ============== SHOES ==============
@@ -202,11 +203,44 @@ export function useOwnedShoes(params) {
   })
 }
 
+export function useOwnedShoe(id) {
+  return useQuery({
+    queryKey: queryKeys.ownedShoe(id),
+    queryFn: () => ownedShoesApi.get(id),
+    enabled: !!id,
+  })
+}
+
 export function useShoeRuns(id) {
   return useQuery({
     queryKey: queryKeys.shoeRuns(id),
     queryFn: () => ownedShoesApi.runs(id),
     enabled: !!id,
+  })
+}
+
+export function useShoeNotes(id) {
+  return useQuery({
+    queryKey: queryKeys.shoeNotes(id),
+    queryFn: () => ownedShoesApi.notes(id),
+    enabled: !!id,
+  })
+}
+
+export function useAddShoeNote() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ id, data }) => ownedShoesApi.addNote(id, data),
+    onSuccess: (_data, { id }) => qc.invalidateQueries({ queryKey: queryKeys.shoeNotes(id) }),
+  })
+}
+
+// Takes { id, noteId } — id is the owned shoe, used to invalidate its notes list.
+export function useDeleteShoeNote() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ noteId }) => ownedShoesApi.deleteNote(noteId),
+    onSuccess: (_data, { id }) => qc.invalidateQueries({ queryKey: queryKeys.shoeNotes(id) }),
   })
 }
 

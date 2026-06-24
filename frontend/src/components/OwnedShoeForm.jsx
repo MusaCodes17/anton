@@ -2,7 +2,6 @@ import { useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { Textarea } from '@/components/ui/textarea'
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/components/ui/select'
 import { DialogFooter } from '@/components/ui/dialog'
 
@@ -12,10 +11,10 @@ const empty = {
   nickname: '',
   shoe_type: '',
   purchase_date: '',
+  purchase_price: '',
   starting_mileage: '0',
   current_mileage: '',
   status: 'active',
-  notes: '',
   image_url: '',
 }
 
@@ -29,10 +28,10 @@ export default function OwnedShoeForm({ initial, onSubmit, onCancel, submitting 
           nickname: initial.nickname ?? '',
           shoe_type: initial.shoe_type ?? '',
           purchase_date: initial.purchase_date ?? '',
+          purchase_price: initial.purchase_price != null ? String(initial.purchase_price) : '',
           starting_mileage: String(initial.starting_mileage ?? 0),
           current_mileage: String(initial.current_mileage ?? 0),
           status: initial.status ?? 'active',
-          notes: initial.notes ?? '',
           image_url: initial.image_url ?? '',
         }
       : {}),
@@ -53,6 +52,10 @@ export default function OwnedShoeForm({ initial, onSubmit, onCancel, submitting 
       if (Number.isNaN(curMileage) || curMileage < 0)
         next.current_mileage = 'Enter a mileage of 0 or more'
     }
+    if (values.purchase_price !== '') {
+      const price = parseFloat(values.purchase_price)
+      if (Number.isNaN(price) || price <= 0) next.purchase_price = 'Enter a price greater than 0'
+    }
     setErrors(next)
     return Object.keys(next).length === 0
   }
@@ -64,9 +67,9 @@ export default function OwnedShoeForm({ initial, onSubmit, onCancel, submitting 
       nickname: values.nickname.trim() || null,
       shoe_type: values.shoe_type.trim() || null,
       purchase_date: values.purchase_date || null,
+      purchase_price: values.purchase_price === '' ? null : parseFloat(values.purchase_price),
       starting_mileage: values.starting_mileage === '' ? 0 : parseFloat(values.starting_mileage),
       status: values.status,
-      notes: values.notes.trim() || null,
       image_url: values.image_url.trim() || null,
     }
     if (initial && values.current_mileage !== '') {
@@ -98,6 +101,16 @@ export default function OwnedShoeForm({ initial, onSubmit, onCancel, submitting 
         </Field>
         <Field label="Purchase date" hint="Optional">
           <Input type="date" value={values.purchase_date} onChange={set('purchase_date')} />
+        </Field>
+        <Field label="Purchase price ($)" error={errors.purchase_price} hint="Optional">
+          <Input
+            type="number"
+            step="0.01"
+            min="0"
+            value={values.purchase_price}
+            onChange={set('purchase_price')}
+            placeholder="225.00"
+          />
         </Field>
         <Field label="Status">
           <Select value={values.status} onValueChange={(v) => setValues((s) => ({ ...s, status: v }))}>
@@ -147,10 +160,6 @@ export default function OwnedShoeForm({ initial, onSubmit, onCancel, submitting 
           onChange={set('image_url')}
           placeholder="https://…"
         />
-      </Field>
-
-      <Field label="Notes" hint="Personal notes, feel, observations">
-        <Textarea value={values.notes} onChange={set('notes')} placeholder="Optional notes" />
       </Field>
 
       <DialogFooter>

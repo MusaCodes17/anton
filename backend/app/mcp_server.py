@@ -19,7 +19,7 @@ from sqlalchemy import desc, func
 from datetime import date as date_type
 
 from app.database import SessionLocal
-from app.models.models import Deal, OwnedShoe, PriceRecord, Retailer, Shoe, ShoeRun
+from app.models.models import Deal, OwnedShoe, PriceRecord, Retailer, Shoe, ShoeNote, ShoeRun
 from app.routers.owned_shoes import _compute_lifetime_stats
 from app.scrapers.scraper_manager import ScraperManager
 
@@ -292,6 +292,11 @@ def get_price_history(shoe_id: int, limit: int = 50) -> List[dict]:
 
 def _owned_shoe_to_dict(shoe: OwnedShoe, lifetime_stats: Optional[dict] = None) -> dict:
     stats = lifetime_stats or {}
+    cost_per_km = (
+        round(shoe.purchase_price / shoe.current_mileage, 2)
+        if shoe.purchase_price and shoe.current_mileage > 0
+        else None
+    )
     return {
         "id": shoe.id,
         "brand": shoe.brand,
@@ -302,10 +307,22 @@ def _owned_shoe_to_dict(shoe: OwnedShoe, lifetime_stats: Optional[dict] = None) 
         "starting_mileage": shoe.starting_mileage,
         "current_mileage": shoe.current_mileage,
         "status": shoe.status,
-        "notes": shoe.notes,
+        "purchase_price": shoe.purchase_price,
+        "cost_per_km": cost_per_km,
         "lifetime_avg_pace": stats.get("lifetime_avg_pace"),
         "lifetime_avg_hr": stats.get("lifetime_avg_hr"),
         "total_runs": stats.get("total_runs", 0),
+    }
+
+
+def _shoe_note_to_dict(note: ShoeNote) -> dict:
+    return {
+        "id": note.id,
+        "owned_shoe_id": note.owned_shoe_id,
+        "body": note.body,
+        "mileage_at_note": note.mileage_at_note,
+        "triggered_by": note.triggered_by,
+        "created_at": note.created_at.isoformat() if note.created_at else None,
     }
 
 
@@ -391,6 +408,7 @@ def log_run_to_shoe(
         if not shoe:
             return {"success": False, "error": f"Owned shoe with id {owned_shoe_id} not found"}
 
+        old_mileage = shoe.current_mileage
         run = ShoeRun(
             owned_shoe_id=owned_shoe_id,
             distance_km=distance_km,
@@ -404,7 +422,17 @@ def log_run_to_shoe(
         shoe.current_mileage += distance_km
         db.commit()
         db.refresh(shoe)
-        return {"success": True, "shoe": _owned_shoe_to_dict(shoe, _compute_lifetime_stats(db, shoe.id))}
+
+        old_checkpoint = int(old_mileage // 100) * 100
+        new_checkpoint = int(shoe.current_mileage // 100) * 100
+        checkpoint_reached = new_checkpoint > old_checkpoint and new_checkpoint > 0
+
+        return {
+            "success": True,
+            "checkpoint_reached": checkpoint_reached,
+            "checkpoint_km": new_checkpoint if checkpoint_reached else None,
+            "shoe": _owned_shoe_to_dict(shoe, _compute_lifetime_stats(db, shoe.id)),
+        }
 
 
 @mcp.tool()
@@ -436,24 +464,50 @@ def delete_shoe_run(run_id: int) -> dict:
 
 
 @mcp.tool()
-def update_shoe_notes(owned_shoe_id: int, notes: str) -> dict:
+def get_shoe_notes(owned_shoe_id: int) -> List[dict]:
     """
-    Update the personal notes on an owned shoe (feel, observations, etc).
-    Overwrites any existing notes.
+    Get the notes journal for an owned shoe (feel, observations, mileage
+    checkpoints), newest first — replaces the old single free-text notes
+    field with a timestamped, mileage-anchored history.
 
     Args:
         owned_shoe_id: ID of the owned shoe (from get_owned_shoes).
-        notes: The new notes text.
+    """
+    with get_session() as db:
+        notes = (
+            db.query(ShoeNote)
+            .filter(ShoeNote.owned_shoe_id == owned_shoe_id)
+            .order_by(desc(ShoeNote.created_at))
+            .all()
+        )
+        return [_shoe_note_to_dict(n) for n in notes]
+
+
+@mcp.tool()
+def add_shoe_note(owned_shoe_id: int, body: str) -> dict:
+    """
+    Add a manual journal entry to an owned shoe's notes. The shoe's current
+    mileage at the time of writing is recorded automatically alongside it.
+
+    Args:
+        owned_shoe_id: ID of the owned shoe (from get_owned_shoes).
+        body: The note content.
     """
     with get_session() as db:
         shoe = db.query(OwnedShoe).filter(OwnedShoe.id == owned_shoe_id).first()
         if not shoe:
             return {"success": False, "error": f"Owned shoe with id {owned_shoe_id} not found"}
 
-        shoe.notes = notes
+        note = ShoeNote(
+            owned_shoe_id=owned_shoe_id,
+            body=body,
+            triggered_by="manual",
+            mileage_at_note=shoe.current_mileage,
+        )
+        db.add(note)
         db.commit()
-        db.refresh(shoe)
-        return {"success": True, "shoe": _owned_shoe_to_dict(shoe)}
+        db.refresh(note)
+        return {"success": True, "note": _shoe_note_to_dict(note)}
 
 
 @mcp.tool()

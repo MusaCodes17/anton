@@ -179,13 +179,14 @@ class OwnedShoe(Base):
     starting_mileage = Column(Float, nullable=False, default=0)  # km already on the shoe when added
     current_mileage = Column(Float, nullable=False, default=0)  # starting_mileage + sum(runs)
     status = Column(String(20), nullable=False, default="active")  # active | retired | for_sale
-    notes = Column(Text, nullable=True)
+    purchase_price = Column(Float, nullable=True)  # what was paid; cost-per-km is derived, not stored
     image_url = Column(Text, nullable=True)  # manually-set product image; overrides any auto-matched image
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 
     # Relationships
     runs = relationship("ShoeRun", back_populates="owned_shoe", cascade="all, delete-orphan")
+    notes_entries = relationship("ShoeNote", back_populates="owned_shoe", cascade="all, delete-orphan")
 
     def __repr__(self):
         return f"<OwnedShoe {self.brand} {self.model} ({self.current_mileage}km)>"
@@ -215,3 +216,26 @@ class ShoeRun(Base):
 
     def __repr__(self):
         return f"<ShoeRun {self.distance_km}km on {self.run_date} (shoe {self.owned_shoe_id})>"
+
+
+class ShoeNote(Base):
+    """
+    A journal entry about an owned shoe — replaces the old single `notes`
+    free-text column with a timestamped, mileage-anchored history. Entries
+    are either written by hand (`triggered_by="manual"`) or prompted by a
+    100km mileage checkpoint (`triggered_by="checkpoint"`).
+    """
+    __tablename__ = "shoe_notes"
+
+    id = Column(Integer, primary_key=True, index=True)
+    owned_shoe_id = Column(Integer, ForeignKey("owned_shoes.id"), nullable=False, index=True)
+    body = Column(Text, nullable=False)
+    mileage_at_note = Column(Float, nullable=False)  # shoe's current_mileage when the note was written
+    triggered_by = Column(String(20), nullable=False, default="manual")  # manual | checkpoint
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    # Relationships
+    owned_shoe = relationship("OwnedShoe", back_populates="notes_entries")
+
+    def __repr__(self):
+        return f"<ShoeNote shoe={self.owned_shoe_id} @ {self.mileage_at_note}km>"

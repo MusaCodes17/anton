@@ -1,8 +1,9 @@
 import { useState } from 'react'
-import { Plus, Pencil, Trash2, Footprints, PlayCircle, Search } from 'lucide-react'
+import { useNavigate } from 'react-router-dom'
+import { Plus, Pencil, Trash2, Footprints, PlayCircle, Search, ArrowUpRight } from 'lucide-react'
 import PageHeader from '@/components/PageHeader'
 import OwnedShoeForm from '@/components/OwnedShoeForm'
-import LogRunForm from '@/components/LogRunForm'
+import LogRunDialog from '@/components/LogRunDialog'
 import MileageProgressBar from '@/components/MileageProgressBar'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -15,19 +16,9 @@ import {
   DialogDescription,
   DialogFooter,
 } from '@/components/ui/dialog'
-import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/table'
 import { ErrorState, EmptyState, CardSkeletonGrid } from '@/components/StatusViews'
 import { useToast } from '@/components/ui/toast'
-import {
-  useOwnedShoes,
-  useShoeRuns,
-  useCreateOwnedShoe,
-  useUpdateOwnedShoe,
-  useDeleteOwnedShoe,
-  useLogRun,
-  useDeleteShoeRun,
-} from '@/hooks/useApi'
-import { cn, formatDate } from '@/lib/utils'
+import { useOwnedShoes, useCreateOwnedShoe, useUpdateOwnedShoe, useDeleteOwnedShoe } from '@/hooks/useApi'
 
 const statusVariant = {
   active: 'success',
@@ -42,20 +33,16 @@ const statusLabel = {
 }
 
 export default function MyShoes() {
+  const navigate = useNavigate()
   const [search, setSearch] = useState('')
   const [formState, setFormState] = useState(null) // null | { shoe?: shoe }
   const [deleting, setDeleting] = useState(null)
-  const [detailShoeId, setDetailShoeId] = useState(null)
   const [logRunShoe, setLogRunShoe] = useState(null)
 
   const shoes = useOwnedShoes()
-  // Looked up live (not a snapshot) so the dialog reflects mileage/run-count
-  // updates — e.g. from deleting a run — without needing to be re-opened.
-  const detailShoe = shoes.data?.find((s) => s.id === detailShoeId) || null
   const create = useCreateOwnedShoe()
   const update = useUpdateOwnedShoe()
   const remove = useDeleteOwnedShoe()
-  const logRun = useLogRun()
   const { toast } = useToast()
 
   const filtered = (shoes.data || []).filter((s) => {
@@ -95,20 +82,6 @@ export default function MyShoes() {
     })
   }
 
-  const handleLogRun = (payload) => {
-    logRun.mutate(
-      { id: logRunShoe.id, data: payload },
-      {
-        onSuccess: () => {
-          toast({ variant: 'success', title: 'Run logged' })
-          setLogRunShoe(null)
-        },
-        onError: (err) =>
-          toast({ variant: 'destructive', title: 'Failed to log run', description: err.message }),
-      }
-    )
-  }
-
   return (
     <div className="space-y-6">
       <PageHeader eyebrow="MY SHOES" title="Shoe rotation" count={shoes.data?.length}>
@@ -138,7 +111,7 @@ export default function MyShoes() {
               <ShoeCard
                 key={shoe.id}
                 shoe={shoe}
-                onOpenDetail={() => setDetailShoeId(shoe.id)}
+                onOpenDetail={() => navigate(`/my-shoes/${shoe.id}`)}
                 onLogRun={() => setLogRunShoe(shoe)}
                 onEdit={() => setFormState({ shoe })}
                 onDelete={() => setDeleting(shoe)}
@@ -167,7 +140,7 @@ export default function MyShoes() {
                   <ShoeCard
                     key={shoe.id}
                     shoe={shoe}
-                    onOpenDetail={() => setDetailShoeId(shoe.id)}
+                    onOpenDetail={() => navigate(`/my-shoes/${shoe.id}`)}
                     onLogRun={() => setLogRunShoe(shoe)}
                     onEdit={() => setFormState({ shoe })}
                     onDelete={() => setDeleting(shoe)}
@@ -203,7 +176,7 @@ export default function MyShoes() {
             <DialogTitle>{formState?.shoe ? 'Edit shoe' : 'Add a shoe'}</DialogTitle>
             <DialogDescription>
               {formState?.shoe
-                ? 'Update mileage, notes, or status for this shoe.'
+                ? 'Update mileage, purchase price, or status for this shoe.'
                 : 'Add a shoe to your personal rotation.'}
             </DialogDescription>
           </DialogHeader>
@@ -219,25 +192,11 @@ export default function MyShoes() {
       </Dialog>
 
       {/* Log run dialog */}
-      <Dialog open={!!logRunShoe} onOpenChange={(o) => !o && setLogRunShoe(null)}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>
-              Log run{logRunShoe ? ` — ${logRunShoe.nickname || logRunShoe.model}` : ''}
-            </DialogTitle>
-          </DialogHeader>
-          {logRunShoe && (
-            <LogRunForm
-              submitting={logRun.isPending}
-              onSubmit={handleLogRun}
-              onCancel={() => setLogRunShoe(null)}
-            />
-          )}
-        </DialogContent>
-      </Dialog>
-
-      {/* Detail / run history dialog */}
-      <ShoeDetailDialog shoe={detailShoe} onOpenChange={(o) => !o && setDetailShoeId(null)} />
+      <LogRunDialog
+        shoe={logRunShoe}
+        open={!!logRunShoe}
+        onOpenChange={(o) => !o && setLogRunShoe(null)}
+      />
 
       {/* Delete confirmation */}
       <Dialog open={!!deleting} onOpenChange={(o) => !o && setDeleting(null)}>
@@ -296,25 +255,32 @@ function ShoeCard({ shoe, onOpenDetail, onLogRun, onEdit, onDelete }) {
         </div>
         <MileageProgressBar mileage={shoe.current_mileage} compact />
       </button>
-      <div className="flex border-t border-border text-[13px] font-bold">
+      <div className="grid grid-cols-2 border-t border-border text-[12px] font-bold">
+        <button
+          type="button"
+          onClick={onOpenDetail}
+          className="flex items-center justify-center gap-1.5 border-b border-r border-border py-2 text-secondary-foreground hover:bg-secondary"
+        >
+          <ArrowUpRight className="h-3.5 w-3.5" /> Details
+        </button>
         <button
           type="button"
           onClick={onLogRun}
-          className="flex flex-1 items-center justify-center gap-1.5 border-r border-border py-2.5 text-secondary-foreground hover:bg-secondary"
+          className="flex items-center justify-center gap-1.5 border-b border-border py-2 text-secondary-foreground hover:bg-secondary"
         >
           <PlayCircle className="h-3.5 w-3.5" /> Log run
         </button>
         <button
           type="button"
           onClick={onEdit}
-          className="flex flex-1 items-center justify-center gap-1.5 border-r border-border py-2.5 text-secondary-foreground hover:bg-secondary"
+          className="flex items-center justify-center gap-1.5 border-r border-border py-2 text-secondary-foreground hover:bg-secondary"
         >
           <Pencil className="h-3.5 w-3.5" /> Edit
         </button>
         <button
           type="button"
           onClick={onDelete}
-          className="flex flex-1 items-center justify-center gap-1.5 py-2.5 text-muted-foreground hover:bg-secondary hover:text-destructive"
+          className="flex items-center justify-center gap-1.5 py-2 text-muted-foreground hover:bg-secondary hover:text-destructive"
         >
           <Trash2 className="h-3.5 w-3.5" /> Remove
         </button>
@@ -323,132 +289,3 @@ function ShoeCard({ shoe, onOpenDetail, onLogRun, onEdit, onDelete }) {
   )
 }
 
-function lifetimeStatsLine(shoe) {
-  if (!shoe?.total_runs) return null
-  const parts = []
-  if (shoe.lifetime_avg_pace) parts.push(`Avg pace ${shoe.lifetime_avg_pace}`)
-  if (shoe.lifetime_avg_hr) parts.push(`Avg HR ${shoe.lifetime_avg_hr} bpm`)
-  parts.push(`${shoe.total_runs} run${shoe.total_runs === 1 ? '' : 's'}`)
-  return parts.join(' · ')
-}
-
-function ShoeDetailDialog({ shoe, onOpenChange }) {
-  const runs = useShoeRuns(shoe?.id)
-  const deleteRun = useDeleteShoeRun()
-  const [deletingRun, setDeletingRun] = useState(null)
-  const { toast } = useToast()
-
-  const confirmDeleteRun = () => {
-    deleteRun.mutate(deletingRun, {
-      onSuccess: () => {
-        toast({ variant: 'success', title: 'Run removed' })
-        setDeletingRun(null)
-      },
-      onError: (err) =>
-        toast({ variant: 'destructive', title: 'Failed to remove run', description: err.message }),
-    })
-  }
-
-  return (
-    <>
-      <Dialog open={!!shoe} onOpenChange={onOpenChange}>
-        <DialogContent className="max-w-2xl">
-          <DialogHeader>
-            <DialogTitle>{shoe ? `${shoe.brand} ${shoe.model}` : ''}</DialogTitle>
-            <DialogDescription>
-              {shoe &&
-                [
-                  shoe.shoe_type,
-                  shoe.purchase_date && `Purchased ${formatDate(shoe.purchase_date)}`,
-                ]
-                  .filter(Boolean)
-                  .join(' · ')}
-            </DialogDescription>
-          </DialogHeader>
-          {shoe && (
-            <div className="space-y-4">
-              <MileageProgressBar mileage={shoe.current_mileage} />
-              {lifetimeStatsLine(shoe) && (
-                <div className="text-[11px] text-faint">{lifetimeStatsLine(shoe)}</div>
-              )}
-              {shoe.notes && (
-                <p className="rounded-md bg-secondary p-3 text-sm text-secondary-foreground">
-                  {shoe.notes}
-                </p>
-              )}
-              <div>
-                <div className="mb-2 text-[11px] font-bold uppercase tracking-[0.08em] text-faint">
-                  Run history
-                </div>
-                {runs.isError ? (
-                  <ErrorState error={runs.error} onRetry={runs.refetch} />
-                ) : runs.isLoading ? (
-                  <div className="h-[120px] animate-pulse rounded-md bg-muted" />
-                ) : runs.data?.length ? (
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Date</TableHead>
-                        <TableHead>Distance</TableHead>
-                        <TableHead>Pace</TableHead>
-                        <TableHead>Avg HR</TableHead>
-                        <TableHead>Source</TableHead>
-                        <TableHead>Notes</TableHead>
-                        <TableHead className="w-0" />
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {runs.data.map((run) => (
-                        <TableRow key={run.id}>
-                          <TableCell>{formatDate(run.run_date)}</TableCell>
-                          <TableCell>{run.distance_km} km</TableCell>
-                          <TableCell>{run.avg_pace || '—'}</TableCell>
-                          <TableCell>{run.avg_hr || '—'}</TableCell>
-                          <TableCell className="capitalize">{run.source}</TableCell>
-                          <TableCell className="max-w-[160px] truncate">{run.notes || '—'}</TableCell>
-                          <TableCell>
-                            <button
-                              type="button"
-                              onClick={() => setDeletingRun(run)}
-                              aria-label="Remove run"
-                              className="text-muted-foreground hover:text-destructive"
-                            >
-                              <Trash2 className="h-3.5 w-3.5" />
-                            </button>
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                ) : (
-                  <p className="text-sm text-muted-foreground">No runs logged yet.</p>
-                )}
-              </div>
-            </div>
-          )}
-        </DialogContent>
-      </Dialog>
-
-      {/* Remove run confirmation */}
-      <Dialog open={!!deletingRun} onOpenChange={(o) => !o && setDeletingRun(null)}>
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle>Remove this run?</DialogTitle>
-            <DialogDescription>
-              {deletingRun &&
-                `This will subtract ${deletingRun.distance_km} km from your shoe mileage. This cannot be undone.`}
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setDeletingRun(null)}>
-              Cancel
-            </Button>
-            <Button variant="destructive" onClick={confirmDeleteRun} disabled={deleteRun.isPending}>
-              {deleteRun.isPending ? 'Removing…' : 'Remove'}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-    </>
-  )
-}

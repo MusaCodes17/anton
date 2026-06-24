@@ -10,11 +10,14 @@ from typing import List, Optional
 from app.database import get_db
 from app.models import (
     OwnedShoe, OwnedShoeCreate, OwnedShoeUpdate, OwnedShoeResponse,
-    ShoeRun, ShoeRunCreate, ShoeRunResponse,
+    ShoeRun, ShoeRunCreate, ShoeRunResponse, LogRunResponse,
+    ShoeNote, ShoeNoteCreate, ShoeNoteResponse,
 )
 from app.models.models import PriceRecord, Shoe
 
 router = APIRouter(prefix="/owned-shoes", tags=["owned-shoes"])
+
+CHECKPOINT_INTERVAL_KM = 100
 
 
 def _find_matched_image(db: Session, brand: str, model: str) -> Optional[str]:
@@ -80,12 +83,17 @@ def _compute_lifetime_stats(db: Session, owned_shoe_id: int) -> dict:
 
 
 def _attach_computed_fields(db: Session, shoe: OwnedShoe) -> OwnedShoe:
-    """Attach the response-only fields (image match + lifetime stats) that aren't real columns."""
+    """Attach the response-only fields (image match, lifetime stats, cost/km) that aren't real columns."""
     shoe.matched_image_url = None if shoe.image_url else _find_matched_image(db, shoe.brand, shoe.model)
     stats = _compute_lifetime_stats(db, shoe.id)
     shoe.lifetime_avg_pace = stats["lifetime_avg_pace"]
     shoe.lifetime_avg_hr = stats["lifetime_avg_hr"]
     shoe.total_runs = stats["total_runs"]
+    shoe.cost_per_km = (
+        round(shoe.purchase_price / shoe.current_mileage, 2)
+        if shoe.purchase_price and shoe.current_mileage > 0
+        else None
+    )
     return shoe
 
 
@@ -169,9 +177,16 @@ def delete_owned_shoe(owned_shoe_id: int, db: Session = Depends(get_db)):
     return None
 
 
-@router.post("/{owned_shoe_id}/log-run", response_model=OwnedShoeResponse)
+@router.post("/{owned_shoe_id}/log-run", response_model=LogRunResponse)
 def log_run(owned_shoe_id: int, run: ShoeRunCreate, db: Session = Depends(get_db)):
-    """Log a manual run against a shoe, accumulating its current_mileage"""
+    """
+    Log a manual run against a shoe, accumulating its current_mileage.
+
+    Flags checkpoint_reached when the new mileage crosses a 100km boundary
+    (100, 200, 300...) that the previous mileage hadn't reached yet, so the
+    frontend can prompt for a notes-journal entry. Whether that prompt has
+    already been shown for a given checkpoint is tracked client-side.
+    """
     db_shoe = db.query(OwnedShoe).filter(OwnedShoe.id == owned_shoe_id).first()
 
     if not db_shoe:
@@ -180,12 +195,24 @@ def log_run(owned_shoe_id: int, run: ShoeRunCreate, db: Session = Depends(get_db
             detail=f"Owned shoe with id {owned_shoe_id} not found"
         )
 
+    old_mileage = db_shoe.current_mileage
     db_run = ShoeRun(owned_shoe_id=owned_shoe_id, source="manual", **run.model_dump())
     db.add(db_run)
     db_shoe.current_mileage += run.distance_km
     db.commit()
     db.refresh(db_shoe)
-    return _attach_computed_fields(db, db_shoe)
+
+    old_checkpoint = int(old_mileage // CHECKPOINT_INTERVAL_KM) * CHECKPOINT_INTERVAL_KM
+    new_checkpoint = int(db_shoe.current_mileage // CHECKPOINT_INTERVAL_KM) * CHECKPOINT_INTERVAL_KM
+    checkpoint_reached = new_checkpoint > old_checkpoint and new_checkpoint > 0
+
+    return LogRunResponse(
+        run_logged=True,
+        updated_mileage=db_shoe.current_mileage,
+        checkpoint_reached=checkpoint_reached,
+        checkpoint_km=new_checkpoint if checkpoint_reached else None,
+        shoe=_attach_computed_fields(db, db_shoe),
+    )
 
 
 @router.get("/{owned_shoe_id}/runs", response_model=List[ShoeRunResponse])
@@ -237,3 +264,61 @@ def delete_shoe_run(run_id: int, db: Session = Depends(get_db)):
 
     db.refresh(db_shoe)
     return _attach_computed_fields(db, db_shoe)
+
+
+@router.get("/{owned_shoe_id}/notes", response_model=List[ShoeNoteResponse])
+def get_shoe_notes(owned_shoe_id: int, db: Session = Depends(get_db)):
+    """List journal entries for a shoe, newest first"""
+    db_shoe = db.query(OwnedShoe).filter(OwnedShoe.id == owned_shoe_id).first()
+
+    if not db_shoe:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Owned shoe with id {owned_shoe_id} not found"
+        )
+
+    return (
+        db.query(ShoeNote)
+        .filter(ShoeNote.owned_shoe_id == owned_shoe_id)
+        .order_by(ShoeNote.created_at.desc())
+        .all()
+    )
+
+
+@router.post("/{owned_shoe_id}/notes", response_model=ShoeNoteResponse, status_code=status.HTTP_201_CREATED)
+def add_shoe_note(owned_shoe_id: int, note: ShoeNoteCreate, db: Session = Depends(get_db)):
+    """Add a journal entry. mileage_at_note is set automatically from the shoe's current mileage."""
+    db_shoe = db.query(OwnedShoe).filter(OwnedShoe.id == owned_shoe_id).first()
+
+    if not db_shoe:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Owned shoe with id {owned_shoe_id} not found"
+        )
+
+    db_note = ShoeNote(
+        owned_shoe_id=owned_shoe_id,
+        body=note.body,
+        triggered_by=note.triggered_by,
+        mileage_at_note=db_shoe.current_mileage,
+    )
+    db.add(db_note)
+    db.commit()
+    db.refresh(db_note)
+    return db_note
+
+
+@router.delete("/notes/{note_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_shoe_note(note_id: int, db: Session = Depends(get_db)):
+    """Delete a journal entry"""
+    db_note = db.query(ShoeNote).filter(ShoeNote.id == note_id).first()
+
+    if not db_note:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Note with id {note_id} not found"
+        )
+
+    db.delete(db_note)
+    db.commit()
+    return None

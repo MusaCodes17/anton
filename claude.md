@@ -6,6 +6,69 @@
 
 ---
 
+## 🆕 Shoe detail page, purchase price/cost-per-km, notes journal, mileage checkpoints — 2026-06-24
+
+**[ADDED] A full `/my-shoes/:id` detail page, replacing the old quick-view dialog as the permanent home for run history.**
+- New route `frontend/src/pages/ShoeDetail.jsx`. Card click target ("Details" button or the
+  image/name header) now navigates here instead of opening a dialog; the old `ShoeDetailDialog`
+  in `MyShoes.jsx` was removed entirely (run history moved into the new page, nothing duplicated).
+- Layout: image/brand/model/nickname header with status badge and purchase-price line → stats row
+  (mileage bar, total runs, lifetime avg pace/HR when present) → a **Replacement Deals** placeholder
+  card (explicitly empty — "Coming soon" badge, no logic, just holding the layout slot for later) →
+  **Shoe Notes Journal** → **Run History**.
+- **[ADDED]** `purchase_price` (nullable float) on `owned_shoes` (migration
+  `backend/migrate_add_shoe_notes.py`, same idempotent-`ALTER TABLE` pattern as prior owned_shoes
+  migrations). Exposed in `OwnedShoeBase`/`Update` and as computed `cost_per_km` on
+  `OwnedShoeResponse` (`purchase_price / current_mileage`, rounded 2dp, only when both are set) —
+  computed server-side in `_attach_computed_fields` so the REST API, MCP tools, and frontend all
+  show the identical number instead of each recomputing it. `OwnedShoeForm` gained a "Purchase
+  price ($)" field.
+- **[ADDED]** "Adjust mileage" action on the detail page — a small two-step dialog (enter value →
+  explicit confirm showing old/new) that PUTs `current_mileage` directly via the existing
+  `OwnedShoeUpdate` endpoint. Deliberately not a new endpoint — `current_mileage` was already
+  updatable via `PUT /owned-shoes/{id}`; this just gives it dedicated UI with a confirmation step
+  since it silently overrides accumulated run mileage rather than logging a run.
+
+**[ADDED] Shoe Notes Journal — replaces the old single free-text `owned_shoes.notes` column.**
+- New table `shoe_notes` (`id`, `owned_shoe_id`, `body`, `mileage_at_note`, `triggered_by`
+  ["manual"|"checkpoint"], `created_at`) — a timestamped, mileage-anchored history instead of one
+  overwritable text blob. `migrate_add_shoe_notes.py` migrates any existing `owned_shoes.notes`
+  text into a `triggered_by="manual"` entry (mileage_at_note = current_mileage at migration time),
+  then drops the old column. Ran live: 2 existing notes migrated cleanly.
+- Endpoints (`routers/owned_shoes.py`): `GET/POST /api/owned-shoes/{id}/notes`,
+  `DELETE /api/owned-shoes/notes/{note_id}`. `mileage_at_note` is always set server-side from the
+  shoe's current mileage at write time — never client-supplied.
+- MCP: `update_shoe_notes` removed (the column it wrote no longer exists); replaced by
+  `get_shoe_notes(owned_shoe_id)` and `add_shoe_note(owned_shoe_id, body)`.
+- Frontend: vertical timeline in `ShoeDetail.jsx` (date · mileage · checkpoint badge when
+  applicable · body), "Add note" button, per-entry delete with confirmation, empty state.
+
+**[ADDED] 100km mileage checkpoints prompt for a journal entry.**
+- `POST /owned-shoes/{id}/log-run` now returns `LogRunResponse` (`run_logged`, `updated_mileage`,
+  `checkpoint_reached`, `checkpoint_km`, `shoe`) instead of the bare shoe — a breaking response-
+  shape change for that one endpoint. Checkpoint crossing is `floor(new_mileage/100) >
+  floor(old_mileage/100)`, e.g. 290.06km + 10km run → checkpoint_km=300. The MCP
+  `log_run_to_shoe` tool got the same `checkpoint_reached`/`checkpoint_km` fields added to its
+  return dict for consistency.
+- New shared `frontend/src/components/LogRunDialog.jsx` (used by both the My Shoes card's "Log
+  run" button and the new detail page) — logs the run, and if `checkpoint_reached` is true and
+  this checkpoint hasn't been prompted before, swaps to a "Your [shoe] just hit Xkm — add a note?"
+  text-input view with Save/Skip, saving via `POST .../notes` with `triggered_by="checkpoint"`.
+  "Already prompted" is tracked client-side only (`frontend/src/lib/checkpoints.js`,
+  localStorage keyed by shoe id + checkpoint km) per the spec — intentionally not a server-side
+  table, so Skip vs Save both suppress future re-prompts for that checkpoint without extra schema.
+- Verified live via REST: logging a run that took a shoe from 290.06km → 300.06km returned
+  `checkpoint_reached: true, checkpoint_km: 300`; a non-crossing run returned `false`.
+
+**Verified live end-to-end:** created a shoe with `purchase_price=200`, `starting_mileage=95` →
+`cost_per_km` computed correctly (2.11); logged a 10km run crossing 100km → checkpoint flagged
+correctly; deleted the run → mileage and stats reverted; added and deleted a note via REST.
+Frontend production build (`vite build`) passes clean. Browser-based UI verification (Playwright)
+was not possible this session — the environment's Node (18.13) predates `URL.canParse`, which the
+Playwright MCP server requires; all verification above was via direct REST calls plus code review.
+
+---
+
 ## 🆕 Run pace/HR, lifetime averages, run deletion — 2026-06-24
 
 **[ADDED] avg_pace/avg_hr wired through properly, lifetime stats, and the ability to remove a logged run.**
