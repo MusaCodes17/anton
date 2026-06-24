@@ -5,6 +5,7 @@ import {
   dealsApi,
   dashboardApi,
   scrapeApi,
+  ownedShoesApi,
 } from '@/services/api'
 
 // Centralized query keys so mutations can invalidate precisely.
@@ -18,6 +19,9 @@ export const queryKeys = {
   dashboardStats: () => ['dashboard', 'stats'],
   recentDeals: (limit) => ['dashboard', 'recent-deals', limit],
   bestDeals: (limit) => ['dashboard', 'best-deals', limit],
+  ownedShoes: (params) => ['owned-shoes', params ?? {}],
+  ownedShoe: (id) => ['owned-shoes', 'detail', id],
+  shoeRuns: (id) => ['owned-shoes', id, 'runs'],
 }
 
 // ============== SHOES ==============
@@ -187,6 +191,57 @@ export function useBestDeals(limit = 8) {
   return useQuery({
     queryKey: queryKeys.bestDeals(limit),
     queryFn: () => dashboardApi.bestDeals(limit),
+  })
+}
+
+// ============== OWNED SHOES ==============
+export function useOwnedShoes(params) {
+  return useQuery({
+    queryKey: queryKeys.ownedShoes(params),
+    queryFn: () => ownedShoesApi.list(params),
+  })
+}
+
+export function useShoeRuns(id) {
+  return useQuery({
+    queryKey: queryKeys.shoeRuns(id),
+    queryFn: () => ownedShoesApi.runs(id),
+    enabled: !!id,
+  })
+}
+
+export function useCreateOwnedShoe() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (data) => ownedShoesApi.create(data),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['owned-shoes'] }),
+  })
+}
+
+export function useUpdateOwnedShoe() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ id, data }) => ownedShoesApi.update(id, data),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['owned-shoes'] }),
+  })
+}
+
+export function useDeleteOwnedShoe() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (id) => ownedShoesApi.remove(id),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['owned-shoes'] }),
+  })
+}
+
+export function useLogRun() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ id, data }) => ownedShoesApi.logRun(id, data),
+    onSuccess: (_data, { id }) => {
+      qc.invalidateQueries({ queryKey: ['owned-shoes'] })
+      qc.invalidateQueries({ queryKey: queryKeys.shoeRuns(id) })
+    },
   })
 }
 

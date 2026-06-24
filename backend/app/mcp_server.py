@@ -16,8 +16,10 @@ from typing import List, Optional
 from mcp.server.fastmcp import FastMCP
 from sqlalchemy import desc, func
 
+from datetime import date as date_type
+
 from app.database import SessionLocal
-from app.models.models import Deal, PriceRecord, Retailer, Shoe
+from app.models.models import Deal, OwnedShoe, PriceRecord, Retailer, Shoe, ShoeRun
 from app.scrapers.scraper_manager import ScraperManager
 
 # streamable_http_path="/" because the app this is mounted under (see
@@ -285,3 +287,144 @@ def get_price_history(shoe_id: int, limit: int = 50) -> List[dict]:
             }
             for r in records
         ]
+
+
+def _owned_shoe_to_dict(shoe: OwnedShoe) -> dict:
+    return {
+        "id": shoe.id,
+        "brand": shoe.brand,
+        "model": shoe.model,
+        "nickname": shoe.nickname,
+        "shoe_type": shoe.shoe_type,
+        "purchase_date": shoe.purchase_date.isoformat() if shoe.purchase_date else None,
+        "starting_mileage": shoe.starting_mileage,
+        "current_mileage": shoe.current_mileage,
+        "status": shoe.status,
+        "notes": shoe.notes,
+    }
+
+
+def _shoe_run_to_dict(run: ShoeRun) -> dict:
+    return {
+        "id": run.id,
+        "owned_shoe_id": run.owned_shoe_id,
+        "distance_km": run.distance_km,
+        "run_date": run.run_date.isoformat() if run.run_date else None,
+        "source": run.source,
+        "avg_pace": run.avg_pace,
+        "avg_hr": run.avg_hr,
+        "notes": run.notes,
+    }
+
+
+@mcp.tool()
+def get_owned_shoes(status_filter: Optional[str] = None) -> List[dict]:
+    """
+    List shoes in the user's personal rotation with current mileage and
+    status. Use this for "what shoes do I have", "which shoes are near
+    retirement", or to look up an owned_shoe_id before calling another tool.
+
+    Args:
+        status_filter: Filter by status — "active", "retired", or
+            "for_sale". Omit for all shoes regardless of status.
+    """
+    with get_session() as db:
+        query = db.query(OwnedShoe)
+        if status_filter:
+            query = query.filter(OwnedShoe.status == status_filter)
+        shoes = query.order_by(OwnedShoe.created_at.desc()).all()
+        return [_owned_shoe_to_dict(s) for s in shoes]
+
+
+@mcp.tool()
+def get_shoe_runs(owned_shoe_id: int) -> List[dict]:
+    """
+    Get the run history logged against an owned shoe, newest first.
+
+    Args:
+        owned_shoe_id: ID of the owned shoe (from get_owned_shoes).
+    """
+    with get_session() as db:
+        runs = (
+            db.query(ShoeRun)
+            .filter(ShoeRun.owned_shoe_id == owned_shoe_id)
+            .order_by(desc(ShoeRun.run_date), desc(ShoeRun.created_at))
+            .all()
+        )
+        return [_shoe_run_to_dict(r) for r in runs]
+
+
+@mcp.tool()
+def log_run_to_shoe(
+    owned_shoe_id: int,
+    distance_km: float,
+    run_date: str,
+    notes: Optional[str] = None,
+) -> dict:
+    """
+    Log a run against an owned shoe, adding to its current mileage.
+
+    Args:
+        owned_shoe_id: ID of the owned shoe (from get_owned_shoes).
+        distance_km: Distance covered in this run, in kilometers.
+        run_date: Date of the run, in YYYY-MM-DD format.
+        notes: Optional notes about the run.
+    """
+    with get_session() as db:
+        shoe = db.query(OwnedShoe).filter(OwnedShoe.id == owned_shoe_id).first()
+        if not shoe:
+            return {"success": False, "error": f"Owned shoe with id {owned_shoe_id} not found"}
+
+        run = ShoeRun(
+            owned_shoe_id=owned_shoe_id,
+            distance_km=distance_km,
+            run_date=date_type.fromisoformat(run_date),
+            source="manual",
+            notes=notes,
+        )
+        db.add(run)
+        shoe.current_mileage += distance_km
+        db.commit()
+        db.refresh(shoe)
+        return {"success": True, "shoe": _owned_shoe_to_dict(shoe)}
+
+
+@mcp.tool()
+def update_shoe_notes(owned_shoe_id: int, notes: str) -> dict:
+    """
+    Update the personal notes on an owned shoe (feel, observations, etc).
+    Overwrites any existing notes.
+
+    Args:
+        owned_shoe_id: ID of the owned shoe (from get_owned_shoes).
+        notes: The new notes text.
+    """
+    with get_session() as db:
+        shoe = db.query(OwnedShoe).filter(OwnedShoe.id == owned_shoe_id).first()
+        if not shoe:
+            return {"success": False, "error": f"Owned shoe with id {owned_shoe_id} not found"}
+
+        shoe.notes = notes
+        db.commit()
+        db.refresh(shoe)
+        return {"success": True, "shoe": _owned_shoe_to_dict(shoe)}
+
+
+@mcp.tool()
+def retire_shoe(owned_shoe_id: int) -> dict:
+    """
+    Mark an owned shoe as retired (status="retired"). Use this when a shoe
+    has hit its mileage limit or is otherwise done being used for running.
+
+    Args:
+        owned_shoe_id: ID of the owned shoe (from get_owned_shoes).
+    """
+    with get_session() as db:
+        shoe = db.query(OwnedShoe).filter(OwnedShoe.id == owned_shoe_id).first()
+        if not shoe:
+            return {"success": False, "error": f"Owned shoe with id {owned_shoe_id} not found"}
+
+        shoe.status = "retired"
+        db.commit()
+        db.refresh(shoe)
+        return {"success": True, "shoe": _owned_shoe_to_dict(shoe)}

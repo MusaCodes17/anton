@@ -3,7 +3,7 @@ Pydantic schemas for API request/response validation
 """
 from pydantic import BaseModel, Field, HttpUrl
 from typing import List, Optional
-from datetime import datetime
+from datetime import date, datetime
 
 
 # ============== SHOE SCHEMAS ==============
@@ -230,3 +230,78 @@ class ShoeTestRequest(BaseModel):
     """Schema for a scrapability test request (brand + model, no size)"""
     brand: str = Field(..., min_length=1, max_length=100)
     model: str = Field(..., min_length=1, max_length=200)
+
+
+# ============== OWNED SHOE SCHEMAS ==============
+
+class OwnedShoeBase(BaseModel):
+    """Base schema for a shoe in the user's personal rotation"""
+    brand: str = Field(..., min_length=1, max_length=100, description="Shoe brand")
+    model: str = Field(..., min_length=1, max_length=200, description="Shoe model")
+    nickname: Optional[str] = Field(None, max_length=100, description="Personal nickname, e.g. 'Race day Adios'")
+    shoe_type: Optional[str] = Field(None, max_length=50, description="e.g. 'Tempo shoe'")
+    purchase_date: Optional[date] = Field(None, description="When the shoe was purchased")
+    starting_mileage: float = Field(0, ge=0, description="km already on the shoe when added")
+    status: str = Field("active", description="active | retired | for_sale")
+    notes: Optional[str] = Field(None, description="Personal notes, feel, observations")
+    image_url: Optional[str] = Field(None, description="Manually-set product image URL")
+
+
+class OwnedShoeCreate(OwnedShoeBase):
+    """Schema for adding a shoe to the rotation"""
+    pass
+
+
+class OwnedShoeUpdate(BaseModel):
+    """Schema for updating an owned shoe (all fields optional)"""
+    brand: Optional[str] = Field(None, min_length=1, max_length=100)
+    model: Optional[str] = Field(None, min_length=1, max_length=200)
+    nickname: Optional[str] = Field(None, max_length=100)
+    shoe_type: Optional[str] = Field(None, max_length=50)
+    purchase_date: Optional[date] = None
+    starting_mileage: Optional[float] = Field(None, ge=0)
+    current_mileage: Optional[float] = Field(None, ge=0)
+    status: Optional[str] = None
+    notes: Optional[str] = None
+    image_url: Optional[str] = None
+
+
+class OwnedShoeResponse(OwnedShoeBase):
+    """Schema for owned shoe response"""
+    id: int
+    matched_image_url: Optional[str] = Field(
+        None, description="Best-effort image match from price_records, used when image_url isn't set"
+    )
+    current_mileage: float
+    created_at: datetime
+    updated_at: Optional[datetime] = None
+
+    class Config:
+        from_attributes = True
+
+
+# ============== SHOE RUN SCHEMAS ==============
+
+class ShoeRunBase(BaseModel):
+    """Base schema for a run logged against an owned shoe"""
+    distance_km: float = Field(..., gt=0, description="Distance covered in this run")
+    run_date: date = Field(..., description="Date the run took place")
+    avg_pace: Optional[str] = Field(None, max_length=20, description="e.g. '4:35/km'")
+    avg_hr: Optional[int] = Field(None, gt=0, description="Average heart rate (bpm)")
+    notes: Optional[str] = Field(None, description="Notes about this run")
+
+
+class ShoeRunCreate(ShoeRunBase):
+    """Schema for manually logging a run (POST /owned-shoes/{id}/log-run)"""
+    pass
+
+
+class ShoeRunResponse(ShoeRunBase):
+    """Schema for run response"""
+    id: int
+    owned_shoe_id: int
+    source: str
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
