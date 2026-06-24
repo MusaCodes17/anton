@@ -123,6 +123,7 @@ export const ownedShoesApi = {
   remove: (id) => client.delete(`/api/owned-shoes/${id}`).then((r) => r.data),
   logRun: (id, data) => client.post(`/api/owned-shoes/${id}/log-run`, data).then((r) => r.data),
   runs: (id) => client.get(`/api/owned-shoes/${id}/runs`).then((r) => r.data),
+  deleteRun: (runId) => client.delete(`/api/owned-shoes/runs/${runId}`).then((r) => r.data),
 }
 
 export default client

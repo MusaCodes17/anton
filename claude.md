@@ -6,6 +6,40 @@
 
 ---
 
+## 🆕 Run pace/HR, lifetime averages, run deletion — 2026-06-24
+
+**[ADDED] avg_pace/avg_hr wired through properly, lifetime stats, and the ability to remove a logged run.**
+- `log_run_to_shoe` (MCP) gained `avg_pace`/`avg_hr` params, saved directly to the existing
+  `shoe_runs` columns — there was no notes-stuffing workaround to remove, those columns were
+  simply unused by the tool until now. `POST /api/owned-shoes/{id}/log-run` already accepted both
+  fields (they're on `ShoeRunCreate`/`ShoeRunBase`); nothing needed to change there.
+- New computed (non-column) fields on `OwnedShoeResponse`: `lifetime_avg_pace`, `lifetime_avg_hr`,
+  `total_runs`. Pace strings are averaged correctly — each "M:SS/km" is converted to seconds,
+  averaged, then formatted back (`_pace_to_seconds` / `_seconds_to_pace` in
+  `routers/owned_shoes.py`); averaging the strings directly would be meaningless. Computed by
+  `_compute_lifetime_stats` + attached via `_attach_computed_fields`, called from every
+  `owned_shoes.py` endpoint that returns a shoe (list/get/create/update/log-run/delete-run) so the
+  stats are never stale in a response. Also exposed in the `get_owned_shoes` and `get_shoe_runs`
+  MCP tools (the latter now returns `{runs, lifetime_avg_pace, lifetime_avg_hr, total_runs}`
+  instead of a bare list — MCP-only, the REST endpoint shape didn't change).
+  Frontend shows it as a compact line ("Avg pace 3:52/km · Avg HR 152 bpm · 2 runs") in the My
+  Shoes detail dialog, only when `total_runs > 0`.
+- **[ADDED]** `DELETE /api/owned-shoes/runs/{run_id}` — deletes the run and subtracts its
+  `distance_km` back out of the parent shoe's `current_mileage` (floored at 0), returns the
+  updated shoe. New MCP tool `delete_shoe_run(run_id)` mirrors it. Frontend: a Trash icon per row
+  in the run history table, with a confirmation dialog quoting the exact km that will be
+  subtracted. `useDeleteShoeRun` (`hooks/useApi.js`) optimistically patches the runs list and the
+  shoe's `current_mileage`/`total_runs` in the query cache in `onMutate` (before the request
+  resolves), then re-syncs with the server in `onSettled` either way. The My Shoes detail dialog
+  now looks up its shoe live from the shoes list by id (`detailShoeId`, not a snapshot object) so
+  it reflects this optimistic update immediately instead of showing stale mileage until reopened.
+- Verified live: logged two runs via REST with paces 3:50/km and 4:10/km → lifetime average
+  correctly computed as 4:00/km (not a string-average); deleted one run via REST and via the MCP
+  tool directly, both correctly subtracted that run's distance from `current_mileage` and
+  recomputed `total_runs`/lifetime averages. Frontend production build passes clean.
+
+---
+
 ## 🆕 My Shoes UI polish — 2026-06-24
 
 **[ADDED] Search, active/retired split, compact mileage text, and product images on owned shoe cards.**

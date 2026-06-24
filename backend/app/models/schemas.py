@@ -273,6 +273,13 @@ class OwnedShoeResponse(OwnedShoeBase):
         None, description="Best-effort image match from price_records, used when image_url isn't set"
     )
     current_mileage: float
+    lifetime_avg_pace: Optional[str] = Field(
+        None, description="Lifetime average pace across all logged runs with a recorded pace, 'M:SS/km'"
+    )
+    lifetime_avg_hr: Optional[int] = Field(
+        None, description="Lifetime average heart rate across all logged runs with a recorded HR (bpm)"
+    )
+    total_runs: int = Field(0, description="Count of runs logged against this shoe")
     created_at: datetime
     updated_at: Optional[datetime] = None
 

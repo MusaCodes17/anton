@@ -45,6 +45,50 @@ def _find_matched_image(db: Session, brand: str, model: str) -> Optional[str]:
     return match[0] if match else None
 
 
+def _pace_to_seconds(pace: str) -> Optional[float]:
+    """Parse a 'M:SS/km' pace string into total seconds. None if unparseable."""
+    try:
+        mins_str, secs_str = pace.split('/')[0].strip().split(':')
+        return int(mins_str) * 60 + int(secs_str)
+    except (ValueError, AttributeError):
+        return None
+
+
+def _seconds_to_pace(seconds: float) -> str:
+    """Format total seconds back into a 'M:SS/km' pace string."""
+    total = round(seconds)
+    mins, secs = divmod(total, 60)
+    return f"{mins}:{secs:02d}/km"
+
+
+def _compute_lifetime_stats(db: Session, owned_shoe_id: int) -> dict:
+    """
+    Lifetime averages across every run logged against a shoe. Pace strings
+    can't be averaged directly (e.g. averaging "3:50/km" and "4:10/km" as
+    text means nothing) — each is converted to seconds first, averaged, then
+    formatted back. Runs missing a pace/HR are excluded from that average
+    but still count toward total_runs.
+    """
+    runs = db.query(ShoeRun).filter(ShoeRun.owned_shoe_id == owned_shoe_id).all()
+    pace_seconds = [s for s in (_pace_to_seconds(r.avg_pace) for r in runs if r.avg_pace) if s is not None]
+    hrs = [r.avg_hr for r in runs if r.avg_hr is not None]
+    return {
+        "lifetime_avg_pace": _seconds_to_pace(sum(pace_seconds) / len(pace_seconds)) if pace_seconds else None,
+        "lifetime_avg_hr": round(sum(hrs) / len(hrs)) if hrs else None,
+        "total_runs": len(runs),
+    }
+
+
+def _attach_computed_fields(db: Session, shoe: OwnedShoe) -> OwnedShoe:
+    """Attach the response-only fields (image match + lifetime stats) that aren't real columns."""
+    shoe.matched_image_url = None if shoe.image_url else _find_matched_image(db, shoe.brand, shoe.model)
+    stats = _compute_lifetime_stats(db, shoe.id)
+    shoe.lifetime_avg_pace = stats["lifetime_avg_pace"]
+    shoe.lifetime_avg_hr = stats["lifetime_avg_hr"]
+    shoe.total_runs = stats["total_runs"]
+    return shoe
+
+
 @router.get("/", response_model=List[OwnedShoeResponse])
 def get_owned_shoes(status_filter: str = None, db: Session = Depends(get_db)):
     """
@@ -56,7 +100,7 @@ def get_owned_shoes(status_filter: str = None, db: Session = Depends(get_db)):
         query = query.filter(OwnedShoe.status == status_filter)
     shoes = query.order_by(OwnedShoe.created_at.desc()).all()
     for shoe in shoes:
-        shoe.matched_image_url = None if shoe.image_url else _find_matched_image(db, shoe.brand, shoe.model)
+        _attach_computed_fields(db, shoe)
     return shoes
 
 
@@ -71,7 +115,7 @@ def get_owned_shoe(owned_shoe_id: int, db: Session = Depends(get_db)):
             detail=f"Owned shoe with id {owned_shoe_id} not found"
         )
 
-    shoe.matched_image_url = None if shoe.image_url else _find_matched_image(db, shoe.brand, shoe.model)
+    _attach_computed_fields(db, shoe)
     return shoe
 
 
@@ -86,7 +130,7 @@ def create_owned_shoe(shoe: OwnedShoeCreate, db: Session = Depends(get_db)):
     db.add(db_shoe)
     db.commit()
     db.refresh(db_shoe)
-    return db_shoe
+    return _attach_computed_fields(db, db_shoe)
 
 
 @router.put("/{owned_shoe_id}", response_model=OwnedShoeResponse)
@@ -106,7 +150,7 @@ def update_owned_shoe(owned_shoe_id: int, shoe_update: OwnedShoeUpdate, db: Sess
 
     db.commit()
     db.refresh(db_shoe)
-    return db_shoe
+    return _attach_computed_fields(db, db_shoe)
 
 
 @router.delete("/{owned_shoe_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -141,7 +185,7 @@ def log_run(owned_shoe_id: int, run: ShoeRunCreate, db: Session = Depends(get_db
     db_shoe.current_mileage += run.distance_km
     db.commit()
     db.refresh(db_shoe)
-    return db_shoe
+    return _attach_computed_fields(db, db_shoe)
 
 
 @router.get("/{owned_shoe_id}/runs", response_model=List[ShoeRunResponse])
@@ -161,3 +205,35 @@ def get_shoe_runs(owned_shoe_id: int, db: Session = Depends(get_db)):
         .order_by(ShoeRun.run_date.desc(), ShoeRun.created_at.desc())
         .all()
     )
+
+
+@router.delete("/runs/{run_id}", response_model=OwnedShoeResponse)
+def delete_shoe_run(run_id: int, db: Session = Depends(get_db)):
+    """
+    Delete a logged run, subtracting its distance back out of the parent
+    shoe's current_mileage. Returns the updated shoe.
+    """
+    run = db.query(ShoeRun).filter(ShoeRun.id == run_id).first()
+
+    if not run:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Run with id {run_id} not found"
+        )
+
+    db_shoe = db.query(OwnedShoe).filter(OwnedShoe.id == run.owned_shoe_id).first()
+    distance = run.distance_km
+    db.delete(run)
+
+    if db_shoe:
+        db_shoe.current_mileage = max(0, db_shoe.current_mileage - distance)
+    db.commit()
+
+    if not db_shoe:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Owned shoe for run {run_id} not found"
+        )
+
+    db.refresh(db_shoe)
+    return _attach_computed_fields(db, db_shoe)
