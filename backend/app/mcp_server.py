@@ -738,3 +738,374 @@ def retire_shoe(owned_shoe_id: int) -> dict:
             }
     except Exception as e:
         return {"success": False, "error": str(e)}
+
+
+# ---------------------------------------------------------------------------
+# Formatting helpers (private — used only by resource functions below)
+# ---------------------------------------------------------------------------
+
+def _format_mileage_bar(current: float, limit: Optional[float]) -> str:
+    """Return a 10-block progress bar with percentage, e.g. '████████░░ 83%'."""
+    if not limit or limit <= 0:
+        return f"{round(current)}km"
+    pct = min(current / limit, 1.0)
+    filled = round(pct * 10)
+    bar = "█" * filled + "░" * (10 - filled)
+    return f"{bar} {round(pct * 100)}%"
+
+
+def _format_relative_time(dt: Optional[datetime]) -> str:
+    """Return a human-readable relative time string, e.g. '2 hours ago'."""
+    if dt is None:
+        return "never"
+    now = datetime.now(timezone.utc)
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    delta = now - dt
+    total_seconds = int(delta.total_seconds())
+    if total_seconds < 60:
+        return "just now"
+    if total_seconds < 3600:
+        mins = total_seconds // 60
+        return f"{mins} minute{'s' if mins != 1 else ''} ago"
+    if total_seconds < 86400:
+        hours = total_seconds // 3600
+        return f"{hours} hour{'s' if hours != 1 else ''} ago"
+    days = total_seconds // 86400
+    return f"{days} day{'s' if days != 1 else ''} ago"
+
+
+# ---------------------------------------------------------------------------
+# Static resources
+# ---------------------------------------------------------------------------
+
+@mcp.resource(
+    "shoes://rotation",
+    name="My Shoe Rotation",
+    description="Current owned shoe rotation with mileage, status and lifetime stats for all active shoes",
+    mime_type="application/json",
+)
+def shoe_rotation_resource() -> str:
+    """Current owned shoe rotation with mileage and lifetime stats"""
+    import json
+
+    with get_session() as db:
+        shoes = db.query(OwnedShoe).order_by(OwnedShoe.created_at.desc()).all()
+        active = [s for s in shoes if s.status == "active"]
+        retired = [s for s in shoes if s.status != "active"]
+
+        md_lines = ["# My Shoe Rotation", "", "**Active Shoes**"]
+        shoe_dicts = []
+        for s in active:
+            stats = _compute_lifetime_stats(db, s.id)
+            bar = _format_mileage_bar(s.current_mileage, s.mileage_limit if hasattr(s, "mileage_limit") else None)
+            label = s.nickname or s.shoe_type or ""
+            name = f"{s.brand} {s.model}" + (f" ({label})" if label else "")
+            pace = stats.get("lifetime_avg_pace") or "—"
+            hr = f"{stats['lifetime_avg_hr']}bpm" if stats.get("lifetime_avg_hr") else "—"
+            runs = stats.get("total_runs", 0)
+            md_lines.append(f"- {name} — {round(s.current_mileage)}km  {bar}")
+            md_lines.append(f"  Avg pace: {pace} · Avg HR: {hr} · {runs} runs")
+            shoe_dicts.append(_owned_shoe_to_dict(s, stats))
+
+        if not active:
+            md_lines.append("_(none)_")
+
+        if retired:
+            md_lines += ["", "**Retired Shoes**"]
+            for s in retired:
+                stats = _compute_lifetime_stats(db, s.id)
+                label = s.nickname or s.shoe_type or ""
+                name = f"{s.brand} {s.model}" + (f" ({label})" if label else "")
+                md_lines.append(f"- {name} — {round(s.current_mileage)}km (retired)")
+                shoe_dicts.append(_owned_shoe_to_dict(s, stats))
+
+        markdown = "\n".join(md_lines)
+        payload = json.dumps({"shoes": shoe_dicts}, default=str)
+        return f"{markdown}\n\n```json\n{payload}\n```"
+
+
+@mcp.resource(
+    "shoes://deals/active",
+    name="Active Deals",
+    description="Current active shoe deals sorted by savings percentage",
+    mime_type="application/json",
+)
+def active_deals_resource() -> str:
+    """Top 20 active deals sorted by savings percentage"""
+    import json
+
+    with get_session() as db:
+        deals = (
+            db.query(Deal)
+            .filter(Deal.is_active == True)
+            .order_by(desc(Deal.savings_percent))
+            .limit(20)
+            .all()
+        )
+        total = db.query(Deal).filter(Deal.is_active == True).count()
+
+        md_lines = [
+            f"# Active Deals ({total} deals)",
+            "",
+            "| Shoe | Retailer | Price | Savings |",
+            "|------|----------|-------|---------|",
+        ]
+        for d in deals:
+            shoe_name = f"{d.shoe.brand} {d.shoe.model}"
+            savings = f"{round(d.savings_percent)}% off"
+            md_lines.append(f"| {shoe_name} | {d.retailer.name} | ${d.current_price:.2f} | {savings} |")
+
+        markdown = "\n".join(md_lines)
+        payload = json.dumps({"total": total, "deals": [_deal_to_dict(d) for d in deals]}, default=str)
+        return f"{markdown}\n\n```json\n{payload}\n```"
+
+
+@mcp.resource(
+    "shoes://retailers",
+    name="Retailers",
+    description="Active retailers being scraped with last scraped timestamp and scraping status",
+    mime_type="application/json",
+)
+def retailers_resource() -> str:
+    """Active retailers with last-scraped relative timestamps"""
+    import json
+
+    with get_session() as db:
+        retailers = (
+            db.query(Retailer)
+            .filter(Retailer.is_active == True)
+            .order_by(Retailer.name)
+            .all()
+        )
+
+        md_lines = ["# Retailers", "", "| Name | Scraping | Last Scraped |", "|------|----------|-------------|"]
+        retailer_dicts = []
+        for r in retailers:
+            status = "✅ enabled" if r.scraping_enabled else "⏸ disabled"
+            last = _format_relative_time(r.last_scraped_at)
+            md_lines.append(f"| {r.name} | {status} | {last} |")
+            retailer_dicts.append({
+                "id": r.id,
+                "name": r.name,
+                "base_url": r.base_url,
+                "platform": r.platform,
+                "scraping_enabled": r.scraping_enabled,
+                "last_scraped_at": r.last_scraped_at.isoformat() if r.last_scraped_at else None,
+                "last_scraped_relative": _format_relative_time(r.last_scraped_at),
+            })
+
+        markdown = "\n".join(md_lines)
+        payload = json.dumps({"retailers": retailer_dicts}, default=str)
+        return f"{markdown}\n\n```json\n{payload}\n```"
+
+
+# ---------------------------------------------------------------------------
+# Templated resources
+# ---------------------------------------------------------------------------
+
+@mcp.resource(
+    "shoes://owned/{shoe_id}",
+    name="Shoe Detail",
+    description="Full detail for a specific owned shoe including stats, recent runs and notes",
+    mime_type="application/json",
+)
+def shoe_detail_resource(shoe_id: int) -> str:
+    """Full detail for a specific owned shoe"""
+    import json
+
+    with get_session() as db:
+        shoe = db.query(OwnedShoe).filter(OwnedShoe.id == shoe_id).first()
+        if not shoe:
+            return f"No shoe found with id {shoe_id}"
+
+        stats = _compute_lifetime_stats(db, shoe.id)
+        cost_per_km = (
+            round(shoe.purchase_price / shoe.current_mileage, 2)
+            if shoe.purchase_price and shoe.current_mileage > 0
+            else None
+        )
+        mileage_limit = getattr(shoe, "mileage_limit", None)
+        bar = _format_mileage_bar(shoe.current_mileage, mileage_limit)
+        label = shoe.nickname or shoe.shoe_type or ""
+        name = f"{shoe.brand} {shoe.model}" + (f" ({label})" if label else "")
+        pct = round(shoe.current_mileage / mileage_limit * 100) if mileage_limit else None
+        mileage_line = f"{round(shoe.current_mileage)}km / {round(mileage_limit)}km ({pct}%)" if mileage_limit else f"{round(shoe.current_mileage)}km"
+
+        md_lines = [
+            f"# {name}",
+            f"**Status:** {shoe.status.capitalize()} | **Mileage:** {mileage_line}",
+        ]
+        if shoe.purchase_price:
+            md_lines.append(
+                f"**Purchase price:** ${shoe.purchase_price:.2f}"
+                + (f" | **Cost per km:** ${cost_per_km:.2f}" if cost_per_km else "")
+            )
+        pace = stats.get("lifetime_avg_pace") or "—"
+        hr = f"{stats['lifetime_avg_hr']}bpm" if stats.get("lifetime_avg_hr") else "—"
+        runs_count = stats.get("total_runs", 0)
+        md_lines.append(f"**Lifetime stats:** Avg {pace} · {hr} · {runs_count} runs")
+
+        recent_runs = (
+            db.query(ShoeRun)
+            .filter(ShoeRun.owned_shoe_id == shoe_id)
+            .order_by(desc(ShoeRun.run_date), desc(ShoeRun.created_at))
+            .limit(5)
+            .all()
+        )
+        if recent_runs:
+            md_lines += ["", "## Recent Runs"]
+            for r in recent_runs:
+                date_str = r.run_date.strftime("%b %d") if r.run_date else "—"
+                p = r.avg_pace or "—"
+                h = f"{r.avg_hr}bpm" if r.avg_hr else "—"
+                md_lines.append(f"- {date_str} · {r.distance_km:.1f}km · {p} · {h}")
+
+        recent_notes = (
+            db.query(ShoeNote)
+            .filter(ShoeNote.owned_shoe_id == shoe_id)
+            .order_by(desc(ShoeNote.created_at))
+            .limit(3)
+            .all()
+        )
+        if recent_notes:
+            md_lines += ["", "## Notes"]
+            for n in recent_notes:
+                km_tag = f"[{round(n.mileage_at_note)}km]" if n.mileage_at_note else ""
+                md_lines.append(f"- {km_tag} {n.body}")
+
+        markdown = "\n".join(md_lines)
+        payload = json.dumps(
+            {
+                "shoe": _owned_shoe_to_dict(shoe, stats),
+                "recent_runs": [_shoe_run_to_dict(r) for r in recent_runs],
+                "recent_notes": [_shoe_note_to_dict(n) for n in recent_notes],
+            },
+            default=str,
+        )
+        return f"{markdown}\n\n```json\n{payload}\n```"
+
+
+@mcp.resource(
+    "shoes://owned/{shoe_id}/runs",
+    name="Shoe Run History",
+    description="Complete run history for a specific owned shoe",
+    mime_type="application/json",
+)
+def shoe_runs_resource(shoe_id: int) -> str:
+    """Complete run history for a specific owned shoe, newest first"""
+    import json
+
+    with get_session() as db:
+        shoe = db.query(OwnedShoe).filter(OwnedShoe.id == shoe_id).first()
+        if not shoe:
+            return f"No shoe found with id {shoe_id}"
+
+        runs = (
+            db.query(ShoeRun)
+            .filter(ShoeRun.owned_shoe_id == shoe_id)
+            .order_by(desc(ShoeRun.run_date), desc(ShoeRun.created_at))
+            .all()
+        )
+        label = shoe.nickname or shoe.shoe_type or ""
+        name = f"{shoe.brand} {shoe.model}" + (f" ({label})" if label else "")
+
+        md_lines = [
+            f"# Run History — {name}",
+            f"_{len(runs)} run{'s' if len(runs) != 1 else ''} logged_",
+            "",
+            "| Date | Distance | Pace | HR | Source |",
+            "|------|----------|------|----|--------|",
+        ]
+        for r in runs:
+            date_str = r.run_date.strftime("%b %d, %Y") if r.run_date else "—"
+            pace = r.avg_pace or "—"
+            hr = f"{r.avg_hr}bpm" if r.avg_hr else "—"
+            source_badge = "🤖 coros" if r.source == "coros" else "✍ manual"
+            md_lines.append(f"| {date_str} | {r.distance_km:.1f}km | {pace} | {hr} | {source_badge} |")
+
+        stats = _compute_lifetime_stats(db, shoe_id)
+        markdown = "\n".join(md_lines)
+        payload = json.dumps(
+            {"shoe_id": shoe_id, "runs": [_shoe_run_to_dict(r) for r in runs], **stats},
+            default=str,
+        )
+        return f"{markdown}\n\n```json\n{payload}\n```"
+
+
+@mcp.resource(
+    "shoes://owned/{shoe_id}/notes",
+    name="Shoe Notes Journal",
+    description="Timestamped notes journal for a specific owned shoe",
+    mime_type="application/json",
+)
+def shoe_notes_resource(shoe_id: int) -> str:
+    """Timestamped notes journal for a specific owned shoe"""
+    import json
+
+    with get_session() as db:
+        shoe = db.query(OwnedShoe).filter(OwnedShoe.id == shoe_id).first()
+        if not shoe:
+            return f"No shoe found with id {shoe_id}"
+
+        notes = (
+            db.query(ShoeNote)
+            .filter(ShoeNote.owned_shoe_id == shoe_id)
+            .order_by(desc(ShoeNote.created_at))
+            .all()
+        )
+        label = shoe.nickname or shoe.shoe_type or ""
+        name = f"{shoe.brand} {shoe.model}" + (f" ({label})" if label else "")
+
+        md_lines = [f"# Notes — {name}", ""]
+        if not notes:
+            md_lines.append("_No notes yet._")
+        for n in notes:
+            date_str = n.created_at.strftime("%b %d, %Y") if n.created_at else "—"
+            km_str = f"{round(n.mileage_at_note)}km" if n.mileage_at_note is not None else ""
+            badge = "🏁 checkpoint" if n.triggered_by == "checkpoint" else "✍ manual"
+            md_lines.append(f"[{date_str} · {km_str}] {badge}")
+            md_lines.append(n.body)
+            md_lines.append("")
+
+        markdown = "\n".join(md_lines).rstrip()
+        payload = json.dumps({"shoe_id": shoe_id, "notes": [_shoe_note_to_dict(n) for n in notes]}, default=str)
+        return f"{markdown}\n\n```json\n{payload}\n```"
+
+
+@mcp.resource(
+    "shoes://deals/{brand}",
+    name="Brand Deals",
+    description="Active deals filtered by brand name",
+    mime_type="application/json",
+)
+def brand_deals_resource(brand: str) -> str:
+    """Active deals for a specific brand, sorted by savings percentage"""
+    import json
+
+    with get_session() as db:
+        deals = (
+            db.query(Deal)
+            .join(Deal.shoe)
+            .filter(Deal.is_active == True, Shoe.brand.ilike(f"%{brand}%"))
+            .order_by(desc(Deal.savings_percent))
+            .all()
+        )
+
+        if not deals:
+            return f"No active deals found for {brand}"
+
+        md_lines = [
+            f"# Active Deals — {brand} ({len(deals)} deal{'s' if len(deals) != 1 else ''})",
+            "",
+            "| Shoe | Retailer | Price | Savings |",
+            "|------|----------|-------|---------|",
+        ]
+        for d in deals:
+            shoe_name = f"{d.shoe.brand} {d.shoe.model}"
+            savings = f"{round(d.savings_percent)}% off"
+            md_lines.append(f"| {shoe_name} | {d.retailer.name} | ${d.current_price:.2f} | {savings} |")
+
+        markdown = "\n".join(md_lines)
+        payload = json.dumps({"brand": brand, "deals": [_deal_to_dict(d) for d in deals]}, default=str)
+        return f"{markdown}\n\n```json\n{payload}\n```"
