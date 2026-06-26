@@ -28,6 +28,46 @@ class BaseScraper(ABC):
     - Price parsing
     """
     
+    # Keywords (case-insensitive) that mark a listing as a kids/junior shoe.
+    # Short/ambiguous ones (jr, gs, ps, td) are bounded by \b on both sides
+    # so they only match as standalone tokens (e.g. "Jr." or "(GS)" or
+    # "- GS"), never as a substring inside an unrelated model name/code.
+    _KIDS_SHOE_KEYWORDS = (
+        "junior", "jr", "kids", "kid", "grade school", "gs", "preschool",
+        "ps", "toddler", "td", "infant", "youth", "children", "child",
+        "little kids", "big kids",
+    )
+    _KIDS_SHOE_RE = re.compile(
+        r'\b(?:' + '|'.join(re.escape(k) for k in _KIDS_SHOE_KEYWORDS) + r')\b',
+        re.IGNORECASE,
+    )
+
+    @classmethod
+    def is_kids_shoe(cls, text: Optional[str]) -> bool:
+        """True if a product name/title/URL looks like a kids/junior listing."""
+        if not text:
+            return False
+        return bool(cls._KIDS_SHOE_RE.search(text))
+
+    def search_products_filtered(self, brand: str, model: str) -> List[Dict]:
+        """
+        Wraps the abstract search_products() with a kids/junior-shoe filter.
+        Defined once, here, so every scraper subclass — existing and any
+        added later — gets it automatically without having to remember to
+        filter itself. Callers that persist results to the database
+        (ScraperManager) should call this instead of search_products()
+        directly; dry-run/test paths may use either.
+        """
+        results = self.search_products(brand, model)
+        filtered = [r for r in results if not self.is_kids_shoe(r.get('name'))]
+        skipped = len(results) - len(filtered)
+        if skipped:
+            logger.info(
+                f"[{self.retailer_name}] Filtered out {skipped} kids/junior shoe result(s) "
+                f"for '{brand} {model}'"
+            )
+        return filtered
+
     def __init__(self, retailer_name: str, base_url: str, config: dict = None):
         self.retailer_name = retailer_name
         self.base_url = base_url

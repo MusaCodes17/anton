@@ -1,13 +1,23 @@
 """
 API routes for scraping operations
 """
-from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks
+import json
+
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
 from sqlalchemy.orm import Session
+from sse_starlette.sse import EventSourceResponse
 from typing import Optional, List
 
 from app.database import get_db
 from app.models import ScrapeRequest, ScrapeResult
-from app.scrapers.scraper_manager import ScraperManager
+from app.scrape_runner import run_scrape_job
+from app.scrape_state import scrape_state
+from app.scrapers.scraper_manager import (
+    ScraperManager,
+    ScrapeInProgressError,
+    scrape_guard,
+    try_acquire_scrape_lock,
+)
 from datetime import datetime
 
 router = APIRouter(prefix="/scrape", tags=["scraping"])
@@ -26,23 +36,28 @@ def scrape_shoe(
     - **retailer_ids**: Optional list of retailer IDs (if None, scrape all active retailers)
     """
     manager = ScraperManager(db)
-    
+
     try:
-        results = manager.scrape_shoe(shoe_id, retailer_ids)
-        
+        with scrape_guard():
+            results = manager.scrape_shoe(shoe_id, retailer_ids)
+
         if not results.get('success', True):
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail=results.get('error', 'Unknown error')
             )
-        
+
         return {
             "success": True,
             "message": f"Scraping completed for shoe ID {shoe_id}",
             "results": results,
             "scraped_at": datetime.utcnow().isoformat()
         }
-        
+
+    except ScrapeInProgressError as e:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e))
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -51,35 +66,58 @@ def scrape_shoe(
 
 
 @router.post("/all", response_model=dict)
-def scrape_all_shoes(
+async def scrape_all_shoes(
+    background_tasks: BackgroundTasks,
     retailer_ids: Optional[List[int]] = None,
-    background_tasks: BackgroundTasks = None,
-    db: Session = Depends(get_db)
 ):
     """
-    Manually trigger scraping for all active shoes
-    
-    This can take a while, so consider running in background
-    
+    Kick off a background scrape of all active shoes across every enabled
+    retailer (concurrently, per retailer) and return immediately — this no
+    longer blocks for the 20-30+ minutes a full catalog can take. Subscribe
+    to GET /scrape/stream for live progress; it ends with a "completed" event.
+
+    Returns {"started": false, "reason": "..."} instead of queuing a second
+    job if one (of any kind — this or /scrape/shoe/{id} or
+    /scrape/retailer/{id}) is already running.
+
     - **retailer_ids**: Optional list of retailer IDs (if None, scrape all active retailers)
     """
-    manager = ScraperManager(db)
-    
-    try:
-        results = manager.scrape_all_shoes(retailer_ids)
-        
-        return {
-            "success": True,
-            "message": "Scraping completed for all active shoes",
-            "results": results,
-            "scraped_at": datetime.utcnow().isoformat()
-        }
-        
-    except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Scraping failed: {str(e)}"
-        )
+    if not try_acquire_scrape_lock():
+        return {"started": False, "reason": "Scrape already in progress"}
+
+    background_tasks.add_task(run_scrape_job, retailer_ids)
+    return {"started": True}
+
+
+@router.get("/stream")
+async def scrape_stream():
+    """
+    SSE stream of progress for the current (or most recently finished)
+    background scrape job kicked off by POST /scrape/all. Event types:
+        {"type": "started", "retailers": [...]}
+        {"type": "retailer_done", "retailer": "...", "deals_found": N, "timestamp": "..."}
+        {"type": "retailer_error", "retailer": "...", "error": "..."}
+        {"type": "completed", "total_deals": N, "completed_at": "..."}
+
+    Connecting after a job already finished replays its full history
+    (ending in "completed") instead of hanging; connecting when nothing has
+    ever run just closes immediately.
+    """
+    queue = scrape_state.subscribe()
+
+    async def event_generator():
+        try:
+            if queue.empty() and not scrape_state.is_running:
+                return  # nothing has ever run and nothing is running now
+            while True:
+                event = await queue.get()
+                yield {"event": "message", "data": json.dumps(event)}
+                if event.get("type") == "completed":
+                    break
+        finally:
+            scrape_state.unsubscribe(queue)
+
+    return EventSourceResponse(event_generator())
 
 
 @router.post("/retailer/{retailer_id}", response_model=dict)
@@ -118,17 +156,21 @@ def scrape_retailer(
         'total_deals_found': 0,
         'errors': []
     }
-    
-    for shoe in shoes:
-        results = manager.scrape_shoe(shoe.id, [retailer_id])
-        
-        aggregated_results['total_products_found'] += results.get('products_found', 0)
-        aggregated_results['total_prices_recorded'] += results.get('prices_recorded', 0)
-        aggregated_results['total_deals_found'] += results.get('deals_found', 0)
-        
-        if results.get('errors'):
-            aggregated_results['errors'].extend(results['errors'])
-    
+
+    try:
+        with scrape_guard():
+            for shoe in shoes:
+                results = manager.scrape_shoe(shoe.id, [retailer_id])
+
+                aggregated_results['total_products_found'] += results.get('products_found', 0)
+                aggregated_results['total_prices_recorded'] += results.get('prices_recorded', 0)
+                aggregated_results['total_deals_found'] += results.get('deals_found', 0)
+
+                if results.get('errors'):
+                    aggregated_results['errors'].extend(results['errors'])
+    except ScrapeInProgressError as e:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e))
+
     return {
         "success": True,
         "message": f"Scraping completed for retailer ID {retailer_id}",

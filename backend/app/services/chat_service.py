@@ -1,37 +1,47 @@
 """
-Streaming chat service — calls Claude via the Anthropic API and dispatches
-tool calls through the MCP protocol (Streamable HTTP transport).
+Streaming chat service — supports Anthropic, OpenAI, and Google Gemini providers.
 
-Tool discovery is fully automatic: the assistant connects to each MCP server
-listed in MCP_SERVERS, reads its tool catalogue, and passes the schemas to
-Claude. Adding a new @mcp.tool() in mcp_server.py is sufficient — no
-registry or schema updates are needed here.
+Tool discovery is fully automatic via MCP (Streamable HTTP transport).
+Adding a new @mcp.tool() in mcp_server.py is sufficient — no registry updates needed here.
 
-To add another MCP server append an entry to MCP_SERVERS.
+Provider routing:
+  claude-*  → AnthropicProvider
+  gpt-*     → OpenAIProvider
+  gemini-*  → GeminiProvider
 """
 import asyncio
 import json
 import os
+from abc import ABC, abstractmethod
 from datetime import timedelta
-from typing import AsyncGenerator
+from typing import AsyncGenerator, Callable
 
-from anthropic import AsyncAnthropic
 from mcp import types as mcp_types
 from mcp.client.session_group import ClientSessionGroup, StreamableHttpParameters
 
-SYSTEM_PROMPT = (
-    "You are a personal running assistant built into the Running Shoe Deal Finder. "
-    "You help the user manage their shoe rotation, track mileage, find deals, and make "
-    "smart decisions about their running gear. You have access to tools to query owned shoes, "
-    "run history, shoe notes, and current deals. Always use your tools to get current data "
-    "rather than making assumptions. Be concise and direct — the user is a competitive runner, "
-    "running terminology is fine. Flag proactively when a shoe is approaching its mileage limit."
-)
+SYSTEM_PROMPT = """You are a personal running assistant called Son of Anton, built into the Running Shoe Deal Finder. \
+You help the user manage their shoe rotation, track mileage, find deals, and make smart decisions about their running gear. \
+You have access to MCP tools to query owned shoes, run history, shoe notes, and current deals. \
+Be concise and direct — the user is a competitive runner, running terminology is fine. \
+Flag proactively when a shoe is approaching 700km or its mileage limit.
 
-# MCP servers the assistant can reach. Each entry needs a `name` and a `url`.
-# When two servers expose a tool with the same name, pass a component_name_hook
-# to ClientSessionGroup to namespace them:
-#   component_name_hook=lambda name, info: f"{info.name}__{name}"
+IMPORTANT RULES — follow every single time, no exceptions:
+
+1. VERIFY BEFORE CLAIMING: Always call get_owned_shoes before making any statement about a specific shoe's \
+mileage, status, or condition. Never rely on memory from earlier in the conversation — shoe state changes \
+with every logged run.
+
+2. CHECK BEFORE ADDING: Before calling add_shoe, always call get_shoes first to verify the shoe isn't \
+already tracked. If it exists, tell the user instead of creating a duplicate.
+
+3. VERIFY TOOL SUCCESS: After every write operation (log_run_to_shoe, add_shoe, retire_shoe, \
+add_shoe_note, delete_shoe_run, etc.), check the response for "success": true. If success is false, \
+report the exact error to the user — never claim an action succeeded without confirming it.
+
+4. CORRECT SHOE IDENTITY: When the user refers to a shoe by nickname, color, or description, always \
+call get_owned_shoes first and match it to the correct owned_shoe_id before calling any other tool. \
+Never guess an id from memory."""
+
 MCP_SERVERS: list[dict] = [
     {
         "name": "rundeals",
@@ -39,23 +49,14 @@ MCP_SERVERS: list[dict] = [
     },
 ]
 
-
-def _to_anthropic_tool(tool: mcp_types.Tool) -> dict:
-    """Convert an MCP Tool object to the Anthropic messages API format."""
-    return {
-        "name": tool.name,
-        "description": tool.description or "",
-        "input_schema": tool.inputSchema,
-    }
+# Defensive cap on the agentic loop in each provider's run() below. Without
+# this, a model that keeps emitting tool calls indefinitely (a confusing
+# tool result, or one that just won't accept "done") loops forever — there
+# was no termination guarantee other than the model's own behavior.
+MAX_AGENTIC_TURNS = 25
 
 
 def _extract_result_text(call_result: mcp_types.CallToolResult) -> str:
-    """
-    Pull text from an MCP CallToolResult.
-
-    FastMCP serialises dict/list returns as pretty-printed JSON inside a
-    TextContent block, so joining all text blocks gives the full payload.
-    """
     if call_result.isError:
         return json.dumps({"error": "Tool call failed"})
     return "\n".join(
@@ -63,24 +64,335 @@ def _extract_result_text(call_result: mcp_types.CallToolResult) -> str:
     ) or "{}"
 
 
+class BaseLLMProvider(ABC):
+    @abstractmethod
+    async def run(
+        self,
+        initial_messages: list[dict],
+        model: str,
+        tools: list[mcp_types.Tool],
+        queue: asyncio.Queue,
+        call_mcp_tool: Callable,
+    ) -> None:
+        """Agentic loop: stream LLM response, call tools, repeat until done.
+        Push SSE event dicts to queue; end with {"type":"done"} or {"type":"error"}."""
+
+
+class AnthropicProvider(BaseLLMProvider):
+    def _tool_schema(self, tool: mcp_types.Tool) -> dict:
+        return {
+            "name": tool.name,
+            "description": tool.description or "",
+            "input_schema": tool.inputSchema,
+        }
+
+    async def run(self, initial_messages, model, tools, queue, call_mcp_tool):
+        from anthropic import AsyncAnthropic
+
+        api_key = os.getenv("ANTHROPIC_API_KEY")
+        if not api_key:
+            await queue.put({"type": "error", "message": "ANTHROPIC_API_KEY is not configured."})
+            return
+
+        client = AsyncAnthropic(api_key=api_key)
+        running = [{"role": m["role"], "content": m["content"]} for m in initial_messages]
+        tool_schemas = [self._tool_schema(t) for t in tools]
+
+        for _turn in range(MAX_AGENTIC_TURNS):
+            streaming_tools: dict[int, dict] = {}
+
+            async with client.messages.stream(
+                model=model,
+                max_tokens=4096,
+                system=SYSTEM_PROMPT,
+                tools=tool_schemas,
+                messages=running,
+            ) as stream:
+                async for event in stream:
+                    if event.type == "content_block_start":
+                        if event.content_block.type == "tool_use":
+                            streaming_tools[event.index] = {
+                                "id": event.content_block.id,
+                                "name": event.content_block.name,
+                                "input_str": "",
+                            }
+                            await queue.put({"type": "tool_call", "tool": event.content_block.name})
+
+                    elif event.type == "content_block_delta":
+                        if event.delta.type == "text_delta":
+                            await queue.put({"type": "text", "content": event.delta.text})
+                        elif event.delta.type == "input_json_delta" and event.index in streaming_tools:
+                            streaming_tools[event.index]["input_str"] += event.delta.partial_json
+
+                    elif event.type == "content_block_stop" and event.index in streaming_tools:
+                        tu = streaming_tools[event.index]
+                        try:
+                            tu["input"] = json.loads(tu["input_str"]) if tu["input_str"] else {}
+                        except json.JSONDecodeError:
+                            tu["input"] = {}
+
+                final_msg = await stream.get_final_message()
+
+            tool_blocks = [b for b in (final_msg.content or []) if b.type == "tool_use"]
+            if not tool_blocks:
+                await queue.put({"type": "done"})
+                return
+
+            assistant_content = []
+            for b in final_msg.content:
+                if b.type == "text":
+                    assistant_content.append({"type": "text", "text": b.text})
+                elif b.type == "tool_use":
+                    assistant_content.append(
+                        {"type": "tool_use", "id": b.id, "name": b.name, "input": b.input}
+                    )
+            running.append({"role": "assistant", "content": assistant_content})
+
+            tool_results = []
+            for block in tool_blocks:
+                result_text, success = await call_mcp_tool(block.name, block.input or {})
+                await queue.put({"type": "tool_result", "tool": block.name, "success": success})
+                tool_results.append(
+                    {"type": "tool_result", "tool_use_id": block.id, "content": result_text}
+                )
+            running.append({"role": "user", "content": tool_results})
+        else:
+            # Loop exhausted MAX_AGENTIC_TURNS without the model ever
+            # stopping on its own (every other exit path above returns
+            # directly, which skips this for/else clause).
+            await queue.put({
+                "type": "error",
+                "message": f"Stopped after {MAX_AGENTIC_TURNS} tool-call turns without finishing — this looks like a loop.",
+            })
+
+
+class OpenAIProvider(BaseLLMProvider):
+    def _tool_schema(self, tool: mcp_types.Tool) -> dict:
+        return {
+            "type": "function",
+            "function": {
+                "name": tool.name,
+                "description": tool.description or "",
+                "parameters": tool.inputSchema,
+            },
+        }
+
+    async def run(self, initial_messages, model, tools, queue, call_mcp_tool):
+        from openai import AsyncOpenAI
+
+        api_key = os.getenv("OPENAI_API_KEY")
+        if not api_key:
+            await queue.put({"type": "error", "message": "OPENAI_API_KEY is not configured."})
+            return
+
+        client = AsyncOpenAI(api_key=api_key)
+        # OpenAI takes system as a message, not a separate parameter
+        running = [{"role": "system", "content": SYSTEM_PROMPT}]
+        running += [{"role": m["role"], "content": m["content"]} for m in initial_messages]
+        tool_schemas = [self._tool_schema(t) for t in tools]
+
+        for _turn in range(MAX_AGENTIC_TURNS):
+            tc_acc: dict[int, dict] = {}
+            full_text = ""
+            finish_reason = None
+
+            stream = await client.chat.completions.create(
+                model=model,
+                messages=running,
+                tools=tool_schemas,
+                stream=True,
+            )
+
+            async for chunk in stream:
+                if not chunk.choices:
+                    continue
+                choice = chunk.choices[0]
+                delta = choice.delta
+
+                if delta.content:
+                    full_text += delta.content
+                    await queue.put({"type": "text", "content": delta.content})
+
+                if delta.tool_calls:
+                    for tc in delta.tool_calls:
+                        idx = tc.index
+                        if idx not in tc_acc:
+                            tc_acc[idx] = {"id": "", "name": "", "arguments": ""}
+                        if tc.id:
+                            tc_acc[idx]["id"] = tc.id
+                        if tc.function:
+                            if tc.function.name and not tc_acc[idx]["name"]:
+                                tc_acc[idx]["name"] = tc.function.name
+                                await queue.put({"type": "tool_call", "tool": tc.function.name})
+                            if tc.function.arguments:
+                                tc_acc[idx]["arguments"] += tc.function.arguments
+
+                if choice.finish_reason:
+                    finish_reason = choice.finish_reason
+
+            if not tc_acc or finish_reason == "stop":
+                await queue.put({"type": "done"})
+                return
+
+            assistant_msg: dict = {"role": "assistant", "content": full_text or None}
+            assistant_msg["tool_calls"] = [
+                {
+                    "id": tc["id"],
+                    "type": "function",
+                    "function": {"name": tc["name"], "arguments": tc["arguments"]},
+                }
+                for tc in tc_acc.values()
+            ]
+            running.append(assistant_msg)
+
+            for tc in tc_acc.values():
+                try:
+                    parsed = json.loads(tc["arguments"] or "{}")
+                except json.JSONDecodeError:
+                    parsed = {}
+                result_text, success = await call_mcp_tool(tc["name"], parsed)
+                await queue.put({"type": "tool_result", "tool": tc["name"], "success": success})
+                running.append({"role": "tool", "tool_call_id": tc["id"], "content": result_text})
+        else:
+            await queue.put({
+                "type": "error",
+                "message": f"Stopped after {MAX_AGENTIC_TURNS} tool-call turns without finishing — this looks like a loop.",
+            })
+
+
+class GeminiProvider(BaseLLMProvider):
+    def _convert_property(self, prop: dict):
+        import google.generativeai as genai
+
+        type_map = {
+            "string": genai.protos.Type.STRING,
+            "integer": genai.protos.Type.INTEGER,
+            "number": genai.protos.Type.NUMBER,
+            "boolean": genai.protos.Type.BOOLEAN,
+            "array": genai.protos.Type.ARRAY,
+            "object": genai.protos.Type.OBJECT,
+        }
+        return genai.protos.Schema(
+            type_=type_map.get(prop.get("type", "string"), genai.protos.Type.STRING),
+            description=prop.get("description", ""),
+        )
+
+    def _to_gemini_schema(self, schema: dict):
+        import google.generativeai as genai
+
+        props = {k: self._convert_property(v) for k, v in (schema.get("properties") or {}).items()}
+        return genai.protos.Schema(
+            type_=genai.protos.Type.OBJECT,
+            properties=props,
+            required=schema.get("required", []),
+        )
+
+    def _tool_schema(self, tool: mcp_types.Tool):
+        import google.generativeai as genai
+
+        schema = tool.inputSchema or {}
+        return genai.protos.FunctionDeclaration(
+            name=tool.name,
+            description=tool.description or "",
+            parameters=self._to_gemini_schema(schema) if schema.get("properties") else None,
+        )
+
+    async def run(self, initial_messages, model, tools, queue, call_mcp_tool):
+        import google.generativeai as genai
+
+        api_key = os.getenv("GOOGLE_API_KEY")
+        if not api_key:
+            await queue.put({"type": "error", "message": "GOOGLE_API_KEY is not configured."})
+            return
+
+        genai.configure(api_key=api_key)
+
+        gemini_tools = [genai.protos.Tool(function_declarations=[self._tool_schema(t) for t in tools])]
+        model_client = genai.GenerativeModel(
+            model_name=model,
+            tools=gemini_tools,
+            system_instruction=SYSTEM_PROMPT,
+        )
+
+        # Build history from prior turns (all but the last message)
+        history = []
+        for msg in initial_messages[:-1]:
+            history.append({"role": "user" if msg["role"] == "user" else "model", "parts": [msg["content"]]})
+
+        chat = model_client.start_chat(history=history)
+        current_message = initial_messages[-1]["content"] if initial_messages else ""
+
+        for _turn in range(MAX_AGENTIC_TURNS):
+            function_calls: list[dict] = []
+
+            try:
+                response = await chat.send_message_async(current_message, stream=True)
+                async for chunk in response:
+                    try:
+                        if chunk.text:
+                            await queue.put({"type": "text", "content": chunk.text})
+                    except (ValueError, AttributeError):
+                        pass
+
+                    try:
+                        for candidate in chunk.candidates or []:
+                            for part in candidate.content.parts or []:
+                                if hasattr(part, "function_call") and part.function_call.name:
+                                    fc = part.function_call
+                                    function_calls.append({"name": fc.name, "args": dict(fc.args) if fc.args else {}})
+                                    await queue.put({"type": "tool_call", "tool": fc.name})
+                    except (AttributeError, ValueError):
+                        pass
+
+            except Exception as exc:
+                await queue.put({"type": "error", "message": f"Gemini error: {exc}"})
+                return
+
+            if not function_calls:
+                await queue.put({"type": "done"})
+                return
+
+            tool_response_parts = []
+            for fc in function_calls:
+                result_text, success = await call_mcp_tool(fc["name"], fc["args"])
+                await queue.put({"type": "tool_result", "tool": fc["name"], "success": success})
+                try:
+                    result_json = json.loads(result_text)
+                except json.JSONDecodeError:
+                    result_json = {"result": result_text}
+                tool_response_parts.append(
+                    genai.protos.Part(
+                        function_response=genai.protos.FunctionResponse(
+                            name=fc["name"],
+                            response=result_json,
+                        )
+                    )
+                )
+
+            current_message = tool_response_parts
+        else:
+            await queue.put({
+                "type": "error",
+                "message": f"Stopped after {MAX_AGENTIC_TURNS} tool-call turns without finishing — this looks like a loop.",
+            })
+
+
+def _get_provider(model: str) -> BaseLLMProvider:
+    if model.startswith("gpt-"):
+        return OpenAIProvider()
+    if model.startswith("gemini-"):
+        return GeminiProvider()
+    return AnthropicProvider()
+
+
 async def _run_chat(messages: list, model: str, queue: asyncio.Queue) -> None:
     """
-    Runs the MCP + Claude loop in an isolated asyncio Task.
+    Runs the provider agentic loop in an isolated asyncio Task.
 
-    All anyio cancel scopes created by ClientSessionGroup live entirely within
-    this task, preventing the cancel-scope ordering conflict that occurs when
-    the context manager straddles sse-starlette's generator iteration boundary.
-    Events are pushed to `queue`; the generator in stream_chat reads them.
-    A sentinel value of None signals the generator to stop.
+    ClientSessionGroup's anyio cancel scopes are confined to this task,
+    preventing cancel-scope ordering conflicts at the SSE generator boundary.
     """
-    api_key = os.getenv("ANTHROPIC_API_KEY")
-    if not api_key:
-        await queue.put({"type": "error", "message": "ANTHROPIC_API_KEY is not configured on the server."})
-        await queue.put(None)
-        return
-
-    client = AsyncAnthropic(api_key=api_key)
-    running_messages = [{"role": m["role"], "content": m["content"]} for m in messages]
+    provider = _get_provider(model)
 
     try:
         async with ClientSessionGroup() as group:
@@ -102,90 +414,24 @@ async def _run_chat(messages: list, model: str, queue: asyncio.Queue) -> None:
 
             if not group.tools:
                 await queue.put({"type": "error", "message": "No tools available from any MCP server."})
-                await queue.put(None)
                 return
 
-            tool_schemas = [_to_anthropic_tool(t) for t in group.tools.values()]
+            tools = list(group.tools.values())
 
-            while True:
-                tool_uses_by_index: dict[int, dict] = {}
+            async def call_mcp_tool(name: str, tool_input: dict) -> tuple[str, bool]:
+                try:
+                    result = await group.call_tool(name, tool_input)
+                    return _extract_result_text(result), not result.isError
+                except Exception as exc:
+                    return json.dumps({"error": str(exc)}), False
 
-                async with client.messages.stream(
-                    model=model,
-                    max_tokens=4096,
-                    system=SYSTEM_PROMPT,
-                    tools=tool_schemas,
-                    messages=running_messages,
-                ) as stream:
-                    async for event in stream:
-                        if event.type == "content_block_start":
-                            if event.content_block.type == "tool_use":
-                                tool_uses_by_index[event.index] = {
-                                    "id": event.content_block.id,
-                                    "name": event.content_block.name,
-                                    "input_str": "",
-                                }
-                                await queue.put({"type": "tool_call", "tool": event.content_block.name})
-
-                        elif event.type == "content_block_delta":
-                            if event.delta.type == "text_delta":
-                                await queue.put({"type": "text", "content": event.delta.text})
-                            elif event.delta.type == "input_json_delta":
-                                if event.index in tool_uses_by_index:
-                                    tool_uses_by_index[event.index]["input_str"] += (
-                                        event.delta.partial_json
-                                    )
-
-                        elif event.type == "content_block_stop":
-                            if event.index in tool_uses_by_index:
-                                tu = tool_uses_by_index[event.index]
-                                try:
-                                    tu["input"] = (
-                                        json.loads(tu["input_str"]) if tu["input_str"] else {}
-                                    )
-                                except json.JSONDecodeError:
-                                    tu["input"] = {}
-
-                    final_message = await stream.get_final_message()
-
-                tool_use_blocks = [
-                    b for b in (final_message.content or []) if b.type == "tool_use"
-                ]
-                if not tool_use_blocks:
-                    await queue.put({"type": "done"})
-                    await queue.put(None)
-                    return
-
-                assistant_content = []
-                for b in final_message.content:
-                    if b.type == "text":
-                        assistant_content.append({"type": "text", "text": b.text})
-                    elif b.type == "tool_use":
-                        assistant_content.append(
-                            {"type": "tool_use", "id": b.id, "name": b.name, "input": b.input}
-                        )
-                running_messages.append({"role": "assistant", "content": assistant_content})
-
-                tool_results: list[dict] = []
-                for block in tool_use_blocks:
-                    try:
-                        mcp_result = await group.call_tool(block.name, block.input or {})
-                        result_text = _extract_result_text(mcp_result)
-                        success = not mcp_result.isError
-                    except Exception as exc:
-                        result_text = json.dumps({"error": str(exc)})
-                        success = False
-
-                    await queue.put({"type": "tool_result", "tool": block.name, "success": success})
-                    tool_results.append(
-                        {
-                            "type": "tool_result",
-                            "tool_use_id": block.id,
-                            "content": result_text,
-                        }
-                    )
-
-                running_messages.append({"role": "user", "content": tool_results})
+            await provider.run(
+                initial_messages=messages,
+                model=model,
+                tools=tools,
+                queue=queue,
+                call_mcp_tool=call_mcp_tool,
+            )
 
     except Exception as exc:
         await queue.put({"type": "error", "message": str(exc)})
@@ -195,12 +441,11 @@ async def _run_chat(messages: list, model: str, queue: asyncio.Queue) -> None:
 
 async def stream_chat(messages: list, model: str) -> AsyncGenerator:
     """
-    Async generator that streams a Claude response as SSE event dicts.
+    Async generator that streams an LLM response as SSE event dicts.
 
     Spawns _run_chat in a separate asyncio Task so that ClientSessionGroup's
     anyio cancel scopes are confined to that task and never cross the SSE
-    generator boundary (which would raise "Attempted to exit a cancel scope
-    that isn't the current task's current cancel scope").
+    generator boundary.
 
     Sequence of yielded events:
       {"type": "tool_call",   "tool": "get_owned_shoes"}

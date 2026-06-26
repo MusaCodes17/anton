@@ -1,3 +1,4 @@
+import { useCallback, useRef, useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   shoesApi,
@@ -7,6 +8,7 @@ import {
   scrapeApi,
   ownedShoesApi,
   corosSyncApi,
+  SCRAPE_STREAM_URL,
 } from '@/services/api'
 
 // Centralized query keys so mutations can invalidate precisely.
@@ -339,13 +341,108 @@ export function useConfirmCorosRuns() {
 }
 
 // ============== SCRAPING ==============
-export function useScrapeAll() {
+/**
+ * Replaces the old blocking useScrapeAll mutation. POSTs /api/scrape/all
+ * (now returns immediately) then opens an SSE connection to
+ * /api/scrape/stream for live per-retailer progress.
+ *
+ * - Patches the ['retailers'] cache in real time on each retailer_done
+ *   event, so "Last scraped" updates immediately wherever the retailers
+ *   list happens to be rendered, with no refetch needed.
+ * - Invalidates everything once "completed" arrives (a scrape can touch
+ *   deals/dashboard/retailers/shoes anywhere) — same blast radius as the
+ *   old mutation's onSuccess.
+ * - `start(onEvent)` returns a promise resolving to the POST body
+ *   ({started: true} or {started: false, reason}); callers handle the
+ *   false case (e.g. a toast) and pass `onEvent` for per-event UI (toasts,
+ *   inline notices) without this hook needing to know about any of that.
+ */
+export function useScrapeStream() {
   const qc = useQueryClient()
-  return useMutation({
-    mutationFn: (retailerIds) => scrapeApi.all(retailerIds),
-    onSuccess: () => {
-      // A scrape can produce new price records and deals everywhere.
-      qc.invalidateQueries()
+  const [isRunning, setIsRunning] = useState(false)
+  const [connectionLost, setConnectionLost] = useState(false)
+  const esRef = useRef(null)
+
+  const closeStream = useCallback(() => {
+    esRef.current?.close()
+    esRef.current = null
+  }, [])
+
+  // Opens the SSE connection and wires up its handlers. Used both for a job
+  // this hook just started AND for one already running server-side (the
+  // stream replays full history to any subscriber, so reattaching after e.g.
+  // a page reload picks up exactly where the real job actually is, instead
+  // of just reporting "already in progress" with no way to see it finish).
+  const attachStream = useCallback(
+    (onEvent) => {
+      setIsRunning(true)
+      const es = new EventSource(SCRAPE_STREAM_URL)
+      esRef.current = es
+
+      es.onmessage = (e) => {
+        let event
+        try {
+          event = JSON.parse(e.data)
+        } catch {
+          return
+        }
+
+        if (event.type === 'retailer_done') {
+          qc.setQueriesData({ queryKey: ['retailers'] }, (old) => {
+            if (!Array.isArray(old)) return old
+            return old.map((r) =>
+              r.name === event.retailer ? { ...r, last_scraped_at: event.timestamp } : r
+            )
+          })
+        }
+
+        onEvent?.(event)
+
+        if (event.type === 'completed') {
+          closeStream()
+          setIsRunning(false)
+          // Patch the dashboard "Last scraped" timestamp with this exact
+          // completion instant immediately — invalidateQueries() below will
+          // also refetch it, but that's an async round-trip, so without this
+          // the sidebar can briefly show stale data (or lag the real
+          // completion moment) until the refetch resolves.
+          qc.setQueryData(['dashboard', 'stats'], (old) =>
+            old ? { ...old, last_scrape: event.completed_at } : old
+          )
+          qc.invalidateQueries()
+        }
+      }
+
+      es.onerror = () => {
+        closeStream()
+        setIsRunning(false)
+        setConnectionLost(true)
+      }
     },
-  })
+    [qc, closeStream]
+  )
+
+  const start = useCallback(
+    (onEvent) => {
+      setConnectionLost(false)
+      setIsRunning(true)
+
+      return scrapeApi
+        .all()
+        .then((data) => {
+          // Either we just started it, or one's already running (e.g.
+          // kicked off before a page reload) — either way, attach and
+          // watch it finish rather than just erroring on the latter.
+          attachStream(onEvent)
+          return data
+        })
+        .catch((err) => {
+          setIsRunning(false)
+          throw err
+        })
+    },
+    [attachStream]
+  )
+
+  return { isRunning, connectionLost, start }
 }

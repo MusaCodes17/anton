@@ -89,6 +89,19 @@ export const dashboardApi = {
 }
 
 // ============== SCRAPING ==============
+// /scrape/shoe/{id} and /scrape/retailer/{id} are still synchronous and can
+// take a while — the default 120s client timeout would fire long before the
+// backend finishes (it keeps running server-side regardless, just rejected
+// retries with 409 now instead of stacking). Give those calls real headroom.
+// /scrape/all is no longer one of these — it now returns immediately and
+// reports progress over SSE (see SCRAPE_STREAM_URL / useScrapeStream).
+const SCRAPE_TIMEOUT_MS = 35 * 60 * 1000
+
+// Built the same way axios resolves its own baseURL, so the EventSource in
+// useScrapeStream hits the right host in both dev (Vite proxies /api) and
+// production (VITE_API_URL set).
+export const SCRAPE_STREAM_URL = `${baseURL}/api/scrape/stream`
+
 export const scrapeApi = {
   all: (retailerIds) =>
     client
@@ -100,12 +113,14 @@ export const scrapeApi = {
     client
       .post(`/api/scrape/shoe/${shoeId}`, null, {
         params: retailerIds ? { retailer_ids: retailerIds } : undefined,
+        timeout: SCRAPE_TIMEOUT_MS,
       })
       .then((r) => r.data),
   retailer: (retailerId, shoeIds) =>
     client
       .post(`/api/scrape/retailer/${retailerId}`, null, {
         params: shoeIds ? { shoe_ids: shoeIds } : undefined,
+        timeout: SCRAPE_TIMEOUT_MS,
       })
       .then((r) => r.data),
   detectPromos: (retailerId) =>
