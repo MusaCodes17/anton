@@ -2,16 +2,18 @@ import { useState } from 'react'
 import { useParams, useNavigate, Link } from 'react-router-dom'
 import {
   ArrowLeft,
+  ChevronRight,
+  ExternalLink,
   Footprints,
   PlayCircle,
   Pencil,
   Plus,
   Trash2,
-  Sparkles,
 } from 'lucide-react'
 import MileageProgressBar from '@/components/MileageProgressBar'
 import OwnedShoeForm from '@/components/OwnedShoeForm'
 import LogRunDialog from '@/components/LogRunDialog'
+import ShoeTypeBadge from '@/components/ShoeTypeBadge'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
@@ -35,8 +37,10 @@ import {
   useShoeNotes,
   useAddShoeNote,
   useDeleteShoeNote,
+  useReplacementDeals,
 } from '@/hooks/useApi'
 import { cn, formatDate, formatCurrency } from '@/lib/utils'
+import { SHOE_TYPE_LABELS } from '@/lib/shoeTypes'
 
 const statusVariant = { active: 'success', retired: 'secondary', for_sale: 'warning' }
 const statusLabel = { active: 'Active', retired: 'Retired', for_sale: 'For sale' }
@@ -101,7 +105,10 @@ export default function ShoeDetail() {
               </h1>
               {shoe.nickname && <div className="text-sm text-faint">{shoe.model}</div>}
             </div>
-            <Badge variant={statusVariant[shoe.status] || 'secondary'}>{statusLabel[shoe.status] || shoe.status}</Badge>
+            <div className="flex flex-wrap items-center gap-2">
+              {shoe.shoe_type && <ShoeTypeBadge type={shoe.shoe_type} />}
+              <Badge variant={statusVariant[shoe.status] || 'secondary'}>{statusLabel[shoe.status] || shoe.status}</Badge>
+            </div>
           </div>
 
           {shoe.purchase_price ? (
@@ -145,18 +152,13 @@ export default function ShoeDetail() {
         </div>
       </div>
 
-      {/* Replacement deals placeholder */}
-      <section className="rounded-[14px] border border-dashed border-border bg-surface/50 p-5">
-        <div className="mb-1.5 flex items-center gap-2">
-          <h2 className="font-heading text-base font-bold text-foreground">Replacement Deals</h2>
-          <Badge variant="secondary" className="gap-1 text-[10px]">
-            <Sparkles className="h-3 w-3" /> Coming soon
-          </Badge>
-        </div>
-        <p className="text-sm text-muted-foreground">
-          When this shoe approaches retirement, we'll surface deals on the same or similar model here.
-        </p>
-      </section>
+      {/* Replacement deals */}
+      <ReplacementDeals
+        ownedShoeId={shoe.id}
+        currentMileage={shoe.current_mileage}
+        shoeType={shoe.shoe_type}
+        onEditShoe={() => setEditing(true)}
+      />
 
       {/* Notes journal */}
       <NotesJournal ownedShoeId={shoe.id} />
@@ -189,6 +191,136 @@ export default function ShoeDetail() {
 
       {/* Log run */}
       <LogRunDialog shoe={shoe} open={loggingRun} onOpenChange={setLoggingRun} />
+    </div>
+  )
+}
+
+function ReplacementDeals({ ownedShoeId, currentMileage, shoeType, onEditShoe }) {
+  const { data, isLoading, isError, error, refetch } = useReplacementDeals(ownedShoeId)
+
+  // Initial open state is determined once at mount from the props already available.
+  // null shoe_type → always collapsed; otherwise open when >= 75% of typical 800km limit.
+  const [open, setOpen] = useState(() => {
+    if (!shoeType) return false
+    return currentMileage >= 600
+  })
+
+  // Prefer server-confirmed type once loaded; fall back to the prop until then.
+  const effectiveType = data !== undefined ? data.shoe_type : shoeType
+  const typeLabel = effectiveType ? (SHOE_TYPE_LABELS[effectiveType] || effectiveType) : null
+  const plural = typeLabel ? typeLabel.toLowerCase() + 's' : ''
+
+  // Hint text shown in header when collapsed (only after data resolves).
+  let collapseHint = null
+  if (!isLoading) {
+    if (!effectiveType) {
+      collapseHint = 'set shoe type to enable'
+    } else if (data) {
+      const n = data.deals.length
+      collapseHint = n > 0 ? `${n} deal${n === 1 ? '' : 's'} available` : 'no deals right now'
+    }
+  }
+
+  return (
+    <section>
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        className="flex w-full items-center gap-2 py-1.5 text-left"
+        aria-expanded={open}
+      >
+        <ChevronRight
+          className={cn(
+            'h-4 w-4 shrink-0 text-muted-foreground transition-transform duration-200',
+            open && 'rotate-90'
+          )}
+        />
+        <h2 className="font-heading text-base font-bold text-foreground">
+          Replacement Deals{typeLabel ? ` — ${typeLabel}` : ''}
+        </h2>
+        {!open && collapseHint && (
+          <span className="ml-1 text-sm text-muted-foreground">({collapseHint})</span>
+        )}
+      </button>
+
+      <div
+        className={cn(
+          'grid transition-[grid-template-rows] duration-200 ease-in-out',
+          open ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]'
+        )}
+      >
+        <div className="overflow-hidden">
+          <div className="space-y-3 pt-2 pb-1">
+            {isLoading ? (
+              <div className="h-[140px] animate-pulse rounded-[14px] bg-muted" />
+            ) : isError ? (
+              <ErrorState error={error} onRetry={refetch} />
+            ) : !effectiveType ? (
+              <div className="rounded-[14px] border border-dashed border-border bg-surface/50 p-5">
+                <p className="text-sm text-muted-foreground">
+                  No shoe type set.{' '}
+                  <button type="button" onClick={onEditShoe} className="text-accent-foreground underline">
+                    Edit this shoe
+                  </button>{' '}
+                  to add a type and see replacement deal suggestions.
+                </p>
+              </div>
+            ) : data.deals.length === 0 ? (
+              <div className="rounded-[14px] border border-border bg-surface/50 p-5">
+                <p className="text-sm text-muted-foreground">
+                  No deals found for {plural} right now. Check back after the next scrape.
+                </p>
+              </div>
+            ) : (
+              <div className="flex gap-3 overflow-x-auto pb-2 -mx-1 px-1">
+                {data.deals.map((deal) => (
+                  <ReplacementDealCard key={deal.id} deal={deal} />
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    </section>
+  )
+}
+
+function ReplacementDealCard({ deal }) {
+  return (
+    <div className="flex w-[190px] shrink-0 flex-col overflow-hidden rounded-[14px] border border-border bg-surface">
+      <div className="relative flex h-[110px] items-center justify-center overflow-hidden bg-[repeating-linear-gradient(135deg,#202327,#202327_6px,#26292E_6px,#26292E_12px)]">
+        {deal.image_url ? (
+          <img src={deal.image_url} alt={deal.model} className="h-full w-full object-contain" />
+        ) : (
+          <Footprints className="h-8 w-8 text-faint" />
+        )}
+        {deal.savings_percent != null && (
+          <Badge className="absolute right-1.5 top-1.5 bg-primary px-2 py-0.5 font-heading text-[11px] font-extrabold text-primary-foreground">
+            {Math.round(deal.savings_percent)}% OFF
+          </Badge>
+        )}
+      </div>
+      <div className="flex flex-1 flex-col gap-1.5 p-3">
+        <div>
+          <div className="text-[10px] font-bold uppercase tracking-[0.08em] text-accent-foreground">
+            {deal.brand}
+          </div>
+          <div className="line-clamp-2 font-heading text-sm font-bold leading-tight text-foreground">
+            {deal.model}
+          </div>
+          <div className="text-[11px] text-muted-foreground">{deal.retailer}</div>
+        </div>
+        <div className="font-heading text-base font-extrabold text-foreground">
+          {formatCurrency(deal.current_price)}
+        </div>
+        {deal.product_url && (
+          <a href={deal.product_url} target="_blank" rel="noreferrer" className="mt-auto">
+            <Button size="sm" variant="outline" className="w-full text-xs">
+              View Deal <ExternalLink className="h-3 w-3" />
+            </Button>
+          </a>
+        )}
+      </div>
     </div>
   )
 }
