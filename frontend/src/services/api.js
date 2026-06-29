@@ -142,6 +142,7 @@ export const ownedShoesApi = {
   notes: (id) => client.get(`/api/owned-shoes/${id}/notes`).then((r) => r.data),
   addNote: (id, data) => client.post(`/api/owned-shoes/${id}/notes`, data).then((r) => r.data),
   deleteNote: (noteId) => client.delete(`/api/owned-shoes/notes/${noteId}`).then((r) => r.data),
+  replacementDeals: (id) => client.get(`/api/owned-shoes/${id}/replacement-deals`).then((r) => r.data),
 }
 
 // ============== COROS SYNC ==============

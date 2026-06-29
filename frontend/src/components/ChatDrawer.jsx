@@ -1,22 +1,21 @@
 import { useState, useRef, useEffect } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
-import { MessageCircle, X, Send, Maximize2 } from 'lucide-react'
+import { MessageCircle, X, Maximize2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { UserMessage, AssistantMessage, ModelDivider, EmptyState } from '@/components/chat/ChatMessages'
+import ChatInput from '@/components/chat/ChatInput'
 import { useChatStream } from '@/hooks/useChatStream'
 
 const DEFAULT_MODEL = 'claude-haiku-4-5-20251001'
 
 export default function ChatDrawer() {
   const [isOpen, setIsOpen] = useState(false)
-  const [input, setInput] = useState('')
 
   const { displayMessages, apiMessages, isStreaming, sendMessage } = useChatStream({
     model: DEFAULT_MODEL,
   })
 
   const messagesEndRef = useRef(null)
-  const textareaRef = useRef(null)
   const location = useLocation()
   const navigate = useNavigate()
 
@@ -26,27 +25,10 @@ export default function ChatDrawer() {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [displayMessages])
 
-  useEffect(() => {
-    if (isOpen) textareaRef.current?.focus()
-  }, [isOpen])
-
-  const handleSend = (content) => {
-    const trimmed = typeof content === 'string' ? content : input
-    if (!trimmed.trim() || isStreaming) return
-    sendMessage(trimmed.trim())
-    setInput('')
-  }
-
-  const handleKeyDown = (e) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault()
-      handleSend(input)
-    }
-  }
-
-  const handleTextareaInput = (e) => {
-    e.target.style.height = 'auto'
-    e.target.style.height = Math.min(e.target.scrollHeight, 120) + 'px'
+  const handleSend = (displayContent, apiContent, pillPreviews) => {
+    const trimmed = typeof displayContent === 'string' ? displayContent.trim() : ''
+    if (!trimmed || isStreaming) return
+    sendMessage(trimmed, apiContent, pillPreviews)
   }
 
   const handleOpenFullPage = () => {
@@ -124,7 +106,7 @@ export default function ChatDrawer() {
           ) : (
             <div className="space-y-3">
               {displayMessages.map((msg) => {
-                if (msg.role === 'user') return <UserMessage key={msg.id} content={msg.content} />
+                if (msg.role === 'user') return <UserMessage key={msg.id} content={msg.content} pillPreviews={msg.pillPreviews} />
                 if (msg.role === 'divider') return <ModelDivider key={msg.id} content={msg.content} />
                 return <AssistantMessage key={msg.id} message={msg} />
               })}
@@ -135,29 +117,7 @@ export default function ChatDrawer() {
 
         {/* Input */}
         <div className="shrink-0 border-t border-border px-4 py-3">
-          <div className="flex items-end gap-2">
-            <textarea
-              ref={textareaRef}
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              onKeyDown={handleKeyDown}
-              onInput={handleTextareaInput}
-              placeholder="Ask about your shoes…"
-              disabled={isStreaming}
-              rows={1}
-              className="flex-1 resize-none rounded-[10px] border border-input bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:ring-offset-background disabled:opacity-50"
-              style={{ minHeight: '38px', maxHeight: '120px', overflowY: 'auto' }}
-            />
-            <button
-              onClick={() => handleSend(input)}
-              disabled={isStreaming || !input.trim()}
-              aria-label="Send"
-              className="flex h-[38px] w-[38px] shrink-0 items-center justify-center rounded-[10px] bg-primary text-primary-foreground transition-colors hover:bg-primary/90 disabled:pointer-events-none disabled:opacity-50"
-            >
-              <Send className="h-4 w-4" />
-            </button>
-          </div>
-          <p className="mt-1.5 text-xs text-faint">Enter to send · Shift+Enter for newline</p>
+          <ChatInput onSend={handleSend} isStreaming={isStreaming} maxHeight={120} />
         </div>
       </div>
     </>

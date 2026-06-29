@@ -1,4 +1,5 @@
-import { MessageCircle, Check, Wrench } from 'lucide-react'
+import { useState } from 'react'
+import { MessageCircle, Check, Wrench, ChevronDown, ChevronUp } from 'lucide-react'
 import Markdown from 'react-markdown'
 import { cn } from '@/lib/utils'
 
@@ -54,11 +55,50 @@ export function ToolPill({ indicator }) {
   )
 }
 
-export function UserMessage({ content }) {
+export function UserMessage({ content, pillPreviews }) {
+  const [expanded, setExpanded] = useState(false)
+  const hasPills = pillPreviews?.length > 0
+
   return (
     <div className="flex justify-end">
-      <div className="max-w-[85%] rounded-[12px] rounded-br-[4px] bg-accent px-3 py-2 text-sm text-accent-foreground">
-        <p className="whitespace-pre-wrap leading-relaxed">{content}</p>
+      <div className="max-w-[85%] space-y-1.5">
+        {hasPills && (
+          <div className="flex flex-wrap items-center gap-1 justify-end">
+            {pillPreviews.map((p) => (
+              <span
+                key={p.uri}
+                className="inline-flex items-center gap-1 rounded-full border border-primary/30 bg-primary/10 px-2 py-0.5 text-[11px] text-primary"
+              >
+                📊 {p.label}
+              </span>
+            ))}
+            <button
+              onClick={() => setExpanded((v) => !v)}
+              className="inline-flex items-center gap-0.5 text-[11px] text-muted-foreground hover:text-foreground transition-colors"
+            >
+              {expanded ? (
+                <><ChevronUp className="h-3 w-3" /> hide context</>
+              ) : (
+                <><ChevronDown className="h-3 w-3" /> show context</>
+              )}
+            </button>
+          </div>
+        )}
+        {expanded && hasPills && (
+          <div className="rounded-[10px] border border-border bg-secondary/50 p-2 space-y-2 max-h-48 overflow-y-auto">
+            {pillPreviews.map((p) => (
+              <div key={p.uri}>
+                <p className="text-[10px] font-semibold text-muted-foreground mb-0.5">{p.label}</p>
+                <pre className="text-[10px] text-muted-foreground/70 whitespace-pre-wrap leading-relaxed line-clamp-6">
+                  {p.content?.slice(0, 600)}{p.content?.length > 600 ? '…' : ''}
+                </pre>
+              </div>
+            ))}
+          </div>
+        )}
+        <div className="rounded-[12px] rounded-br-[4px] bg-accent px-3 py-2 text-sm text-accent-foreground">
+          <p className="whitespace-pre-wrap leading-relaxed">{content}</p>
+        </div>
       </div>
     </div>
   )

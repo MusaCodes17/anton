@@ -47,6 +47,7 @@ def _deal_to_dict(deal: Deal) -> dict:
         "shoe_id": deal.shoe_id,
         "brand": deal.shoe.brand,
         "model": deal.shoe.model,
+        "shoe_type": deal.shoe.shoe_type,
         "retailer": deal.retailer.name,
         "current_price": deal.current_price,
         "target_price": deal.target_price,
@@ -65,6 +66,7 @@ def get_deals(
     min_savings_percent: Optional[float] = None,
     brand: Optional[str] = None,
     size: Optional[str] = None,
+    shoe_type: Optional[str] = None,
     limit: int = 20,
 ) -> List[dict]:
     """
@@ -82,6 +84,9 @@ def get_deals(
             match), e.g. "Adidas".
         size: Filter to deals with this US size currently in stock,
             e.g. "10.5". Sizes are matched exactly as recorded by the scraper.
+        shoe_type: Filter by shoe category, e.g. "long_distance_racer",
+            "daily_trainer", "tempo", "trail", "recovery", "intervals",
+            "short_distance_racer".
         limit: Max number of deals to return (default 20, capped at 100).
     """
     limit = max(1, min(limit, 100))
@@ -90,8 +95,13 @@ def get_deals(
         query = db.query(Deal).filter(Deal.is_active == True)
         if min_savings_percent is not None:
             query = query.filter(Deal.savings_percent >= min_savings_percent)
-        if brand:
-            query = query.join(Deal.shoe).filter(Shoe.brand.ilike(f"%{brand}%"))
+        needs_shoe_join = brand or shoe_type
+        if needs_shoe_join:
+            query = query.join(Deal.shoe)
+            if brand:
+                query = query.filter(Shoe.brand.ilike(f"%{brand}%"))
+            if shoe_type:
+                query = query.filter(Shoe.shoe_type == shoe_type)
         query = query.order_by(desc(Deal.savings_percent))
 
         if size:
@@ -156,6 +166,7 @@ def get_shoes(is_active: Optional[bool] = True) -> List[dict]:
                 "id": s.id,
                 "brand": s.brand,
                 "model": s.model,
+                "shoe_type": s.shoe_type,
                 "target_price": s.target_price,
                 "msrp": s.msrp,
                 "is_active": s.is_active,
@@ -799,12 +810,13 @@ def shoe_rotation_resource() -> str:
         for s in active:
             stats = _compute_lifetime_stats(db, s.id)
             bar = _format_mileage_bar(s.current_mileage, s.mileage_limit if hasattr(s, "mileage_limit") else None)
-            label = s.nickname or s.shoe_type or ""
+            label = s.nickname or ""
             name = f"{s.brand} {s.model}" + (f" ({label})" if label else "")
             pace = stats.get("lifetime_avg_pace") or "—"
             hr = f"{stats['lifetime_avg_hr']}bpm" if stats.get("lifetime_avg_hr") else "—"
             runs = stats.get("total_runs", 0)
-            md_lines.append(f"- {name} — {round(s.current_mileage)}km  {bar}")
+            type_tag = f" [{s.shoe_type}]" if s.shoe_type else ""
+            md_lines.append(f"- {name}{type_tag} — {round(s.current_mileage)}km  {bar}")
             md_lines.append(f"  Avg pace: {pace} · Avg HR: {hr} · {runs} runs")
             shoe_dicts.append(_owned_shoe_to_dict(s, stats))
 
@@ -815,7 +827,7 @@ def shoe_rotation_resource() -> str:
             md_lines += ["", "**Retired Shoes**"]
             for s in retired:
                 stats = _compute_lifetime_stats(db, s.id)
-                label = s.nickname or s.shoe_type or ""
+                label = s.nickname or ""
                 name = f"{s.brand} {s.model}" + (f" ({label})" if label else "")
                 md_lines.append(f"- {name} — {round(s.current_mileage)}km (retired)")
                 shoe_dicts.append(_owned_shoe_to_dict(s, stats))
@@ -927,14 +939,15 @@ def shoe_detail_resource(shoe_id: int) -> str:
         )
         mileage_limit = getattr(shoe, "mileage_limit", None)
         bar = _format_mileage_bar(shoe.current_mileage, mileage_limit)
-        label = shoe.nickname or shoe.shoe_type or ""
+        label = shoe.nickname or ""
         name = f"{shoe.brand} {shoe.model}" + (f" ({label})" if label else "")
         pct = round(shoe.current_mileage / mileage_limit * 100) if mileage_limit else None
         mileage_line = f"{round(shoe.current_mileage)}km / {round(mileage_limit)}km ({pct}%)" if mileage_limit else f"{round(shoe.current_mileage)}km"
 
+        type_line = f" | **Type:** {shoe.shoe_type}" if shoe.shoe_type else ""
         md_lines = [
             f"# {name}",
-            f"**Status:** {shoe.status.capitalize()} | **Mileage:** {mileage_line}",
+            f"**Status:** {shoe.status.capitalize()} | **Mileage:** {mileage_line}{type_line}",
         ]
         if shoe.purchase_price:
             md_lines.append(
@@ -1007,7 +1020,7 @@ def shoe_runs_resource(shoe_id: int) -> str:
             .order_by(desc(ShoeRun.run_date), desc(ShoeRun.created_at))
             .all()
         )
-        label = shoe.nickname or shoe.shoe_type or ""
+        label = shoe.nickname or ""
         name = f"{shoe.brand} {shoe.model}" + (f" ({label})" if label else "")
 
         md_lines = [
@@ -1054,7 +1067,7 @@ def shoe_notes_resource(shoe_id: int) -> str:
             .order_by(desc(ShoeNote.created_at))
             .all()
         )
-        label = shoe.nickname or shoe.shoe_type or ""
+        label = shoe.nickname or ""
         name = f"{shoe.brand} {shoe.model}" + (f" ({label})" if label else "")
 
         md_lines = [f"# Notes — {name}", ""]

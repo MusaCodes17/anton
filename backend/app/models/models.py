@@ -16,6 +16,7 @@ class Shoe(Base):
     id = Column(Integer, primary_key=True, index=True)
     brand = Column(String(100), nullable=False, index=True)  # e.g., "Adidas", "Nike"
     model = Column(String(200), nullable=False, index=True)  # e.g., "Adizero Adios Pro 3"
+    shoe_type = Column(String(50), nullable=True)  # e.g. "long_distance_racer"
     # Size intentionally removed: we track a model across ALL sizes so the
     # scraper isn't restricted to one exact size that may be out of stock.
     target_price = Column(Float, nullable=False)  # Price we want to pay

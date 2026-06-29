@@ -5,10 +5,10 @@ import {
   Trash2,
   ChevronDown,
   Check,
-  Send,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { UserMessage, AssistantMessage, ModelDivider, EmptyState } from '@/components/chat/ChatMessages'
+import ChatInput from '@/components/chat/ChatInput'
 import { useChatStream } from '@/hooks/useChatStream'
 import {
   loadConversations,
@@ -49,17 +49,11 @@ function ChatArea({
   })
 
   const messagesEndRef = useRef(null)
-  const textareaRef = useRef(null)
-  const [input, setInput] = useState('')
   const isFirstRun = useRef(true)
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [displayMessages])
-
-  useEffect(() => {
-    textareaRef.current?.focus()
-  }, [])
 
   // Insert model switch divider and persist immediately (isStreaming doesn't change here)
   useEffect(() => {
@@ -87,27 +81,15 @@ function ChatArea({
     }
   }, [isStreaming])
 
+  // Called by ChatInput and EmptyState prompt clicks
   const handleSend = useCallback(
-    (content) => {
-      const trimmed = typeof content === 'string' ? content.trim() : ''
+    (displayContent, apiContent, pillPreviews) => {
+      const trimmed = typeof displayContent === 'string' ? displayContent.trim() : ''
       if (!trimmed || isStreaming) return
-      sendMessage(trimmed)
-      setInput('')
+      sendMessage(trimmed, apiContent, pillPreviews)
     },
     [isStreaming, sendMessage]
   )
-
-  const handleKeyDown = (e) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault()
-      handleSend(input)
-    }
-  }
-
-  const handleTextareaInput = (e) => {
-    e.target.style.height = 'auto'
-    e.target.style.height = Math.min(e.target.scrollHeight, 160) + 'px'
-  }
 
   return (
     <div className="flex flex-1 flex-col overflow-hidden">
@@ -120,7 +102,7 @@ function ChatArea({
         ) : (
           <div className="mx-auto max-w-3xl space-y-4">
             {displayMessages.map((msg) => {
-              if (msg.role === 'user') return <UserMessage key={msg.id} content={msg.content} />
+              if (msg.role === 'user') return <UserMessage key={msg.id} content={msg.content} pillPreviews={msg.pillPreviews} />
               if (msg.role === 'divider') return <ModelDivider key={msg.id} content={msg.content} />
               return <AssistantMessage key={msg.id} message={msg} />
             })}
@@ -132,29 +114,7 @@ function ChatArea({
       {/* Input */}
       <div className="shrink-0 border-t border-border px-6 py-4">
         <div className="mx-auto max-w-3xl">
-          <div className="flex items-end gap-3">
-            <textarea
-              ref={textareaRef}
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              onKeyDown={handleKeyDown}
-              onInput={handleTextareaInput}
-              placeholder="Ask about your shoes…"
-              disabled={isStreaming}
-              rows={1}
-              className="flex-1 resize-none rounded-[10px] border border-input bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:ring-offset-background disabled:opacity-50"
-              style={{ minHeight: '40px', maxHeight: '160px', overflowY: 'auto' }}
-            />
-            <button
-              onClick={() => handleSend(input)}
-              disabled={isStreaming || !input.trim()}
-              aria-label="Send"
-              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[10px] bg-primary text-primary-foreground transition-colors hover:bg-primary/90 disabled:pointer-events-none disabled:opacity-50"
-            >
-              <Send className="h-4 w-4" />
-            </button>
-          </div>
-          <p className="mt-1.5 text-xs text-faint">Enter to send · Shift+Enter for newline</p>
+          <ChatInput onSend={handleSend} isStreaming={isStreaming} maxHeight={160} />
         </div>
       </div>
     </div>

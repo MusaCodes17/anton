@@ -3,7 +3,7 @@ API routes for managing shoes the user owns (personal rotation/mileage
 tracking) — separate from app/routers/shoes.py, which is for deal tracking.
 """
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy import func, or_
+from sqlalchemy import desc, func, or_
 from sqlalchemy.orm import Session
 from typing import List, Optional
 
@@ -13,7 +13,7 @@ from app.models import (
     ShoeRun, ShoeRunCreate, ShoeRunResponse, LogRunResponse,
     ShoeNote, ShoeNoteCreate, ShoeNoteResponse,
 )
-from app.models.models import PriceRecord, Shoe
+from app.models.models import Deal, PriceRecord, Shoe
 
 router = APIRouter(prefix="/owned-shoes", tags=["owned-shoes"])
 
@@ -264,6 +264,57 @@ def delete_shoe_run(run_id: int, db: Session = Depends(get_db)):
 
     db.refresh(db_shoe)
     return _attach_computed_fields(db, db_shoe)
+
+
+@router.get("/{owned_shoe_id}/replacement-deals")
+def get_replacement_deals(owned_shoe_id: int, db: Session = Depends(get_db)):
+    """
+    Active deals on shoes of the same type as this owned shoe, sorted by
+    biggest discount first (max 6). Returns empty with a prompt message when
+    shoe_type isn't set. Excludes the exact same model so we don't suggest
+    "buy another copy of what you already own".
+    """
+    owned_shoe = db.query(OwnedShoe).filter(OwnedShoe.id == owned_shoe_id).first()
+    if not owned_shoe:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Owned shoe with id {owned_shoe_id} not found",
+        )
+
+    if not owned_shoe.shoe_type:
+        return {"shoe_type": None, "deals": [], "total": 0, "message": "Add a shoe type to see replacement suggestions"}
+
+    deals = (
+        db.query(Deal)
+        .join(Deal.shoe)
+        .filter(
+            Deal.is_active == True,
+            Deal.in_stock == True,
+            Shoe.shoe_type == owned_shoe.shoe_type,
+            func.lower(Shoe.model) != func.lower(owned_shoe.model),
+        )
+        .order_by(desc(Deal.savings_percent))
+        .limit(6)
+        .all()
+    )
+
+    deal_list = [
+        {
+            "id": d.id,
+            "brand": d.shoe.brand,
+            "model": d.shoe.model,
+            "retailer": d.retailer.name,
+            "current_price": d.current_price,
+            "savings_percent": d.savings_percent,
+            "savings_amount": d.savings_amount,
+            "image_url": d.image_url,
+            "product_url": d.product_url,
+            "in_stock": d.in_stock,
+        }
+        for d in deals
+    ]
+
+    return {"shoe_type": owned_shoe.shoe_type, "deals": deal_list, "total": len(deal_list)}
 
 
 @router.get("/{owned_shoe_id}/notes", response_model=List[ShoeNoteResponse])

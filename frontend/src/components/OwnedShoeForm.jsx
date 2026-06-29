@@ -4,6 +4,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/components/ui/select'
 import { DialogFooter } from '@/components/ui/dialog'
+import { SHOE_TYPES } from '@/lib/shoeTypes'
 
 const empty = {
   brand: '',
@@ -96,8 +97,21 @@ export default function OwnedShoeForm({ initial, onSubmit, onCancel, submitting 
         <Field label="Nickname" hint="Optional">
           <Input value={values.nickname} onChange={set('nickname')} placeholder="Race day Adios" />
         </Field>
-        <Field label="Shoe type" hint="Optional">
-          <Input value={values.shoe_type} onChange={set('shoe_type')} placeholder="Tempo shoe" />
+        <Field label="Shoe type" hint="Optional — used for replacement deal suggestions">
+          <Select
+            value={values.shoe_type || '__none__'}
+            onValueChange={(v) => setValues((s) => ({ ...s, shoe_type: v === '__none__' ? '' : v }))}
+          >
+            <SelectTrigger>
+              <SelectValue placeholder="Select type…" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="__none__">Untagged</SelectItem>
+              {SHOE_TYPES.map((t) => (
+                <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </Field>
         <Field label="Purchase date" hint="Optional">
           <Input type="date" value={values.purchase_date} onChange={set('purchase_date')} />

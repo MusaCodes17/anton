@@ -6,6 +6,7 @@ import OwnedShoeForm from '@/components/OwnedShoeForm'
 import LogRunDialog from '@/components/LogRunDialog'
 import MileageProgressBar from '@/components/MileageProgressBar'
 import CorosSyncModal from '@/components/CorosSyncModal'
+import ShoeTypeBadge from '@/components/ShoeTypeBadge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
@@ -287,6 +288,11 @@ function ShoeCard({ shoe, onOpenDetail, onLogRun, onEdit, onDelete }) {
                   {shoe.nickname || shoe.model}
                 </div>
                 {shoe.nickname && <div className="truncate text-xs text-faint">{shoe.model}</div>}
+                {shoe.shoe_type && (
+                  <div className="mt-1">
+                    <ShoeTypeBadge type={shoe.shoe_type} />
+                  </div>
+                )}
               </div>
               <Badge variant={statusVariant[shoe.status] || 'secondary'}>
                 {statusLabel[shoe.status] || shoe.status}

@@ -4,11 +4,14 @@ Chat API — streaming endpoint that calls Claude (or OpenAI) with access to MCP
 import json
 import os
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sse_starlette.sse import EventSourceResponse
+from sqlalchemy.orm import Session
 
-from app.services.chat_service import stream_chat
+from app.database import get_db
+from app.models.models import OwnedShoe
+from app.services.chat_service import read_mcp_resource, stream_chat
 
 router = APIRouter(prefix="/chat", tags=["chat"])
 
@@ -81,6 +84,67 @@ def get_providers():
         },
         "default_model": DEFAULT_MODEL,
     }
+
+
+@router.get("/resources")
+def get_chat_resources(db: Session = Depends(get_db)):
+    """
+    Returns all MCP resources grouped for the @ mention picker.
+    Static resources are hard-coded; My Shoes are queried directly from the DB.
+    """
+    static_items = [
+        {"id": "shoes://rotation", "label": "My Shoe Rotation", "type": "resource", "uri": "shoes://rotation"},
+        {"id": "shoes://deals/active", "label": "Active Deals", "type": "resource", "uri": "shoes://deals/active"},
+        {"id": "shoes://retailers", "label": "Retailers", "type": "resource", "uri": "shoes://retailers"},
+    ]
+
+    shoes = (
+        db.query(OwnedShoe)
+        .filter(OwnedShoe.status == "active")
+        .order_by(OwnedShoe.created_at.desc())
+        .all()
+    )
+    shoe_items = []
+    for s in shoes:
+        label = f"{s.brand} {s.model}"
+        if s.nickname:
+            label = f"{s.brand} {s.model} — {s.nickname}"
+        shoe_items.append({
+            "id": f"shoes://owned/{s.id}",
+            "label": label,
+            "sublabel": f"{round(s.current_mileage)}km · {s.status.capitalize()}",
+            "type": "resource",
+            "uri": f"shoes://owned/{s.id}",
+        })
+
+    return {
+        "groups": [
+            {"label": "Rotation & Deals", "items": static_items},
+            {"label": "My Shoes", "items": shoe_items},
+        ]
+    }
+
+
+class ResourceReadRequest(BaseModel):
+    uri: str
+
+
+@router.post("/resource/read")
+async def read_resource_endpoint(request: ResourceReadRequest):
+    """Read a single MCP resource by URI and return its text content."""
+    try:
+        content = await read_mcp_resource(request.uri)
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=str(exc))
+
+    # Extract first H1 as label
+    label = request.uri.split("/")[-1]
+    for line in content.split("\n"):
+        if line.startswith("# "):
+            label = line[2:].strip()
+            break
+
+    return {"uri": request.uri, "content": content, "label": label}
 
 
 @router.post("/message")

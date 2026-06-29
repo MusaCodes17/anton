@@ -36,6 +36,7 @@ import {
 } from '@/hooks/useApi'
 import { exportApi, shoesApi, scrapeApi } from '@/services/api'
 import { cn, formatCurrency } from '@/lib/utils'
+import ShoeTypeBadge from '@/components/ShoeTypeBadge'
 
 export default function Shoes() {
   const [search, setSearch] = useState('')
@@ -208,6 +209,11 @@ export default function Shoes() {
                     <div className="mt-0.5 truncate font-heading text-base font-bold leading-tight text-foreground">
                       {shoe.model}
                     </div>
+                    {shoe.shoe_type && (
+                      <div className="mt-1">
+                        <ShoeTypeBadge type={shoe.shoe_type} />
+                      </div>
+                    )}
                     <div
                       className={cn(
                         'mt-2 inline-flex items-center gap-1.5 rounded-[6px] px-2 py-[3px]',

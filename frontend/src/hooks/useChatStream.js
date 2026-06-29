@@ -26,12 +26,24 @@ export function useChatStream({
   }, [])
 
   const sendMessage = useCallback(
-    async (messageContent) => {
-      const content = messageContent.trim()
+    // apiContent defaults to displayContent when pills are not involved.
+    // pillPreviews is an array of {uri, label, content} for display in the thread.
+    async (displayContent, apiContent, pillPreviews = []) => {
+      const content = (typeof displayContent === 'string' ? displayContent : '').trim()
       if (!content || isStreaming) return
 
+      const apiBody = typeof apiContent === 'string' && apiContent.trim()
+        ? apiContent.trim()
+        : content
+
       const timestamp = new Date().toISOString()
-      const userMsg = { id: `u-${Date.now()}`, role: 'user', content, timestamp }
+      const userMsg = {
+        id: `u-${Date.now()}`,
+        role: 'user',
+        content,
+        pillPreviews: pillPreviews.length > 0 ? pillPreviews : undefined,
+        timestamp,
+      }
       const assistantMsg = {
         id: `a-${Date.now()}`,
         role: 'assistant',
@@ -41,7 +53,7 @@ export function useChatStream({
         timestamp,
       }
 
-      const updatedApiMessages = [...apiMessages, { role: 'user', content }]
+      const updatedApiMessages = [...apiMessages, { role: 'user', content: apiBody }]
       setDisplayMessages((prev) => [...prev, userMsg, assistantMsg])
       setApiMessages(updatedApiMessages)
       setIsStreaming(true)

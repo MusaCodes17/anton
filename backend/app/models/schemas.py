@@ -12,6 +12,7 @@ class ShoeBase(BaseModel):
     """Base schema for shoe data"""
     brand: str = Field(..., min_length=1, max_length=100, description="Shoe brand")
     model: str = Field(..., min_length=1, max_length=200, description="Shoe model")
+    shoe_type: Optional[str] = Field(None, max_length=50, description="Shoe category, e.g. 'long_distance_racer'")
     target_price: float = Field(..., gt=0, description="Target price we want to pay")
     msrp: Optional[float] = Field(None, gt=0, description="Manufacturer's list price")
     notes: Optional[str] = Field(None, description="Additional notes")
@@ -27,6 +28,7 @@ class ShoeUpdate(BaseModel):
     """Schema for updating a shoe (all fields optional)"""
     brand: Optional[str] = Field(None, min_length=1, max_length=100)
     model: Optional[str] = Field(None, min_length=1, max_length=200)
+    shoe_type: Optional[str] = Field(None, max_length=50)
     target_price: Optional[float] = Field(None, gt=0)
     msrp: Optional[float] = Field(None, gt=0)
     notes: Optional[str] = None

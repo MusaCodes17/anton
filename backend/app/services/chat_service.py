@@ -25,6 +25,11 @@ You have access to MCP tools to query owned shoes, run history, shoe notes, and 
 Be concise and direct — the user is a competitive runner, running terminology is fine. \
 Flag proactively when a shoe is approaching 700km or its mileage limit.
 
+Shoes are categorized by type: short_distance_racer, long_distance_racer, long_run, tempo, intervals, daily_trainer, \
+trail, recovery. Use shoe_type when recommending replacement deals, suggesting which shoe to wear for a \
+specific workout type, or filtering deals by category. When the user asks for a shoe recommendation for a \
+race, tempo run, or easy day — use shoe_type to match the right shoe from their rotation.
+
 IMPORTANT RULES — follow every single time, no exceptions:
 
 1. VERIFY BEFORE CLAIMING: Always call get_owned_shoes before making any statement about a specific shoe's \
@@ -40,7 +45,12 @@ report the exact error to the user — never claim an action succeeded without c
 
 4. CORRECT SHOE IDENTITY: When the user refers to a shoe by nickname, color, or description, always \
 call get_owned_shoes first and match it to the correct owned_shoe_id before calling any other tool. \
-Never guess an id from memory."""
+Never guess an id from memory.
+
+5. RESOURCE CONTEXT: Your system prompt contains live shoe rotation and deals data loaded at conversation \
+start. Use this for general rotation and deals questions without calling tools. Only call get_owned_shoes \
+or get_deals tools if you need fresher data than what is in context, or if the user asks about something \
+specific not covered by the pre-loaded context."""
 
 MCP_SERVERS: list[dict] = [
     {
@@ -73,6 +83,7 @@ class BaseLLMProvider(ABC):
         tools: list[mcp_types.Tool],
         queue: asyncio.Queue,
         call_mcp_tool: Callable,
+        system_prompt: str = SYSTEM_PROMPT,
     ) -> None:
         """Agentic loop: stream LLM response, call tools, repeat until done.
         Push SSE event dicts to queue; end with {"type":"done"} or {"type":"error"}."""
@@ -86,7 +97,7 @@ class AnthropicProvider(BaseLLMProvider):
             "input_schema": tool.inputSchema,
         }
 
-    async def run(self, initial_messages, model, tools, queue, call_mcp_tool):
+    async def run(self, initial_messages, model, tools, queue, call_mcp_tool, system_prompt=SYSTEM_PROMPT):
         from anthropic import AsyncAnthropic
 
         api_key = os.getenv("ANTHROPIC_API_KEY")
@@ -104,7 +115,7 @@ class AnthropicProvider(BaseLLMProvider):
             async with client.messages.stream(
                 model=model,
                 max_tokens=4096,
-                system=SYSTEM_PROMPT,
+                system=system_prompt,
                 tools=tool_schemas,
                 messages=running,
             ) as stream:
@@ -177,7 +188,7 @@ class OpenAIProvider(BaseLLMProvider):
             },
         }
 
-    async def run(self, initial_messages, model, tools, queue, call_mcp_tool):
+    async def run(self, initial_messages, model, tools, queue, call_mcp_tool, system_prompt=SYSTEM_PROMPT):
         from openai import AsyncOpenAI
 
         api_key = os.getenv("OPENAI_API_KEY")
@@ -187,7 +198,7 @@ class OpenAIProvider(BaseLLMProvider):
 
         client = AsyncOpenAI(api_key=api_key)
         # OpenAI takes system as a message, not a separate parameter
-        running = [{"role": "system", "content": SYSTEM_PROMPT}]
+        running = [{"role": "system", "content": system_prompt}]
         running += [{"role": m["role"], "content": m["content"]} for m in initial_messages]
         tool_schemas = [self._tool_schema(t) for t in tools]
 
@@ -297,7 +308,7 @@ class GeminiProvider(BaseLLMProvider):
             parameters=self._to_gemini_schema(schema) if schema.get("properties") else None,
         )
 
-    async def run(self, initial_messages, model, tools, queue, call_mcp_tool):
+    async def run(self, initial_messages, model, tools, queue, call_mcp_tool, system_prompt=SYSTEM_PROMPT):
         import google.generativeai as genai
 
         api_key = os.getenv("GOOGLE_API_KEY")
@@ -311,7 +322,7 @@ class GeminiProvider(BaseLLMProvider):
         model_client = genai.GenerativeModel(
             model_name=model,
             tools=gemini_tools,
-            system_instruction=SYSTEM_PROMPT,
+            system_instruction=system_prompt,
         )
 
         # Build history from prior turns (all but the last message)
@@ -385,6 +396,57 @@ def _get_provider(model: str) -> BaseLLMProvider:
     return AnthropicProvider()
 
 
+async def _load_context_resources(group) -> str:
+    """Read rotation and deals resources from the MCP server and format them as a system-prompt addition."""
+    try:
+        if not group.sessions:
+            return ""
+        session = group.sessions[0]
+        from pydantic import AnyUrl
+
+        rotation_result = await session.read_resource(AnyUrl("shoes://rotation"))
+        rotation_text = "\n".join(c.text for c in rotation_result.contents if hasattr(c, "text"))
+
+        deals_result = await session.read_resource(AnyUrl("shoes://deals/active"))
+        deals_text = "\n".join(c.text for c in deals_result.contents if hasattr(c, "text"))
+
+        return (
+            "\n\n## Live Context (loaded at conversation start)\n\n"
+            f"### My Shoe Rotation\n{rotation_text}\n\n"
+            f"### Active Deals\n{deals_text}\n"
+        )
+    except Exception:
+        return ""  # fail silently — tools are still available as a fallback
+
+
+async def read_mcp_resource(uri: str) -> str:
+    """Open a brief MCP session, read one resource by URI, and return its text content."""
+    from pydantic import AnyUrl
+
+    async with ClientSessionGroup() as group:
+        for server in MCP_SERVERS:
+            url = server.get("url", "")
+            if not url:
+                continue
+            try:
+                await group.connect_to_server(
+                    StreamableHttpParameters(
+                        url=url,
+                        headers=server.get("headers"),
+                        timeout=timedelta(seconds=10),
+                        sse_read_timeout=timedelta(seconds=30),
+                    )
+                )
+            except Exception:
+                continue
+
+        if not group.sessions:
+            raise RuntimeError("No MCP server available")
+
+        result = await group.sessions[0].read_resource(AnyUrl(uri))
+        return "\n".join(c.text for c in result.contents if hasattr(c, "text"))
+
+
 async def _run_chat(messages: list, model: str, queue: asyncio.Queue) -> None:
     """
     Runs the provider agentic loop in an isolated asyncio Task.
@@ -425,12 +487,16 @@ async def _run_chat(messages: list, model: str, queue: asyncio.Queue) -> None:
                 except Exception as exc:
                     return json.dumps({"error": str(exc)}), False
 
+            context_addition = await _load_context_resources(group)
+            augmented_system_prompt = SYSTEM_PROMPT + context_addition
+
             await provider.run(
                 initial_messages=messages,
                 model=model,
                 tools=tools,
                 queue=queue,
                 call_mcp_tool=call_mcp_tool,
+                system_prompt=augmented_system_prompt,
             )
 
     except Exception as exc:

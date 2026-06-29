@@ -26,6 +26,7 @@ export const queryKeys = {
   ownedShoe: (id) => ['owned-shoes', 'detail', id],
   shoeRuns: (id) => ['owned-shoes', id, 'runs'],
   shoeNotes: (id) => ['owned-shoes', id, 'notes'],
+  replacementDeals: (id) => ['owned-shoes', id, 'replacement-deals'],
   corosSyncStatus: () => ['coros', 'sync-status'],
 }
 
@@ -269,6 +270,14 @@ export function useDeleteOwnedShoe() {
   return useMutation({
     mutationFn: (id) => ownedShoesApi.remove(id),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['owned-shoes'] }),
+  })
+}
+
+export function useReplacementDeals(id) {
+  return useQuery({
+    queryKey: queryKeys.replacementDeals(id),
+    queryFn: () => ownedShoesApi.replacementDeals(id),
+    enabled: !!id,
   })
 }
 

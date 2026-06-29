@@ -5,13 +5,16 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Switch } from '@/components/ui/switch'
+import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/components/ui/select'
 import { DialogFooter } from '@/components/ui/dialog'
 import ScrapabilityTestModal from '@/components/ScrapabilityTestModal'
 import { useTestShoeScrapability } from '@/hooks/useApi'
+import { SHOE_TYPES } from '@/lib/shoeTypes'
 
 const empty = {
   brand: '',
   model: '',
+  shoe_type: '',
   target_price: '',
   msrp: '',
   notes: '',
@@ -30,6 +33,7 @@ export default function ShoeForm({ initial, onSubmit, onCancel, submitting }) {
       ? {
           brand: initial.brand ?? '',
           model: initial.model ?? '',
+          shoe_type: initial.shoe_type ?? '',
           target_price: initial.target_price ?? '',
           msrp: initial.msrp ?? '',
           notes: initial.notes ?? '',
@@ -62,6 +66,7 @@ export default function ShoeForm({ initial, onSubmit, onCancel, submitting }) {
   const buildPayload = () => ({
     brand: values.brand.trim(),
     model: values.model.trim(),
+    shoe_type: values.shoe_type || null,
     target_price: parseFloat(values.target_price),
     msrp: values.msrp ? parseFloat(values.msrp) : null,
     notes: values.notes.trim() || null,
@@ -104,6 +109,22 @@ export default function ShoeForm({ initial, onSubmit, onCancel, submitting }) {
             onChange={set('model')}
             placeholder="Vaporfly 3"
           />
+        </Field>
+        <Field label="Shoe type" hint="Optional — used for replacement deal suggestions">
+          <Select
+            value={values.shoe_type || '__none__'}
+            onValueChange={(v) => setValues((s) => ({ ...s, shoe_type: v === '__none__' ? '' : v }))}
+          >
+            <SelectTrigger>
+              <SelectValue placeholder="Select type…" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="__none__">Untagged</SelectItem>
+              {SHOE_TYPES.map((t) => (
+                <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </Field>
         <Field label="Target price (CAD)" error={errors.target_price}>
           <Input
