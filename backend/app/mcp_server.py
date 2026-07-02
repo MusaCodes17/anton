@@ -19,12 +19,11 @@ from sqlalchemy import desc, func
 
 from datetime import date as date_type, datetime, timezone
 
-from app.coros_client import activity_to_run_dict, fetch_running_activities, get_coros_config
+from app.coros_client import get_coros_config
 from app.database import SessionLocal
-from app.models.models import AppSettings, Deal, OwnedShoe, PriceRecord, Retailer, Shoe, ShoeNote, ShoeRun
-from app.routers.owned_shoes import _compute_lifetime_stats
-from app.routers.coros_sync import _get_setting, _is_already_logged, _set_setting
+from app.models.models import Deal, OwnedShoe, PriceRecord, Retailer, Shoe, ShoeNote, ShoeRun
 from app.scrapers.scraper_manager import ScraperManager, ScrapeInProgressError, scrape_guard
+from app.services import rotation, coros as coros_svc, settings as settings_svc
 
 # streamable_http_path="/" because the app this is mounted under (see
 # main.py) already adds the "/mcp" prefix — without this override the route
@@ -370,13 +369,10 @@ def get_price_history(shoe_id: int, limit: int = 50) -> List[dict]:
         ]
 
 
-def _owned_shoe_to_dict(shoe: OwnedShoe, lifetime_stats: Optional[dict] = None) -> dict:
-    stats = lifetime_stats or {}
-    cost_per_km = (
-        round(shoe.purchase_price / shoe.current_mileage, 2)
-        if shoe.purchase_price and shoe.current_mileage > 0
-        else None
-    )
+def _owned_shoe_to_dict(shoe: OwnedShoe, lifetime_stats=None) -> dict:
+    pace = lifetime_stats.lifetime_avg_pace if lifetime_stats else None
+    hr = lifetime_stats.lifetime_avg_hr if lifetime_stats else None
+    total = lifetime_stats.total_runs if lifetime_stats else 0
     return {
         "id": shoe.id,
         "brand": shoe.brand,
@@ -388,10 +384,11 @@ def _owned_shoe_to_dict(shoe: OwnedShoe, lifetime_stats: Optional[dict] = None) 
         "current_mileage": shoe.current_mileage,
         "status": shoe.status,
         "purchase_price": shoe.purchase_price,
-        "cost_per_km": cost_per_km,
-        "lifetime_avg_pace": stats.get("lifetime_avg_pace"),
-        "lifetime_avg_hr": stats.get("lifetime_avg_hr"),
-        "total_runs": stats.get("total_runs", 0),
+        "mileage_limit": shoe.mileage_limit,
+        "cost_per_km": rotation.cost_per_km(shoe),
+        "lifetime_avg_pace": pace,
+        "lifetime_avg_hr": hr,
+        "total_runs": total,
     }
 
 
@@ -435,7 +432,7 @@ def get_owned_shoes(status_filter: Optional[str] = None) -> List[dict]:
         if status_filter:
             query = query.filter(OwnedShoe.status == status_filter)
         shoes = query.order_by(OwnedShoe.created_at.desc()).all()
-        return [_owned_shoe_to_dict(s, _compute_lifetime_stats(db, s.id)) for s in shoes]
+        return [_owned_shoe_to_dict(s, rotation.compute_lifetime_stats(db, s.id)) for s in shoes]
 
 
 @mcp.tool()
@@ -454,11 +451,13 @@ def get_shoe_runs(owned_shoe_id: int) -> dict:
             .order_by(desc(ShoeRun.run_date), desc(ShoeRun.created_at))
             .all()
         )
-        stats = _compute_lifetime_stats(db, owned_shoe_id)
+        stats = rotation.compute_lifetime_stats(db, owned_shoe_id)
         return {
             "owned_shoe_id": owned_shoe_id,
             "runs": [_shoe_run_to_dict(r) for r in runs],
-            **stats,
+            "lifetime_avg_pace": stats.lifetime_avg_pace,
+            "lifetime_avg_hr": stats.lifetime_avg_hr,
+            "total_runs": stats.total_runs,
         }
 
 
@@ -489,26 +488,41 @@ async def log_run_to_shoe(
             shoe = db.query(OwnedShoe).filter(OwnedShoe.id == owned_shoe_id).first()
             if not shoe:
                 return {"success": False, "error": f"Owned shoe with id {owned_shoe_id} not found"}
-
             old_mileage = shoe.current_mileage
-            run = ShoeRun(
-                owned_shoe_id=owned_shoe_id,
+
+            result = rotation.log_run(
+                db,
+                owned_shoe_id,
                 distance_km=distance_km,
                 run_date=date_type.fromisoformat(run_date),
-                source="manual",
                 avg_pace=avg_pace,
                 avg_hr=avg_hr,
                 notes=notes,
             )
-            db.add(run)
-            shoe.current_mileage += distance_km
-            db.commit()
-            db.refresh(run)
-            db.refresh(shoe)
+            shoe = result.shoe
 
-            old_checkpoint = int(old_mileage // 100) * 100
-            new_checkpoint = int(shoe.current_mileage // 100) * 100
-            checkpoint_reached = new_checkpoint > old_checkpoint and new_checkpoint > 0
+            thresholds = [
+                (600, "approaching end of life — start thinking about replacement"),
+                (700, "consider retiring soon — performance may be degrading"),
+                (800, "past recommended limit — retire this shoe"),
+            ]
+            threshold_crossed = None
+            threshold_message = None
+            for threshold_km, message in thresholds:
+                if old_mileage < threshold_km <= shoe.current_mileage:
+                    threshold_crossed = threshold_km
+                    threshold_message = message
+                    break
+
+            if threshold_crossed is not None:
+                try:
+                    await ctx.log(
+                        "warning",
+                        f"⚠️ {shoe.brand} {shoe.model} has reached {threshold_crossed}km — {threshold_message}.",
+                        logger_name="shoe-tracker",
+                    )
+                except Exception:
+                    pass
 
             thresholds = [
                 (600, "approaching end of life — start thinking about replacement"),
@@ -535,7 +549,7 @@ async def log_run_to_shoe(
 
             return {
                 "success": True,
-                "run_id": run.id,
+                "run_id": result.run.id,
                 "shoe": f"{shoe.brand} {shoe.model}",
                 "new_mileage": round(shoe.current_mileage, 2),
                 "checkpoint_reached": checkpoint_reached,
@@ -561,18 +575,11 @@ def delete_shoe_run(run_id: int) -> dict:
             run = db.query(ShoeRun).filter(ShoeRun.id == run_id).first()
             if not run:
                 return {"success": False, "error": f"Run with id {run_id} not found"}
-
-            shoe = db.query(OwnedShoe).filter(OwnedShoe.id == run.owned_shoe_id).first()
             distance = run.distance_km
-            db.delete(run)
-            if shoe:
-                shoe.current_mileage = max(0, shoe.current_mileage - distance)
-            db.commit()
-
-            if not shoe:
-                return {"success": True, "removed_km": distance, "updated_mileage": 0}
-
-            db.refresh(shoe)
+            try:
+                shoe = rotation.delete_run(db, run_id)
+            except LookupError as exc:
+                return {"success": False, "error": str(exc)}
             return {"success": True, "removed_km": distance, "updated_mileage": round(shoe.current_mileage, 2)}
     except Exception as e:
         return {"success": False, "error": str(e)}
@@ -610,24 +617,16 @@ def add_shoe_note(owned_shoe_id: int, body: str) -> dict:
     """
     try:
         with get_session() as db:
+            try:
+                note = rotation.add_note(db, owned_shoe_id, body)
+            except LookupError as exc:
+                return {"success": False, "error": str(exc)}
             shoe = db.query(OwnedShoe).filter(OwnedShoe.id == owned_shoe_id).first()
-            if not shoe:
-                return {"success": False, "error": f"Owned shoe with id {owned_shoe_id} not found"}
-
-            note = ShoeNote(
-                owned_shoe_id=owned_shoe_id,
-                body=body,
-                triggered_by="manual",
-                mileage_at_note=shoe.current_mileage,
-            )
-            db.add(note)
-            db.commit()
-            db.refresh(note)
             return {
                 "success": True,
                 "note_id": note.id,
                 "shoe": f"{shoe.brand} {shoe.model}",
-                "mileage_at_note": shoe.current_mileage,
+                "mileage_at_note": note.mileage_at_note,
             }
     except Exception as e:
         return {"success": False, "error": str(e)}
@@ -757,7 +756,7 @@ def get_coros_sync_status() -> dict:
     """
     config = get_coros_config()
     with get_session() as db:
-        last_sync_str = _get_setting(db, "last_coros_sync_at")
+        last_sync_str = settings_svc.get_setting(db, "last_coros_sync_at")
     return {
         "coros_configured": config is not None,
         "last_sync_at": last_sync_str,
@@ -782,36 +781,28 @@ def fetch_unsynced_coros_runs(days_back: int = 30) -> dict:
             After the first sync, pass a smaller window matching the days
             since last_sync_at to avoid refetching old history.
     """
-    config = get_coros_config()
-    if not config:
+    import requests as _requests
+    with get_session() as db:
+        try:
+            result = coros_svc.fetch_unsynced(db, days_back)
+        except _requests.exceptions.RequestException as exc:
+            return {"success": False, "coros_configured": True, "error": str(exc)}
+        except ValueError as exc:
+            return {"success": False, "coros_configured": True, "error": str(exc)}
+
+    if not result.coros_configured:
         return {
             "success": False,
             "coros_configured": False,
             "error": "COROS sync not configured. Add COROS_ACCESS_TOKEN and COROS_OPEN_ID to your .env.",
         }
 
-    try:
-        activities = fetch_running_activities(config, days_back)
-    except Exception as exc:
-        return {"success": False, "coros_configured": True, "error": str(exc)}
-
-    with get_session() as db:
-        new_runs = []
-        already_synced = 0
-        for act in activities:
-            run = activity_to_run_dict(act)
-            if _is_already_logged(db, run["coros_activity_id"], run["date"], run["distance_km"]):
-                already_synced += 1
-            else:
-                new_runs.append(run)
-
-    new_runs.sort(key=lambda r: r["date"], reverse=True)
     return {
         "success": True,
         "coros_configured": True,
-        "runs": new_runs,
-        "already_synced": already_synced,
-        "total_fetched": len(activities),
+        "runs": result.runs,
+        "already_synced": result.already_synced,
+        "total_fetched": len(result.runs) + result.already_synced,
     }
 
 
@@ -840,40 +831,29 @@ def confirm_coros_run(
         notes: Optional notes about this run.
     """
     with get_session() as db:
-        shoe = db.query(OwnedShoe).filter(OwnedShoe.id == owned_shoe_id).first()
-        if not shoe:
+        try:
+            result = coros_svc.confirm_run(
+                db,
+                coros_activity_id=coros_activity_id,
+                owned_shoe_id=owned_shoe_id,
+                run_date=date_type.fromisoformat(date),
+                distance_km=distance_km,
+                avg_pace=avg_pace,
+                avg_hr=avg_hr,
+                notes=notes,
+            )
+        except LookupError:
             return {"success": False, "error": f"Owned shoe {owned_shoe_id} not found"}
 
-        if db.query(ShoeRun).filter(ShoeRun.coros_activity_id == coros_activity_id).count():
+        if result is None:
             return {"success": False, "error": f"Run {coros_activity_id} is already logged"}
 
-        old_mileage = shoe.current_mileage
-        run = ShoeRun(
-            owned_shoe_id=owned_shoe_id,
-            distance_km=distance_km,
-            run_date=date_type.fromisoformat(date),
-            source="coros",
-            coros_activity_id=coros_activity_id,
-            avg_pace=avg_pace,
-            avg_hr=avg_hr,
-            notes=notes,
-        )
-        db.add(run)
-        shoe.current_mileage += distance_km
-        db.commit()
-        db.refresh(shoe)
-
-        _set_setting(db, "last_coros_sync_at", datetime.now(timezone.utc).isoformat())
-
-        old_cp = int(old_mileage // 100) * 100
-        new_cp = int(shoe.current_mileage // 100) * 100
-        checkpoint_reached = new_cp > old_cp and new_cp > 0
-
+        stats = rotation.compute_lifetime_stats(db, result.shoe.id)
         return {
             "success": True,
-            "checkpoint_reached": checkpoint_reached,
-            "checkpoint_km": new_cp if checkpoint_reached else None,
-            "shoe": _owned_shoe_to_dict(shoe, _compute_lifetime_stats(db, shoe.id)),
+            "checkpoint_reached": result.checkpoint_reached,
+            "checkpoint_km": result.checkpoint_km,
+            "shoe": _owned_shoe_to_dict(result.shoe, stats),
         }
 
 
@@ -961,13 +941,13 @@ def shoe_rotation_resource() -> str:
         md_lines = ["# My Shoe Rotation", "", "**Active Shoes**"]
         shoe_dicts = []
         for s in active:
-            stats = _compute_lifetime_stats(db, s.id)
-            bar = _format_mileage_bar(s.current_mileage, s.mileage_limit if hasattr(s, "mileage_limit") else None)
+            stats = rotation.compute_lifetime_stats(db, s.id)
+            bar = _format_mileage_bar(s.current_mileage, s.mileage_limit)
             label = s.nickname or ""
             name = f"{s.brand} {s.model}" + (f" ({label})" if label else "")
-            pace = stats.get("lifetime_avg_pace") or "—"
-            hr = f"{stats['lifetime_avg_hr']}bpm" if stats.get("lifetime_avg_hr") else "—"
-            runs = stats.get("total_runs", 0)
+            pace = stats.lifetime_avg_pace or "—"
+            hr = f"{stats.lifetime_avg_hr}bpm" if stats.lifetime_avg_hr else "—"
+            runs = stats.total_runs
             type_tag = f" [{s.shoe_type}]" if s.shoe_type else ""
             md_lines.append(f"- {name}{type_tag} — {round(s.current_mileage)}km  {bar}")
             md_lines.append(f"  Avg pace: {pace} · Avg HR: {hr} · {runs} runs")
@@ -979,7 +959,7 @@ def shoe_rotation_resource() -> str:
         if retired:
             md_lines += ["", "**Retired Shoes**"]
             for s in retired:
-                stats = _compute_lifetime_stats(db, s.id)
+                stats = rotation.compute_lifetime_stats(db, s.id)
                 label = s.nickname or ""
                 name = f"{s.brand} {s.model}" + (f" ({label})" if label else "")
                 md_lines.append(f"- {name} — {round(s.current_mileage)}km (retired)")
@@ -1084,13 +1064,9 @@ def shoe_detail_resource(shoe_id: int) -> str:
         if not shoe:
             return f"No shoe found with id {shoe_id}"
 
-        stats = _compute_lifetime_stats(db, shoe.id)
-        cost_per_km = (
-            round(shoe.purchase_price / shoe.current_mileage, 2)
-            if shoe.purchase_price and shoe.current_mileage > 0
-            else None
-        )
-        mileage_limit = getattr(shoe, "mileage_limit", None)
+        stats = rotation.compute_lifetime_stats(db, shoe.id)
+        cost_per_km = rotation.cost_per_km(shoe)
+        mileage_limit = shoe.mileage_limit
         bar = _format_mileage_bar(shoe.current_mileage, mileage_limit)
         label = shoe.nickname or ""
         name = f"{shoe.brand} {shoe.model}" + (f" ({label})" if label else "")
@@ -1107,9 +1083,9 @@ def shoe_detail_resource(shoe_id: int) -> str:
                 f"**Purchase price:** ${shoe.purchase_price:.2f}"
                 + (f" | **Cost per km:** ${cost_per_km:.2f}" if cost_per_km else "")
             )
-        pace = stats.get("lifetime_avg_pace") or "—"
-        hr = f"{stats['lifetime_avg_hr']}bpm" if stats.get("lifetime_avg_hr") else "—"
-        runs_count = stats.get("total_runs", 0)
+        pace = stats.lifetime_avg_pace or "—"
+        hr = f"{stats.lifetime_avg_hr}bpm" if stats.lifetime_avg_hr else "—"
+        runs_count = stats.total_runs
         md_lines.append(f"**Lifetime stats:** Avg {pace} · {hr} · {runs_count} runs")
 
         recent_runs = (
@@ -1190,10 +1166,16 @@ def shoe_runs_resource(shoe_id: int) -> str:
             source_badge = "🤖 coros" if r.source == "coros" else "✍ manual"
             md_lines.append(f"| {date_str} | {r.distance_km:.1f}km | {pace} | {hr} | {source_badge} |")
 
-        stats = _compute_lifetime_stats(db, shoe_id)
+        stats = rotation.compute_lifetime_stats(db, shoe_id)
         markdown = "\n".join(md_lines)
         payload = json.dumps(
-            {"shoe_id": shoe_id, "runs": [_shoe_run_to_dict(r) for r in runs], **stats},
+            {
+                "shoe_id": shoe_id,
+                "runs": [_shoe_run_to_dict(r) for r in runs],
+                "lifetime_avg_pace": stats.lifetime_avg_pace,
+                "lifetime_avg_hr": stats.lifetime_avg_hr,
+                "total_runs": stats.total_runs,
+            },
             default=str,
         )
         return f"{markdown}\n\n```json\n{payload}\n```"

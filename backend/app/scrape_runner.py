@@ -11,7 +11,7 @@ code path that reuses the same per-(shoe, retailer) primitive
 """
 import asyncio
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import List, Optional
 
 from app.database import SessionLocal
@@ -42,7 +42,7 @@ def _scrape_one_retailer(retailer_id: int, shoe_ids: List[int]) -> dict:
         errors: List[str] = []
         for shoe in shoes:
             try:
-                result = manager._scrape_retailer_for_shoe(shoe, retailer)
+                result = manager.scrape_retailer_for_shoe(shoe, retailer)
                 deals_found += result.get("deals_found", 0)
                 errors.extend(result.get("errors", []))
             except Exception as e:
@@ -52,7 +52,7 @@ def _scrape_one_retailer(retailer_id: int, shoe_ids: List[int]) -> dict:
         # shoe it processes; set it once more here so it reflects this
         # retailer's actual completion time exactly, matching the
         # retailer_done event's timestamp below precisely.
-        retailer.last_scraped_at = datetime.utcnow()
+        retailer.last_scraped_at = datetime.now(timezone.utc)
         db.commit()
         return {"deals_found": deals_found, "errors": errors}
     finally:
@@ -104,7 +104,7 @@ async def run_scrape_job(retailer_ids: Optional[List[int]] = None) -> None:
                     "type": "retailer_done",
                     "retailer": name,
                     "deals_found": result["deals_found"],
-                    "timestamp": datetime.utcnow().isoformat(),
+                    "timestamp": datetime.now(timezone.utc).isoformat(),
                 })
                 return result
             except Exception as e:
@@ -119,7 +119,7 @@ async def run_scrape_job(retailer_ids: Optional[List[int]] = None) -> None:
         gathered = await asyncio.gather(*[run_one(rid, name) for rid, name in retailers])
         total_deals = sum(r.get("deals_found", 0) for r in gathered)
 
-        completed_at = datetime.utcnow().isoformat()
+        completed_at = datetime.now(timezone.utc).isoformat()
         scrape_state.finish(completed_at)
         await scrape_state.publish({
             "type": "completed",

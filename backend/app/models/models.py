@@ -181,6 +181,7 @@ class OwnedShoe(Base):
     current_mileage = Column(Float, nullable=False, default=0)  # starting_mileage + sum(runs)
     status = Column(String(20), nullable=False, default="active")  # active | retired | for_sale
     purchase_price = Column(Float, nullable=True)  # what was paid; cost-per-km is derived, not stored
+    mileage_limit = Column(Float, nullable=True)   # km at which this shoe should be retired (user-set)
     image_url = Column(Text, nullable=True)  # manually-set product image; overrides any auto-matched image
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
