@@ -1451,11 +1451,10 @@ language mix of confirmations, changes, and skips. If ambiguous,
 ask for clarification.
 
 ## Step 6 — Log confirmed runs
-For each confirmed run call log_run_to_shoe with:
+For each confirmed run call confirm_coros_run with:
+- coros_activity_id (from querySportRecords)
 - owned_shoe_id (the confirmed shoe)
-- distance_km, run_date, avg_pace, avg_hr from COROS data
-- source: "coros"
-- notes: empty unless user specifies
+- date, distance_km, avg_pace, avg_hr from COROS data
 
 ## Step 7 — Summarise results
 "Logged [N] runs:
@@ -1470,7 +1469,7 @@ to check replacement deals or add a note.
 ## General rules
 - Never log a run without explicit user confirmation
 - Never invent data — all run details come from
-  fetch_unsynced_coros_runs
+  querySportRecords (Step 1)
 - If confirm_coros_run returns success: false for any run, report
   the specific error and continue processing the rest
 - Keep the tone direct and concise — this user is a competitive
