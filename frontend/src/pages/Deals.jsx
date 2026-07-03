@@ -27,6 +27,10 @@ const SORTS = {
 
 const ALL = '__all__'
 
+// "long_distance_racer" → "Long distance racer"
+const formatShoeType = (t) =>
+  t.replace(/_/g, ' ').replace(/^\w/, (c) => c.toUpperCase())
+
 export default function Deals() {
   const [brand, setBrand] = useState(ALL)
   const [retailerId, setRetailerId] = useState(ALL)
@@ -174,7 +178,7 @@ export default function Deals() {
                 <SelectItem value={ALL}>All types</SelectItem>
                 {shoeTypes.map((t) => (
                   <SelectItem key={t} value={t}>
-                    {t}
+                    {formatShoeType(t)}
                   </SelectItem>
                 ))}
               </SelectContent>
