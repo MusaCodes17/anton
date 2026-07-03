@@ -547,6 +547,29 @@ async def log_run_to_shoe(
                 except Exception:
                     pass
 
+            thresholds = [
+                (600, "approaching end of life — start thinking about replacement"),
+                (700, "consider retiring soon — performance may be degrading"),
+                (800, "past recommended limit — retire this shoe"),
+            ]
+            threshold_crossed = None
+            threshold_message = None
+            for threshold_km, message in thresholds:
+                if old_mileage < threshold_km <= shoe.current_mileage:
+                    threshold_crossed = threshold_km
+                    threshold_message = message
+                    break
+
+            if threshold_crossed is not None:
+                try:
+                    await ctx.log(
+                        "warning",
+                        f"⚠️ {shoe.brand} {shoe.model} has reached {threshold_crossed}km — {threshold_message}.",
+                        logger_name="shoe-tracker",
+                    )
+                except Exception:
+                    pass
+
             return {
                 "success": True,
                 "run_id": result.run.id,

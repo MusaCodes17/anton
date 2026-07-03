@@ -30,6 +30,7 @@ const ALL = '__all__'
 export default function Deals() {
   const [brand, setBrand] = useState(ALL)
   const [retailerId, setRetailerId] = useState(ALL)
+  const [shoeType, setShoeType] = useState(ALL)
   const [minSavings, setMinSavings] = useState('')
   const [size, setSize] = useState(ALL)
   const [sort, setSort] = useState('savings_desc')
@@ -54,6 +55,15 @@ export default function Deals() {
     return Array.from(set).sort()
   }, [shoes.data])
 
+  // Distinct shoe types for the filter dropdown, derived from tracked shoes.
+  const shoeTypes = useMemo(() => {
+    const set = new Set()
+    for (const s of shoes.data || []) {
+      if (s.shoe_type) set.add(s.shoe_type)
+    }
+    return Array.from(set).sort()
+  }, [shoes.data])
+
   // Distinct sizes for the filter dropdown, derived from the deals already
   // fetched (sizes_available is cached at scrape time — picking a size never
   // triggers another scrape). Deals scraped before size tracking was added
@@ -66,17 +76,20 @@ export default function Deals() {
     return Array.from(set).sort((a, b) => parseFloat(a) - parseFloat(b))
   }, [deals.data])
 
-  // Retailer/size filtering + sorting happen client-side.
+  // Retailer/size/shoe-type filtering + sorting happen client-side.
   const visible = useMemo(() => {
     let list = deals.data || []
     if (retailerId !== ALL) {
       list = list.filter((d) => String(d.retailer_id) === retailerId)
     }
+    if (shoeType !== ALL) {
+      list = list.filter((d) => d.shoe?.shoe_type === shoeType)
+    }
     if (size !== ALL) {
       list = list.filter((d) => (d.sizes_available || []).includes(size))
     }
     return [...list].sort(SORTS[sort])
-  }, [deals.data, retailerId, size, sort])
+  }, [deals.data, retailerId, shoeType, size, sort])
 
   // Consolidate colorways/retailers: one card per tracked shoe. Groups inherit
   // the sorted order of `visible`, so each group's first (best) deal also orders
@@ -95,6 +108,7 @@ export default function Deals() {
   const resetFilters = () => {
     setBrand(ALL)
     setRetailerId(ALL)
+    setShoeType(ALL)
     setMinSavings('')
     setSize(ALL)
     setSort('savings_desc')
@@ -103,6 +117,7 @@ export default function Deals() {
   const hasFilters =
     brand !== ALL ||
     retailerId !== ALL ||
+    shoeType !== ALL ||
     minSavings !== '' ||
     size !== ALL ||
     sort !== 'savings_desc'
@@ -114,7 +129,7 @@ export default function Deals() {
       </PageHeader>
 
       <Card>
-        <CardContent className="grid grid-cols-1 gap-4 p-4 sm:grid-cols-2 lg:grid-cols-4">
+        <CardContent className="grid grid-cols-1 gap-4 p-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
           <div className="space-y-1.5">
             <Label>Brand</Label>
             <Select value={brand} onValueChange={setBrand}>
@@ -143,6 +158,23 @@ export default function Deals() {
                 {(retailers.data || []).map((r) => (
                   <SelectItem key={r.id} value={String(r.id)}>
                     {r.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="space-y-1.5">
+            <Label>Shoe type</Label>
+            <Select value={shoeType} onValueChange={setShoeType}>
+              <SelectTrigger>
+                <SelectValue placeholder="All types" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value={ALL}>All types</SelectItem>
+                {shoeTypes.map((t) => (
+                  <SelectItem key={t} value={t}>
+                    {t}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -194,7 +226,7 @@ export default function Deals() {
           </div>
 
           {hasFilters && (
-            <div className="flex items-end lg:col-span-4">
+            <div className="flex items-end xl:col-span-6">
               <Button variant="ghost" size="sm" onClick={resetFilters}>
                 <SlidersHorizontal className="h-4 w-4" /> Clear filters
               </Button>
