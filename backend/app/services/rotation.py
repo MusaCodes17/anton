@@ -131,16 +131,29 @@ def log_run(
     run_date: date,
     source: str = "manual",
     coros_activity_id: Optional[str] = None,
+    strava_activity_id: Optional[int] = None,
     avg_pace: Optional[str] = None,
     avg_hr: Optional[int] = None,
     notes: Optional[str] = None,
+    increment_mileage: bool = True,
+    commit: bool = True,
 ) -> RunLogResult:
     """
     Create a ShoeRun, increment the shoe's mileage, commit, and detect any
     100km checkpoint crossing.
 
-    This is THE only code path that writes a ShoeRun — manual REST, MCP, and
-    COROS confirm all route here (after Task D).
+    This is THE only code path that writes a ShoeRun — manual REST, MCP, COROS
+    confirm, and Strava backfill all route here. Backfill passes
+    ``increment_mileage=False`` (it applies its own reconciliation policy to the
+    mileage afterward) and ``commit=False`` (it batches every write into one
+    transaction it commits itself), so the invariant holds without the counter
+    or transaction semantics that manual logging needs.
+
+    Args:
+        increment_mileage: add ``distance_km`` to the shoe's current_mileage.
+            Set False when the caller manages mileage itself (Strava backfill).
+        commit: commit the transaction. Set False to flush only (assigning
+            ``run.id``) and leave the commit to the caller batching many writes.
 
     Raises LookupError if the shoe doesn't exist.
     """
@@ -155,15 +168,20 @@ def log_run(
         run_date=run_date,
         source=source,
         coros_activity_id=coros_activity_id,
+        strava_activity_id=strava_activity_id,
         avg_pace=avg_pace,
         avg_hr=avg_hr,
         notes=notes,
     )
     db.add(run)
-    shoe.current_mileage += distance_km
-    db.commit()
-    db.refresh(run)
-    db.refresh(shoe)
+    if increment_mileage:
+        shoe.current_mileage += distance_km
+    if commit:
+        db.commit()
+        db.refresh(run)
+        db.refresh(shoe)
+    else:
+        db.flush()  # assign run.id within the caller's open transaction
 
     cp = crossed_checkpoint(old_mileage, shoe.current_mileage)
     return RunLogResult(

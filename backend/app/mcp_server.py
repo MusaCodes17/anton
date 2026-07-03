@@ -21,9 +21,9 @@ from datetime import date as date_type, datetime, timezone
 
 from app.coros_client import get_coros_config
 from app.database import SessionLocal
-from app.models.models import Deal, OwnedShoe, PriceRecord, Retailer, Shoe, ShoeNote, ShoeRun
+from app.models.models import Deal, OwnedShoe, PriceRecord, Retailer, Shoe, ShoeNote, ShoeRun, StravaActivity
 from app.scrapers.scraper_manager import ScraperManager, ScrapeInProgressError, scrape_guard
-from app.services import rotation, coros as coros_svc, settings as settings_svc
+from app.services import rotation, coros as coros_svc, settings as settings_svc, strava_stats
 
 # streamable_http_path="/" because the app this is mounted under (see
 # main.py) already adds the "/mcp" prefix — without this override the route
@@ -524,59 +524,13 @@ async def log_run_to_shoe(
                 except Exception:
                     pass
 
-            thresholds = [
-                (600, "approaching end of life — start thinking about replacement"),
-                (700, "consider retiring soon — performance may be degrading"),
-                (800, "past recommended limit — retire this shoe"),
-            ]
-            threshold_crossed = None
-            threshold_message = None
-            for threshold_km, message in thresholds:
-                if old_mileage < threshold_km <= shoe.current_mileage:
-                    threshold_crossed = threshold_km
-                    threshold_message = message
-                    break
-
-            if threshold_crossed is not None:
-                try:
-                    await ctx.log(
-                        "warning",
-                        f"⚠️ {shoe.brand} {shoe.model} has reached {threshold_crossed}km — {threshold_message}.",
-                        logger_name="shoe-tracker",
-                    )
-                except Exception:
-                    pass
-
-            thresholds = [
-                (600, "approaching end of life — start thinking about replacement"),
-                (700, "consider retiring soon — performance may be degrading"),
-                (800, "past recommended limit — retire this shoe"),
-            ]
-            threshold_crossed = None
-            threshold_message = None
-            for threshold_km, message in thresholds:
-                if old_mileage < threshold_km <= shoe.current_mileage:
-                    threshold_crossed = threshold_km
-                    threshold_message = message
-                    break
-
-            if threshold_crossed is not None:
-                try:
-                    await ctx.log(
-                        "warning",
-                        f"⚠️ {shoe.brand} {shoe.model} has reached {threshold_crossed}km — {threshold_message}.",
-                        logger_name="shoe-tracker",
-                    )
-                except Exception:
-                    pass
-
             return {
                 "success": True,
                 "run_id": result.run.id,
                 "shoe": f"{shoe.brand} {shoe.model}",
                 "new_mileage": round(shoe.current_mileage, 2),
-                "checkpoint_reached": checkpoint_reached,
-                "checkpoint_km": new_checkpoint if checkpoint_reached else None,
+                "checkpoint_reached": result.checkpoint_reached,
+                "checkpoint_km": result.checkpoint_km,
                 "threshold_crossed": threshold_crossed,
                 "threshold_message": threshold_message,
             }
@@ -691,10 +645,10 @@ async def draft_shoe_review(owned_shoe_id: int, ctx: Context) -> dict:
             .all()
         )
 
-        stats = _compute_lifetime_stats(db, owned_shoe_id)
-        total_runs = stats.get("total_runs", 0)
-        lifetime_avg_pace = stats.get("lifetime_avg_pace") or "—"
-        lifetime_avg_hr = stats.get("lifetime_avg_hr")
+        stats = rotation.compute_lifetime_stats(db, owned_shoe_id)
+        total_runs = stats.total_runs
+        lifetime_avg_pace = stats.lifetime_avg_pace or "—"
+        lifetime_avg_hr = stats.lifetime_avg_hr
 
         first_run_date = runs[0].run_date.isoformat() if runs else "—"
         last_run_date = runs[-1].run_date.isoformat() if runs else "—"
@@ -905,6 +859,69 @@ def retire_shoe(owned_shoe_id: int) -> dict:
             }
     except Exception as e:
         return {"success": False, "error": str(e)}
+
+
+@mcp.tool()
+def get_training_summary(period: str = "monthly") -> dict:
+    """
+    Weekly or monthly training aggregates over the full imported Strava run
+    history: total distance, run count, average pace, average heart rate, and
+    elevation gain per period (newest first).
+
+    Use this for questions like "how much did I run last month", "what were my
+    weekly volumes this year", or "how has my average pace trended".
+
+    Args:
+        period: "monthly" (default) or "weekly".
+    """
+    if period not in ("weekly", "monthly"):
+        return {"error": "period must be 'weekly' or 'monthly'"}
+    with get_session() as db:
+        summaries = strava_stats.training_summary(db, period)
+        return {
+            "period": period,
+            "buckets": [
+                {
+                    "period": s.period,
+                    "total_km": s.total_km,
+                    "run_count": s.run_count,
+                    "avg_pace": s.avg_pace,
+                    "avg_hr": s.avg_hr,
+                    "elevation_gain_m": s.elevation_gain_m,
+                }
+                for s in summaries
+            ],
+        }
+
+
+@mcp.tool()
+def get_personal_bests() -> dict:
+    """
+    Fastest average pace at each distance band (5k, 10k, half, full) across
+    all imported Strava runs.
+
+    IMPORTANT: these are *average-pace-for-the-whole-activity* bests within a
+    distance tolerance — not true segment/split PBs. Describe them that way to
+    the user (e.g. "your fastest-average-pace 10k", not "your 10k PB").
+    """
+    with get_session() as db:
+        bests = strava_stats.personal_bests(db)
+        return {
+            "note": "Whole-activity average-pace bests within a distance tolerance, not segment PBs.",
+            "bests": [
+                {
+                    "band": b.band,
+                    "target_km": b.target_km,
+                    "run_date": b.run_date,
+                    "name": b.name,
+                    "distance_km": b.distance_km,
+                    "avg_pace": b.avg_pace,
+                    "avg_hr": b.avg_hr,
+                    "strava_activity_id": b.strava_activity_id,
+                }
+                for b in bests
+            ],
+        }
 
 
 # ---------------------------------------------------------------------------
@@ -1151,6 +1168,15 @@ def shoe_detail_resource(shoe_id: int) -> str:
         return f"{markdown}\n\n```json\n{payload}\n```"
 
 
+# Run-source badges for the run-history resource. Default (manual) covers any
+# unrecognized source.
+_SOURCE_BADGES = {
+    "coros": "🤖 coros",
+    "strava": "🟠 strava",
+    "manual": "✍ manual",
+}
+
+
 @mcp.resource(
     "shoes://owned/{shoe_id}/runs",
     name="Shoe Run History",
@@ -1186,7 +1212,7 @@ def shoe_runs_resource(shoe_id: int) -> str:
             date_str = r.run_date.strftime("%b %d, %Y") if r.run_date else "—"
             pace = r.avg_pace or "—"
             hr = f"{r.avg_hr}bpm" if r.avg_hr else "—"
-            source_badge = "🤖 coros" if r.source == "coros" else "✍ manual"
+            source_badge = _SOURCE_BADGES.get(r.source, "✍ manual")
             md_lines.append(f"| {date_str} | {r.distance_km:.1f}km | {pace} | {hr} | {source_badge} |")
 
         stats = rotation.compute_lifetime_stats(db, shoe_id)
@@ -1282,6 +1308,70 @@ def brand_deals_resource(brand: str) -> str:
         return f"{markdown}\n\n```json\n{payload}\n```"
 
 
+@mcp.resource(
+    "strava://runs/{year}/{month}",
+    name="Strava Runs by Month",
+    description="Imported Strava runs for a given year/month, so a chat can pull one month without flooding context",
+    mime_type="application/json",
+)
+def strava_runs_by_month_resource(year: str, month: str) -> str:
+    """Imported Strava runs for a single month (year/month as YYYY / MM or M)."""
+    import json
+    from calendar import monthrange
+    from datetime import date as _date
+
+    try:
+        y, m = int(year), int(month)
+        start = _date(y, m, 1)
+        end = _date(y, m, monthrange(y, m)[1])
+    except (ValueError, TypeError):
+        return f"Invalid year/month: {year}/{month} (expected e.g. 2026/07)"
+
+    with get_session() as db:
+        runs = (
+            db.query(StravaActivity)
+            .filter(
+                StravaActivity.activity_type == "Run",
+                StravaActivity.run_date >= start,
+                StravaActivity.run_date <= end,
+            )
+            .order_by(StravaActivity.run_date)
+            .all()
+        )
+
+        total_km = round(sum(r.distance_km or 0.0 for r in runs), 1)
+        md_lines = [
+            f"# Strava Runs — {y}-{m:02d}",
+            f"_{len(runs)} run{'s' if len(runs) != 1 else ''} · {total_km}km total_",
+            "",
+            "| Date | Distance | Pace | HR | Gear |",
+            "|------|----------|------|----|------|",
+        ]
+        run_dicts = []
+        for r in runs:
+            date_str = r.run_date.strftime("%b %d") if r.run_date else "—"
+            pace = rotation.seconds_to_pace(r.avg_pace_s_per_km) if r.avg_pace_s_per_km else "—"
+            hr = f"{r.avg_hr}bpm" if r.avg_hr else "—"
+            gear = r.gear_name or "—"
+            md_lines.append(f"| {date_str} | {r.distance_km:.1f}km | {pace} | {hr} | {gear} |")
+            run_dicts.append({
+                "strava_activity_id": r.strava_activity_id,
+                "run_date": r.run_date.isoformat() if r.run_date else None,
+                "distance_km": r.distance_km,
+                "avg_pace": pace if pace != "—" else None,
+                "avg_hr": r.avg_hr,
+                "gear_name": r.gear_name,
+                "name": r.name,
+            })
+
+        markdown = "\n".join(md_lines)
+        payload = json.dumps(
+            {"year": y, "month": m, "total_km": total_km, "runs": run_dicts},
+            default=str,
+        )
+        return f"{markdown}\n\n```json\n{payload}\n```"
+
+
 # ---------------------------------------------------------------------------
 # Prompts
 # ---------------------------------------------------------------------------
@@ -1370,11 +1460,10 @@ language mix of confirmations, changes, and skips. If ambiguous,
 ask for clarification.
 
 ## Step 6 — Log confirmed runs
-For each confirmed run call log_run_to_shoe with:
+For each confirmed run call confirm_coros_run with:
+- coros_activity_id (from querySportRecords)
 - owned_shoe_id (the confirmed shoe)
-- distance_km, run_date, avg_pace, avg_hr from COROS data
-- source: "coros"
-- notes: empty unless user specifies
+- date, distance_km, avg_pace, avg_hr from COROS data
 
 ## Step 7 — Summarise results
 "Logged [N] runs:
@@ -1389,7 +1478,7 @@ to check replacement deals or add a note.
 ## General rules
 - Never log a run without explicit user confirmation
 - Never invent data — all run details come from
-  fetch_unsynced_coros_runs
+  querySportRecords (Step 1)
 - If confirm_coros_run returns success: false for any run, report
   the specific error and continue processing the rest
 - Keep the tone direct and concise — this user is a competitive
