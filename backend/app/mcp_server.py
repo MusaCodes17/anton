@@ -645,10 +645,10 @@ async def draft_shoe_review(owned_shoe_id: int, ctx: Context) -> dict:
             .all()
         )
 
-        stats = _compute_lifetime_stats(db, owned_shoe_id)
-        total_runs = stats.get("total_runs", 0)
-        lifetime_avg_pace = stats.get("lifetime_avg_pace") or "—"
-        lifetime_avg_hr = stats.get("lifetime_avg_hr")
+        stats = rotation.compute_lifetime_stats(db, owned_shoe_id)
+        total_runs = stats.total_runs
+        lifetime_avg_pace = stats.lifetime_avg_pace or "—"
+        lifetime_avg_hr = stats.lifetime_avg_hr
 
         first_run_date = runs[0].run_date.isoformat() if runs else "—"
         last_run_date = runs[-1].run_date.isoformat() if runs else "—"
