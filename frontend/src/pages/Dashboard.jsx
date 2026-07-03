@@ -169,7 +169,7 @@ function HighestDealTile({ deal }) {
         <span className="font-heading text-base font-bold text-foreground">{shoe.model}</span>
         <span className="text-sm-plus text-muted-foreground">{retailerName}</span>
         <div className="mt-auto pt-3">
-          <div className="flex items-baseline gap-2">
+          <div className="flex items-baseline gap-2 tabular-nums">
             <span className="font-heading text-stat font-extrabold text-foreground">
               {formatCurrency(deal.current_price)}
             </span>
@@ -223,7 +223,7 @@ function RecentDealRow({ deal }) {
         <div className="text-xs text-muted-foreground">{retailerName}</div>
       </div>
       <div className="shrink-0 text-right">
-        <div className="flex items-baseline justify-end gap-1.5">
+        <div className="flex items-baseline justify-end gap-1.5 tabular-nums">
           <span className="font-heading text-md-plus font-extrabold text-foreground">
             {formatCurrency(deal.current_price)}
           </span>

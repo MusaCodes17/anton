@@ -10,7 +10,7 @@ export default function StatCard({ label, value, hint, loading }) {
       {loading ? (
         <Skeleton className="mt-2 h-8 w-16" />
       ) : (
-        <div className="mt-2 font-heading text-[32px] font-extrabold leading-none text-foreground">
+        <div className="mt-2 font-heading text-[32px] font-extrabold leading-none tabular-nums text-foreground">
           {value}
         </div>
       )}

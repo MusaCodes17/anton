@@ -22,9 +22,9 @@ export default function MileageProgressBar({ mileage, limit = DEFAULT_LIMIT_KM, 
         />
       </div>
       {compact ? (
-        <div className="text-2xs text-faint">Current Mileage: {Math.round(mileage)} km</div>
+        <div className="text-2xs tabular-nums text-faint">Current Mileage: {Math.round(mileage)} km</div>
       ) : (
-        <div className="flex justify-between text-2xs text-faint">
+        <div className="flex justify-between text-2xs tabular-nums text-faint">
           <span>{Math.round(mileage)} km</span>
           <span>{limit} km limit</span>
         </div>

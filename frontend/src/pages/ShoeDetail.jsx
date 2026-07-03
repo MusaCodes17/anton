@@ -334,7 +334,7 @@ function Stat({ label, value }) {
   return (
     <div className="space-y-1">
       <div className="text-2xs font-bold uppercase tracking-[0.08em] text-faint">{label}</div>
-      <div className="font-heading text-lg font-bold text-foreground">{value}</div>
+      <div className="font-heading text-lg font-bold tabular-nums text-foreground">{value}</div>
     </div>
   )
 }
@@ -587,7 +587,7 @@ function RunHistory({ ownedShoeId }) {
               const isLong = (run.notes || '').length > 40
               const expanded = expandedNoteId === run.id
               return (
-                <TableRow key={run.id}>
+                <TableRow key={run.id} className="tabular-nums">
                   <TableCell>{formatDate(run.run_date)}</TableCell>
                   <TableCell>{run.distance_km}</TableCell>
                   <TableCell>{run.avg_pace || '—'}</TableCell>
