@@ -21,9 +21,9 @@ from datetime import date as date_type, datetime, timezone
 
 from app.coros_client import get_coros_config
 from app.database import SessionLocal
-from app.models.models import Deal, OwnedShoe, PriceRecord, Retailer, Shoe, ShoeNote, ShoeRun
+from app.models.models import Deal, OwnedShoe, PriceRecord, Retailer, Shoe, ShoeNote, ShoeRun, StravaActivity
 from app.scrapers.scraper_manager import ScraperManager, ScrapeInProgressError, scrape_guard
-from app.services import rotation, coros as coros_svc, settings as settings_svc
+from app.services import rotation, coros as coros_svc, settings as settings_svc, strava_stats
 
 # streamable_http_path="/" because the app this is mounted under (see
 # main.py) already adds the "/mcp" prefix — without this override the route
@@ -907,6 +907,69 @@ def retire_shoe(owned_shoe_id: int) -> dict:
         return {"success": False, "error": str(e)}
 
 
+@mcp.tool()
+def get_training_summary(period: str = "monthly") -> dict:
+    """
+    Weekly or monthly training aggregates over the full imported Strava run
+    history: total distance, run count, average pace, average heart rate, and
+    elevation gain per period (newest first).
+
+    Use this for questions like "how much did I run last month", "what were my
+    weekly volumes this year", or "how has my average pace trended".
+
+    Args:
+        period: "monthly" (default) or "weekly".
+    """
+    if period not in ("weekly", "monthly"):
+        return {"error": "period must be 'weekly' or 'monthly'"}
+    with get_session() as db:
+        summaries = strava_stats.training_summary(db, period)
+        return {
+            "period": period,
+            "buckets": [
+                {
+                    "period": s.period,
+                    "total_km": s.total_km,
+                    "run_count": s.run_count,
+                    "avg_pace": s.avg_pace,
+                    "avg_hr": s.avg_hr,
+                    "elevation_gain_m": s.elevation_gain_m,
+                }
+                for s in summaries
+            ],
+        }
+
+
+@mcp.tool()
+def get_personal_bests() -> dict:
+    """
+    Fastest average pace at each distance band (5k, 10k, half, full) across
+    all imported Strava runs.
+
+    IMPORTANT: these are *average-pace-for-the-whole-activity* bests within a
+    distance tolerance — not true segment/split PBs. Describe them that way to
+    the user (e.g. "your fastest-average-pace 10k", not "your 10k PB").
+    """
+    with get_session() as db:
+        bests = strava_stats.personal_bests(db)
+        return {
+            "note": "Whole-activity average-pace bests within a distance tolerance, not segment PBs.",
+            "bests": [
+                {
+                    "band": b.band,
+                    "target_km": b.target_km,
+                    "run_date": b.run_date,
+                    "name": b.name,
+                    "distance_km": b.distance_km,
+                    "avg_pace": b.avg_pace,
+                    "avg_hr": b.avg_hr,
+                    "strava_activity_id": b.strava_activity_id,
+                }
+                for b in bests
+            ],
+        }
+
+
 # ---------------------------------------------------------------------------
 # Formatting helpers (private — used only by resource functions below)
 # ---------------------------------------------------------------------------
@@ -1279,6 +1342,70 @@ def brand_deals_resource(brand: str) -> str:
 
         markdown = "\n".join(md_lines)
         payload = json.dumps({"brand": brand, "deals": [_deal_to_dict(d) for d in deals]}, default=str)
+        return f"{markdown}\n\n```json\n{payload}\n```"
+
+
+@mcp.resource(
+    "strava://runs/{year}/{month}",
+    name="Strava Runs by Month",
+    description="Imported Strava runs for a given year/month, so a chat can pull one month without flooding context",
+    mime_type="application/json",
+)
+def strava_runs_by_month_resource(year: str, month: str) -> str:
+    """Imported Strava runs for a single month (year/month as YYYY / MM or M)."""
+    import json
+    from calendar import monthrange
+    from datetime import date as _date
+
+    try:
+        y, m = int(year), int(month)
+        start = _date(y, m, 1)
+        end = _date(y, m, monthrange(y, m)[1])
+    except (ValueError, TypeError):
+        return f"Invalid year/month: {year}/{month} (expected e.g. 2026/07)"
+
+    with get_session() as db:
+        runs = (
+            db.query(StravaActivity)
+            .filter(
+                StravaActivity.activity_type == "Run",
+                StravaActivity.run_date >= start,
+                StravaActivity.run_date <= end,
+            )
+            .order_by(StravaActivity.run_date)
+            .all()
+        )
+
+        total_km = round(sum(r.distance_km or 0.0 for r in runs), 1)
+        md_lines = [
+            f"# Strava Runs — {y}-{m:02d}",
+            f"_{len(runs)} run{'s' if len(runs) != 1 else ''} · {total_km}km total_",
+            "",
+            "| Date | Distance | Pace | HR | Gear |",
+            "|------|----------|------|----|------|",
+        ]
+        run_dicts = []
+        for r in runs:
+            date_str = r.run_date.strftime("%b %d") if r.run_date else "—"
+            pace = rotation.seconds_to_pace(r.avg_pace_s_per_km) if r.avg_pace_s_per_km else "—"
+            hr = f"{r.avg_hr}bpm" if r.avg_hr else "—"
+            gear = r.gear_name or "—"
+            md_lines.append(f"| {date_str} | {r.distance_km:.1f}km | {pace} | {hr} | {gear} |")
+            run_dicts.append({
+                "strava_activity_id": r.strava_activity_id,
+                "run_date": r.run_date.isoformat() if r.run_date else None,
+                "distance_km": r.distance_km,
+                "avg_pace": pace if pace != "—" else None,
+                "avg_hr": r.avg_hr,
+                "gear_name": r.gear_name,
+                "name": r.name,
+            })
+
+        markdown = "\n".join(md_lines)
+        payload = json.dumps(
+            {"year": y, "month": m, "total_km": total_km, "runs": run_dicts},
+            default=str,
+        )
         return f"{markdown}\n\n```json\n{payload}\n```"
 
 
