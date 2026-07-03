@@ -5,6 +5,8 @@ and the mileage-preservation property.
 """
 from datetime import date, timedelta
 
+import pytest
+
 from app.models.models import OwnedShoe, ShoeRun, StravaActivity, StravaGearMapping
 from app.services import strava_backfill as bf
 
@@ -185,3 +187,44 @@ def test_add_policy_double_counts(db):
 
     bf.execute_backfill(db, mileage_policy=bf.POLICY_ADD)
     assert db.get(OwnedShoe, 1).current_mileage == 110.0
+
+
+def test_per_shoe_policy_override_in_same_commit(db):
+    # Shoe 1 rides the global 'preserve'; shoe 2 is overridden to 'offset-zero'
+    # in the very same commit, proving the override is per-shoe not global.
+    _shoe(db, 1, nickname="A", starting=100.0)
+    _shoe(db, 2, nickname="B", starting=100.0)
+    _strava(db, 5001, D, 10.0, gear="Adidas Evo SL")   # → shoe 1
+    _strava(db, 5002, D, 12.0, gear="Saucony Endorphin")  # → shoe 2
+    _map(db, "Adidas Evo SL", 1)
+    _map(db, "Saucony Endorphin", 2)
+    db.commit()
+
+    per_shoe = {2: bf.POLICY_OFFSET_ZERO}
+
+    # Dry-run reconcile already reflects each shoe's effective policy.
+    finals = {
+        r.shoe_id: r.proposed_final
+        for r in bf.plan_backfill(db, mileage_policy=bf.POLICY_PRESERVE, per_shoe_policies=per_shoe).reconcile
+    }
+    assert finals == {1: 100.0, 2: 12.0}
+
+    bf.execute_backfill(db, mileage_policy=bf.POLICY_PRESERVE, per_shoe_policies=per_shoe)
+
+    shoe1 = db.get(OwnedShoe, 1)
+    assert shoe1.current_mileage == 100.0     # preserve: total held
+    assert shoe1.starting_mileage == 90.0     # 100 - 10
+
+    shoe2 = db.get(OwnedShoe, 2)
+    assert shoe2.current_mileage == 12.0      # offset-zero: runs define total
+    assert shoe2.starting_mileage == 0.0
+
+
+def test_execute_rejects_unknown_per_shoe_policy(db):
+    _shoe(db, 1, starting=0.0)
+    _strava(db, 5001, D, 10.0, gear="Adidas Evo SL")
+    _map(db, "Adidas Evo SL", 1)
+    db.commit()
+
+    with pytest.raises(ValueError):
+        bf.execute_backfill(db, per_shoe_policies={1: "nonsense"})

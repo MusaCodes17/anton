@@ -103,14 +103,29 @@ def _linked_strava_ids(db: Session) -> set[int]:
     return {r[0] for r in rows}
 
 
+def _validate_policies(mileage_policy: str, per_shoe_policies: dict[int, str]) -> None:
+    if mileage_policy not in MILEAGE_POLICIES:
+        raise ValueError(f"unknown mileage_policy {mileage_policy!r}; expected one of {MILEAGE_POLICIES}")
+    for shoe_id, policy in per_shoe_policies.items():
+        if policy not in MILEAGE_POLICIES:
+            raise ValueError(
+                f"unknown mileage_policy {policy!r} for shoe {shoe_id}; expected one of {MILEAGE_POLICIES}"
+            )
+
+
 def plan_backfill(
     db: Session,
     *,
     distance_tol: float = DISTANCE_TOLERANCE_KM,
     mileage_policy: str = POLICY_PRESERVE,
+    per_shoe_policies: Optional[dict[int, str]] = None,
 ) -> BackfillReport:
     """
     Analyze without writing. Returns the full match/backfill/reconcile plan.
+
+    per_shoe_policies overrides the global mileage_policy for specific shoe ids,
+    so the reconciliation table reflects the same per-shoe decisions execute
+    will apply.
     """
     report = BackfillReport()
 
@@ -210,7 +225,7 @@ def plan_backfill(
         else:
             report.skipped_no_gear.append(s.strava_activity_id)
 
-    report.reconcile = _reconcile(db, report, mileage_policy)
+    report.reconcile = _reconcile(db, report, mileage_policy, per_shoe_policies or {})
     return report
 
 
@@ -233,7 +248,12 @@ def _make_link(s: StravaActivity, run: ShoeRun, gear_shoe_id: Optional[int], kin
     )
 
 
-def _reconcile(db: Session, report: BackfillReport, policy: str) -> list[ShoeReconcile]:
+def _reconcile(
+    db: Session,
+    report: BackfillReport,
+    policy: str,
+    per_shoe_policies: dict[int, str],
+) -> list[ShoeReconcile]:
     """Per-shoe mileage table for the shoes that will receive backfill runs."""
     by_shoe: dict[int, float] = {}
     for c in report.to_create:
@@ -250,7 +270,8 @@ def _reconcile(db: Session, report: BackfillReport, policy: str) -> list[ShoeRec
             .scalar()
         ) or 0.0
         implied_offset = shoe.current_mileage - sum_existing
-        proposed_final = _proposed_final(shoe.current_mileage, implied_offset, sum_backfill, policy)
+        effective_policy = per_shoe_policies.get(shoe_id, policy)
+        proposed_final = _proposed_final(shoe.current_mileage, implied_offset, sum_backfill, effective_policy)
         flagged = implied_offset > OFFSET_EPSILON_KM and sum_backfill > 0
         out.append(ShoeReconcile(
             shoe_id=shoe_id,
@@ -278,17 +299,26 @@ def _proposed_final(current: float, implied_offset: float, sum_backfill: float, 
     return new_offset + existing_runs + sum_backfill
 
 
-def execute_backfill(db: Session, *, mileage_policy: str = POLICY_PRESERVE) -> BackfillReport:
+def execute_backfill(
+    db: Session,
+    *,
+    mileage_policy: str = POLICY_PRESERVE,
+    per_shoe_policies: Optional[dict[int, str]] = None,
+) -> BackfillReport:
     """
     Re-plan and apply in ONE transaction: link matched runs, create backfill
     runs (source='strava'), and adjust each affected shoe's mileage per the
     chosen policy. Idempotent — a second run finds everything already linked
     and creates nothing.
-    """
-    if mileage_policy not in MILEAGE_POLICIES:
-        raise ValueError(f"unknown mileage_policy {mileage_policy!r}; expected one of {MILEAGE_POLICIES}")
 
-    report = plan_backfill(db, mileage_policy=mileage_policy)
+    per_shoe_policies overrides mileage_policy for specific shoe ids (the
+    "per-shoe decision" from the dry-run's flagged shoes), applied within the
+    same commit.
+    """
+    per_shoe_policies = per_shoe_policies or {}
+    _validate_policies(mileage_policy, per_shoe_policies)
+
+    report = plan_backfill(db, mileage_policy=mileage_policy, per_shoe_policies=per_shoe_policies)
 
     # 1. Link matched (exact) runs — never date-shift (manual only).
     for link in report.matched:
@@ -316,14 +346,15 @@ def execute_backfill(db: Session, *, mileage_policy: str = POLICY_PRESERVE) -> B
         )
         created_km_by_shoe[c.owned_shoe_id] = created_km_by_shoe.get(c.owned_shoe_id, 0.0) + (c.distance_km or 0.0)
 
-    # 3. Apply mileage policy per affected shoe.
+    # 3. Apply mileage policy per affected shoe (per-shoe override wins).
     for shoe_id, added_km in created_km_by_shoe.items():
         shoe = db.query(OwnedShoe).filter(OwnedShoe.id == shoe_id).first()
         if not shoe:
             continue
-        if mileage_policy == POLICY_ADD:
+        policy = per_shoe_policies.get(shoe_id, mileage_policy)
+        if policy == POLICY_ADD:
             shoe.current_mileage += added_km
-        elif mileage_policy == POLICY_OFFSET_ZERO:
+        elif policy == POLICY_OFFSET_ZERO:
             shoe.current_mileage = max(0.0, shoe.current_mileage - shoe.starting_mileage) + added_km
             shoe.starting_mileage = 0.0
         else:  # preserve

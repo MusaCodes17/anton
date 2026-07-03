@@ -8,6 +8,9 @@ committing. This is the checkpoint where mistakes are free.
     python -m app.scripts.backfill_strava                      # dry-run report
     python -m app.scripts.backfill_strava --commit             # apply (preserve policy)
     python -m app.scripts.backfill_strava --commit --mileage-policy add
+    python -m app.scripts.backfill_strava --commit \
+        --mileage-policy preserve \
+        --shoe-policy 5=offset-zero --shoe-policy 12=add   # per-shoe overrides
 
 Mileage policies (§5):
   preserve (default) — reduce each shoe's starting_mileage by the backfilled
@@ -78,6 +81,25 @@ def _print_report(report: bf.BackfillReport, policy: str) -> None:
               "    these blindly. Choose --mileage-policy explicitly if 'preserve' is wrong.")
 
 
+def _parse_shoe_policy(parser: argparse.ArgumentParser, values: list[str]) -> dict[int, str]:
+    """Parse repeated --shoe-policy SHOE_ID=POLICY into {shoe_id: policy}."""
+    out: dict[int, str] = {}
+    for v in values:
+        if "=" not in v:
+            parser.error(f"--shoe-policy expects SHOE_ID=POLICY, got {v!r}")
+        sid_str, policy = v.split("=", 1)
+        try:
+            sid = int(sid_str)
+        except ValueError:
+            parser.error(f"--shoe-policy shoe id must be an int, got {sid_str!r}")
+        if policy not in bf.MILEAGE_POLICIES:
+            parser.error(
+                f"--shoe-policy {v!r}: unknown policy {policy!r}; expected one of {bf.MILEAGE_POLICIES}"
+            )
+        out[sid] = policy
+    return out
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="Strava dedup + backfill")
     parser.add_argument("--commit", action="store_true", help="Apply changes (default is dry-run)")
@@ -87,14 +109,27 @@ def main() -> int:
         default=bf.POLICY_PRESERVE,
         help="How to reconcile stored mileage on commit (default: preserve)",
     )
+    parser.add_argument(
+        "--shoe-policy",
+        action="append",
+        default=[],
+        metavar="SHOE_ID=POLICY",
+        help="Override the global mileage policy for one shoe id (repeatable), "
+             "e.g. --shoe-policy 5=offset-zero",
+    )
     args = parser.parse_args()
+    per_shoe_policies = _parse_shoe_policy(parser, args.shoe_policy)
 
     db = SessionLocal()
     try:
         if args.commit:
-            report = bf.execute_backfill(db, mileage_policy=args.mileage_policy)
+            report = bf.execute_backfill(
+                db, mileage_policy=args.mileage_policy, per_shoe_policies=per_shoe_policies
+            )
         else:
-            report = bf.plan_backfill(db, mileage_policy=args.mileage_policy)
+            report = bf.plan_backfill(
+                db, mileage_policy=args.mileage_policy, per_shoe_policies=per_shoe_policies
+            )
         _print_report(report, args.mileage_policy)
     finally:
         db.close()
