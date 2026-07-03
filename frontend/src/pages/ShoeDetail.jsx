@@ -45,6 +45,11 @@ import { SHOE_TYPE_LABELS } from '@/lib/shoeTypes'
 const statusVariant = { active: 'success', retired: 'secondary', for_sale: 'warning' }
 const statusLabel = { active: 'Active', retired: 'Retired', for_sale: 'For sale' }
 
+// Mirrors backend _SOURCE_BADGES: coros → primary, strava → orange, manual → grey.
+const sourceBadgeVariant = { coros: 'default', strava: 'strava', manual: 'secondary' }
+
+const RUN_PAGE_SIZE = 15
+
 export default function ShoeDetail() {
   const { id } = useParams()
   const shoeId = Number(id)
@@ -540,7 +545,11 @@ function RunHistory({ ownedShoeId }) {
   const deleteRun = useDeleteShoeRun()
   const [deletingRun, setDeletingRun] = useState(null)
   const [expandedNoteId, setExpandedNoteId] = useState(null)
+  const [showAll, setShowAll] = useState(false)
   const { toast } = useToast()
+
+  const allRuns = runs.data || []
+  const visibleRuns = showAll ? allRuns : allRuns.slice(0, RUN_PAGE_SIZE)
 
   const confirmDeleteRun = () => {
     deleteRun.mutate(deletingRun, {
@@ -574,7 +583,7 @@ function RunHistory({ ownedShoeId }) {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {runs.data.map((run) => {
+            {visibleRuns.map((run) => {
               const isLong = (run.notes || '').length > 40
               const expanded = expandedNoteId === run.id
               return (
@@ -584,7 +593,7 @@ function RunHistory({ ownedShoeId }) {
                   <TableCell>{run.avg_pace || '—'}</TableCell>
                   <TableCell>{run.avg_hr || '—'}</TableCell>
                   <TableCell>
-                    <Badge variant={run.source === 'coros' ? 'default' : 'secondary'} className="text-[10px] capitalize">
+                    <Badge variant={sourceBadgeVariant[run.source] || 'secondary'} className="text-[10px] capitalize">
                       {run.source}
                     </Badge>
                   </TableCell>
@@ -611,6 +620,16 @@ function RunHistory({ ownedShoeId }) {
         </Table>
       ) : (
         <p className="text-sm text-muted-foreground">No runs logged yet.</p>
+      )}
+
+      {allRuns.length > RUN_PAGE_SIZE && (
+        <button
+          type="button"
+          onClick={() => setShowAll((s) => !s)}
+          className="text-sm font-medium text-accent-foreground hover:underline"
+        >
+          {showAll ? 'Show less' : `Show all (${allRuns.length})`}
+        </button>
       )}
 
       <Dialog open={!!deletingRun} onOpenChange={(o) => !o && setDeletingRun(null)}>

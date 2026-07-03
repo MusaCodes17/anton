@@ -56,6 +56,10 @@ export default {
           DEFAULT: 'var(--warning)',
           foreground: 'var(--warning-foreground)',
         },
+        strava: {
+          DEFAULT: 'var(--strava)',
+          foreground: 'var(--strava-foreground)',
+        },
         // "Velocity" design system: a second, slightly lighter dark tone used
         // for nested tiles/rows inside a --card panel (stat tiles, table rows),
         // distinct from the panel background itself.

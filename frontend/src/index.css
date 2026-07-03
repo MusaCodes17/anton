@@ -29,6 +29,9 @@
     --success-foreground: #0e0f11;
     --warning: oklch(0.8 0.15 75);
     --warning-foreground: #1a1206;
+    /* Strava brand-orange accent for backfilled runs (source='strava'). */
+    --strava: oklch(0.66 0.19 41);
+    --strava-foreground: #0e0f11;
     --border: #23262b;
     --input: #23262b;
     --ring: oklch(0.74 0.17 153);
