@@ -570,7 +570,7 @@ function RunHistory({ ownedShoeId }) {
       ) : runs.isLoading ? (
         <div className="h-[160px] animate-pulse rounded-md bg-muted" />
       ) : runs.data?.length ? (
-        <Table>
+        <Table className="min-w-[640px]">
           <TableHeader>
             <TableRow>
               <TableHead>Date</TableHead>
