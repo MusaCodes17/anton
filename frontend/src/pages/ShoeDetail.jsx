@@ -277,10 +277,14 @@ function ReplacementDeals({ ownedShoeId, currentMileage, shoeType, onEditShoe })
                 </p>
               </div>
             ) : (
-              <div className="flex gap-3 overflow-x-auto pb-2 -mx-1 px-1">
-                {data.deals.map((deal) => (
-                  <ReplacementDealCard key={deal.id} deal={deal} />
-                ))}
+              <div className="relative">
+                <div className="flex snap-x snap-mandatory gap-3 overflow-x-auto pb-2 -mx-1 px-1">
+                  {data.deals.map((deal) => (
+                    <ReplacementDealCard key={deal.id} deal={deal} />
+                  ))}
+                </div>
+                {/* Right-edge fade hints there's more to scroll. */}
+                <div className="pointer-events-none absolute inset-y-0 right-0 w-10 bg-gradient-to-l from-background to-transparent" />
               </div>
             )}
           </div>
@@ -292,7 +296,7 @@ function ReplacementDeals({ ownedShoeId, currentMileage, shoeType, onEditShoe })
 
 function ReplacementDealCard({ deal }) {
   return (
-    <div className="flex w-[190px] shrink-0 flex-col overflow-hidden rounded-[14px] border border-border bg-surface">
+    <div className="flex w-[190px] shrink-0 snap-start flex-col overflow-hidden rounded-[14px] border border-border bg-surface">
       <div className="relative flex h-[110px] items-center justify-center overflow-hidden bg-placeholder-stripes">
         {deal.image_url ? (
           <img src={deal.image_url} alt={deal.model} className="h-full w-full object-contain" />
@@ -387,6 +391,10 @@ function AdjustMileageDialog({ shoe, open, onOpenChange }) {
               placeholder={String(shoe.current_mileage)}
               autoFocus
             />
+            <p className="text-xs text-faint">
+              Mileage is normally derived from your logged runs plus the starting offset. A manual
+              override here creates a discrepancy the next COROS/Strava reconciliation will surface.
+            </p>
             <DialogFooter>
               <Button type="button" variant="outline" onClick={reset}>
                 Cancel

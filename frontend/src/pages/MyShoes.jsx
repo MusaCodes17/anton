@@ -82,7 +82,7 @@ export default function MyShoes() {
   const [deleting, setDeleting] = useState(null)
   const [logRunShoe, setLogRunShoe] = useState(null)
   const [corosSyncOpen, setCorosSyncOpen] = useState(false)
-  const [retiredCollapsed, setRetiredCollapsed] = useState(false)
+  const [retiredCollapsed, setRetiredCollapsed] = useState(true)
 
   const shoes = useOwnedShoes()
   const create = useCreateOwnedShoe()
