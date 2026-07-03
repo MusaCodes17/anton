@@ -52,8 +52,8 @@ export default function Dashboard() {
           />
           <StatCard
             label="Retailers"
-            value={s?.total_retailers ?? 0}
-            hint={s ? `${s.active_retailers} active` : undefined}
+            value={s?.active_retailers ?? 0}
+            hint={s ? `${s.total_retailers} total` : undefined}
             loading={stats.isLoading}
           />
         </div>
