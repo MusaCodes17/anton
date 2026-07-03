@@ -20,9 +20,9 @@ def get_dashboard_stats(db: Session = Depends(get_db)):
     total_shoes = db.query(Shoe).count()
     active_shoes = db.query(Shoe).filter(Shoe.is_active == True).count()
     
-    # Count total and active retailers
+    # Count total retailers; "active" means scraping is enabled
     total_retailers = db.query(Retailer).count()
-    active_retailers = db.query(Retailer).filter(Retailer.is_active == True).count()
+    active_retailers = db.query(Retailer).filter(Retailer.scraping_enabled == True).count()
     
     # Count active deals
     active_deals = db.query(Deal).filter(Deal.is_active == True).count()
