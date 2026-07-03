@@ -1,7 +1,7 @@
 """
 Database models using SQLAlchemy ORM
 """
-from sqlalchemy import Column, Integer, String, Float, Boolean, DateTime, Date, ForeignKey, Text, JSON
+from sqlalchemy import BigInteger, Column, Integer, String, Float, Boolean, DateTime, Date, ForeignKey, Text, JSON
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from app.database import Base
@@ -197,9 +197,11 @@ class OwnedShoe(Base):
 class ShoeRun(Base):
     """
     A single run logged against an owned shoe, accumulating its mileage.
-    `source` distinguishes manually-logged runs from COROS-imported ones.
-    `coros_activity_id` stores the COROS labelId for deduplication — None
-    for manual runs.
+    `source` distinguishes manually-logged runs from COROS-imported and
+    Strava-imported ones. `coros_activity_id` stores the COROS labelId for
+    deduplication — None for manual runs. `strava_activity_id` links a run to
+    at most one Strava activity (and vice versa) — the idempotency guard for
+    the historical import.
     """
     __tablename__ = "shoe_runs"
 
@@ -207,8 +209,9 @@ class ShoeRun(Base):
     owned_shoe_id = Column(Integer, ForeignKey("owned_shoes.id"), nullable=False, index=True)
     distance_km = Column(Float, nullable=False)
     run_date = Column(Date, nullable=False)
-    source = Column(String(20), nullable=False, default="manual")  # manual | coros
+    source = Column(String(20), nullable=False, default="manual", server_default="manual")  # manual | coros | strava
     coros_activity_id = Column(String(100), nullable=True, index=True)
+    strava_activity_id = Column(BigInteger, nullable=True, unique=True)  # links this run to one Strava activity
     avg_pace = Column(String(20), nullable=True)  # e.g. "4:35/km"
     avg_hr = Column(Integer, nullable=True)
     notes = Column(Text, nullable=True)
@@ -256,3 +259,66 @@ class AppSettings(Base):
 
     def __repr__(self):
         return f"<AppSettings {self.key}={self.value!r}>"
+
+
+class StravaActivity(Base):
+    """
+    Canonical import of every activity from a Strava bulk export (all types,
+    not just runs). Deliberately raw-ish: light normalization only, plus the
+    full CSV row preserved in `raw_json`, so richer features can re-derive
+    later without re-requesting the archive.
+
+    `strava_activity_id` (Strava's stable ID) is the natural key for
+    idempotent re-imports. Pace is stored as seconds-per-km (int) here;
+    formatting to "M:SS/km" happens only at the boundary when writing to
+    shoe_runs / MCP, matching the rotation-domain convention.
+    """
+    __tablename__ = "strava_activities"
+
+    id = Column(Integer, primary_key=True, index=True)
+    strava_activity_id = Column(BigInteger, nullable=False, unique=True, index=True)
+    activity_type = Column(String(50), nullable=True, index=True)  # Run / Ride / Walk / ...
+    name = Column(String(500), nullable=True)
+    description = Column(Text, nullable=True)
+    started_at_utc = Column(DateTime, nullable=True)  # parsed Activity Date (UTC)
+    started_at_local = Column(DateTime, nullable=True)  # America/Toronto conversion
+    run_date = Column(Date, nullable=True, index=True)  # local calendar date — dedup/match key
+    distance_km = Column(Float, nullable=True)  # first Distance column (km)
+    moving_time_s = Column(Integer, nullable=True)
+    elapsed_time_s = Column(Integer, nullable=True)
+    avg_hr = Column(Integer, nullable=True)
+    max_hr = Column(Integer, nullable=True)
+    avg_pace_s_per_km = Column(Integer, nullable=True)  # moving_time_s / distance_km, null if dist < 0.5km
+    elevation_gain_m = Column(Float, nullable=True)
+    avg_cadence = Column(Float, nullable=True)
+    calories = Column(Float, nullable=True)
+    gear_name = Column(String(200), nullable=True, index=True)  # stripped Activity Gear
+    fit_filename = Column(String(300), nullable=True)  # e.g. activities/20273873902.fit.gz
+    grade_adjusted_distance_m = Column(Float, nullable=True)
+    raw_json = Column(JSON, nullable=True)  # full CSV row as dict — the ingest-raw escape hatch
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    def __repr__(self):
+        return f"<StravaActivity {self.strava_activity_id} {self.activity_type} {self.run_date}>"
+
+
+class StravaGearMapping(Base):
+    """
+    Maps an exact (stripped) Strava gear string to an owned shoe.
+
+    `owned_shoe_id` is nullable: NULL means "known but unmapped" — e.g. a shoe
+    owned before the tracker existed, retired-and-deleted, or deliberately
+    skipped. Unmapped gear still imports into strava_activities; it just
+    doesn't backfill a shoe run.
+    """
+    __tablename__ = "strava_gear_mappings"
+
+    id = Column(Integer, primary_key=True, index=True)
+    gear_name = Column(String(200), nullable=False, unique=True)  # exact stripped Strava string
+    owned_shoe_id = Column(Integer, ForeignKey("owned_shoes.id"), nullable=True)
+
+    # Relationship (no back_populates — owned_shoes doesn't need to know)
+    owned_shoe = relationship("OwnedShoe")
+
+    def __repr__(self):
+        return f"<StravaGearMapping {self.gear_name!r} -> shoe {self.owned_shoe_id}>"
