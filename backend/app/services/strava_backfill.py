@@ -296,20 +296,24 @@ def execute_backfill(db: Session, *, mileage_policy: str = POLICY_PRESERVE) -> B
         if run and run.strava_activity_id is None:
             run.strava_activity_id = link.strava_activity_id
 
-    # 2. Create backfill runs directly (bypass rotation.log_run so we can apply
-    #    the mileage policy explicitly rather than blindly incrementing).
+    # 2. Create backfill runs via rotation.log_run — the single sanctioned
+    #    ShoeRun write path. increment_mileage=False lets us apply the mileage
+    #    policy explicitly below; commit=False batches every write into this
+    #    function's single transaction.
     created_km_by_shoe: dict[int, float] = {}
     for c in report.to_create:
-        db.add(ShoeRun(
-            owned_shoe_id=c.owned_shoe_id,
+        rotation.log_run(
+            db,
+            c.owned_shoe_id,
             distance_km=c.distance_km,
             run_date=c.run_date,
             source="strava",
             strava_activity_id=c.strava_activity_id,
             avg_pace=c.avg_pace,
             avg_hr=c.avg_hr,
-            notes=None,
-        ))
+            increment_mileage=False,
+            commit=False,
+        )
         created_km_by_shoe[c.owned_shoe_id] = created_km_by_shoe.get(c.owned_shoe_id, 0.0) + (c.distance_km or 0.0)
 
     # 3. Apply mileage policy per affected shoe.
