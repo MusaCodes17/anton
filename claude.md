@@ -6,6 +6,30 @@
 
 ---
 
+## 🆕 Anton redesign Phase 4 — Home rebuilt as an attention surface — 2026-07-03
+
+**[ADDED] `GET /api/home` + a rebuilt Home page (`/`) — four attention modules in one round trip.**
+- New `app/services/home.py` (`home_summary(db, today)`) aggregates all four §4 modules; thin
+  router `app/routers/home.py` (`GET /api/home`, ~110ms locally). API-first: every number computed
+  server-side.
+  - **Training pulse**: this-week vs last-week km (Monday-anchored, computed off the unioned run
+    feed so an empty week reads 0), + newest run (distance, pace, HR, shoe, source).
+  - **Shoe alerts**: active owned shoes at/over 75% of `mileage_limit`, worst-first, each with a
+    replacement-deal count (active deals on a tracked `Shoe` of the same `shoe_type` — heuristic,
+    no FK). Empty = "Rotation healthy" shown small + proud.
+  - **Top deals**: 3 deepest active discounts, biggest savings % first.
+  - **Activity strip**: last COROS sync (`app_settings.last_coros_sync_at`), last scrape
+    (`max(retailers.last_scraped_at)`), newest active deal detected.
+- Frontend: `pages/Home.jsx` (Dashboard convention — inline sub-components), `useHome` hook,
+  `homeApi.summary`. Every module deep-links into its tab (`/training`, `/deals?deal=id`, `/shoes`).
+- **[REMOVED]** old `pages/Dashboard.jsx` + `components/TrainingVolumeCard.jsx` (+ now-dead
+  `useRecentDeals`/`useBestDeals` hooks). `useDashboardStats` kept — still used by Layout + Settings.
+- Tests: `tests/test_home.py` (10) — week-over-week math, empty-week-reads-0, last-run selection,
+  75% threshold + worst-first ordering + replacement-deal counting, top-deals ranking/cap, strip.
+  Full suite 63 passed. Desktop (no-scroll) + ~380px passes clean, 0 console errors.
+
+---
+
 ## Project Commands
 
 | Command | What it does |

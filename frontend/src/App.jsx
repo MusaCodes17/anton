@@ -1,7 +1,7 @@
 import { Routes, Route, Navigate, useParams } from 'react-router-dom'
 import Layout from '@/components/layout/Layout'
 import ChatDrawer from '@/components/ChatDrawer'
-import Dashboard from '@/pages/Dashboard'
+import Home from '@/pages/Home'
 import Deals from '@/pages/Deals'
 import Training from '@/pages/Training'
 import Shoes from '@/pages/Shoes'
@@ -23,7 +23,7 @@ export default function App() {
     <>
       <Routes>
         <Route element={<Layout />}>
-          <Route index element={<Dashboard />} />
+          <Route index element={<Home />} />
           <Route path="training" element={<Training />} />
           <Route path="deals" element={<Deals />} />
           <Route path="shoes" element={<MyShoes />} />

@@ -165,6 +165,11 @@ export const racesApi = {
   remove: (id) => client.delete(`/api/races/${id}`).then((r) => r.data),
 }
 
+// ============== HOME ==============
+export const homeApi = {
+  summary: () => client.get('/api/home').then((r) => r.data),
+}
+
 // ============== STRAVA ==============
 export const stravaApi = {
   status: () => client.get('/api/strava/status').then((r) => r.data),

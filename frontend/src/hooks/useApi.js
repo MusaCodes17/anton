@@ -13,6 +13,7 @@ import {
   watchlistApi,
   activitiesApi,
   racesApi,
+  homeApi,
   SCRAPE_STREAM_URL,
 } from '@/services/api'
 
@@ -25,8 +26,6 @@ export const queryKeys = {
   retailers: (params) => ['retailers', params ?? {}],
   deals: (params) => ['deals', params ?? {}],
   dashboardStats: () => ['dashboard', 'stats'],
-  recentDeals: (limit) => ['dashboard', 'recent-deals', limit],
-  bestDeals: (limit) => ['dashboard', 'best-deals', limit],
   ownedShoes: (params) => ['owned-shoes', params ?? {}],
   ownedShoe: (id) => ['owned-shoes', 'detail', id],
   shoeRuns: (id) => ['owned-shoes', id, 'runs'],
@@ -39,6 +38,7 @@ export const queryKeys = {
   watchlist: () => ['watchlist'],
   activities: (params) => ['activities', params ?? {}],
   races: () => ['races'],
+  home: () => ['home'],
 }
 
 // ============== SHOES ==============
@@ -197,17 +197,11 @@ export function useDashboardStats() {
   })
 }
 
-export function useRecentDeals(limit = 8) {
+// ============== HOME ==============
+export function useHome() {
   return useQuery({
-    queryKey: queryKeys.recentDeals(limit),
-    queryFn: () => dashboardApi.recentDeals(limit),
-  })
-}
-
-export function useBestDeals(limit = 8) {
-  return useQuery({
-    queryKey: queryKeys.bestDeals(limit),
-    queryFn: () => dashboardApi.bestDeals(limit),
+    queryKey: queryKeys.home(),
+    queryFn: () => homeApi.summary(),
   })
 }
 
