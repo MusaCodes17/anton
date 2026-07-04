@@ -1,27 +1,36 @@
 """
-Tests for the unified activity feed (§3 Phase-3a) and the union-aware
-training stats. Exercised at the service/handler level to match the suite's
-style.
+Tests for the unified activity feed (§3 Phase-3a) over the canonical
+`activities` table (§3 Phase-5). Exercised at the service/handler level to
+match the suite's style.
+
+In v2 every run is a single `Activity` row; a `ShoeRun` is just an attribution
+row pointing an activity at an owned shoe. There is no more "linked/unlinked"
+dedup — a physical run exists once by construction.
 """
 from datetime import date
 
-from app.models.models import OwnedShoe, ShoeRun, StravaActivity
+from app.models.models import Activity, OwnedShoe, ShoeRun
 from app.routers.activities import get_activities
 from app.services import activities as activities_svc
 from app.services import strava_stats
 
 
-def _strava(db, said, run_date, dist, pace_s=300, hr=150, atype="Run", moving_s=None, name="Run"):
-    a = StravaActivity(
-        strava_activity_id=said,
+def _activity(db, *, source="strava", run_date, dist, pace_s=300, hr=150,
+              atype="Run", moving_s=None, name="Run", said=None, coros_id=None):
+    """A canonical activity. Strava rows carry a real moving_time_s; COROS/manual
+    rows leave it None (pace reconstructs it), mirroring production."""
+    a = Activity(
+        source=source,
         activity_type=atype,
         name=name,
         run_date=run_date,
         distance_km=dist,
-        moving_time_s=moving_s if moving_s is not None else int(pace_s * dist),
+        moving_time_s=(moving_s if moving_s is not None else (int(pace_s * dist) if source == "strava" else None)),
         avg_hr=hr,
         avg_pace_s_per_km=pace_s,
         elevation_gain_m=10.0,
+        strava_activity_id=said,
+        coros_activity_id=coros_id,
     )
     db.add(a)
     db.flush()
@@ -35,25 +44,17 @@ def _owned(db, brand="Nike", model="Vaporfly"):
     return s
 
 
-def _run(db, shoe_id, run_date, dist, source="manual", said=None, pace="5:00/km", hr=140):
-    r = ShoeRun(
-        owned_shoe_id=shoe_id,
-        distance_km=dist,
-        run_date=run_date,
-        source=source,
-        strava_activity_id=said,
-        avg_pace=pace,
-        avg_hr=hr,
-    )
+def _attribute(db, activity, shoe):
+    r = ShoeRun(activity_id=activity.id, owned_shoe_id=shoe.id)
     db.add(r)
     db.flush()
     return r
 
 
 def test_non_runs_excluded_and_sorted_desc(db):
-    _strava(db, 1, date(2026, 6, 1), 10.0)
-    _strava(db, 2, date(2026, 6, 20), 5.0)
-    _strava(db, 3, date(2026, 6, 10), 30.0, atype="Ride")  # excluded
+    _activity(db, said=1, run_date=date(2026, 6, 1), dist=10.0)
+    _activity(db, said=2, run_date=date(2026, 6, 20), dist=5.0)
+    _activity(db, said=3, run_date=date(2026, 6, 10), dist=30.0, atype="Ride")  # excluded
     db.commit()
 
     items = activities_svc.unified_activities(db)
@@ -61,27 +62,27 @@ def test_non_runs_excluded_and_sorted_desc(db):
     assert all(a.source == "strava" for a in items)
 
 
-def test_linked_run_appears_once_with_shoe_attribution(db):
+def test_run_appears_once_with_shoe_attribution(db):
     shoe = _owned(db)
-    _strava(db, 100, date(2026, 6, 15), 10.0)
-    # a shoe_run linked to that same Strava activity — must NOT double-count
-    _run(db, shoe.id, date(2026, 6, 15), 10.0, source="strava", said=100)
+    a = _activity(db, said=100, run_date=date(2026, 6, 15), dist=10.0)
+    _attribute(db, a, shoe)
     db.commit()
 
     items = activities_svc.unified_activities(db)
     assert len(items) == 1
-    a = items[0]
-    assert a.strava_activity_id == 100
-    assert a.source == "strava"
-    assert a.shoe is not None and a.shoe.model == "Vaporfly"
-    assert a.shoe_run_id is not None
+    got = items[0]
+    assert got.strava_activity_id == 100
+    assert got.source == "strava"
+    assert got.shoe is not None and got.shoe.model == "Vaporfly"
+    assert got.shoe_run_id is not None
 
 
 def test_post_export_run_appears(db):
     shoe = _owned(db)
-    _strava(db, 1, date(2026, 6, 1), 8.0)
-    # a COROS run logged AFTER the export, not linked to any Strava activity
-    _run(db, shoe.id, date(2026, 7, 2), 12.0, source="coros")
+    _activity(db, said=1, run_date=date(2026, 6, 1), dist=8.0)
+    # a COROS run recorded AFTER the frozen export — its own activity + attribution
+    coros = _activity(db, source="coros", run_date=date(2026, 7, 2), dist=12.0, coros_id="c1")
+    _attribute(db, coros, shoe)
     db.commit()
 
     items = activities_svc.unified_activities(db)
@@ -94,16 +95,17 @@ def test_post_export_run_appears(db):
 
 def test_filters_year_month_shoe_min_distance_and_pagination(db):
     shoe = _owned(db)
-    _strava(db, 1, date(2025, 12, 1), 5.0)
-    _strava(db, 2, date(2026, 6, 5), 3.0)
-    _strava(db, 3, date(2026, 6, 25), 20.0)
-    _run(db, shoe.id, date(2026, 6, 15), 15.0, source="manual")
+    _activity(db, said=1, run_date=date(2025, 12, 1), dist=5.0)
+    _activity(db, said=2, run_date=date(2026, 6, 5), dist=3.0)
+    _activity(db, said=3, run_date=date(2026, 6, 25), dist=20.0)
+    manual = _activity(db, source="manual", run_date=date(2026, 6, 15), dist=15.0)
+    _attribute(db, manual, shoe)
     db.commit()
 
     y2026 = activities_svc.unified_activities(db, year=2026)
-    assert len(y2026) == 3  # strava 2 & 3 + the unlinked run; strava 1 is 2025
+    assert len(y2026) == 3  # strava 2 & 3 + the manual run; strava 1 is 2025
     assert {2, 3} <= {a.strava_activity_id for a in y2026 if a.strava_activity_id}
-    assert len(activities_svc.unified_activities(db, month=6)) == 3  # two strava + one run
+    assert len(activities_svc.unified_activities(db, month=6)) == 3
     assert all(a.shoe and a.shoe.id == shoe.id
                for a in activities_svc.unified_activities(db, shoe_id=shoe.id))
     assert all(a.distance_km >= 10 for a in activities_svc.unified_activities(db, min_distance_km=10))
@@ -114,10 +116,11 @@ def test_filters_year_month_shoe_min_distance_and_pagination(db):
     assert not ({id(x) for x in page1} & {id(x) for x in page2})
 
 
-def test_summary_includes_both_stores(db):
+def test_summary_includes_all_sources(db):
     shoe = _owned(db)
-    _strava(db, 1, date(2026, 6, 1), 10.0)
-    _run(db, shoe.id, date(2026, 6, 20), 5.0, source="coros")  # same month, live store
+    _activity(db, said=1, run_date=date(2026, 6, 1), dist=10.0)
+    coros = _activity(db, source="coros", run_date=date(2026, 6, 20), dist=5.0, coros_id="c1")
+    _attribute(db, coros, shoe)
     db.commit()
 
     monthly = strava_stats.training_summary(db, "monthly")
@@ -126,12 +129,12 @@ def test_summary_includes_both_stores(db):
     assert jun.total_km == 15.0
 
 
-def test_records_attribute_shoe_when_linked(db):
+def test_records_attribute_shoe(db):
     shoe = _owned(db)
-    # A fast 10k linked to a shoe, and a slower unlinked 10k.
-    _strava(db, 1, date(2026, 6, 1), 10.0, pace_s=240)
-    _run(db, shoe.id, date(2026, 6, 1), 10.0, source="strava", said=1)
-    _strava(db, 2, date(2026, 5, 1), 10.0, pace_s=300)
+    # A fast 10k attributed to a shoe, and a slower unattributed 10k.
+    fast = _activity(db, said=1, run_date=date(2026, 6, 1), dist=10.0, pace_s=240)
+    _attribute(db, fast, shoe)
+    _activity(db, said=2, run_date=date(2026, 5, 1), dist=10.0, pace_s=300)
     db.commit()
 
     # smoke: router adapter returns without error (explicit args since we bypass

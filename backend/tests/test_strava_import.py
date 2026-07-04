@@ -107,5 +107,5 @@ def test_upsert_is_idempotent(tmp_path, db):
     assert s1.total == 5 and s1.inserted == 5 and s1.runs == 4
     s2 = strava_import.import_from_csv(path, db)
     assert s2.inserted == 0 and s2.updated == 5
-    from app.models.models import StravaActivity
-    assert db.query(StravaActivity).count() == 5  # no duplicates
+    from app.models.models import Activity
+    assert db.query(Activity).filter(Activity.source == "strava").count() == 5  # no duplicates

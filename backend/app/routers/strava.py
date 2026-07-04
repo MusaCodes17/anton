@@ -2,8 +2,9 @@
 API routes for imported Strava data status.
 
 A tiny read-only surface so the Settings → Sync & Scraping page (and the
-future mobile client) can show "N activities imported, last export <date>"
-without reaching into the raw strava_activities table itself.
+future mobile client) can show "N activities imported, last export <date>".
+Since §3 Phase-5 the Strava archive lives as source='strava' rows in the
+canonical `activities` table.
 """
 from datetime import date, datetime
 from typing import Optional
@@ -14,7 +15,7 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.models.models import StravaActivity
+from app.models.models import Activity
 
 router = APIRouter(prefix="/strava", tags=["strava"])
 
@@ -33,15 +34,16 @@ class StravaStatus(BaseModel):
 @router.get("/status", response_model=StravaStatus)
 def get_strava_status(db: Session = Depends(get_db)):
     """Return counts and the export/import dates for the imported Strava archive."""
-    activity_count = db.query(func.count(StravaActivity.id)).scalar() or 0
+    strava = Activity.source == "strava"
+    activity_count = db.query(func.count(Activity.id)).filter(strava).scalar() or 0
     run_count = (
-        db.query(func.count(StravaActivity.id))
-        .filter(StravaActivity.activity_type == "Run")
+        db.query(func.count(Activity.id))
+        .filter(strava, Activity.activity_type == "Run")
         .scalar()
         or 0
     )
-    latest_activity_date = db.query(func.max(StravaActivity.run_date)).scalar()
-    imported_at = db.query(func.max(StravaActivity.created_at)).scalar()
+    latest_activity_date = db.query(func.max(Activity.run_date)).filter(strava).scalar()
+    imported_at = db.query(func.max(Activity.created_at)).filter(strava).scalar()
 
     return StravaStatus(
         activity_count=activity_count,
