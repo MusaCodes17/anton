@@ -1,5 +1,5 @@
 import { useCallback, useRef, useState } from 'react'
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { useQuery, useMutation, useQueryClient, keepPreviousData } from '@tanstack/react-query'
 import {
   shoesApi,
   retailersApi,
@@ -12,6 +12,7 @@ import {
   stravaApi,
   watchlistApi,
   activitiesApi,
+  racesApi,
   SCRAPE_STREAM_URL,
 } from '@/services/api'
 
@@ -37,6 +38,7 @@ export const queryKeys = {
   stravaStatus: () => ['strava', 'status'],
   watchlist: () => ['watchlist'],
   activities: (params) => ['activities', params ?? {}],
+  races: () => ['races'],
 }
 
 // ============== SHOES ==============
@@ -229,7 +231,39 @@ export function useActivities(params) {
   return useQuery({
     queryKey: queryKeys.activities(params),
     queryFn: () => activitiesApi.list(params),
-    keepPreviousData: true,
+    placeholderData: keepPreviousData,
+  })
+}
+
+// ============== PLANNED RACES ==============
+export function useRaces() {
+  return useQuery({
+    queryKey: queryKeys.races(),
+    queryFn: () => racesApi.list(),
+  })
+}
+
+export function useCreateRace() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (data) => racesApi.create(data),
+    onSuccess: () => qc.invalidateQueries({ queryKey: queryKeys.races() }),
+  })
+}
+
+export function useUpdateRace() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ id, data }) => racesApi.update(id, data),
+    onSuccess: () => qc.invalidateQueries({ queryKey: queryKeys.races() }),
+  })
+}
+
+export function useDeleteRace() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (id) => racesApi.remove(id),
+    onSuccess: () => qc.invalidateQueries({ queryKey: queryKeys.races() }),
   })
 }
 

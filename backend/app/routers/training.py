@@ -44,6 +44,7 @@ class PersonalBestResponse(BaseModel):
     run_date: Optional[str] = None
     name: Optional[str] = None
     distance_km: float
+    total_time_s: int      # whole-activity time — the headline figure
     avg_pace: str
     avg_hr: Optional[int] = None
     source: str

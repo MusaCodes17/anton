@@ -409,3 +409,60 @@ class ShoeNoteResponse(BaseModel):
 
     class Config:
         from_attributes = True
+
+
+# ============== PLANNED RACE SCHEMAS ==============
+
+class PlannedRaceBase(BaseModel):
+    """Shared fields for creating/updating a planned race."""
+    name: str = Field(..., min_length=1, max_length=200)
+    race_date: date
+    distance_km: Optional[float] = Field(None, gt=0)
+    target_time_s: Optional[int] = Field(None, gt=0, description="Goal finish time in seconds")
+    location: Optional[str] = Field(None, max_length=200)
+    planned_shoe_id: Optional[int] = None
+    notes: Optional[str] = None
+
+
+class PlannedRaceCreate(PlannedRaceBase):
+    pass
+
+
+class PlannedRaceUpdate(BaseModel):
+    """Partial update — every field optional, including status/result on completion."""
+    name: Optional[str] = Field(None, min_length=1, max_length=200)
+    race_date: Optional[date] = None
+    distance_km: Optional[float] = Field(None, gt=0)
+    target_time_s: Optional[int] = Field(None, gt=0)
+    location: Optional[str] = Field(None, max_length=200)
+    planned_shoe_id: Optional[int] = None
+    notes: Optional[str] = None
+    status: Optional[str] = Field(None, pattern="^(planned|completed|skipped)$")
+    result_time_s: Optional[int] = Field(None, gt=0)
+
+
+class PlannedShoeBrief(BaseModel):
+    """The planned shoe, inlined so the card needs no second request."""
+    id: int
+    brand: str
+    model: str
+    nickname: Optional[str] = None
+
+    class Config:
+        from_attributes = True
+
+
+class PlannedRaceResponse(PlannedRaceBase):
+    """A planned race plus server-computed countdown/pace (API-first, §2.1)."""
+    id: int
+    status: str
+    result_time_s: Optional[int] = None
+    created_at: datetime
+    planned_shoe: Optional[PlannedShoeBrief] = None
+    # Computed server-side:
+    days_remaining: int
+    weeks_remaining: int
+    target_pace: Optional[str] = None      # "M:SS/km" from target_time_s / distance_km
+
+    class Config:
+        from_attributes = True

@@ -23,7 +23,7 @@ from app.coros_client import get_coros_config
 from app.database import SessionLocal
 from app.models.models import Deal, OwnedShoe, PriceRecord, Retailer, Shoe, ShoeNote, ShoeRun, StravaActivity
 from app.scrapers.scraper_manager import ScraperManager, ScrapeInProgressError, scrape_guard
-from app.services import rotation, coros as coros_svc, settings as settings_svc, strava_stats
+from app.services import rotation, coros as coros_svc, settings as settings_svc, strava_stats, races as races_svc
 
 # streamable_http_path="/" because the app this is mounted under (see
 # main.py) already adds the "/mcp" prefix — without this override the route
@@ -898,13 +898,13 @@ def get_training_summary(period: str = "monthly") -> dict:
 @mcp.tool()
 def get_personal_bests() -> dict:
     """
-    Fastest average pace at each distance band (5k, 10k, half, full) across
-    the full run history (imported Strava runs unioned with live COROS/manual
-    runs).
+    Fastest whole-activity time at each distance band (5k, 10k, half, full)
+    across the full run history (imported Strava runs unioned with live COROS/
+    manual runs). Each best also reports average pace and HR.
 
-    IMPORTANT: these are *average-pace-for-the-whole-activity* bests within a
-    distance tolerance — not true segment/split PBs. Describe them that way to
-    the user (e.g. "your fastest-average-pace 10k", not "your 10k PB").
+    IMPORTANT: these are *whole-activity* times within a distance tolerance —
+    not true segment/split PBs. Describe them that way to the user (e.g. "your
+    fastest 10k run", not "your 10k PB").
     """
     with get_session() as db:
         bests = strava_stats.personal_bests(db)
@@ -917,6 +917,7 @@ def get_personal_bests() -> dict:
                     "run_date": b.run_date,
                     "name": b.name,
                     "distance_km": b.distance_km,
+                    "total_time_s": b.total_time_s,
                     "avg_pace": b.avg_pace,
                     "avg_hr": b.avg_hr,
                     "source": b.source,
@@ -926,6 +927,22 @@ def get_personal_bests() -> dict:
                 for b in bests
             ],
         }
+
+
+@mcp.tool()
+def get_planned_races() -> dict:
+    """
+    Upcoming and past races the user is training toward, soonest first. Each
+    race includes days_remaining / weeks_remaining and a derived target_pace
+    ("M:SS/km") when a target time and distance are set.
+
+    Use this to answer "how many weeks until my next race", to reason about
+    where the user is in a training block, or to relate recent volume/pace to
+    an upcoming goal. A negative days_remaining means the race is in the past.
+    """
+    with get_session() as db:
+        races = races_svc.list_races(db)
+        return {"races": [races_svc.race_to_dict(r) for r in races]}
 
 
 # ---------------------------------------------------------------------------

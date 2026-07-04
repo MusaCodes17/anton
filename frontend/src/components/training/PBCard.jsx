@@ -1,16 +1,17 @@
 import { Link } from 'react-router-dom'
-import { Footprints } from 'lucide-react'
-import { formatDate } from '@/lib/utils'
+import { Footprints, Heart } from 'lucide-react'
+import { formatDate, formatDuration } from '@/lib/utils'
 
 const BAND_LABEL = { '5k': '5K', '10k': '10K', half: 'Half', full: 'Full' }
 
 /**
- * One personal-record card for a distance band. Honest labelling: these are
- * fastest *whole-activity average* paces, not segment PBs. Links to the
- * attributed owned shoe when the record run was on a tracked shoe.
+ * One personal-record card for a distance band. Headline is the fastest
+ * whole-activity time in that band, with average pace and HR beneath. Honest
+ * labelling: whole-activity times, not segment PBs. Links to the attributed
+ * owned shoe when the record run was on a tracked shoe.
  */
 export default function PBCard({ record }) {
-  const { band, avg_pace, run_date, distance_km, shoe } = record
+  const { band, total_time_s, avg_pace, avg_hr, run_date, distance_km, shoe } = record
   return (
     <div className="flex flex-col gap-3 rounded-[14px] border border-border bg-surface p-4">
       <div className="flex items-center justify-between">
@@ -22,9 +23,17 @@ export default function PBCard({ record }) {
 
       <div>
         <div className="font-heading text-[26px] font-extrabold tracking-tight text-foreground tabular-nums">
-          {avg_pace}
+          {formatDuration(total_time_s)}
         </div>
-        <div className="text-2xs uppercase tracking-[0.08em] text-faint">fastest average pace</div>
+        <div className="mt-1 flex items-center gap-3 text-xs text-muted-foreground tabular-nums">
+          <span>{avg_pace}</span>
+          {avg_hr != null && (
+            <span className="inline-flex items-center gap-1">
+              <Heart className="h-3 w-3 text-faint" />
+              {avg_hr}
+            </span>
+          )}
+        </div>
       </div>
 
       <div className="mt-auto flex items-center justify-between gap-2 text-xs text-muted-foreground">

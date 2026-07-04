@@ -302,6 +302,34 @@ class StravaActivity(Base):
         return f"<StravaActivity {self.strava_activity_id} {self.activity_type} {self.run_date}>"
 
 
+class PlannedRace(Base):
+    """
+    A race the user is training toward (P3.4). The next upcoming race is the
+    most time-sensitive thing on the Training page, so it sits above the
+    trends. Derived fields (days/weeks remaining, target pace) are computed at
+    the API boundary, never stored.
+    """
+    __tablename__ = "planned_races"
+
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String(200), nullable=False)
+    race_date = Column(Date, nullable=False, index=True)
+    distance_km = Column(Float, nullable=True)
+    target_time_s = Column(Integer, nullable=True)   # goal finish time in seconds
+    location = Column(String(200), nullable=True)
+    planned_shoe_id = Column(Integer, ForeignKey("owned_shoes.id"), nullable=True)
+    notes = Column(Text, nullable=True)
+    status = Column(String(20), nullable=False, default="planned", server_default="planned")  # planned | completed | skipped
+    result_time_s = Column(Integer, nullable=True)   # actual finish time, set on completion
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    # Relationship (no back_populates — owned_shoes doesn't need to know)
+    planned_shoe = relationship("OwnedShoe")
+
+    def __repr__(self):
+        return f"<PlannedRace {self.name!r} @ {self.race_date}>"
+
+
 class StravaGearMapping(Base):
     """
     Maps an exact (stripped) Strava gear string to an owned shoe.

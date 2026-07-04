@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react'
 import { Activity, Trophy, ListOrdered, TrendingUp } from 'lucide-react'
 import PageHeader from '@/components/PageHeader'
+import PlannedRacesCard from '@/components/training/PlannedRacesCard'
 import VolumeChart from '@/components/training/VolumeChart'
 import PBCard from '@/components/training/PBCard'
 import ActivityRow from '@/components/training/ActivityRow'
@@ -78,7 +79,7 @@ function SectionHeading({ id, icon: Icon, title, hint }) {
 }
 
 export default function Training() {
-  const [period, setPeriod] = useState('monthly')
+  const [period, setPeriod] = useState('weekly')
   const monthly = useTrainingSummary('monthly')
   const weekly = useTrainingSummary('weekly')
   const records = useTrainingRecords()
@@ -137,11 +138,17 @@ export default function Training() {
     <div className="space-y-8">
       <PageHeader eyebrow="TRAIN" title="Training">
         <nav className="hidden gap-4 text-sm text-muted-foreground sm:flex">
+          <a href="#races" className="focus-ring rounded hover:text-foreground">Races</a>
           <a href="#trends" className="focus-ring rounded hover:text-foreground">Trends</a>
           <a href="#records" className="focus-ring rounded hover:text-foreground">Records</a>
           <a href="#activities" className="focus-ring rounded hover:text-foreground">Activities</a>
         </nav>
       </PageHeader>
+
+      {/* ── Races (most time-sensitive → top) ──────────────────── */}
+      <div id="races" className="scroll-mt-20">
+        <PlannedRacesCard />
+      </div>
 
       {/* ── Trends ─────────────────────────────────────────────── */}
       <section className="space-y-4">
@@ -167,7 +174,7 @@ export default function Training() {
                   <span className="font-heading text-md-plus font-bold text-foreground">Volume</span>
                 </div>
                 <div className="flex rounded-lg border border-border p-0.5">
-                  {['monthly', 'weekly'].map((p) => (
+                  {['weekly', 'monthly'].map((p) => (
                     <button
                       key={p}
                       type="button"
@@ -206,7 +213,7 @@ export default function Training() {
           id="records"
           icon={Trophy}
           title="Records"
-          hint="fastest average pace · whole-activity, not segments"
+          hint="fastest whole-activity time · not segment PBs"
         />
         {records.isLoading ? (
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">

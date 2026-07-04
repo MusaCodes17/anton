@@ -143,4 +143,5 @@ def test_records_attribute_shoe_when_linked(db):
     bests = strava_stats.personal_bests(db)
     ten = next(b for b in bests if b.band == "10k")
     assert ten.avg_pace == "4:00/km"          # the faster one won
+    assert ten.total_time_s == 2400           # 10km * 240s/km — the headline figure
     assert ten.shoe is not None and ten.shoe["id"] == shoe.id

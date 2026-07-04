@@ -47,6 +47,7 @@ class PersonalBest:
     run_date: Optional[str]
     name: Optional[str]
     distance_km: float
+    total_time_s: int                # whole-activity time — the headline figure
     avg_pace: str
     avg_hr: Optional[int]
     source: str
@@ -108,28 +109,33 @@ def training_summary(db: Session, period: str = "monthly") -> list[PeriodSummary
 
 def personal_bests(db: Session) -> list[PersonalBest]:
     """
-    Fastest average pace within each distance band, across the unioned run
-    history. These are whole-activity average-pace bests, not true segment PBs
-    — name/describe accordingly. Shoe attribution is included when the winning
-    run is linked to an owned shoe.
+    Fastest whole-activity time within each distance band, across the unioned
+    run history. The record is the run with the lowest total time in the band;
+    the card shows that time as the headline, with average pace and HR beneath.
+    These are whole-activity times, not true segment PBs — describe accordingly.
+    Shoe attribution is included when the winning run is linked to an owned shoe.
     """
-    runs = [
-        r for r in activities_svc.unified_activities(db)
-        if r.avg_pace_s_per_km is not None and r.distance_km
-    ]
+    runs = []
+    for r in activities_svc.unified_activities(db):
+        if not r.distance_km or r.avg_pace_s_per_km is None:
+            continue
+        total_s = _effective_moving_s(r)
+        if total_s:
+            runs.append((r, total_s))
 
     out = []
     for label, target, tol in PB_BANDS:
-        in_band = [r for r in runs if abs(r.distance_km - target) <= tol]
+        in_band = [(r, t) for (r, t) in runs if abs(r.distance_km - target) <= tol]
         if not in_band:
             continue
-        best = min(in_band, key=lambda r: r.avg_pace_s_per_km)
+        best, best_time_s = min(in_band, key=lambda rt: rt[1])
         out.append(PersonalBest(
             band=label,
             target_km=target,
             run_date=best.date.isoformat() if best.date else None,
             name=best.name,
             distance_km=round(best.distance_km, 2),
+            total_time_s=round(best_time_s),
             avg_pace=rotation.seconds_to_pace(best.avg_pace_s_per_km),
             avg_hr=best.avg_hr,
             source=best.source,
