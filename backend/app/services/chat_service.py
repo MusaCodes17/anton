@@ -54,7 +54,7 @@ specific not covered by the pre-loaded context."""
 
 MCP_SERVERS: list[dict] = [
     {
-        "name": "rundeals",
+        "name": "anton",
         "url": os.getenv("MCP_SERVER_URL", "http://localhost:8000/mcp"),
     },
 ]

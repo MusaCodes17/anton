@@ -86,8 +86,8 @@ export default function ShoeDetail() {
 
   return (
     <div className="space-y-8">
-      <Link to="/my-shoes" className="focus-ring rounded inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground">
-        <ArrowLeft className="h-4 w-4" /> Back to My Shoes
+      <Link to="/shoes" className="focus-ring rounded inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground">
+        <ArrowLeft className="h-4 w-4" /> Back to Shoes
       </Link>
 
       {/* Header */}

@@ -1,19 +1,20 @@
 import { useState } from 'react'
 import { NavLink, Outlet, useLocation } from 'react-router-dom'
-import { LayoutDashboard, Tag, Footprints, Store, Menu, X, PersonStanding, Sparkles } from 'lucide-react'
+import { Home, Activity, Tag, PersonStanding, Sparkles, Settings as SettingsIcon, Menu, X } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { useDashboardStats } from '@/hooks/useApi'
 import { formatRelativeTime } from '@/lib/utils'
 
 const navItems = [
-  { to: '/', label: 'Dashboard', icon: LayoutDashboard, end: true },
+  { to: '/', label: 'Home', icon: Home, end: true },
+  { to: '/training', label: 'Training', icon: Activity },
+  { to: '/shoes', label: 'Shoes', icon: PersonStanding },
   { to: '/deals', label: 'Deals', icon: Tag },
-  { to: '/shoes', label: 'Tracked Shoes', icon: Footprints },
-  { to: '/retailers', label: 'Retailers', icon: Store },
-  { to: '/my-shoes', label: 'My Shoes', icon: PersonStanding },
   { to: '/assistant', label: 'Son of Anton', icon: Sparkles },
 ]
+
+const settingsItem = { to: '/settings', label: 'Settings', icon: SettingsIcon }
 
 function NavLinks({ onNavigate }) {
   return (
@@ -50,6 +51,29 @@ function NavLinks({ onNavigate }) {
   )
 }
 
+// Settings is plumbing, not a primary destination — pinned apart from the
+// main nav with a gear icon (the standard mobile "behind a gear" pattern).
+function SettingsLink({ onNavigate }) {
+  const { to, label, icon: Icon } = settingsItem
+  return (
+    <NavLink
+      to={to}
+      onClick={onNavigate}
+      className={({ isActive }) =>
+        cn(
+          'focus-ring flex items-center gap-3 rounded-[9px] px-3 py-[11px] text-sm transition-colors',
+          isActive
+            ? 'bg-accent font-bold text-accent-foreground'
+            : 'font-medium text-muted-foreground hover:bg-secondary hover:text-foreground'
+        )
+      }
+    >
+      <Icon className="h-[15px] w-[15px] shrink-0" />
+      {label}
+    </NavLink>
+  )
+}
+
 function Brand() {
   return (
     <div className="flex items-center gap-[11px] px-2">
@@ -57,7 +81,7 @@ function Brand() {
         <span className="h-[11px] w-[11px] rotate-45 rounded-[2px] bg-background" />
       </span>
       <span className="font-heading text-[19px] font-extrabold tracking-tight text-foreground">
-        RunDeals
+        Anton
       </span>
     </div>
   )
@@ -80,7 +104,10 @@ export default function Layout() {
           <Brand />
         </div>
         <NavLinks />
-        <div className="mt-auto flex items-center gap-[9px] border-t border-border px-2.5 pt-3">
+        <div className="mt-auto border-t border-border pt-3">
+          <SettingsLink />
+        </div>
+        <div className="mt-3 flex items-center gap-[9px] border-t border-border px-2.5 pt-3">
           <span className="relative flex h-2 w-2 shrink-0 rounded-full bg-primary shadow-[0_0_0_3px_oklch(0.74_0.17_153_/_0.18)]" />
           <span className="text-xs text-faint">
             {stats.data?.last_scrape
@@ -107,6 +134,9 @@ export default function Layout() {
       {mobileOpen && (
         <div className="sticky top-16 z-20 border-b border-border bg-sidebar p-3 md:hidden">
           <NavLinks onNavigate={() => setMobileOpen(false)} />
+          <div className="mt-1 border-t border-border pt-1">
+            <SettingsLink onNavigate={() => setMobileOpen(false)} />
+          </div>
         </div>
       )}
 

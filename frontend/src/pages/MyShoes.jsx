@@ -251,7 +251,7 @@ export default function MyShoes() {
               <ShoeCard
                 key={shoe.id}
                 shoe={shoe}
-                onOpenDetail={() => navigate(`/my-shoes/${shoe.id}`)}
+                onOpenDetail={() => navigate(`/shoes/${shoe.id}`)}
                 onLogRun={() => setLogRunShoe(shoe)}
                 onEdit={() => setFormState({ shoe })}
                 onDelete={() => setDeleting(shoe)}
@@ -288,7 +288,7 @@ export default function MyShoes() {
                     <ShoeCard
                       key={shoe.id}
                       shoe={shoe}
-                      onOpenDetail={() => navigate(`/my-shoes/${shoe.id}`)}
+                      onOpenDetail={() => navigate(`/shoes/${shoe.id}`)}
                       onLogRun={() => setLogRunShoe(shoe)}
                       onEdit={() => setFormState({ shoe })}
                       onDelete={() => setDeleting(shoe)}

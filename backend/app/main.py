@@ -10,7 +10,7 @@ from dotenv import load_dotenv
 
 from app.database import init_db
 from app.mcp_server import mcp
-from app.routers import shoes, retailers, deals, dashboard, scraping, export, owned_shoes, coros_sync, chat, admin, training
+from app.routers import shoes, retailers, deals, dashboard, scraping, export, owned_shoes, coros_sync, chat, admin, training, strava, watchlist
 
 # Load environment variables
 load_dotenv()
@@ -61,6 +61,8 @@ app.include_router(owned_shoes.router, prefix="/api")
 app.include_router(chat.router, prefix="/api")
 app.include_router(admin.router, prefix="/api")
 app.include_router(training.router, prefix="/api")
+app.include_router(strava.router, prefix="/api")
+app.include_router(watchlist.router, prefix="/api")
 
 # Mount the MCP server (Streamable HTTP transport) at /mcp
 app.mount("/mcp", mcp.streamable_http_app())
