@@ -140,7 +140,7 @@ export default function Retailers() {
         <ErrorState error={retailers.error} onRetry={retailers.refetch} />
       ) : retailers.data?.length ? (
         <div className="overflow-hidden rounded-[14px] border border-border bg-card">
-          <div className="grid grid-cols-[2fr_1.1fr_1fr_1.2fr_1.6fr] gap-3.5 border-b border-border px-5 py-3 font-mono text-[11px] uppercase tracking-[0.08em] text-faint">
+          <div className="grid grid-cols-[2fr_1.1fr_1fr_1.2fr_1.6fr] gap-3.5 border-b border-border px-5 py-3 font-mono text-2xs uppercase tracking-[0.08em] text-faint">
             <span>Retailer</span>
             <span>Status</span>
             <span>Active deals</span>
@@ -158,14 +158,14 @@ export default function Retailers() {
             return (
               <div
                 key={retailer.id}
-                className="grid grid-cols-[2fr_1.1fr_1fr_1.2fr_1.6fr] items-center gap-3.5 border-b border-[#1A1D22] px-5 py-3.5 last:border-b-0"
+                className="grid grid-cols-[2fr_1.1fr_1fr_1.2fr_1.6fr] items-center gap-3.5 border-b border-divider px-5 py-3.5 last:border-b-0"
               >
                 <div className="flex min-w-0 items-center gap-3">
-                  <div className="flex h-[42px] w-[42px] shrink-0 items-center justify-center rounded-[9px] bg-secondary font-heading text-[15px] font-extrabold text-secondary-foreground">
+                  <div className="flex h-[42px] w-[42px] shrink-0 items-center justify-center rounded-[9px] bg-secondary font-heading text-md-plus font-extrabold text-secondary-foreground">
                     {initials}
                   </div>
                   <div className="min-w-0">
-                    <div className="truncate text-[15px] font-bold text-foreground">
+                    <div className="truncate text-md-plus font-bold text-foreground">
                       {retailer.name}
                     </div>
                     {retailer.base_url && (
@@ -173,7 +173,7 @@ export default function Retailers() {
                         href={retailer.base_url}
                         target="_blank"
                         rel="noreferrer"
-                        className="inline-flex items-center gap-1 truncate font-mono text-[11px] text-faint hover:text-muted-foreground"
+                        className="inline-flex items-center gap-1 truncate font-mono text-2xs text-faint hover:text-muted-foreground"
                       >
                         {retailer.base_url.replace(/^https?:\/\//, '')}
                         <ExternalLink className="h-3 w-3 shrink-0" />

@@ -8,6 +8,7 @@ import {
   scrapeApi,
   ownedShoesApi,
   corosSyncApi,
+  trainingApi,
   SCRAPE_STREAM_URL,
 } from '@/services/api'
 
@@ -28,6 +29,7 @@ export const queryKeys = {
   shoeNotes: (id) => ['owned-shoes', id, 'notes'],
   replacementDeals: (id) => ['owned-shoes', id, 'replacement-deals'],
   corosSyncStatus: () => ['coros', 'sync-status'],
+  trainingSummary: (period) => ['training', 'summary', period],
 }
 
 // ============== SHOES ==============
@@ -197,6 +199,14 @@ export function useBestDeals(limit = 8) {
   return useQuery({
     queryKey: queryKeys.bestDeals(limit),
     queryFn: () => dashboardApi.bestDeals(limit),
+  })
+}
+
+// ============== TRAINING ==============
+export function useTrainingSummary(period = 'monthly') {
+  return useQuery({
+    queryKey: queryKeys.trainingSummary(period),
+    queryFn: () => trainingApi.summary(period),
   })
 }
 

@@ -21,7 +21,7 @@ function ResourcePicker({ groups, filter, activeIndex, onSelect, onClose, contai
   return (
     <div
       className={cn(
-        'absolute bottom-full left-0 z-50 mb-1 w-80 max-w-full rounded-[10px] border border-border bg-[#101215] py-1 shadow-xl',
+        'absolute bottom-full left-0 z-50 mb-1 w-80 max-w-full rounded-[10px] border border-border bg-sidebar py-1 shadow-xl',
         'max-h-[280px] overflow-y-auto'
       )}
       ref={scrollRef}
@@ -46,7 +46,7 @@ function ResourcePicker({ groups, filter, activeIndex, onSelect, onClose, contai
               >
                 <span className="text-sm font-medium leading-snug">{item.label}</span>
                 {item.sublabel && (
-                  <span className="text-[11px] opacity-60 leading-snug">{item.sublabel}</span>
+                  <span className="text-2xs opacity-60 leading-snug">{item.sublabel}</span>
                 )}
               </button>
             )

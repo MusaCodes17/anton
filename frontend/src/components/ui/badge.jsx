@@ -17,6 +17,8 @@ const badgeVariants = cva(
           'border-transparent bg-success text-success-foreground',
         warning:
           'border-transparent bg-warning text-warning-foreground',
+        strava:
+          'border-transparent bg-strava text-strava-foreground',
         outline: 'text-foreground',
       },
     },

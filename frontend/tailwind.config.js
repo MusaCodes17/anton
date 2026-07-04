@@ -14,6 +14,16 @@ export default {
         heading: ['Archivo', 'sans-serif'],
         mono: ['JetBrains Mono', 'monospace'],
       },
+      // Named steps for the recurring arbitrary sizes that fall between
+      // Tailwind's defaults. Plain strings (font-size only, no line-height) so
+      // they render identically to the text-[NNpx] values they replace.
+      fontSize: {
+        '2xs': '11px',
+        'sm-plus': '13px',
+        'md-plus': '15px',
+        'lg-plus': '17px',
+        stat: '23px',
+      },
       colors: {
         border: 'var(--border)',
         input: 'var(--input)',
@@ -56,11 +66,19 @@ export default {
           DEFAULT: 'var(--warning)',
           foreground: 'var(--warning-foreground)',
         },
+        strava: {
+          DEFAULT: 'var(--strava)',
+          foreground: 'var(--strava-foreground)',
+        },
         // "Velocity" design system: a second, slightly lighter dark tone used
         // for nested tiles/rows inside a --card panel (stat tiles, table rows),
         // distinct from the panel background itself.
         surface: 'var(--surface)',
         faint: 'var(--faint)',
+        sidebar: 'var(--sidebar)',
+        divider: 'var(--divider)',
+        edge: 'var(--edge)',
+        'nav-inactive': 'var(--nav-inactive)',
       },
       borderRadius: {
         lg: 'var(--radius)',

@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Plus, Pencil, Trash2, Footprints, PlayCircle, ArrowUpRight, RefreshCw, ChevronDown } from 'lucide-react'
+import { Plus, Pencil, Trash2, Footprints, PlayCircle, ArrowUpRight, RefreshCw, ChevronDown, MoreHorizontal } from 'lucide-react'
 import PageHeader from '@/components/PageHeader'
 import OwnedShoeForm from '@/components/OwnedShoeForm'
 import LogRunDialog from '@/components/LogRunDialog'
@@ -26,6 +26,13 @@ import {
   DialogDescription,
   DialogFooter,
 } from '@/components/ui/dialog'
+import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+} from '@/components/ui/dropdown-menu'
 import { ErrorState, EmptyState, CardSkeletonGrid } from '@/components/StatusViews'
 import { useToast } from '@/components/ui/toast'
 import {
@@ -75,7 +82,7 @@ export default function MyShoes() {
   const [deleting, setDeleting] = useState(null)
   const [logRunShoe, setLogRunShoe] = useState(null)
   const [corosSyncOpen, setCorosSyncOpen] = useState(false)
-  const [retiredCollapsed, setRetiredCollapsed] = useState(false)
+  const [retiredCollapsed, setRetiredCollapsed] = useState(true)
 
   const shoes = useOwnedShoes()
   const create = useCreateOwnedShoe()
@@ -225,7 +232,7 @@ export default function MyShoes() {
             <button
               type="button"
               onClick={resetFilters}
-              className="text-xs text-muted-foreground hover:text-foreground"
+              className="focus-ring rounded text-xs text-muted-foreground hover:text-foreground"
             >
               Reset filters
             </button>
@@ -254,7 +261,7 @@ export default function MyShoes() {
             <button
               type="button"
               onClick={() => setFormState({})}
-              className="flex min-h-[180px] flex-col items-center justify-center gap-2.5 rounded-[14px] border-[1.5px] border-dashed border-[#2E3239] text-faint hover:border-primary/40 hover:text-muted-foreground"
+              className="focus-ring flex min-h-[180px] flex-col items-center justify-center gap-2.5 rounded-[14px] border-[1.5px] border-dashed border-edge text-faint hover:border-primary/40 hover:text-muted-foreground"
             >
               <span className="flex h-[42px] w-[42px] items-center justify-center rounded-[11px] border border-border bg-surface text-xl leading-none text-accent-foreground">
                 +
@@ -268,7 +275,7 @@ export default function MyShoes() {
               <button
                 type="button"
                 onClick={() => setRetiredCollapsed((c) => !c)}
-                className="flex items-center gap-2 text-[11px] font-bold uppercase tracking-[0.08em] text-faint hover:text-muted-foreground transition-colors mb-3.5"
+                className="focus-ring rounded flex items-center gap-2 text-2xs font-bold uppercase tracking-[0.08em] text-faint hover:text-muted-foreground transition-colors mb-3.5"
               >
                 <ChevronDown
                   className={`h-3.5 w-3.5 transition-transform duration-200 ${retiredCollapsed ? '-rotate-90' : ''}`}
@@ -357,7 +364,11 @@ export default function MyShoes() {
             <DialogTitle>Delete shoe?</DialogTitle>
             <DialogDescription>
               {deleting &&
-                `This removes "${deleting.brand} ${deleting.model}" and its run history. This cannot be undone.`}
+                `This removes "${deleting.brand} ${deleting.model}"${
+                  deleting.total_runs
+                    ? ` and its ${deleting.total_runs} logged run${deleting.total_runs === 1 ? '' : 's'}`
+                    : ' and its run history'
+                }. This cannot be undone.`}
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
@@ -379,9 +390,9 @@ function ShoeCard({ shoe, onOpenDetail, onLogRun, onEdit, onDelete }) {
 
   return (
     <div className="flex flex-col overflow-hidden rounded-[14px] border border-border bg-surface">
-      <button type="button" onClick={onOpenDetail} className="flex flex-col gap-3.5 p-4 text-left">
+      <button type="button" onClick={onOpenDetail} className="focus-ring flex flex-col gap-3.5 p-4 text-left">
         <div className="flex gap-3.5">
-          <div className="flex h-[74px] w-[74px] shrink-0 items-center justify-center overflow-hidden rounded-[11px] bg-[repeating-linear-gradient(135deg,#202327,#202327_6px,#26292E_6px,#26292E_12px)]">
+          <div className="flex h-[74px] w-[74px] shrink-0 items-center justify-center overflow-hidden rounded-[11px] bg-placeholder-stripes">
             {image ? (
               <img src={image} alt={shoe.model} className="h-full w-full object-contain" />
             ) : (
@@ -391,7 +402,7 @@ function ShoeCard({ shoe, onOpenDetail, onLogRun, onEdit, onDelete }) {
           <div className="min-w-0 flex-1">
             <div className="flex items-start justify-between gap-2">
               <div className="min-w-0">
-                <div className="text-[11px] font-bold uppercase tracking-[0.08em] text-accent-foreground">
+                <div className="text-2xs font-bold uppercase tracking-[0.08em] text-accent-foreground">
                   {shoe.brand}
                 </div>
                 <div className="mt-0.5 truncate font-heading text-base font-bold leading-tight text-foreground">
@@ -410,37 +421,43 @@ function ShoeCard({ shoe, onOpenDetail, onLogRun, onEdit, onDelete }) {
             </div>
           </div>
         </div>
-        <MileageProgressBar mileage={shoe.current_mileage} compact />
+        <MileageProgressBar mileage={shoe.current_mileage} limit={shoe.mileage_limit ?? 800} compact />
       </button>
-      <div className="grid grid-cols-2 border-t border-border text-[12px] font-bold">
+      <div className="grid grid-cols-[1fr_1fr_auto] border-t border-border text-[12px] font-bold">
         <button
           type="button"
           onClick={onOpenDetail}
-          className="flex items-center justify-center gap-1.5 border-b border-r border-border py-2 text-secondary-foreground hover:bg-secondary"
+          className="focus-ring flex items-center justify-center gap-1.5 border-r border-border py-2 text-secondary-foreground hover:bg-secondary"
         >
           <ArrowUpRight className="h-3.5 w-3.5" /> Details
         </button>
         <button
           type="button"
           onClick={onLogRun}
-          className="flex items-center justify-center gap-1.5 border-b border-border py-2 text-secondary-foreground hover:bg-secondary"
+          className="focus-ring flex items-center justify-center gap-1.5 border-r border-border py-2 text-secondary-foreground hover:bg-secondary"
         >
           <PlayCircle className="h-3.5 w-3.5" /> Log run
         </button>
-        <button
-          type="button"
-          onClick={onEdit}
-          className="flex items-center justify-center gap-1.5 border-r border-border py-2 text-secondary-foreground hover:bg-secondary"
-        >
-          <Pencil className="h-3.5 w-3.5" /> Edit
-        </button>
-        <button
-          type="button"
-          onClick={onDelete}
-          className="flex items-center justify-center gap-1.5 py-2 text-muted-foreground hover:bg-secondary hover:text-destructive"
-        >
-          <Trash2 className="h-3.5 w-3.5" /> Remove
-        </button>
+        <DropdownMenu>
+          <DropdownMenuTrigger
+            aria-label="More actions"
+            className="focus-ring flex items-center justify-center px-3 py-2 text-muted-foreground hover:bg-secondary hover:text-foreground"
+          >
+            <MoreHorizontal className="h-4 w-4" />
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            <DropdownMenuItem onSelect={onEdit}>
+              <Pencil className="h-3.5 w-3.5" /> Edit
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem
+              onSelect={onDelete}
+              className="text-destructive focus:bg-destructive/10 focus:text-destructive"
+            >
+              <Trash2 className="h-3.5 w-3.5" /> Remove
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
       </div>
     </div>
   )

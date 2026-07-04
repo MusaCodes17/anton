@@ -49,7 +49,7 @@ export default function ShoeProductCard({ group, onViewDetails }) {
           </div>
         )}
         {savings != null && (
-          <Badge className="absolute right-2 top-2 rounded-[7px] bg-primary px-[9px] py-[5px] font-heading text-[13px] font-extrabold text-primary-foreground">
+          <Badge className="absolute right-2 top-2 rounded-[7px] bg-primary px-[9px] py-[5px] font-heading text-sm-plus font-extrabold text-primary-foreground">
             {formatPercent(savings)} OFF
           </Badge>
         )}
@@ -57,7 +57,7 @@ export default function ShoeProductCard({ group, onViewDetails }) {
 
       <div className="flex flex-1 flex-col gap-3 p-4">
         <div className="min-w-0">
-          <p className="text-[11px] font-bold uppercase tracking-[0.1em] text-accent-foreground">
+          <p className="text-2xs font-bold uppercase tracking-[0.1em] text-accent-foreground">
             {shoe.brand}
           </p>
           <h3 className="truncate font-heading text-base font-extrabold leading-tight text-foreground">

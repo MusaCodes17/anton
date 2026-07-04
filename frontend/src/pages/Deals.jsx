@@ -1,4 +1,5 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { Tag, SlidersHorizontal } from 'lucide-react'
 import PageHeader from '@/components/PageHeader'
 import ShoeProductCard from '@/components/ShoeProductCard'
@@ -39,6 +40,8 @@ export default function Deals() {
   const [size, setSize] = useState(ALL)
   const [sort, setSort] = useState('savings_desc')
   const [selected, setSelected] = useState(null)
+  const [searchParams, setSearchParams] = useSearchParams()
+  const deepLinkId = searchParams.get('deal')
 
   // Server-side filters the API supports directly.
   const params = useMemo(() => {
@@ -52,6 +55,22 @@ export default function Deals() {
   const deals = useDeals(params)
   const shoes = useShoes()
   const retailers = useRetailers()
+
+  // Deep link from the Dashboard: /deals?deal=<id> opens that deal's modal
+  // once the deals are loaded. The param is cleared when the modal closes.
+  useEffect(() => {
+    if (!deepLinkId || !deals.data) return
+    const match = deals.data.find((d) => String(d.id) === deepLinkId)
+    if (match) setSelected(match)
+  }, [deepLinkId, deals.data])
+
+  const closeModal = () => {
+    setSelected(null)
+    if (deepLinkId) {
+      searchParams.delete('deal')
+      setSearchParams(searchParams, { replace: true })
+    }
+  }
 
   // Distinct brands for the filter dropdown, derived from tracked shoes.
   const brands = useMemo(() => {
@@ -283,7 +302,7 @@ export default function Deals() {
       <DealDetailModal
         deal={selected}
         open={!!selected}
-        onOpenChange={(o) => !o && setSelected(null)}
+        onOpenChange={(o) => !o && closeModal()}
       />
     </div>
   )

@@ -26,7 +26,7 @@ function NavLinks({ onNavigate }) {
           onClick={onNavigate}
           className={({ isActive }) =>
             cn(
-              'flex items-center gap-3 rounded-[9px] px-3 py-[11px] text-sm transition-colors',
+              'focus-ring flex items-center gap-3 rounded-[9px] px-3 py-[11px] text-sm transition-colors',
               isActive
                 ? 'bg-accent font-bold text-accent-foreground'
                 : 'font-medium text-muted-foreground hover:bg-secondary hover:text-foreground'
@@ -38,7 +38,7 @@ function NavLinks({ onNavigate }) {
               <span
                 className={cn(
                   'h-[7px] w-[7px] shrink-0 rotate-45 rounded-[2px]',
-                  isActive ? 'bg-primary' : 'bg-[#3A3E44]'
+                  isActive ? 'bg-primary' : 'bg-nav-inactive'
                 )}
               />
               {label}
@@ -75,7 +75,7 @@ export default function Layout() {
   return (
     <div className="min-h-screen bg-background">
       {/* Desktop sidebar */}
-      <aside className="fixed inset-y-0 left-0 z-30 hidden w-[236px] flex-none flex-col bg-[#101215] p-4 pt-6 md:flex">
+      <aside className="fixed inset-y-0 left-0 z-30 hidden w-[236px] flex-none flex-col bg-sidebar p-4 pt-6 md:flex">
         <div className="pb-[30px]">
           <Brand />
         </div>
@@ -91,7 +91,7 @@ export default function Layout() {
       </aside>
 
       {/* Mobile top bar */}
-      <header className="sticky top-0 z-30 flex h-16 items-center justify-between border-b border-border bg-[#101215] px-4 md:hidden">
+      <header className="sticky top-0 z-30 flex h-16 items-center justify-between border-b border-border bg-sidebar px-4 md:hidden">
         <Brand />
         <Button
           variant="ghost"
@@ -105,7 +105,7 @@ export default function Layout() {
 
       {/* Mobile slide-down menu */}
       {mobileOpen && (
-        <div className="sticky top-16 z-20 border-b border-border bg-[#101215] p-3 md:hidden">
+        <div className="sticky top-16 z-20 border-b border-border bg-sidebar p-3 md:hidden">
           <NavLinks onNavigate={() => setMobileOpen(false)} />
         </div>
       )}

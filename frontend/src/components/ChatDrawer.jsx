@@ -72,7 +72,7 @@ export default function ChatDrawer() {
       {/* Drawer */}
       <div
         className={cn(
-          'fixed right-0 top-0 z-[51] flex h-full w-[400px] flex-col border-l border-border bg-[#101215] transition-transform duration-300',
+          'fixed right-0 top-0 z-[51] flex h-full w-[400px] flex-col border-l border-border bg-sidebar transition-transform duration-300',
           'max-[500px]:w-full',
           isOpen ? 'translate-x-0' : 'translate-x-full'
         )}

@@ -29,6 +29,9 @@
     --success-foreground: #0e0f11;
     --warning: oklch(0.8 0.15 75);
     --warning-foreground: #1a1206;
+    /* Strava brand-orange accent for backfilled runs (source='strava'). */
+    --strava: oklch(0.66 0.19 41);
+    --strava-foreground: #0e0f11;
     --border: #23262b;
     --input: #23262b;
     --ring: oklch(0.74 0.17 153);
@@ -37,6 +40,36 @@
     /* Velocity-specific tones not covered by the shadcn set above. */
     --surface: #16181b;
     --faint: #6a6f76;
+    --sidebar: #101215;       /* sidebar / topbar background */
+    --divider: #1a1d22;       /* subtle row divider, softer than --border */
+    --edge: #2e3239;          /* dashed "add card" border */
+    --nav-inactive: #3a3e44;  /* inactive nav diamond */
+  }
+}
+
+@layer components {
+  /*
+   * Shared keyboard focus treatment for custom <button>/<a>/<Link> elements
+   * that aren't the shared Button component (which already ships this ring).
+   * Tailwind preflight strips default outlines, so these need it explicitly.
+   */
+  .focus-ring {
+    @apply focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background;
+  }
+
+  /*
+   * Diagonal placeholder stripes shown behind product images before one
+   * loads. Previously duplicated inline in 6 spots with slightly varying
+   * stripe widths (5–7px); unified here at 6px.
+   */
+  .bg-placeholder-stripes {
+    background-image: repeating-linear-gradient(
+      135deg,
+      #202327,
+      #202327 6px,
+      #26292e 6px,
+      #26292e 12px
+    );
   }
 }
 

@@ -312,6 +312,12 @@ class ShoeRunCreate(ShoeRunBase):
 
 class ShoeRunResponse(ShoeRunBase):
     """Schema for run response"""
+    # Manual creation requires distance > 0 (ShoeRunBase), but some historical
+    # COROS-synced runs were deliberately logged at 0km to avoid double-counting
+    # mileage that had already been added manually (the real distance is kept in
+    # the note). Responses must therefore allow 0 so those runs still serialize
+    # and appear in run history instead of 500ing the endpoint.
+    distance_km: float = Field(..., ge=0, description="Distance covered in this run")
     id: int
     owned_shoe_id: int
     source: str

@@ -45,3 +45,32 @@ def test_log_run_result_has_run_and_shoe(db):
     result = rotation.log_run(db, shoe.id, distance_km=5.0, run_date=date(2026, 7, 1))
     assert result.run.id is not None
     assert result.shoe.id == shoe.id
+
+
+def test_shoe_run_response_allows_zero_distance():
+    """Historical COROS runs logged at 0km (mileage already counted manually)
+    must still serialize in responses, else GET /runs 500s for that shoe."""
+    from datetime import datetime
+    from app.models.schemas import ShoeRunResponse
+
+    r = ShoeRunResponse(
+        distance_km=0.0,
+        run_date=date(2026, 6, 18),
+        avg_pace="4:28/km",
+        avg_hr=155,
+        notes="Actual distance 11.06 km — logged at 0km since mileage was already added manually.",
+        id=11,
+        owned_shoe_id=9,
+        source="coros",
+        created_at=datetime(2026, 6, 18, 12, 0, 0),
+    )
+    assert r.distance_km == 0.0
+
+
+def test_shoe_run_create_still_rejects_zero_distance():
+    """Manual logging stays strict: a 0km run makes no sense to create."""
+    import pytest
+    from app.models.schemas import ShoeRunCreate
+
+    with pytest.raises(Exception):
+        ShoeRunCreate(distance_km=0.0, run_date=date(2026, 6, 18))

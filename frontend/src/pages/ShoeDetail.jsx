@@ -45,6 +45,11 @@ import { SHOE_TYPE_LABELS } from '@/lib/shoeTypes'
 const statusVariant = { active: 'success', retired: 'secondary', for_sale: 'warning' }
 const statusLabel = { active: 'Active', retired: 'Retired', for_sale: 'For sale' }
 
+// Mirrors backend _SOURCE_BADGES: coros → primary, strava → orange, manual → grey.
+const sourceBadgeVariant = { coros: 'default', strava: 'strava', manual: 'secondary' }
+
+const RUN_PAGE_SIZE = 15
+
 export default function ShoeDetail() {
   const { id } = useParams()
   const shoeId = Number(id)
@@ -81,13 +86,13 @@ export default function ShoeDetail() {
 
   return (
     <div className="space-y-8">
-      <Link to="/my-shoes" className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground">
+      <Link to="/my-shoes" className="focus-ring rounded inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground">
         <ArrowLeft className="h-4 w-4" /> Back to My Shoes
       </Link>
 
       {/* Header */}
       <div className="flex flex-col gap-5 sm:flex-row">
-        <div className="flex h-[120px] w-[120px] shrink-0 items-center justify-center overflow-hidden rounded-[14px] bg-[repeating-linear-gradient(135deg,#202327,#202327_6px,#26292E_6px,#26292E_12px)]">
+        <div className="flex h-[120px] w-[120px] shrink-0 items-center justify-center overflow-hidden rounded-[14px] bg-placeholder-stripes">
           {image ? (
             <img src={image} alt={shoe.model} className="h-full w-full object-contain" />
           ) : (
@@ -97,7 +102,7 @@ export default function ShoeDetail() {
         <div className="min-w-0 flex-1 space-y-2">
           <div className="flex flex-wrap items-start justify-between gap-2">
             <div>
-              <div className="text-[11px] font-bold uppercase tracking-[0.08em] text-accent-foreground">
+              <div className="text-2xs font-bold uppercase tracking-[0.08em] text-accent-foreground">
                 {shoe.brand}
               </div>
               <h1 className="font-heading text-2xl font-extrabold leading-tight text-foreground">
@@ -119,7 +124,7 @@ export default function ShoeDetail() {
           ) : (
             <div className="text-sm text-faint">
               Purchase price not recorded —{' '}
-              <button type="button" onClick={() => setEditing(true)} className="text-accent-foreground underline">
+              <button type="button" onClick={() => setEditing(true)} className="focus-ring rounded text-accent-foreground underline">
                 add it
               </button>
             </div>
@@ -142,8 +147,8 @@ export default function ShoeDetail() {
       {/* Stats row */}
       <div className="grid grid-cols-1 gap-4 rounded-[14px] border border-border bg-surface p-4 sm:grid-cols-3">
         <div className="space-y-1.5">
-          <div className="text-[11px] font-bold uppercase tracking-[0.08em] text-faint">Mileage</div>
-          <MileageProgressBar mileage={shoe.current_mileage} />
+          <div className="text-2xs font-bold uppercase tracking-[0.08em] text-faint">Mileage</div>
+          <MileageProgressBar mileage={shoe.current_mileage} limit={shoe.mileage_limit ?? 800} />
         </div>
         <Stat label="Total runs" value={shoe.total_runs ?? 0} />
         <div className="flex flex-col gap-1">
@@ -226,7 +231,7 @@ function ReplacementDeals({ ownedShoeId, currentMileage, shoeType, onEditShoe })
       <button
         type="button"
         onClick={() => setOpen((o) => !o)}
-        className="flex w-full items-center gap-2 py-1.5 text-left"
+        className="focus-ring rounded flex w-full items-center gap-2 py-1.5 text-left"
         aria-expanded={open}
       >
         <ChevronRight
@@ -259,7 +264,7 @@ function ReplacementDeals({ ownedShoeId, currentMileage, shoeType, onEditShoe })
               <div className="rounded-[14px] border border-dashed border-border bg-surface/50 p-5">
                 <p className="text-sm text-muted-foreground">
                   No shoe type set.{' '}
-                  <button type="button" onClick={onEditShoe} className="text-accent-foreground underline">
+                  <button type="button" onClick={onEditShoe} className="focus-ring rounded text-accent-foreground underline">
                     Edit this shoe
                   </button>{' '}
                   to add a type and see replacement deal suggestions.
@@ -272,10 +277,14 @@ function ReplacementDeals({ ownedShoeId, currentMileage, shoeType, onEditShoe })
                 </p>
               </div>
             ) : (
-              <div className="flex gap-3 overflow-x-auto pb-2 -mx-1 px-1">
-                {data.deals.map((deal) => (
-                  <ReplacementDealCard key={deal.id} deal={deal} />
-                ))}
+              <div className="relative">
+                <div className="flex snap-x snap-mandatory gap-3 overflow-x-auto pb-2 -mx-1 px-1">
+                  {data.deals.map((deal) => (
+                    <ReplacementDealCard key={deal.id} deal={deal} />
+                  ))}
+                </div>
+                {/* Right-edge fade hints there's more to scroll. */}
+                <div className="pointer-events-none absolute inset-y-0 right-0 w-10 bg-gradient-to-l from-background to-transparent" />
               </div>
             )}
           </div>
@@ -287,15 +296,15 @@ function ReplacementDeals({ ownedShoeId, currentMileage, shoeType, onEditShoe })
 
 function ReplacementDealCard({ deal }) {
   return (
-    <div className="flex w-[190px] shrink-0 flex-col overflow-hidden rounded-[14px] border border-border bg-surface">
-      <div className="relative flex h-[110px] items-center justify-center overflow-hidden bg-[repeating-linear-gradient(135deg,#202327,#202327_6px,#26292E_6px,#26292E_12px)]">
+    <div className="flex w-[190px] shrink-0 snap-start flex-col overflow-hidden rounded-[14px] border border-border bg-surface">
+      <div className="relative flex h-[110px] items-center justify-center overflow-hidden bg-placeholder-stripes">
         {deal.image_url ? (
           <img src={deal.image_url} alt={deal.model} className="h-full w-full object-contain" />
         ) : (
           <Footprints className="h-8 w-8 text-faint" />
         )}
         {deal.savings_percent != null && (
-          <Badge className="absolute right-1.5 top-1.5 bg-primary px-2 py-0.5 font-heading text-[11px] font-extrabold text-primary-foreground">
+          <Badge className="absolute right-1.5 top-1.5 bg-primary px-2 py-0.5 font-heading text-2xs font-extrabold text-primary-foreground">
             {Math.round(deal.savings_percent)}% OFF
           </Badge>
         )}
@@ -308,13 +317,13 @@ function ReplacementDealCard({ deal }) {
           <div className="line-clamp-2 font-heading text-sm font-bold leading-tight text-foreground">
             {deal.model}
           </div>
-          <div className="text-[11px] text-muted-foreground">{deal.retailer}</div>
+          <div className="text-2xs text-muted-foreground">{deal.retailer}</div>
         </div>
         <div className="font-heading text-base font-extrabold text-foreground">
           {formatCurrency(deal.current_price)}
         </div>
         {deal.product_url && (
-          <a href={deal.product_url} target="_blank" rel="noreferrer" className="mt-auto">
+          <a href={deal.product_url} target="_blank" rel="noreferrer" className="focus-ring mt-auto rounded-[8px]">
             <Button size="sm" variant="outline" className="w-full text-xs">
               View Deal <ExternalLink className="h-3 w-3" />
             </Button>
@@ -328,8 +337,8 @@ function ReplacementDealCard({ deal }) {
 function Stat({ label, value }) {
   return (
     <div className="space-y-1">
-      <div className="text-[11px] font-bold uppercase tracking-[0.08em] text-faint">{label}</div>
-      <div className="font-heading text-lg font-bold text-foreground">{value}</div>
+      <div className="text-2xs font-bold uppercase tracking-[0.08em] text-faint">{label}</div>
+      <div className="font-heading text-lg font-bold tabular-nums text-foreground">{value}</div>
     </div>
   )
 }
@@ -382,6 +391,10 @@ function AdjustMileageDialog({ shoe, open, onOpenChange }) {
               placeholder={String(shoe.current_mileage)}
               autoFocus
             />
+            <p className="text-xs text-faint">
+              Mileage is normally derived from your logged runs plus the starting offset. A manual
+              override here creates a discrepancy the next COROS/Strava reconciliation will surface.
+            </p>
             <DialogFooter>
               <Button type="button" variant="outline" onClick={reset}>
                 Cancel
@@ -466,7 +479,7 @@ function NotesJournal({ ownedShoeId }) {
           {notes.data.map((note) => (
             <div key={note.id} className="relative rounded-[10px] border border-border bg-surface p-3">
               <div className="flex items-center justify-between gap-2">
-                <div className="flex items-center gap-2 text-[11px] text-faint">
+                <div className="flex items-center gap-2 text-2xs text-faint">
                   <span>{formatDate(note.created_at)}</span>
                   <span>·</span>
                   <span>{Math.round(note.mileage_at_note)} km</span>
@@ -480,7 +493,7 @@ function NotesJournal({ ownedShoeId }) {
                   type="button"
                   onClick={() => setDeleting(note)}
                   aria-label="Delete note"
-                  className="text-muted-foreground hover:text-destructive"
+                  className="focus-ring rounded text-muted-foreground hover:text-destructive"
                 >
                   <Trash2 className="h-3.5 w-3.5" />
                 </button>
@@ -540,7 +553,11 @@ function RunHistory({ ownedShoeId }) {
   const deleteRun = useDeleteShoeRun()
   const [deletingRun, setDeletingRun] = useState(null)
   const [expandedNoteId, setExpandedNoteId] = useState(null)
+  const [showAll, setShowAll] = useState(false)
   const { toast } = useToast()
+
+  const allRuns = runs.data || []
+  const visibleRuns = showAll ? allRuns : allRuns.slice(0, RUN_PAGE_SIZE)
 
   const confirmDeleteRun = () => {
     deleteRun.mutate(deletingRun, {
@@ -561,7 +578,7 @@ function RunHistory({ ownedShoeId }) {
       ) : runs.isLoading ? (
         <div className="h-[160px] animate-pulse rounded-md bg-muted" />
       ) : runs.data?.length ? (
-        <Table>
+        <Table className="min-w-[640px]">
           <TableHeader>
             <TableRow>
               <TableHead>Date</TableHead>
@@ -574,17 +591,17 @@ function RunHistory({ ownedShoeId }) {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {runs.data.map((run) => {
+            {visibleRuns.map((run) => {
               const isLong = (run.notes || '').length > 40
               const expanded = expandedNoteId === run.id
               return (
-                <TableRow key={run.id}>
+                <TableRow key={run.id} className="tabular-nums">
                   <TableCell>{formatDate(run.run_date)}</TableCell>
                   <TableCell>{run.distance_km}</TableCell>
                   <TableCell>{run.avg_pace || '—'}</TableCell>
                   <TableCell>{run.avg_hr || '—'}</TableCell>
                   <TableCell>
-                    <Badge variant={run.source === 'coros' ? 'default' : 'secondary'} className="text-[10px] capitalize">
+                    <Badge variant={sourceBadgeVariant[run.source] || 'secondary'} className="text-[10px] capitalize">
                       {run.source}
                     </Badge>
                   </TableCell>
@@ -599,7 +616,7 @@ function RunHistory({ ownedShoeId }) {
                       type="button"
                       onClick={() => setDeletingRun(run)}
                       aria-label="Remove run"
-                      className="text-muted-foreground hover:text-destructive"
+                      className="focus-ring rounded text-muted-foreground hover:text-destructive"
                     >
                       <Trash2 className="h-3.5 w-3.5" />
                     </button>
@@ -611,6 +628,16 @@ function RunHistory({ ownedShoeId }) {
         </Table>
       ) : (
         <p className="text-sm text-muted-foreground">No runs logged yet.</p>
+      )}
+
+      {allRuns.length > RUN_PAGE_SIZE && (
+        <button
+          type="button"
+          onClick={() => setShowAll((s) => !s)}
+          className="focus-ring rounded text-sm font-medium text-accent-foreground hover:underline"
+        >
+          {showAll ? 'Show less' : `Show all (${allRuns.length})`}
+        </button>
       )}
 
       <Dialog open={!!deletingRun} onOpenChange={(o) => !o && setDeletingRun(null)}>

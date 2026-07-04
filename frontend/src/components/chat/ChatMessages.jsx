@@ -67,14 +67,14 @@ export function UserMessage({ content, pillPreviews }) {
             {pillPreviews.map((p) => (
               <span
                 key={p.uri}
-                className="inline-flex items-center gap-1 rounded-full border border-primary/30 bg-primary/10 px-2 py-0.5 text-[11px] text-primary"
+                className="inline-flex items-center gap-1 rounded-full border border-primary/30 bg-primary/10 px-2 py-0.5 text-2xs text-primary"
               >
                 📊 {p.label}
               </span>
             ))}
             <button
               onClick={() => setExpanded((v) => !v)}
-              className="inline-flex items-center gap-0.5 text-[11px] text-muted-foreground hover:text-foreground transition-colors"
+              className="inline-flex items-center gap-0.5 text-2xs text-muted-foreground hover:text-foreground transition-colors"
             >
               {expanded ? (
                 <><ChevronUp className="h-3 w-3" /> hide context</>

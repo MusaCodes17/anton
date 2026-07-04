@@ -273,7 +273,7 @@ export default function ChatPage() {
     <div className="flex h-screen bg-background">
       {/* ── Conversation list panel — lives inside the main content area,
           to the right of the app sidebar (rendered by Layout) ── */}
-      <aside className="flex w-[280px] shrink-0 flex-col border-r border-border bg-[#101215]">
+      <aside className="flex w-[280px] shrink-0 flex-col border-r border-border bg-sidebar">
         {/* New conversation */}
         <div className="px-3 pt-3 pb-1">
           <button
@@ -372,7 +372,7 @@ export default function ChatPage() {
                     className="fixed inset-0 z-10"
                     onClick={() => setShowModelMenu(false)}
                   />
-                  <div className="absolute right-0 top-full mt-1 z-20 w-60 rounded-[10px] border border-border bg-[#101215] py-1 shadow-xl">
+                  <div className="absolute right-0 top-full mt-1 z-20 w-60 rounded-[10px] border border-border bg-sidebar py-1 shadow-xl">
                     {providers &&
                       Object.entries(providers.providers ?? {}).map(([key, provider]) => (
                         <div key={key}>

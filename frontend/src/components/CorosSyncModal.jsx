@@ -211,7 +211,7 @@ export default function CorosSyncModal({ open, onOpenChange, activeShoes, lastSy
                       <tr key={run.coros_activity_id} className="border-b border-border/50">
                         <td className="py-2.5 pr-3">
                           <div className="font-medium text-foreground">{formatDate(run.date)}</div>
-                          <div className="text-[11px] text-faint">{SPORT_LABELS[run.sport_type] || 'Run'}</div>
+                          <div className="text-2xs text-faint">{SPORT_LABELS[run.sport_type] || 'Run'}</div>
                         </td>
                         <td className="py-2.5 pr-3 font-mono text-foreground">
                           {run.distance_km.toFixed(2)} km

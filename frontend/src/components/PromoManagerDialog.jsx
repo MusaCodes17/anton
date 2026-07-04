@@ -124,7 +124,7 @@ export default function PromoManagerDialog({ retailer, open, onOpenChange }) {
                       {promo.description}
                     </p>
                   )}
-                  <p className="text-[11px] text-muted-foreground">
+                  <p className="text-2xs text-muted-foreground">
                     {promo.discount_percent ? `${promo.discount_percent}% off · ` : ''}
                     {promo.source === 'manual' ? 'added manually' : 'auto-detected'}
                   </p>

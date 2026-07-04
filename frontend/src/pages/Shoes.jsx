@@ -195,7 +195,7 @@ export default function Shoes() {
                 className="flex flex-col overflow-hidden rounded-[14px] border border-border bg-surface"
               >
                 <div className="flex gap-3.5 p-4">
-                  <div className="flex h-[74px] w-[74px] shrink-0 items-center justify-center overflow-hidden rounded-[11px] bg-[repeating-linear-gradient(135deg,#202327,#202327_6px,#26292E_6px,#26292E_12px)]">
+                  <div className="flex h-[74px] w-[74px] shrink-0 items-center justify-center overflow-hidden rounded-[11px] bg-placeholder-stripes">
                     {image ? (
                       <img src={image} alt={shoe.model} className="h-full w-full object-contain" />
                     ) : (
@@ -203,7 +203,7 @@ export default function Shoes() {
                     )}
                   </div>
                   <div className="min-w-0 flex-1">
-                    <div className="text-[11px] font-bold uppercase tracking-[0.08em] text-accent-foreground">
+                    <div className="text-2xs font-bold uppercase tracking-[0.08em] text-accent-foreground">
                       {shoe.brand}
                     </div>
                     <div className="mt-0.5 truncate font-heading text-base font-bold leading-tight text-foreground">
@@ -225,7 +225,7 @@ export default function Shoes() {
                       />
                       <span
                         className={cn(
-                          'text-[11px] font-bold',
+                          'text-2xs font-bold',
                           onSale ? 'text-accent-foreground' : 'text-muted-foreground'
                         )}
                       >
@@ -236,7 +236,7 @@ export default function Shoes() {
                 </div>
                 <div className="flex border-t border-border">
                   <div className="flex-1 border-r border-border px-4 py-3">
-                    <div className="text-[11px] uppercase tracking-[0.06em] text-faint">
+                    <div className="text-2xs uppercase tracking-[0.06em] text-faint">
                       {onSale ? 'Lowest active' : 'Current price'}
                     </div>
                     <div className="flex items-baseline gap-1.5">
@@ -254,7 +254,7 @@ export default function Shoes() {
                     </div>
                   </div>
                   <div className="flex-1 px-4 py-3">
-                    <div className="text-[11px] uppercase tracking-[0.06em] text-faint">
+                    <div className="text-2xs uppercase tracking-[0.06em] text-faint">
                       Retailers
                     </div>
                     <div className="mt-0.5 font-heading text-lg font-extrabold text-foreground">
@@ -262,7 +262,7 @@ export default function Shoes() {
                     </div>
                   </div>
                 </div>
-                <div className="flex border-t border-border text-[13px] font-bold">
+                <div className="flex border-t border-border text-sm-plus font-bold">
                   <button
                     type="button"
                     onClick={() => setHistoryShoe(shoe)}
@@ -299,7 +299,7 @@ export default function Shoes() {
           <button
             type="button"
             onClick={() => setFormState({})}
-            className="flex min-h-[200px] flex-col items-center justify-center gap-2.5 rounded-[14px] border-[1.5px] border-dashed border-[#2E3239] text-faint hover:border-primary/40 hover:text-muted-foreground"
+            className="flex min-h-[200px] flex-col items-center justify-center gap-2.5 rounded-[14px] border-[1.5px] border-dashed border-edge text-faint hover:border-primary/40 hover:text-muted-foreground"
           >
             <span className="flex h-[42px] w-[42px] items-center justify-center rounded-[11px] border border-border bg-surface text-xl leading-none text-accent-foreground">
               +

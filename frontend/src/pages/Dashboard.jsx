@@ -3,6 +3,7 @@ import { Tag, Footprints, ArrowRight } from 'lucide-react'
 import PageHeader from '@/components/PageHeader'
 import StatCard from '@/components/StatCard'
 import ScrapeButton from '@/components/ScrapeButton'
+import TrainingVolumeCard from '@/components/TrainingVolumeCard'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { ErrorState, EmptyState, CardSkeletonGrid, RowSkeleton } from '@/components/StatusViews'
@@ -59,10 +60,13 @@ export default function Dashboard() {
         </div>
       )}
 
+      {/* Training volume (imported Strava history) */}
+      <TrainingVolumeCard />
+
       {/* Highest deals */}
       <section>
         <div className="mb-3.5 flex items-center justify-between">
-          <h2 className="font-heading text-[17px] font-bold text-foreground">Highest deals</h2>
+          <h2 className="font-heading text-lg-plus font-bold text-foreground">Highest deals</h2>
           <Button variant="ghost" size="sm" asChild>
             <Link to="/deals">
               View all <ArrowRight className="h-4 w-4" />
@@ -94,11 +98,11 @@ export default function Dashboard() {
         <div className="flex items-center justify-between border-b border-border px-5 py-3.5">
           <div className="flex items-center gap-2.5">
             <span className="h-2 w-2 rounded-full bg-primary shadow-[0_0_0_3px_oklch(0.74_0.17_153_/_0.18)]" />
-            <span className="font-heading text-[15px] font-bold text-foreground">
+            <span className="font-heading text-md-plus font-bold text-foreground">
               Recently detected
             </span>
           </div>
-          <span className="font-mono text-[11px] text-faint">live</span>
+          <span className="font-mono text-2xs text-faint">live</span>
         </div>
 
         {recent.isLoading ? (
@@ -118,7 +122,7 @@ export default function Dashboard() {
             </div>
             <Link
               to="/deals"
-              className="block border-t border-border py-3.5 text-center text-sm font-semibold text-muted-foreground hover:text-foreground"
+              className="focus-ring block border-t border-border py-3.5 text-center text-sm font-semibold text-muted-foreground hover:text-foreground"
             >
               View all activity →
             </Link>
@@ -143,30 +147,30 @@ function HighestDealTile({ deal }) {
 
   return (
     <Link
-      to="/deals"
-      className="flex flex-col overflow-hidden rounded-[14px] border border-border bg-surface"
+      to={`/deals?deal=${deal.id}`}
+      className="focus-ring flex flex-col overflow-hidden rounded-[14px] border border-border bg-surface"
     >
-      <div className="relative flex h-[140px] items-center justify-center bg-[repeating-linear-gradient(135deg,#202327,#202327_7px,#26292E_7px,#26292E_14px)]">
+      <div className="relative flex h-[140px] items-center justify-center bg-placeholder-stripes">
         {deal.image_url ? (
           <img src={deal.image_url} alt={shoe.model} className="h-full w-full object-contain" />
         ) : (
           <Footprints className="h-8 w-8 text-faint" />
         )}
         {deal.savings_percent != null && (
-          <Badge className="absolute left-[11px] top-[11px] rounded-[7px] bg-primary px-[9px] py-[5px] font-heading text-[13px] font-extrabold text-primary-foreground">
+          <Badge className="absolute left-[11px] top-[11px] rounded-[7px] bg-primary px-[9px] py-[5px] font-heading text-sm-plus font-extrabold text-primary-foreground">
             {formatPercent(deal.savings_percent)} OFF
           </Badge>
         )}
       </div>
       <div className="flex flex-1 flex-col gap-0.5 p-4">
-        <span className="text-[11px] font-bold uppercase tracking-[0.1em] text-accent-foreground">
+        <span className="text-2xs font-bold uppercase tracking-[0.1em] text-accent-foreground">
           {shoe.brand}
         </span>
         <span className="font-heading text-base font-bold text-foreground">{shoe.model}</span>
-        <span className="text-[13px] text-muted-foreground">{retailerName}</span>
+        <span className="text-sm-plus text-muted-foreground">{retailerName}</span>
         <div className="mt-auto pt-3">
-          <div className="flex items-baseline gap-2">
-            <span className="font-heading text-[23px] font-extrabold text-foreground">
+          <div className="flex items-baseline gap-2 tabular-nums">
+            <span className="font-heading text-stat font-extrabold text-foreground">
               {formatCurrency(deal.current_price)}
             </span>
             {shoe.msrp != null && (
@@ -178,7 +182,7 @@ function HighestDealTile({ deal }) {
               </span>
             )}
           </div>
-          <p className="text-[13px] text-faint">
+          <p className="text-sm-plus text-faint">
             {[
               shoe.msrp != null && `Retail price ${formatCurrency(shoe.msrp)}`,
               deal.target_price != null && `Target ${formatCurrency(deal.target_price)}`,
@@ -198,17 +202,17 @@ function RecentDealRow({ deal }) {
 
   return (
     <Link
-      to="/deals"
-      className="flex items-center gap-[13px] border-b border-[#1A1D22] px-[18px] py-[13px] last:border-b-0"
+      to={`/deals?deal=${deal.id}`}
+      className="focus-ring flex items-center gap-[13px] border-b border-divider px-[18px] py-[13px] last:border-b-0"
     >
-      <div className="flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-[9px] bg-[repeating-linear-gradient(135deg,#202327,#202327_5px,#26292E_5px,#26292E_10px)]">
+      <div className="flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-[9px] bg-placeholder-stripes">
         {deal.image_url && (
           <img src={deal.image_url} alt={shoe.model} className="h-full w-full object-contain" />
         )}
       </div>
       <div className="min-w-0 flex-1">
         <div className="flex items-baseline gap-1.5">
-          <span className="text-[11px] font-bold uppercase tracking-[0.06em] text-accent-foreground">
+          <span className="text-2xs font-bold uppercase tracking-[0.06em] text-accent-foreground">
             {shoe.brand}
           </span>
           <span className="font-mono text-[10px] text-faint">
@@ -219,8 +223,8 @@ function RecentDealRow({ deal }) {
         <div className="text-xs text-muted-foreground">{retailerName}</div>
       </div>
       <div className="shrink-0 text-right">
-        <div className="flex items-baseline justify-end gap-1.5">
-          <span className="font-heading text-[15px] font-extrabold text-foreground">
+        <div className="flex items-baseline justify-end gap-1.5 tabular-nums">
+          <span className="font-heading text-md-plus font-extrabold text-foreground">
             {formatCurrency(deal.current_price)}
           </span>
           {shoe.msrp != null && (
@@ -233,7 +237,7 @@ function RecentDealRow({ deal }) {
           )}
         </div>
         {deal.savings_percent != null && (
-          <div className="text-[11px] font-bold text-accent-foreground">
+          <div className="text-2xs font-bold text-accent-foreground">
             −{formatPercent(deal.savings_percent)}
           </div>
         )}
