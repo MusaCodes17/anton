@@ -13,7 +13,7 @@ import requests
 from sqlalchemy.orm import Session
 
 from app.coros_client import activity_to_run_dict, fetch_running_activities, get_coros_config
-from app.models.models import ShoeRun
+from app.models.models import Activity
 from app.services import rotation, settings as settings_svc
 
 
@@ -31,13 +31,13 @@ def is_already_logged(db: Session, activity_id: str, act_date: str, dist_km: flo
     2. Same date + distance within 0.1km (secondary — catches runs logged
        manually before this feature existed).
     """
-    if activity_id and db.query(ShoeRun).filter(
-        ShoeRun.coros_activity_id == activity_id
+    if activity_id and db.query(Activity).filter(
+        Activity.coros_activity_id == activity_id
     ).count():
         return True
-    return db.query(ShoeRun).filter(
-        ShoeRun.run_date == act_date,
-        ShoeRun.distance_km.between(dist_km - 0.1, dist_km + 0.1),
+    return db.query(Activity).filter(
+        Activity.run_date == act_date,
+        Activity.distance_km.between(dist_km - 0.1, dist_km + 0.1),
     ).count() > 0
 
 
@@ -91,8 +91,8 @@ def confirm_run(
     Raises LookupError if the shoe doesn't exist (caller decides whether to
     skip or surface the error).
     """
-    if coros_activity_id and db.query(ShoeRun).filter(
-        ShoeRun.coros_activity_id == coros_activity_id
+    if coros_activity_id and db.query(Activity).filter(
+        Activity.coros_activity_id == coros_activity_id
     ).count():
         return None
 

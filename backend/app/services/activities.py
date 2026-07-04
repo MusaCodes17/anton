@@ -1,21 +1,15 @@
 """
-Unified activity feed (§3 Phase-3a).
+Unified activity feed (§3 Phase-3a, now over the canonical `activities` table).
 
-Two run stores exist: `strava_activities` (frozen at the Jul 2026 bulk
-export) and `shoe_runs` (live — COROS / manual / Strava-backfill). New runs
-land only in `shoe_runs`, so any Training view reading `strava_activities`
-alone goes stale immediately. This service unions them into one date-sorted
-feed the whole app (web + MCP + future mobile) reads through.
+As of §3 Phase-5 there is ONE run store: the `activities` table. Every physical
+run — Strava export, COROS sync, manual log — is a single Activity row,
+distinguished by `source`; `shoe_runs` is a pure attribution row linking an
+activity to the owned shoe it was run in. The old two-store dedup-by-link join
+is gone: each run already appears exactly once.
 
-Union semantics:
-- Start from `strava_activities` (runs only), LEFT-joined to `shoe_runs` via
-  `shoe_runs.strava_activity_id` — a linked run gives shoe attribution and is
-  NOT double-counted (it appears once, on the Strava side).
-- Add `shoe_runs` rows with `strava_activity_id IS NULL` — post-export COROS/
-  manual runs and any unlinked history.
-
-The canonical `activities` table (§3 Phase-5) can replace the internals here
-without the UI ever noticing — that's the whole point of this seam.
+This service still exists as the read seam the whole app (web + MCP + future
+mobile) goes through, so callers (`strava_stats`, `home`, routers) are
+unchanged — `UnifiedActivity` keeps its shape.
 """
 from __future__ import annotations
 
@@ -25,7 +19,7 @@ from typing import Optional
 
 from sqlalchemy.orm import Session
 
-from app.models.models import OwnedShoe, ShoeRun, StravaActivity
+from app.models.models import Activity, OwnedShoe, ShoeRun
 from app.services import rotation
 
 
@@ -70,66 +64,44 @@ def _effective_moving_s(a: UnifiedActivity) -> Optional[float]:
 
 
 def _build(db: Session) -> list[UnifiedActivity]:
-    """The raw union, unsorted/unfiltered. Split out so stats helpers can reuse
-    it without re-implementing the join."""
-    shoes = {s.id: s for s in db.query(OwnedShoe).all()}
+    """The raw run feed, unsorted/unfiltered. Split out so stats helpers can
+    reuse it without re-implementing the join.
 
-    def _shoe_of(run: ShoeRun) -> Optional[UnifiedShoe]:
-        s = shoes.get(run.owned_shoe_id)
+    One pass over `activities` (runs only), each LEFT-joined to its optional
+    `shoe_runs` attribution for shoe info. No dedup — a physical run is a single
+    Activity row by construction."""
+    shoes = {s.id: s for s in db.query(OwnedShoe).all()}
+    attr_by_activity: dict[int, ShoeRun] = {
+        sr.activity_id: sr for sr in db.query(ShoeRun).all()
+    }
+
+    def _shoe_of(attr: Optional[ShoeRun]) -> Optional[UnifiedShoe]:
+        if attr is None:
+            return None
+        s = shoes.get(attr.owned_shoe_id)
         if s is None:
             return None
         return UnifiedShoe(id=s.id, brand=s.brand, model=s.model, nickname=s.nickname)
 
-    runs = db.query(ShoeRun).all()
-    linked_by_said: dict[int, ShoeRun] = {}
-    unlinked: list[ShoeRun] = []
-    for run in runs:
-        if run.strava_activity_id is not None:
-            linked_by_said[run.strava_activity_id] = run
-        else:
-            unlinked.append(run)
-
     out: list[UnifiedActivity] = []
-
-    # Strava side (runs only). A linked shoe_run only supplies attribution.
-    for sa in (
-        db.query(StravaActivity)
-        .filter(StravaActivity.activity_type == "Run")
-        .all()
-    ):
-        if sa.run_date is None:
+    for a in db.query(Activity).filter(Activity.activity_type == "Run").all():
+        if a.run_date is None:
             continue
-        linked = linked_by_said.get(sa.strava_activity_id)
-        pace_s = sa.avg_pace_s_per_km
+        attr = attr_by_activity.get(a.id)
+        pace_s = a.avg_pace_s_per_km
         out.append(UnifiedActivity(
-            date=sa.run_date,
-            distance_km=sa.distance_km or 0.0,
-            source="strava",
-            moving_time_s=sa.moving_time_s,
+            date=a.run_date,
+            distance_km=a.distance_km or 0.0,
+            source=a.source,
+            moving_time_s=a.moving_time_s,
             avg_pace=rotation.seconds_to_pace(pace_s) if pace_s else None,
             avg_pace_s_per_km=pace_s,
-            avg_hr=sa.avg_hr,
-            elevation_m=sa.elevation_gain_m,
-            name=sa.name,
-            shoe=_shoe_of(linked) if linked else None,
-            strava_activity_id=sa.strava_activity_id,
-            shoe_run_id=linked.id if linked else None,
-        ))
-
-    # shoe_runs side: only the unlinked ones (post-export COROS/manual/etc.).
-    for run in unlinked:
-        if run.run_date is None:
-            continue
-        pace_s = rotation.pace_to_seconds(run.avg_pace) if run.avg_pace else None
-        out.append(UnifiedActivity(
-            date=run.run_date,
-            distance_km=run.distance_km or 0.0,
-            source=run.source or "manual",
-            avg_pace=run.avg_pace,
-            avg_pace_s_per_km=int(pace_s) if pace_s else None,
-            avg_hr=run.avg_hr,
-            shoe=_shoe_of(run),
-            shoe_run_id=run.id,
+            avg_hr=a.avg_hr,
+            elevation_m=a.elevation_gain_m,
+            name=a.name,
+            shoe=_shoe_of(attr),
+            strava_activity_id=a.strava_activity_id,
+            shoe_run_id=attr.id if attr else None,
         ))
 
     return out

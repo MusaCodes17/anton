@@ -12,7 +12,7 @@ from typing import Optional
 from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
 
-from app.models.models import Deal, OwnedShoe, PriceRecord, Shoe, ShoeNote, ShoeRun
+from app.models.models import Activity, Deal, OwnedShoe, PriceRecord, Shoe, ShoeNote, ShoeRun
 
 CHECKPOINT_INTERVAL_KM = 100
 
@@ -41,8 +41,9 @@ class PipelineEntry:
 
 @dataclass
 class RunLogResult:
-    run: ShoeRun
-    shoe: OwnedShoe        # refreshed after commit
+    run: ShoeRun          # the attribution row
+    activity: Activity    # the canonical run record it points at
+    shoe: OwnedShoe       # refreshed after commit
     checkpoint_reached: bool
     checkpoint_km: Optional[int]
 
@@ -85,21 +86,23 @@ def crossed_checkpoint(
 
 def compute_lifetime_stats(db: Session, owned_shoe_id: int) -> LifetimeStats:
     """
-    Lifetime averages across every run logged against a shoe. Pace strings are
-    converted to seconds before averaging to avoid string-averaging nonsense;
-    runs missing pace or HR are excluded from those averages but count toward
-    total_runs.
+    Lifetime averages across every activity attributed to a shoe. Pace is
+    already stored as seconds-per-km on the activity, so averaging is a plain
+    mean; activities missing pace or HR are excluded from those averages but
+    count toward total_runs.
     """
-    runs = db.query(ShoeRun).filter(ShoeRun.owned_shoe_id == owned_shoe_id).all()
-    pace_seconds = [
-        s for s in (pace_to_seconds(r.avg_pace) for r in runs if r.avg_pace)
-        if s is not None
-    ]
-    hrs = [r.avg_hr for r in runs if r.avg_hr is not None]
+    acts = (
+        db.query(Activity)
+        .join(ShoeRun, ShoeRun.activity_id == Activity.id)
+        .filter(ShoeRun.owned_shoe_id == owned_shoe_id)
+        .all()
+    )
+    pace_seconds = [a.avg_pace_s_per_km for a in acts if a.avg_pace_s_per_km is not None]
+    hrs = [a.avg_hr for a in acts if a.avg_hr is not None]
     return LifetimeStats(
         lifetime_avg_pace=seconds_to_pace(sum(pace_seconds) / len(pace_seconds)) if pace_seconds else None,
         lifetime_avg_hr=round(sum(hrs) / len(hrs)) if hrs else None,
-        total_runs=len(runs),
+        total_runs=len(acts),
     )
 
 
@@ -232,17 +235,26 @@ def log_run(
         raise LookupError(f"Owned shoe with id {owned_shoe_id} not found")
 
     old_mileage = shoe.current_mileage
-    run = ShoeRun(
-        owned_shoe_id=owned_shoe_id,
-        distance_km=distance_km,
-        run_date=run_date,
+
+    # Canonical activity first, then the attribution row that links it to a shoe
+    # (§3 Phase-5). Pace comes in as "M:SS/km" and is stored as seconds; per-run
+    # notes live on the activity's description.
+    pace_s = pace_to_seconds(avg_pace) if avg_pace else None
+    activity = Activity(
         source=source,
+        activity_type="Run",
+        run_date=run_date,
+        distance_km=distance_km,
+        avg_pace_s_per_km=int(pace_s) if pace_s is not None else None,
+        avg_hr=avg_hr,
         coros_activity_id=coros_activity_id,
         strava_activity_id=strava_activity_id,
-        avg_pace=avg_pace,
-        avg_hr=avg_hr,
-        notes=notes,
+        description=notes,
     )
+    db.add(activity)
+    db.flush()  # assign activity.id
+
+    run = ShoeRun(activity_id=activity.id, owned_shoe_id=owned_shoe_id)
     db.add(run)
     if increment_mileage:
         shoe.current_mileage += distance_km
@@ -250,12 +262,14 @@ def log_run(
         db.commit()
         db.refresh(run)
         db.refresh(shoe)
+        db.refresh(activity)
     else:
         db.flush()  # assign run.id within the caller's open transaction
 
     cp = crossed_checkpoint(old_mileage, shoe.current_mileage)
     return RunLogResult(
         run=run,
+        activity=activity,
         shoe=shoe,
         checkpoint_reached=cp is not None,
         checkpoint_km=cp,
@@ -264,8 +278,12 @@ def log_run(
 
 def delete_run(db: Session, run_id: int) -> OwnedShoe:
     """
-    Delete a logged run, subtract its distance back out of the parent shoe's
-    mileage (floored at 0), commit, and return the refreshed shoe.
+    Delete a run attribution, subtract its distance back out of the parent
+    shoe's mileage (floored at 0), commit, and return the refreshed shoe.
+
+    The underlying activity is deleted too EXCEPT for source='strava' — the
+    frozen bulk-export archive is preserved (deleting the attribution merely
+    un-attributes that historical run from the shoe).
 
     Raises LookupError if the run or its parent shoe is missing.
     """
@@ -277,8 +295,12 @@ def delete_run(db: Session, run_id: int) -> OwnedShoe:
     if not shoe:
         raise LookupError(f"Owned shoe for run {run_id} not found")
 
-    distance = run.distance_km
+    activity = db.query(Activity).filter(Activity.id == run.activity_id).first()
+    distance = (activity.distance_km if activity else 0.0) or 0.0
+
     db.delete(run)
+    if activity is not None and activity.source != "strava":
+        db.delete(activity)
     shoe.current_mileage = max(0.0, shoe.current_mileage - distance)
     db.commit()
     db.refresh(shoe)

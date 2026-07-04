@@ -13,7 +13,7 @@ from app.models import (
     ShoeRun, ShoeRunCreate, ShoeRunResponse, LogRunResponse,
     ShoeNote, ShoeNoteCreate, ShoeNoteResponse,
 )
-from app.models.models import Deal, Shoe
+from app.models.models import Activity, Deal, Shoe
 from app.services import rotation
 
 router = APIRouter(prefix="/owned-shoes", tags=["owned-shoes"])
@@ -184,8 +184,9 @@ def get_shoe_runs(owned_shoe_id: int, db: Session = Depends(get_db)):
 
     return (
         db.query(ShoeRun)
+        .join(Activity, ShoeRun.activity_id == Activity.id)
         .filter(ShoeRun.owned_shoe_id == owned_shoe_id)
-        .order_by(ShoeRun.run_date.desc(), ShoeRun.created_at.desc())
+        .order_by(Activity.run_date.desc(), ShoeRun.created_at.desc())
         .all()
     )
 

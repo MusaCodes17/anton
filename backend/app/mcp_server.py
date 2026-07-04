@@ -21,7 +21,7 @@ from datetime import date as date_type, datetime, timezone
 
 from app.coros_client import get_coros_config
 from app.database import SessionLocal
-from app.models.models import Deal, OwnedShoe, PriceRecord, Retailer, Shoe, ShoeNote, ShoeRun, StravaActivity
+from app.models.models import Activity, Deal, OwnedShoe, PriceRecord, Retailer, Shoe, ShoeNote, ShoeRun
 from app.scrapers.scraper_manager import ScraperManager, ScrapeInProgressError, scrape_guard
 from app.services import rotation, coros as coros_svc, settings as settings_svc, strava_stats, races as races_svc
 
@@ -404,15 +404,18 @@ def _shoe_note_to_dict(note: ShoeNote) -> dict:
 
 
 def _shoe_run_to_dict(run: ShoeRun) -> dict:
+    """Flatten an attribution row + its canonical activity into the run shape
+    the tools have always returned (run fields now live on the activity)."""
+    a = run.activity
     return {
         "id": run.id,
         "owned_shoe_id": run.owned_shoe_id,
-        "distance_km": run.distance_km,
-        "run_date": run.run_date.isoformat() if run.run_date else None,
-        "source": run.source,
-        "avg_pace": run.avg_pace,
-        "avg_hr": run.avg_hr,
-        "notes": run.notes,
+        "distance_km": a.distance_km if a else None,
+        "run_date": a.run_date.isoformat() if a and a.run_date else None,
+        "source": a.source if a else None,
+        "avg_pace": rotation.seconds_to_pace(a.avg_pace_s_per_km) if a and a.avg_pace_s_per_km else None,
+        "avg_hr": a.avg_hr if a else None,
+        "notes": a.description if a else None,
     }
 
 
@@ -447,8 +450,9 @@ def get_shoe_runs(owned_shoe_id: int) -> dict:
     with get_session() as db:
         runs = (
             db.query(ShoeRun)
+            .join(Activity, ShoeRun.activity_id == Activity.id)
             .filter(ShoeRun.owned_shoe_id == owned_shoe_id)
-            .order_by(desc(ShoeRun.run_date), desc(ShoeRun.created_at))
+            .order_by(desc(Activity.run_date), desc(ShoeRun.created_at))
             .all()
         )
         stats = rotation.compute_lifetime_stats(db, owned_shoe_id)
@@ -552,7 +556,7 @@ def delete_shoe_run(run_id: int) -> dict:
             run = db.query(ShoeRun).filter(ShoeRun.id == run_id).first()
             if not run:
                 return {"success": False, "error": f"Run with id {run_id} not found"}
-            distance = run.distance_km
+            distance = run.activity.distance_km if run.activity else None
             try:
                 shoe = rotation.delete_run(db, run_id)
             except LookupError as exc:
@@ -640,8 +644,9 @@ async def draft_shoe_review(owned_shoe_id: int, ctx: Context) -> dict:
 
         runs = (
             db.query(ShoeRun)
+            .join(Activity, ShoeRun.activity_id == Activity.id)
             .filter(ShoeRun.owned_shoe_id == owned_shoe_id)
-            .order_by(ShoeRun.run_date)
+            .order_by(Activity.run_date)
             .all()
         )
 
@@ -650,8 +655,8 @@ async def draft_shoe_review(owned_shoe_id: int, ctx: Context) -> dict:
         lifetime_avg_pace = stats.lifetime_avg_pace or "—"
         lifetime_avg_hr = stats.lifetime_avg_hr
 
-        first_run_date = runs[0].run_date.isoformat() if runs else "—"
-        last_run_date = runs[-1].run_date.isoformat() if runs else "—"
+        first_run_date = runs[0].activity.run_date.isoformat() if runs and runs[0].activity.run_date else "—"
+        last_run_date = runs[-1].activity.run_date.isoformat() if runs and runs[-1].activity.run_date else "—"
 
         formatted_notes = "\n".join(
             f"- [{round(n.mileage_at_note)}km · {n.created_at.strftime('%Y-%m-%d') if n.created_at else '—'}] {n.body}"
@@ -1151,18 +1156,20 @@ def shoe_detail_resource(shoe_id: int) -> str:
 
         recent_runs = (
             db.query(ShoeRun)
+            .join(Activity, ShoeRun.activity_id == Activity.id)
             .filter(ShoeRun.owned_shoe_id == shoe_id)
-            .order_by(desc(ShoeRun.run_date), desc(ShoeRun.created_at))
+            .order_by(desc(Activity.run_date), desc(ShoeRun.created_at))
             .limit(5)
             .all()
         )
         if recent_runs:
             md_lines += ["", "## Recent Runs"]
             for r in recent_runs:
-                date_str = r.run_date.strftime("%b %d") if r.run_date else "—"
-                p = r.avg_pace or "—"
-                h = f"{r.avg_hr}bpm" if r.avg_hr else "—"
-                md_lines.append(f"- {date_str} · {r.distance_km:.1f}km · {p} · {h}")
+                a = r.activity
+                date_str = a.run_date.strftime("%b %d") if a.run_date else "—"
+                p = rotation.seconds_to_pace(a.avg_pace_s_per_km) if a.avg_pace_s_per_km else "—"
+                h = f"{a.avg_hr}bpm" if a.avg_hr else "—"
+                md_lines.append(f"- {date_str} · {a.distance_km:.1f}km · {p} · {h}")
 
         recent_notes = (
             db.query(ShoeNote)
@@ -1215,8 +1222,9 @@ def shoe_runs_resource(shoe_id: int) -> str:
 
         runs = (
             db.query(ShoeRun)
+            .join(Activity, ShoeRun.activity_id == Activity.id)
             .filter(ShoeRun.owned_shoe_id == shoe_id)
-            .order_by(desc(ShoeRun.run_date), desc(ShoeRun.created_at))
+            .order_by(desc(Activity.run_date), desc(ShoeRun.created_at))
             .all()
         )
         label = shoe.nickname or ""
@@ -1230,11 +1238,12 @@ def shoe_runs_resource(shoe_id: int) -> str:
             "|------|----------|------|----|--------|",
         ]
         for r in runs:
-            date_str = r.run_date.strftime("%b %d, %Y") if r.run_date else "—"
-            pace = r.avg_pace or "—"
-            hr = f"{r.avg_hr}bpm" if r.avg_hr else "—"
-            source_badge = _SOURCE_BADGES.get(r.source, "✍ manual")
-            md_lines.append(f"| {date_str} | {r.distance_km:.1f}km | {pace} | {hr} | {source_badge} |")
+            a = r.activity
+            date_str = a.run_date.strftime("%b %d, %Y") if a.run_date else "—"
+            pace = rotation.seconds_to_pace(a.avg_pace_s_per_km) if a.avg_pace_s_per_km else "—"
+            hr = f"{a.avg_hr}bpm" if a.avg_hr else "—"
+            source_badge = _SOURCE_BADGES.get(a.source, "✍ manual")
+            md_lines.append(f"| {date_str} | {a.distance_km:.1f}km | {pace} | {hr} | {source_badge} |")
 
         stats = rotation.compute_lifetime_stats(db, shoe_id)
         markdown = "\n".join(md_lines)
@@ -1350,13 +1359,14 @@ def strava_runs_by_month_resource(year: str, month: str) -> str:
 
     with get_session() as db:
         runs = (
-            db.query(StravaActivity)
+            db.query(Activity)
             .filter(
-                StravaActivity.activity_type == "Run",
-                StravaActivity.run_date >= start,
-                StravaActivity.run_date <= end,
+                Activity.source == "strava",
+                Activity.activity_type == "Run",
+                Activity.run_date >= start,
+                Activity.run_date <= end,
             )
-            .order_by(StravaActivity.run_date)
+            .order_by(Activity.run_date)
             .all()
         )
 

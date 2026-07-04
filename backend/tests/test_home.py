@@ -9,7 +9,7 @@ replacement-deal counting, top-deals ranking, and the activity strip.
 from datetime import date, datetime, timedelta
 
 from app.models.models import (
-    Deal, OwnedShoe, Retailer, Shoe, ShoeRun,
+    Activity, Deal, OwnedShoe, Retailer, Shoe, ShoeRun,
 )
 from app.services import home as home_svc
 from app.services import settings as settings_svc
@@ -27,10 +27,17 @@ def _owned(db, brand="Adidas", model="Adios Pro 4", *, mileage, limit,
 
 
 def _run(db, shoe_id, run_date, distance_km, *, source="coros", avg_pace=None, avg_hr=None):
-    r = ShoeRun(
-        owned_shoe_id=shoe_id, distance_km=distance_km, run_date=run_date,
-        source=source, avg_pace=avg_pace, avg_hr=avg_hr,
+    pace_s = None
+    if avg_pace:
+        mins, secs = avg_pace.split('/')[0].split(':')
+        pace_s = int(mins) * 60 + int(secs)
+    a = Activity(
+        source=source, activity_type="Run", run_date=run_date,
+        distance_km=distance_km, avg_pace_s_per_km=pace_s, avg_hr=avg_hr,
     )
+    db.add(a)
+    db.flush()
+    r = ShoeRun(activity_id=a.id, owned_shoe_id=shoe_id)
     db.add(r)
     db.flush()
     return r

@@ -1,7 +1,7 @@
 """
 Models package - exports all models and schemas
 """
-from app.models.models import Shoe, Retailer, PriceRecord, Deal, PromoCode, OwnedShoe, ShoeRun, ShoeNote, AppSettings
+from app.models.models import Shoe, Retailer, PriceRecord, Deal, PromoCode, OwnedShoe, ShoeRun, ShoeNote, AppSettings, Activity
 from app.models.schemas import (
     ShoeCreate, ShoeUpdate, ShoeResponse,
     RetailerCreate, RetailerUpdate, RetailerResponse,
@@ -19,7 +19,7 @@ from app.models.schemas import (
 __all__ = [
     # Database models
     "Shoe", "Retailer", "PriceRecord", "Deal", "PromoCode", "OwnedShoe", "ShoeRun", "ShoeNote",
-    "AppSettings",
+    "AppSettings", "Activity",
 
     # Pydantic schemas
     "ShoeCreate", "ShoeUpdate", "ShoeResponse",

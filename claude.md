@@ -6,6 +6,35 @@
 
 ---
 
+## 🆕 Anton redesign Phase 5 — canonical `activities` table (§3 v2) — 2026-07-04
+
+**[CHANGED] The two run stores collapsed into one canonical `activities` table; `shoe_runs` is now a pure attribution row.**
+- New `Activity` model (`models.py`) — superset of the old `strava_activities` columns + a `source`
+  discriminator (`strava`|`coros`|`manual`) + `coros_activity_id`. Every physical run (Strava export,
+  COROS sync, manual log) is one Activity row. `StravaActivity` model + table **removed**.
+- `ShoeRun` rewritten to attribution only: `{id, activity_id (FK, unique), owned_shoe_id, created_at}`.
+  Read-only proxy properties (`distance_km`, `run_date`, `source`, `avg_pace`, `avg_hr`, `notes`,
+  `coros_activity_id`) pull from the joined activity so `ShoeRunResponse` and every reader keep the
+  **identical response shape** — no frontend/MCP consumer changes.
+- Migration `alembic/versions/c3d4e5f6a7b8_canonical_activities.py` (reversible): migrates
+  `strava_activities` → `activities` (source='strava'); linked `shoe_runs` become attribution for the
+  matching strava activity (stamping its `coros_activity_id`); unlinked post-export runs mint fresh
+  activities; rebuilds `shoe_runs`; drops `strava_activities`. Downgrade reconstitutes both old tables.
+  **`current_mileage` counters untouched** — storage restructured, totals unchanged.
+- Write path (`rotation.log_run`) now creates an Activity then the attribution row; `delete_run`
+  removes the attribution + decrements mileage, deleting the activity too **except** source='strava'
+  (frozen archive preserved). `coros.confirm_run`/`is_already_logged` dedup on
+  `activities.coros_activity_id`. `activities._build` (the union seam) simplifies to one join — no more
+  dedup-by-link. `strava_import` upserts into `activities`; `strava /status` + MCP readers repoint.
+- **[REMOVED]** `strava_backfill.py` + its CLI + test — the two-store reconciliation it performed is
+  exactly what this migration makes permanent (Strava export is frozen; no new cross-store dups).
+- Verified on the live DB: pre/post reconciliation exact (698 runs · 8028.02 km · 667 attributed ·
+  0 per-shoe mileage drift; 933 activities), `downgrade -1` round-trips clean, full suite **61 passed**
+  (new `tests/test_activities_model.py`), `/training` + `/shoes/:id` + `/` render identical numbers,
+  0 console errors. Clean pre-migration backup kept at `backend/shoe_deals.db.bak-pre-activities`.
+
+---
+
 ## 🆕 Anton redesign Phase 5 — true app mark for Anton — 2026-07-04
 
 **[ADDED] A real logo mark: a forward-leaning "A" monogram, replacing the placeholder diamond.**

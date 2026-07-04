@@ -18,16 +18,16 @@ import argparse
 import sys
 
 from app.database import SessionLocal
-from app.models.models import OwnedShoe, StravaActivity, StravaGearMapping
+from app.models.models import Activity, OwnedShoe, StravaGearMapping
 from app.services.strava_gear import ShoeLike, auto_match
 
 
 def _distinct_gear(db) -> list[str]:
     rows = (
-        db.query(StravaActivity.gear_name)
-        .filter(StravaActivity.gear_name.isnot(None))
+        db.query(Activity.gear_name)
+        .filter(Activity.source == "strava", Activity.gear_name.isnot(None))
         .distinct()
-        .order_by(StravaActivity.gear_name)
+        .order_by(Activity.gear_name)
         .all()
     )
     return [r[0] for r in rows]

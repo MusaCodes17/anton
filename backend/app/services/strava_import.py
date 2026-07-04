@@ -25,7 +25,7 @@ from zoneinfo import ZoneInfo
 import pandas as pd
 from sqlalchemy.orm import Session
 
-from app.models.models import StravaActivity
+from app.models.models import Activity
 
 LOCAL_TZ = ZoneInfo("America/Toronto")
 STRAVA_DATE_FORMAT = "%b %d, %Y, %I:%M:%S %p"
@@ -192,16 +192,20 @@ def parse_activities_csv(path: str) -> list[StravaActivityRow]:
 
 def upsert_strava_activities(rows: list[StravaActivityRow], session: Session) -> ImportStats:
     """
-    Insert or update strava_activities, idempotent on strava_activity_id.
-    Re-running after a fresh export updates existing rows in place — never
-    duplicates. Does not commit (caller owns the transaction).
+    Insert or update source='strava' rows in the canonical `activities` table,
+    idempotent on strava_activity_id. Re-running after a fresh export updates
+    existing rows in place — never duplicates. Does not commit (caller owns the
+    transaction).
     """
     stats = ImportStats(total=len(rows))
 
     existing = {
         a.strava_activity_id: a
-        for a in session.query(StravaActivity)
-        .filter(StravaActivity.strava_activity_id.in_([r.strava_activity_id for r in rows]))
+        for a in session.query(Activity)
+        .filter(
+            Activity.source == "strava",
+            Activity.strava_activity_id.in_([r.strava_activity_id for r in rows]),
+        )
         .all()
     } if rows else {}
 
@@ -211,7 +215,7 @@ def upsert_strava_activities(rows: list[StravaActivityRow], session: Session) ->
 
         target = existing.get(r.strava_activity_id)
         if target is None:
-            target = StravaActivity(strava_activity_id=r.strava_activity_id)
+            target = Activity(source="strava", strava_activity_id=r.strava_activity_id)
             session.add(target)
             stats.inserted += 1
         else:

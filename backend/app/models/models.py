@@ -194,34 +194,117 @@ class OwnedShoe(Base):
         return f"<OwnedShoe {self.brand} {self.model} ({self.current_mileage}km)>"
 
 
+class Activity(Base):
+    """
+    Canonical record of a single physical activity — the one place every run
+    lives (§3 Phase-5). Supersedes the old two-store split of
+    `strava_activities` + data-bearing `shoe_runs`: a Strava-export run, a
+    COROS-synced run, and a manually-logged run are all just Activity rows,
+    distinguished by `source`. `shoe_runs` now merely *attributes* an activity
+    to an owned shoe.
+
+    Columns are a superset of the old `strava_activities` schema so the frozen
+    bulk-export archive survives intact (raw_json, fit_filename, cadence, ...).
+    External ids are the dedup/idempotency keys: `strava_activity_id` for
+    re-imports, `coros_activity_id` for COROS sync. Pace is stored as
+    seconds-per-km (int); formatting to "M:SS/km" happens at the boundary.
+    """
+    __tablename__ = "activities"
+
+    id = Column(Integer, primary_key=True, index=True)
+    source = Column(String(20), nullable=False, index=True)  # strava | coros | manual
+    activity_type = Column(String(50), nullable=True, index=True)  # Run / Ride / Walk / ...
+    name = Column(String(500), nullable=True)
+    description = Column(Text, nullable=True)  # also holds per-run manual notes
+    started_at_utc = Column(DateTime, nullable=True)
+    started_at_local = Column(DateTime, nullable=True)
+    run_date = Column(Date, nullable=True, index=True)  # local calendar date — dedup/match key
+    distance_km = Column(Float, nullable=True)
+    moving_time_s = Column(Integer, nullable=True)
+    elapsed_time_s = Column(Integer, nullable=True)
+    avg_hr = Column(Integer, nullable=True)
+    max_hr = Column(Integer, nullable=True)
+    avg_pace_s_per_km = Column(Integer, nullable=True)
+    elevation_gain_m = Column(Float, nullable=True)
+    avg_cadence = Column(Float, nullable=True)
+    calories = Column(Float, nullable=True)
+    strava_activity_id = Column(BigInteger, nullable=True, unique=True, index=True)
+    coros_activity_id = Column(String(100), nullable=True, index=True)
+    gear_name = Column(String(200), nullable=True, index=True)
+    fit_filename = Column(String(300), nullable=True)
+    grade_adjusted_distance_m = Column(Float, nullable=True)
+    raw_json = Column(JSON, nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    # One attribution at most (a run is worn by one shoe).
+    attribution = relationship(
+        "ShoeRun", back_populates="activity", uselist=False,
+        cascade="all, delete-orphan",
+    )
+
+    def __repr__(self):
+        return f"<Activity {self.id} {self.source} {self.activity_type} {self.run_date}>"
+
+
 class ShoeRun(Base):
     """
-    A single run logged against an owned shoe, accumulating its mileage.
-    `source` distinguishes manually-logged runs from COROS-imported and
-    Strava-imported ones. `coros_activity_id` stores the COROS labelId for
-    deduplication — None for manual runs. `strava_activity_id` links a run to
-    at most one Strava activity (and vice versa) — the idempotency guard for
-    the historical import.
+    Attribution row (§3 Phase-5): links a canonical `Activity` to the owned
+    shoe it was run in. Run data (distance, date, pace, HR, source) lives on
+    the Activity — this table answers only "which shoe ran it". `activity_id`
+    is unique: an activity is attributed to at most one shoe.
+
+    Retained as `shoe_runs` (not renamed) so the many owned-shoe relationships,
+    mileage accounting, and response shapes keep working; readers join through
+    to the activity for the run fields.
     """
     __tablename__ = "shoe_runs"
 
     id = Column(Integer, primary_key=True, index=True)
+    activity_id = Column(Integer, ForeignKey("activities.id"), nullable=False, unique=True, index=True)
     owned_shoe_id = Column(Integer, ForeignKey("owned_shoes.id"), nullable=False, index=True)
-    distance_km = Column(Float, nullable=False)
-    run_date = Column(Date, nullable=False)
-    source = Column(String(20), nullable=False, default="manual", server_default="manual")  # manual | coros | strava
-    coros_activity_id = Column(String(100), nullable=True, index=True)
-    strava_activity_id = Column(BigInteger, nullable=True, unique=True)  # links this run to one Strava activity
-    avg_pace = Column(String(20), nullable=True)  # e.g. "4:35/km"
-    avg_hr = Column(Integer, nullable=True)
-    notes = Column(Text, nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
     # Relationships
     owned_shoe = relationship("OwnedShoe", back_populates="runs")
+    activity = relationship("Activity", back_populates="attribution")
+
+    # Read-only proxies to the canonical activity — so response schemas
+    # (ShoeRunResponse via from_attributes) and any run-field reader keep
+    # working now that run data lives on `activities` (§3 Phase-5).
+    @property
+    def distance_km(self):
+        return self.activity.distance_km if self.activity else None
+
+    @property
+    def run_date(self):
+        return self.activity.run_date if self.activity else None
+
+    @property
+    def source(self):
+        return self.activity.source if self.activity else None
+
+    @property
+    def avg_hr(self):
+        return self.activity.avg_hr if self.activity else None
+
+    @property
+    def coros_activity_id(self):
+        return self.activity.coros_activity_id if self.activity else None
+
+    @property
+    def notes(self):
+        return self.activity.description if self.activity else None
+
+    @property
+    def avg_pace(self):
+        s = self.activity.avg_pace_s_per_km if self.activity else None
+        if s is None:
+            return None
+        mins, secs = divmod(round(s), 60)
+        return f"{mins}:{secs:02d}/km"
 
     def __repr__(self):
-        return f"<ShoeRun {self.distance_km}km on {self.run_date} (shoe {self.owned_shoe_id})>"
+        return f"<ShoeRun activity={self.activity_id} shoe={self.owned_shoe_id}>"
 
 
 class ShoeNote(Base):
@@ -259,47 +342,6 @@ class AppSettings(Base):
 
     def __repr__(self):
         return f"<AppSettings {self.key}={self.value!r}>"
-
-
-class StravaActivity(Base):
-    """
-    Canonical import of every activity from a Strava bulk export (all types,
-    not just runs). Deliberately raw-ish: light normalization only, plus the
-    full CSV row preserved in `raw_json`, so richer features can re-derive
-    later without re-requesting the archive.
-
-    `strava_activity_id` (Strava's stable ID) is the natural key for
-    idempotent re-imports. Pace is stored as seconds-per-km (int) here;
-    formatting to "M:SS/km" happens only at the boundary when writing to
-    shoe_runs / MCP, matching the rotation-domain convention.
-    """
-    __tablename__ = "strava_activities"
-
-    id = Column(Integer, primary_key=True, index=True)
-    strava_activity_id = Column(BigInteger, nullable=False, unique=True, index=True)
-    activity_type = Column(String(50), nullable=True, index=True)  # Run / Ride / Walk / ...
-    name = Column(String(500), nullable=True)
-    description = Column(Text, nullable=True)
-    started_at_utc = Column(DateTime, nullable=True)  # parsed Activity Date (UTC)
-    started_at_local = Column(DateTime, nullable=True)  # America/Toronto conversion
-    run_date = Column(Date, nullable=True, index=True)  # local calendar date — dedup/match key
-    distance_km = Column(Float, nullable=True)  # first Distance column (km)
-    moving_time_s = Column(Integer, nullable=True)
-    elapsed_time_s = Column(Integer, nullable=True)
-    avg_hr = Column(Integer, nullable=True)
-    max_hr = Column(Integer, nullable=True)
-    avg_pace_s_per_km = Column(Integer, nullable=True)  # moving_time_s / distance_km, null if dist < 0.5km
-    elevation_gain_m = Column(Float, nullable=True)
-    avg_cadence = Column(Float, nullable=True)
-    calories = Column(Float, nullable=True)
-    gear_name = Column(String(200), nullable=True, index=True)  # stripped Activity Gear
-    fit_filename = Column(String(300), nullable=True)  # e.g. activities/20273873902.fit.gz
-    grade_adjusted_distance_m = Column(Float, nullable=True)
-    raw_json = Column(JSON, nullable=True)  # full CSV row as dict — the ingest-raw escape hatch
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
-
-    def __repr__(self):
-        return f"<StravaActivity {self.strava_activity_id} {self.activity_type} {self.run_date}>"
 
 
 class PlannedRace(Base):
