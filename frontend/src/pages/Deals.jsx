@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { Tag, SlidersHorizontal } from 'lucide-react'
+import { Tag, SlidersHorizontal, ChevronDown, Eye } from 'lucide-react'
 import PageHeader from '@/components/PageHeader'
 import ShoeProductCard from '@/components/ShoeProductCard'
 import DealDetailModal from '@/components/DealDetailModal'
 import ScrapeButton from '@/components/ScrapeButton'
+import WatchlistRow from '@/components/WatchlistRow'
 import { Card, CardContent } from '@/components/ui/card'
 import { Label } from '@/components/ui/label'
 import { Input } from '@/components/ui/input'
@@ -17,7 +18,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { ErrorState, EmptyState, CardSkeletonGrid } from '@/components/StatusViews'
-import { useDeals, useShoes, useRetailers } from '@/hooks/useApi'
+import { useDeals, useShoes, useRetailers, useWatchlist } from '@/hooks/useApi'
 
 const SORTS = {
   savings_desc: (a, b) => b.savings_percent - a.savings_percent,
@@ -40,6 +41,7 @@ export default function Deals() {
   const [size, setSize] = useState(ALL)
   const [sort, setSort] = useState('savings_desc')
   const [selected, setSelected] = useState(null)
+  const [watchingOpen, setWatchingOpen] = useState(false)
   const [searchParams, setSearchParams] = useSearchParams()
   const deepLinkId = searchParams.get('deal')
 
@@ -55,6 +57,7 @@ export default function Deals() {
   const deals = useDeals(params)
   const shoes = useShoes()
   const retailers = useRetailers()
+  const watchlist = useWatchlist()
 
   // Deep link from the Dashboard: /deals?deal=<id> opens that deal's modal
   // once the deals are loaded. The param is cleared when the modal closes.
@@ -128,6 +131,20 @@ export default function Deals() {
     return Array.from(map.values())
   }, [visible])
 
+  // "Watching" = tracked shoes with no active deal. The brand/retailer/type
+  // filters apply here too (savings/size/sort are deal-only and don't).
+  const watching = useMemo(() => {
+    let list = (watchlist.data || []).filter((it) => !it.on_sale)
+    if (brand !== ALL) list = list.filter((it) => it.brand === brand)
+    if (shoeType !== ALL) list = list.filter((it) => it.shoe_type === shoeType)
+    if (retailerId !== ALL) {
+      list = list.filter((it) =>
+        (it.last_seen || []).some((ls) => String(ls.retailer_id) === retailerId)
+      )
+    }
+    return list
+  }, [watchlist.data, brand, shoeType, retailerId])
+
   const resetFilters = () => {
     setBrand(ALL)
     setRetailerId(ALL)
@@ -147,7 +164,7 @@ export default function Deals() {
 
   return (
     <div className="space-y-6">
-      <PageHeader eyebrow="DEALS" title="All deals" count={deals.data?.length}>
+      <PageHeader eyebrow="DEALS" title="Deals" count={groups.length}>
         <ScrapeButton variant="outline" />
       </PageHeader>
 
@@ -258,16 +275,25 @@ export default function Deals() {
         </CardContent>
       </Card>
 
-      {deals.isLoading ? (
-        <CardSkeletonGrid count={6} />
-      ) : deals.isError ? (
-        <ErrorState error={deals.error} onRetry={deals.refetch} />
-      ) : groups.length ? (
-        <>
-          <p className="text-sm text-muted-foreground">
-            {groups.length} shoe{groups.length === 1 ? '' : 's'} · {visible.length} deal
-            {visible.length === 1 ? '' : 's'}
-          </p>
+      {/* ── On sale now ─────────────────────────────────────────── */}
+      <section className="space-y-4">
+        <div className="flex items-baseline gap-2">
+          <h2 className="font-heading text-lg font-extrabold tracking-tight text-foreground">
+            On sale now
+          </h2>
+          {!deals.isLoading && !deals.isError && (
+            <span className="text-sm text-faint">
+              {groups.length} shoe{groups.length === 1 ? '' : 's'} · {visible.length} deal
+              {visible.length === 1 ? '' : 's'}
+            </span>
+          )}
+        </div>
+
+        {deals.isLoading ? (
+          <CardSkeletonGrid count={6} />
+        ) : deals.isError ? (
+          <ErrorState error={deals.error} onRetry={deals.refetch} />
+        ) : groups.length ? (
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {groups.map((group) => (
               <ShoeProductCard
@@ -277,26 +303,62 @@ export default function Deals() {
               />
             ))}
           </div>
-        </>
-      ) : (
-        <EmptyState
-          icon={Tag}
-          title={hasFilters ? 'No deals match your filters' : 'No active deals'}
-          description={
-            hasFilters
-              ? 'Try widening or clearing the filters.'
-              : 'Run a scrape to detect deals on your tracked shoes.'
-          }
-          action={
-            hasFilters ? (
-              <Button variant="outline" size="sm" onClick={resetFilters}>
-                Clear filters
-              </Button>
+        ) : (
+          <EmptyState
+            icon={Tag}
+            title={hasFilters ? 'No deals match your filters' : 'No active deals'}
+            description={
+              hasFilters
+                ? 'Try widening or clearing the filters — the shoes you track are below.'
+                : 'Nothing on sale right now. Everything you track is in Watching below.'
+            }
+            action={
+              hasFilters ? (
+                <Button variant="outline" size="sm" onClick={resetFilters}>
+                  Clear filters
+                </Button>
+              ) : (
+                <ScrapeButton />
+              )
+            }
+          />
+        )}
+      </section>
+
+      {/* ── Watching (not on sale) ──────────────────────────────── */}
+      {(watching.length > 0 || watchlist.isLoading) && (
+        <section className="space-y-4 border-t border-border pt-6">
+          <button
+            type="button"
+            onClick={() => setWatchingOpen((o) => !o)}
+            className="focus-ring flex items-center gap-2 rounded text-left"
+            aria-expanded={watchingOpen}
+          >
+            <ChevronDown
+              className={`h-4 w-4 shrink-0 text-muted-foreground transition-transform duration-200 ${
+                watchingOpen ? '' : '-rotate-90'
+              }`}
+            />
+            <Eye className="h-4 w-4 shrink-0 text-accent-foreground" />
+            <span className="font-heading text-lg font-extrabold tracking-tight text-foreground">
+              Watching
+            </span>
+            <span className="text-sm text-faint">
+              · {watching.length} shoe{watching.length === 1 ? '' : 's'} not on sale
+            </span>
+          </button>
+
+          {watchingOpen &&
+            (watchlist.isError ? (
+              <ErrorState error={watchlist.error} onRetry={watchlist.refetch} />
             ) : (
-              <ScrapeButton />
-            )
-          }
-        />
+              <div className="space-y-3">
+                {watching.map((item) => (
+                  <WatchlistRow key={item.shoe_id} item={item} />
+                ))}
+              </div>
+            ))}
+        </section>
       )}
 
       <DealDetailModal

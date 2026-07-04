@@ -156,6 +156,11 @@ export const stravaApi = {
   status: () => client.get('/api/strava/status').then((r) => r.data),
 }
 
+// ============== WATCHLIST ==============
+export const watchlistApi = {
+  list: () => client.get('/api/watchlist').then((r) => r.data),
+}
+
 // ============== COROS SYNC ==============
 export const corosSyncApi = {
   status: () => client.get('/api/owned-shoes/sync-coros/status').then((r) => r.data),
