@@ -26,7 +26,7 @@ import {
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
 const ALL = '__all__'
-const PAGE = 20
+const PAGE = 5
 
 // "2026-07" → { label: "Jul", fullLabel: "Jul 2026" }
 function labelMonth(period) {
@@ -138,19 +138,14 @@ export default function Training() {
     <div className="space-y-8">
       <PageHeader eyebrow="TRAIN" title="Training">
         <nav className="hidden gap-4 text-sm text-muted-foreground sm:flex">
-          <a href="#races" className="focus-ring rounded hover:text-foreground">Races</a>
           <a href="#trends" className="focus-ring rounded hover:text-foreground">Trends</a>
+          <a href="#races" className="focus-ring rounded hover:text-foreground">Races</a>
           <a href="#records" className="focus-ring rounded hover:text-foreground">Records</a>
           <a href="#activities" className="focus-ring rounded hover:text-foreground">Activities</a>
         </nav>
       </PageHeader>
 
-      {/* ── Races (most time-sensitive → top) ──────────────────── */}
-      <div id="races" className="scroll-mt-20">
-        <PlannedRacesCard />
-      </div>
-
-      {/* ── Trends ─────────────────────────────────────────────── */}
+      {/* ── Trends (volume first) ──────────────────────────────── */}
       <section className="space-y-4">
         <SectionHeading id="trends" icon={TrendingUp} title="Trends" />
 
@@ -206,6 +201,11 @@ export default function Training() {
           </>
         )}
       </section>
+
+      {/* ── Races (after volume) ───────────────────────────────── */}
+      <div id="races" className="scroll-mt-20">
+        <PlannedRacesCard />
+      </div>
 
       {/* ── Records ────────────────────────────────────────────── */}
       <section className="space-y-4">
