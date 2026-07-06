@@ -19,9 +19,15 @@ class Shoe(Base):
     shoe_type = Column(String(50), nullable=True)  # e.g. "long_distance_racer"
     # Size intentionally removed: we track a model across ALL sizes so the
     # scraper isn't restricted to one exact size that may be out of stock.
-    target_price = Column(Float, nullable=False)  # Price we want to pay
-    msrp = Column(Float, nullable=True)  # Manufacturer's list price — kept separate
-    # from target_price so "at target" and "actually below MSRP" can't be confused.
+    # MSRP drives deal qualification: a deal exists when a retailer's price is
+    # below this list price, and savings % is measured against it (see
+    # DealStore.upsert_deal / orchestrator). Nullable so a shoe can be tracked
+    # before its MSRP is known — but such a shoe can't produce deals until set.
+    msrp = Column(Float, nullable=True)  # Manufacturer's list price — the deal reference
+    # target_price is now an optional personal "ping me at this price" threshold.
+    # It no longer affects qualification or savings — MSRP does. Kept nullable so
+    # it can be omitted entirely.
+    target_price = Column(Float, nullable=True)
     notes = Column(Text, nullable=True)  # Any additional notes
     is_active = Column(Boolean, default=True)  # Whether to actively monitor this shoe
     created_at = Column(DateTime(timezone=True), server_default=func.now())
@@ -106,7 +112,11 @@ class PriceRecord(Base):
 
 class Deal(Base):
     """
-    Active deals when price drops below target
+    Active deals when a retailer's price drops below the shoe's MSRP.
+
+    savings_amount / savings_percent are measured against MSRP (msrp - price).
+    target_price is a reference snapshot of the shoe's optional threshold at
+    detection time; it no longer affects qualification or savings.
     """
     __tablename__ = "deals"
 
@@ -114,9 +124,9 @@ class Deal(Base):
     shoe_id = Column(Integer, ForeignKey("shoes.id"), nullable=False, index=True)
     retailer_id = Column(Integer, ForeignKey("retailers.id"), nullable=False, index=True)
     current_price = Column(Float, nullable=False)
-    target_price = Column(Float, nullable=False)
-    savings_amount = Column(Float, nullable=False)  # How much we save
-    savings_percent = Column(Float, nullable=False)  # Percentage discount
+    target_price = Column(Float, nullable=True)  # optional threshold snapshot (not used in math)
+    savings_amount = Column(Float, nullable=False)  # msrp - price
+    savings_percent = Column(Float, nullable=False)  # (msrp - price) / msrp * 100
     product_url = Column(Text, nullable=False)
     in_stock = Column(Boolean, default=True)
     sizes_available = Column(JSON, nullable=True)  # e.g. ["8", "8.5", "9", "10"] — None for pre-migration rows

@@ -52,12 +52,12 @@ export default function ShoeForm({ initial, onSubmit, onCancel, submitting }) {
     const next = {}
     if (!values.brand.trim()) next.brand = 'Brand is required'
     if (!values.model.trim()) next.model = 'Model is required'
-    const price = parseFloat(values.target_price)
-    if (!values.target_price || Number.isNaN(price) || price <= 0)
-      next.target_price = 'Enter a price greater than 0'
-    if (values.msrp) {
-      const msrp = parseFloat(values.msrp)
-      if (Number.isNaN(msrp) || msrp <= 0) next.msrp = 'Enter a price greater than 0'
+    const msrp = parseFloat(values.msrp)
+    if (!values.msrp || Number.isNaN(msrp) || msrp <= 0)
+      next.msrp = 'Enter a price greater than 0'
+    if (values.target_price) {
+      const price = parseFloat(values.target_price)
+      if (Number.isNaN(price) || price <= 0) next.target_price = 'Enter a price greater than 0'
     }
     setErrors(next)
     return Object.keys(next).length === 0
@@ -67,8 +67,8 @@ export default function ShoeForm({ initial, onSubmit, onCancel, submitting }) {
     brand: values.brand.trim(),
     model: values.model.trim(),
     shoe_type: values.shoe_type || null,
-    target_price: parseFloat(values.target_price),
-    msrp: values.msrp ? parseFloat(values.msrp) : null,
+    msrp: parseFloat(values.msrp),
+    target_price: values.target_price ? parseFloat(values.target_price) : null,
     notes: values.notes.trim() || null,
     is_active: values.is_active,
   })
@@ -126,17 +126,7 @@ export default function ShoeForm({ initial, onSubmit, onCancel, submitting }) {
             </SelectContent>
           </Select>
         </Field>
-        <Field label="Target price (CAD)" error={errors.target_price}>
-          <Input
-            type="number"
-            step="0.01"
-            min="0"
-            value={values.target_price}
-            onChange={set('target_price')}
-            placeholder="180"
-          />
-        </Field>
-        <Field label="Retail price (CAD)" error={errors.msrp} hint="Optional — manufacturer's list price">
+        <Field label="Retail price / MSRP (CAD)" error={errors.msrp} hint="Drives deals — a sale is any price below this">
           <Input
             type="number"
             step="0.01"
@@ -144,6 +134,16 @@ export default function ShoeForm({ initial, onSubmit, onCancel, submitting }) {
             value={values.msrp}
             onChange={set('msrp')}
             placeholder="220"
+          />
+        </Field>
+        <Field label="Target price (CAD)" error={errors.target_price} hint="Optional — a personal 'ping me at' threshold">
+          <Input
+            type="number"
+            step="0.01"
+            min="0"
+            value={values.target_price}
+            onChange={set('target_price')}
+            placeholder="180"
           />
         </Field>
       </div>

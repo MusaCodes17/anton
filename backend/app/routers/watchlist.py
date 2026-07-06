@@ -49,7 +49,7 @@ class WatchlistItem(BaseModel):
     brand: str
     model: str
     shoe_type: Optional[str] = None
-    target_price: float
+    target_price: Optional[float] = None
     msrp: Optional[float] = None
     image_url: Optional[str] = None
     on_sale: bool

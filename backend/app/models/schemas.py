@@ -13,8 +13,8 @@ class ShoeBase(BaseModel):
     brand: str = Field(..., min_length=1, max_length=100, description="Shoe brand")
     model: str = Field(..., min_length=1, max_length=200, description="Shoe model")
     shoe_type: Optional[str] = Field(None, max_length=50, description="Shoe category, e.g. 'long_distance_racer'")
-    target_price: float = Field(..., gt=0, description="Target price we want to pay")
-    msrp: Optional[float] = Field(None, gt=0, description="Manufacturer's list price")
+    msrp: Optional[float] = Field(None, gt=0, description="Manufacturer's list price — drives deal qualification and savings %")
+    target_price: Optional[float] = Field(None, gt=0, description="Optional personal 'ping me at' threshold — not used in savings math")
     notes: Optional[str] = Field(None, description="Additional notes")
     is_active: bool = Field(True, description="Whether to actively monitor this shoe")
 
@@ -166,7 +166,7 @@ class DealBase(BaseModel):
     shoe_id: int
     retailer_id: int
     current_price: float = Field(..., gt=0)
-    target_price: float = Field(..., gt=0)
+    target_price: Optional[float] = Field(None, gt=0)
     savings_amount: float = Field(..., ge=0)
     savings_percent: float = Field(..., ge=0, le=100)
     product_url: str

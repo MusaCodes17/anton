@@ -71,7 +71,9 @@ export default function DealDetailModal({ deal, open, onOpenChange }) {
           {shoe.msrp != null && (
             <Metric label="Retail price" value={formatCurrency(shoe.msrp)} />
           )}
-          <Metric label="Target" value={formatCurrency(deal.target_price)} />
+          {deal.target_price != null && (
+            <Metric label="Target" value={formatCurrency(deal.target_price)} />
+          )}
           <Metric label="You save" value={formatCurrency(deal.savings_amount)} />
           <Metric
             label="Discount"
@@ -126,7 +128,7 @@ export default function DealDetailModal({ deal, open, onOpenChange }) {
           ) : prices.isLoading ? (
             <div className="h-[300px] animate-pulse rounded-md bg-muted" />
           ) : (
-            <PriceChart records={prices.data} targetPrice={deal.target_price} />
+            <PriceChart records={prices.data} targetPrice={deal.target_price} msrp={shoe.msrp} />
           )}
         </div>
 

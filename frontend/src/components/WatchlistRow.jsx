@@ -51,7 +51,7 @@ export default function WatchlistRow({ item }) {
             className="focus-ring inline-flex items-center gap-1 rounded text-primary hover:underline"
             title="Edit target price"
           >
-            {formatCurrency(target_price)}
+            {target_price != null ? formatCurrency(target_price) : 'Set'}
             <Pencil className="h-3 w-3" />
           </Link>
         </Stat>

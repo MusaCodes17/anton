@@ -72,8 +72,11 @@ def _generate_seed_source(db: Session) -> str:
     ]
 
     for s in shoes:
-        parts = [f"{'brand'!r}: {s.brand!r}", f"{'model'!r}: {s.model!r}",
-                 f"{'target_price'!r}: {float(s.target_price)!r}"]
+        parts = [f"{'brand'!r}: {s.brand!r}", f"{'model'!r}: {s.model!r}"]
+        if s.msrp is not None:
+            parts.append(f"{'msrp'!r}: {float(s.msrp)!r}")
+        if s.target_price is not None:
+            parts.append(f"{'target_price'!r}: {float(s.target_price)!r}")
         if s.notes:
             parts.append(f"{'notes'!r}: {s.notes!r}")
         parts.append(f"{'is_active'!r}: {bool(s.is_active)!r}")

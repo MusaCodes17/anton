@@ -50,6 +50,7 @@ def _deal_to_dict(deal: Deal) -> dict:
         "shoe_type": deal.shoe.shoe_type,
         "retailer": deal.retailer.name,
         "current_price": deal.current_price,
+        "msrp": deal.shoe.msrp,
         "target_price": deal.target_price,
         "savings_amount": deal.savings_amount,
         "savings_percent": deal.savings_percent,
@@ -208,7 +209,7 @@ def get_retailers(scraping_enabled: Optional[bool] = True) -> List[dict]:
 
 
 @mcp.tool()
-def add_shoe(brand: str, model: str, target_price: float, msrp: Optional[float] = None) -> dict:
+def add_shoe(brand: str, model: str, msrp: Optional[float] = None, target_price: Optional[float] = None) -> dict:
     """
     Start tracking a new shoe for deals.
 
@@ -220,10 +221,13 @@ def add_shoe(brand: str, model: str, target_price: float, msrp: Optional[float] 
     Args:
         brand: Shoe brand, e.g. "Nike".
         model: Shoe model, e.g. "Vaporfly 3" (no size).
-        target_price: The price (CAD) you want to pay — a deal is created
-            once a retailer marks it down to at or below this price.
-        msrp: Optional manufacturer's list/retail price, shown alongside
-            target_price in the UI so the two aren't confused.
+        msrp: Manufacturer's list/retail price (CAD). This drives deals — a
+            deal is created whenever a retailer's price falls below the MSRP,
+            and savings % is measured against it. A shoe with no MSRP is
+            tracked but can't produce deals until one is set.
+        target_price: Optional personal "ping me at this price" threshold. It
+            is stored for reference but does NOT affect deal qualification or
+            savings % — MSRP does.
     """
     try:
         with get_session() as db:

@@ -393,8 +393,8 @@ function PriceHistoryDialog({ shoe, onOpenChange }) {
           <DialogDescription>
             {shoe &&
               [
-                `Target ${formatCurrency(shoe.target_price)}`,
                 shoe.msrp != null && `Retail price ${formatCurrency(shoe.msrp)}`,
+                shoe.target_price != null && `Target ${formatCurrency(shoe.target_price)}`,
               ]
                 .filter(Boolean)
                 .join(' · ')}
@@ -405,7 +405,7 @@ function PriceHistoryDialog({ shoe, onOpenChange }) {
         ) : prices.isLoading ? (
           <div className="h-[300px] animate-pulse rounded-md bg-muted" />
         ) : (
-          <PriceChart records={prices.data} targetPrice={shoe?.target_price} />
+          <PriceChart records={prices.data} targetPrice={shoe?.target_price} msrp={shoe?.msrp} />
         )}
       </DialogContent>
     </Dialog>
