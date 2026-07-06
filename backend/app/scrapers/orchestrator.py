@@ -31,14 +31,11 @@ class ScrapeOrchestrator:
         """
         Scrape a specific retailer for a specific shoe and persist results.
 
-        Deal-qualification rule: a "deal" requires both that the retailer is
-        actually marking the item down from its own original price (on_sale),
-        AND that the sale price is at/below the shoe's CURRENT target_price
-        (read fresh this scrape, so target edits take effect immediately).
-        Hitting your target at full price (no original_price, or
-        original_price <= price) is not a deal — e.g. Adios Pro 4 at BlackToe
-        sits at $300 full price with no compare_at_price, which used to falsely
-        qualify when target was $300.
+        Deal-qualification rule: a "deal" is any price strictly below the
+        shoe's CURRENT MSRP (read fresh this scrape, so MSRP edits take effect
+        immediately). "On sale" now means "below list price" — the retailer's
+        own compare-at/original price is ignored for qualification. Shoes
+        without an MSRP can't produce deals (nothing to measure against).
 
         URLs seen this scrape are tracked so orphaned deals can be retired after
         the loop (see _deactivate_orphaned_deals comment below).
@@ -106,15 +103,17 @@ class ScrapeOrchestrator:
                     if price_recorded:
                         results['prices_recorded'] += 1
 
-                        # A "deal" requires both: the retailer is actually marking
-                        # the item down from its own original price, AND that sale
-                        # price is at/below the shoe's CURRENT target_price (read
-                        # fresh this scrape, so target edits take effect
-                        # immediately). Hitting your target at full price (no
-                        # original_price, or original_price <= price) is not a deal.
-                        original_price = details.get('original_price')
-                        on_sale = original_price is not None and original_price > details['price']
-                        if details['price'] and on_sale and details['price'] <= shoe.target_price:
+                        # A "deal" is any price strictly below the shoe's
+                        # CURRENT MSRP (read fresh this scrape, so MSRP edits
+                        # take effect immediately). The retailer's own
+                        # compare-at/original price no longer matters. A shoe
+                        # with no MSRP can't qualify — nothing to measure against.
+                        below_msrp = (
+                            shoe.msrp is not None
+                            and details['price']
+                            and details['price'] < shoe.msrp
+                        )
+                        if below_msrp:
                             deal_created = self.store.upsert_deal(
                                 shoe=shoe,
                                 retailer=retailer,
@@ -129,11 +128,12 @@ class ScrapeOrchestrator:
                                 results['deals_found'] += 1
                                 logger.info(
                                     f"🎉 Deal found! {shoe.brand} {shoe.model} at {retailer.name}: "
-                                    f"${details['price']} (target: ${shoe.target_price})"
+                                    f"${details['price']} (msrp: ${shoe.msrp})"
                                 )
                         else:
-                            # Price is above target (or target was just raised) —
-                            # retire any stale deal so the UI reflects reality.
+                            # Price is at/above MSRP (or MSRP was just raised, or
+                            # is unset) — retire any stale deal so the UI reflects
+                            # reality.
                             self.store.deactivate_deal(shoe, retailer, details['product_url'])
 
                 except Exception as e:
@@ -173,7 +173,7 @@ class ScrapeOrchestrator:
         if not shoe.is_active:
             return {'success': False, 'error': f'Shoe {shoe.brand} {shoe.model} is not active'}
 
-        logger.info(f"Scraping prices for {shoe.brand} {shoe.model} (target ${shoe.target_price})")
+        logger.info(f"Scraping prices for {shoe.brand} {shoe.model} (msrp ${shoe.msrp})")
 
         query = self.db.query(Retailer).filter(
             Retailer.is_active == True, Retailer.scraping_enabled == True

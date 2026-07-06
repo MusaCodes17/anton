@@ -75,15 +75,24 @@ class DealStore:
         """
         Create or refresh a deal. Returns True only for net-new deals.
 
+        Savings are measured against the shoe's MSRP (msrp - price); the caller
+        (orchestrator) guarantees msrp is set and price < msrp before calling.
+
         Always refreshes image/colorway/sizes when available (older deals
         predate this data and would otherwise stay blank/stale). Refreshes
-        price/savings when the scraped price OR the shoe's target_price changed
-        since the deal was created — this makes target edits "stick" on
-        existing deals.
+        price/savings when the scraped price OR the recomputed savings changed
+        since the deal was created — so a scraped-price move or an MSRP edit
+        "sticks" on existing deals.
         """
         try:
-            savings_amount = shoe.target_price - price
-            savings_percent = (savings_amount / shoe.target_price) * 100
+            if not shoe.msrp:
+                logger.warning(
+                    f"Skipping deal for {shoe.brand} {shoe.model}: no MSRP set"
+                )
+                return False
+
+            savings_amount = shoe.msrp - price
+            savings_percent = (savings_amount / shoe.msrp) * 100
 
             existing_deal = self.db.query(Deal).filter(
                 Deal.shoe_id == shoe.id,
@@ -98,16 +107,16 @@ class DealStore:
                 if colorway:
                     existing_deal.colorway = colorway
                 existing_deal.sizes_available = sizes_available
-                # Refresh price/savings if the scraped price OR the shoe's
-                # target_price changed since the deal was created.
+                # Refresh price/savings if the scraped price OR the recomputed
+                # savings (i.e. an MSRP edit) changed since the deal was created.
                 if (existing_deal.current_price != price
-                        or existing_deal.target_price != shoe.target_price):
+                        or existing_deal.savings_amount != savings_amount):
                     existing_deal.current_price = price
                     existing_deal.target_price = shoe.target_price
                     existing_deal.savings_amount = savings_amount
                     existing_deal.savings_percent = savings_percent
                     existing_deal.in_stock = in_stock
-                    logger.info(f"Updated existing deal (price ${price}, target ${shoe.target_price})")
+                    logger.info(f"Updated existing deal (price ${price}, msrp ${shoe.msrp})")
                 self.db.commit()
                 return False  # Not a new deal
 
@@ -139,8 +148,8 @@ class DealStore:
 
     def deactivate_deal(self, shoe: Shoe, retailer: Retailer, product_url: str) -> bool:
         """
-        Retire an active deal that no longer qualifies (price rose above target,
-        or the target_price was lowered below the current price).
+        Retire an active deal that no longer qualifies (price rose to at/above
+        the shoe's MSRP, or the MSRP was lowered to at/below the current price).
 
         Returns True if a deal was deactivated.
         """
@@ -159,7 +168,7 @@ class DealStore:
             self.db.commit()
             logger.info(
                 f"Deactivated stale deal: {shoe.brand} {shoe.model} at {retailer.name} "
-                f"(no longer <= target ${shoe.target_price})"
+                f"(no longer below MSRP ${shoe.msrp})"
             )
             return True
         except Exception as e:

@@ -21,7 +21,7 @@ const COLORS = ['#3B6FE0', '#E0186E', '#C8F032', '#7c3aed', '#0891b2', '#d97706'
  * Line chart of price over time, one line per retailer.
  * `records` is the array returned by GET /api/shoes/{id}/prices.
  */
-export default function PriceChart({ records = [], targetPrice }) {
+export default function PriceChart({ records = [], targetPrice, msrp }) {
   const { data, retailers } = useMemo(() => {
     if (!records.length) return { data: [], retailers: [] }
 
@@ -87,6 +87,18 @@ export default function PriceChart({ records = [], targetPrice }) {
           labelStyle={{ color: 'var(--muted-foreground)' }}
         />
         <Legend wrapperStyle={{ fontSize: 12, color: 'var(--muted-foreground)' }} />
+        {msrp != null && (
+          <Line
+            type="monotone"
+            dataKey={() => msrp}
+            name="MSRP (sale below)"
+            stroke="#6A6F76"
+            strokeOpacity={0.6}
+            strokeDasharray="2 3"
+            dot={false}
+            isAnimationActive={false}
+          />
+        )}
         {targetPrice != null && (
           <Line
             type="monotone"
