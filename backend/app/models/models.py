@@ -53,7 +53,7 @@ class Retailer(Base):
     is_active = Column(Boolean, default=True)  # Whether this retailer is enabled
     scraping_enabled = Column(Boolean, default=True)  # Whether to scrape this retailer
     # Platform backing this retailer's storefront. "shopify"/"algolia" retailers get a
-    # generic scraper built automatically (see scraper_manager.build_dynamic_scraper);
+    # generic scraper built automatically (see registry.build_dynamic_scraper);
     # "custom" means no scraper exists yet and scraping stays disabled. Existing rows
     # default to "custom" — they keep working via their hardcoded subclass scrapers,
     # which are looked up by name first regardless of this column.

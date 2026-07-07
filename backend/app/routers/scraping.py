@@ -12,8 +12,8 @@ from app.database import get_db
 from app.models import ScrapeRequest, ScrapeResult
 from app.scrape_runner import run_scrape_job
 from app.scrape_state import scrape_state
-from app.scrapers.scraper_manager import (
-    ScraperManager,
+from app.scrapers.orchestrator import ScrapeOrchestrator
+from app.scrapers.lock import (
     ScrapeInProgressError,
     scrape_guard,
     try_acquire_scrape_lock,
@@ -35,7 +35,7 @@ def scrape_shoe(
     - **shoe_id**: ID of the shoe to scrape
     - **retailer_ids**: Optional list of retailer IDs (if None, scrape all active retailers)
     """
-    manager = ScraperManager(db)
+    manager = ScrapeOrchestrator(db)
 
     try:
         with scrape_guard():
@@ -134,7 +134,7 @@ def scrape_retailer(
     """
     from app.models.models import Shoe
     
-    manager = ScraperManager(db)
+    manager = ScrapeOrchestrator(db)
     
     # Get shoes to scrape
     query = db.query(Shoe).filter(Shoe.is_active == True)
@@ -184,7 +184,7 @@ def detect_all_promos(db: Session = Depends(get_db)):
     """
     Scan all active retailers' sites for discount codes.
     """
-    manager = ScraperManager(db)
+    manager = ScrapeOrchestrator(db)
     try:
         results = manager.detect_all_promo_codes()
         return {
@@ -214,7 +214,7 @@ def detect_retailer_promos(retailer_id: int, db: Session = Depends(get_db)):
             detail=f"Retailer with id {retailer_id} not found"
         )
 
-    manager = ScraperManager(db)
+    manager = ScrapeOrchestrator(db)
     try:
         results = manager.detect_promo_codes_for_retailer(retailer)
         return {

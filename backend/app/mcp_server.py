@@ -5,7 +5,7 @@ Mounted onto the FastAPI app (see app/main.py) at /mcp via
 mcp.streamable_http_app(), using Streamable HTTP transport.
 
 Tools stay thin on purpose: they read the same SQLAlchemy models and call
-the same ScraperManager the REST routers (app/routers/*.py) use, so there is
+the same ScrapeOrchestrator the REST routers (app/routers/*.py) use, so there is
 exactly one place business logic lives. Each tool opens its own DB session
 (FastMCP tools aren't FastAPI route handlers, so they can't use
 Depends(get_db)) and closes it when done, mirroring get_db's lifecycle.
@@ -23,7 +23,8 @@ from datetime import date as date_type, datetime, timezone
 from app.coros_client import get_coros_config
 from app.database import SessionLocal
 from app.models.models import Activity, Deal, OwnedShoe, PriceRecord, Retailer, Shoe, ShoeNote, ShoeRun
-from app.scrapers.scraper_manager import ScraperManager, ScrapeInProgressError, scrape_guard
+from app.scrapers.orchestrator import ScrapeOrchestrator
+from app.scrapers.lock import ScrapeInProgressError, scrape_guard
 from app.services import rotation, coros as coros_svc, settings as settings_svc, strava_stats, races as races_svc
 
 # streamable_http_path="/" because the app this is mounted under (see
@@ -274,7 +275,7 @@ async def trigger_scrape(ctx: Context, shoe_id: Optional[int] = None) -> dict:
     Scrapes one shoe if shoe_id is given, otherwise every actively-tracked
     shoe across every enabled retailer — which can take a while (it's a
     real, synchronous scrape of live retailer sites, not a queued job).
-    Calls the same ScraperManager the REST API's /api/scrape endpoints use.
+    Calls the same ScrapeOrchestrator the REST API's /api/scrape endpoints use.
     If a scrape is already running (from this tool, the REST API, or the
     UI), returns success=False immediately rather than starting another
     one on top of it — do not just retry in a loop; wait and check
@@ -285,7 +286,7 @@ async def trigger_scrape(ctx: Context, shoe_id: Optional[int] = None) -> dict:
             scrape every active shoe.
     """
     with get_session() as db:
-        manager = ScraperManager(db)
+        manager = ScrapeOrchestrator(db)
         try:
             with scrape_guard():
                 if shoe_id is not None:

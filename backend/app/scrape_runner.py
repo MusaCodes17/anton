@@ -3,7 +3,7 @@ Background, concurrent (per-retailer) scrape job — the new flow behind
 POST /api/scrape/all. Publishes progress to app.scrape_state for
 GET /api/scrape/stream to relay as SSE.
 
-The existing synchronous ScraperManager.scrape_shoe/scrape_all_shoes (used
+The existing synchronous ScrapeOrchestrator.scrape_shoe/scrape_all_shoes (used
 by /api/scrape/shoe/{id}, /api/scrape/retailer/{id}, the MCP trigger_scrape
 tool, and the chat assistant) are untouched — this is an additional, parallel
 code path that reuses the same per-(shoe, retailer) primitive
@@ -17,7 +17,8 @@ from typing import List, Optional
 from app.database import SessionLocal
 from app.models.models import Retailer, Shoe
 from app.scrape_state import scrape_state
-from app.scrapers.scraper_manager import ScraperManager, release_scrape_lock
+from app.scrapers.orchestrator import ScrapeOrchestrator
+from app.scrapers.lock import release_scrape_lock
 
 logger = logging.getLogger(__name__)
 
@@ -31,7 +32,7 @@ def _scrape_one_retailer(retailer_id: int, shoe_ids: List[int]) -> dict:
     """
     db = SessionLocal()
     try:
-        manager = ScraperManager(db)
+        manager = ScrapeOrchestrator(db)
         retailer = db.query(Retailer).filter(Retailer.id == retailer_id).first()
         if not retailer:
             return {"deals_found": 0, "errors": [f"Retailer {retailer_id} not found"]}
@@ -80,7 +81,7 @@ async def run_scrape_job(retailer_ids: Optional[List[int]] = None) -> None:
         # Site-wide discount codes, same as the old synchronous flow — quick
         # and sequential; not part of the SSE event schema, so no event for it.
         try:
-            ScraperManager(db).detect_all_promo_codes()
+            ScrapeOrchestrator(db).detect_all_promo_codes()
         except Exception as e:
             logger.warning(f"Promo detection failed during background scrape: {e}")
     finally:

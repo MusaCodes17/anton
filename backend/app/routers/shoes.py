@@ -11,7 +11,7 @@ from app.models import (
     Shoe, ShoeCreate, ShoeUpdate, ShoeResponse, ShoeTestRequest
 )
 from app.models.models import Deal, PriceRecord
-from app.scrapers.scraper_manager import ScraperManager
+from app.scrapers.orchestrator import ScrapeOrchestrator
 
 router = APIRouter(prefix="/shoes", tags=["shoes"])
 
@@ -23,7 +23,7 @@ def test_shoe_scrapability(payload: ShoeTestRequest, db: Session = Depends(get_d
     shoe (new or already saved) is actually findable, before/without saving
     it. Never writes to the database.
     """
-    manager = ScraperManager(db)
+    manager = ScrapeOrchestrator(db)
     try:
         return manager.test_shoe_scrapability(payload.brand.strip(), payload.model.strip())
     except Exception as e:

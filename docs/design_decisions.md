@@ -286,7 +286,7 @@
 **Why (recorded in the shim itself):** Decompose without touching every call site in the same change.
 **Advantages:** The refactor landed safely in one session.
 **Trade-offs:** Real module boundaries invisible at call sites; the "temporary" is aging.
-**Verdict:** ⚠️ Scheduled to change — four call sites, one sweep (dependency_graph.md §11.2).
+**Verdict:** 🔁 **Superseded — shim deleted r1: 2026-07-07** (R1.5b, debt sweep #1). All five consumers (`routers/scraping`, `routers/shoes`, `mcp_server`, `scrape_runner`, `scrapers/__init__`) now import `ScrapeOrchestrator` / `lock` / `registry` directly; the misleading `ScraperManager` alias is gone. See changelog 2026-07-07.
 
 ---
 
@@ -344,9 +344,10 @@
 | `strava_backfill` MATCH/BACKFILL reconciliation (plan-then-execute, mileage policies) | The bridge between the two stores | Made permanent, then deleted with them (its *process* pattern lives on in E4) | 2026-07-04 |
 | Direct backend integration of the external COROS MCP in `chat_service` | First attempt at watch sync | C6 — client-side agent prompt (OAuth constraint) | recorded in `docs/changelog.md` |
 | Single free-text `notes` column on owned shoes | Original journal | B12 — `shoe_notes` timestamped/mileage-anchored rows | recorded in `docs/changelog.md` |
-| Scraper monolith (`scraper_manager` as implementation) | Pre-refactor | D1/D7 — decomposed modules behind a (still-standing) shim | 2026 refactor |
+| Scraper monolith (`scraper_manager` as implementation) | Pre-refactor | D1/D7 — decomposed modules behind a shim | 2026 refactor |
+| `scraper_manager.py` compat shim (`ScraperManager` alias) | Post-refactor transition scaffolding | D7 — deleted; consumers import `ScrapeOrchestrator`/`lock`/`registry` directly | 2026-07-07 (R1.5b) |
 | Per-size shoe tracking | Original watchlist shape | B2 — size-less tracking | recorded in code comment |
 
 ---
 
-*Maintenance note: add an entry when a decision is made that a future session might reasonably reverse; move reversed decisions to the Superseded table with the succeeding entry named. The verdicts above marked ⚠️ are this document's standing to-do list — A6, C8, D7, E1, E5 — and should flip to Superseded entries as they're executed.*
+*Maintenance note: add an entry when a decision is made that a future session might reasonably reverse; move reversed decisions to the Superseded table with the succeeding entry named. The verdicts above marked ⚠️ are this document's standing to-do list — A6, C8, E1, E5 — and should flip to Superseded entries as they're executed. (D7 shim was executed 2026-07-07, R1.5b.)*

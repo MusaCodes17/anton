@@ -55,7 +55,7 @@ class BaseScraper(ABC):
         Defined once, here, so every scraper subclass — existing and any
         added later — gets it automatically without having to remember to
         filter itself. Callers that persist results to the database
-        (ScraperManager) should call this instead of search_products()
+        (ScrapeOrchestrator) should call this instead of search_products()
         directly; dry-run/test paths may use either.
         """
         results = self.search_products(brand, model)
