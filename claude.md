@@ -114,7 +114,7 @@ Placement rules: new business logic → `services/` (never a router, never an MC
 - "Shoe" is ambiguous: `Shoe` = watchlist entry, `OwnedShoe` = physical pair. Name variables accordingly.
 - Timezone: run dates are **America/Toronto local dates**; converting from UTC first is mandatory.
 - The Starlette/FastAPI/sse-starlette pins resolve an `mcp[cli]` conflict — don't bump them independently.
-- `MCP_SERVER_URL` points the chat service back at *this same app*; changing bind/port affects Son of Anton.
+- `MCP_SERVER_URL` points the chat service back at *this same app*; changing bind/port affects Son of Anton. Since R2.1 the loopback must also send `Authorization: Bearer <ANTON_SECRET>` (injected by `chat_service._server_headers`) — drop it and the assistant *silently* loses all tools with no error.
 - `strava_stats` imports the private-by-convention `activities._effective_moving_s` — renaming it "safely" inside `activities.py` breaks stats with no import-level signal.
 - Router prefixes ↔ `api.js` paths (and the SSE event names on both sides of `useChatStream` / the scrape stream) are hand-matched string contracts — change one side, grep for the other.
 
