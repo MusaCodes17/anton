@@ -16,14 +16,34 @@ from app.routers import shoes, retailers, deals, dashboard, scraping, export, ow
 load_dotenv()
 
 
+def require_anton_secret() -> None:
+    """
+    Fail fast if the R2.1 auth secret is missing.
+
+    Auth is *not* an optional feature (contrast the graceful-degradation pattern
+    for optional creds in CLAUDE.md §4.6): absence is fatal, never a silently
+    unauthenticated server. Called at startup, before the app serves any request.
+    The `.env.example` placeholder is an empty string, so empty/whitespace counts
+    as unset. Raises RuntimeError so uvicorn aborts the boot with a clear message.
+    """
+    if not os.getenv("ANTON_SECRET", "").strip():
+        raise RuntimeError(
+            "ANTON_SECRET is not set. The API refuses to start without it "
+            "(R2.1 security pass — SECURITY_PASS_PLAN.md). Generate one with: "
+            'python -c "import secrets; print(secrets.token_hex(32))" '
+            "and set ANTON_SECRET (and VITE_ANTON_SECRET) in backend/.env."
+        )
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """
-    Initialize the database, then run the MCP server's session manager for
-    the lifetime of the app. Streamable HTTP transport needs that session
-    manager's task group active — mounting mcp.streamable_http_app() alone
-    doesn't run a sub-app's lifespan, so it's merged in here instead.
+    Validate the auth secret, initialize the database, then run the MCP server's
+    session manager for the lifetime of the app. Streamable HTTP transport needs
+    that session manager's task group active — mounting mcp.streamable_http_app()
+    alone doesn't run a sub-app's lifespan, so it's merged in here instead.
     """
+    require_anton_secret()
     init_db()
     print("✅ Database initialized")
     async with mcp.session_manager.run():
