@@ -322,6 +322,11 @@ function ReplacementDealCard({ deal }) {
         <div className="font-heading text-base font-extrabold text-foreground">
           {formatCurrency(deal.current_price)}
         </div>
+        {Array.isArray(deal.sizes_available) && deal.sizes_available.length > 0 && (
+          <div className="truncate text-2xs text-muted-foreground">
+            Sizes {deal.sizes_available.join(', ')}
+          </div>
+        )}
         {deal.product_url && (
           <a href={deal.product_url} target="_blank" rel="noreferrer" className="focus-ring mt-auto rounded-[8px]">
             <Button size="sm" variant="outline" className="w-full text-xs">

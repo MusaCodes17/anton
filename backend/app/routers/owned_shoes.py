@@ -234,6 +234,7 @@ def get_replacement_deals(owned_shoe_id: int, db: Session = Depends(get_db)):
             "image_url": d.image_url,
             "product_url": d.product_url,
             "in_stock": d.in_stock,
+            "sizes_available": d.sizes_available,  # JSON list, e.g. ["9","9.5"]; None pre-migration
         }
         for d in deals
     ]
