@@ -14,6 +14,9 @@ instead, across every entry point (REST + the MCP trigger_scrape tool).
 import threading
 from contextlib import contextmanager
 
+# Scheduling note: if scheduled scraping is added (roadmap R4.1),
+# this in-memory lock must be replaced with DB-level coordination
+# before APScheduler or any multi-process runner is introduced.
 _scrape_lock = threading.Lock()
 
 

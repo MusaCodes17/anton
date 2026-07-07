@@ -31,8 +31,10 @@ html5lib==1.1
 httpx==0.28.1  # bumped from 0.26.0: mcp[cli] requires httpx>=0.27.1
 requests==2.31.0
 
-# Task Scheduling
-apscheduler==3.10.4
+# Task Scheduling: intentionally none. APScheduler was declared-but-unused and
+# removed 2026-07-07 (R1.6 / design_decisions E5). Scheduled scraping (roadmap
+# R4.1) needs a real design — persisted job state + DB-level coordination to
+# replace the in-memory scrape lock — before a scheduler is reintroduced.
 
 # Data Validation
 pydantic==2.5.3

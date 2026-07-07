@@ -325,7 +325,7 @@
 **Why (inferred):** Anticipatory install.
 **Advantages:** None yet.
 **Trade-offs:** A dependency without an architecture invites drive-by wiring that would collide with D4's lock assumptions.
-**Verdict:** ⚠️ Decide deliberately: either design scheduled scraping (with persisted job state, per architecture.md §16.6) or drop the dependency until then.
+**Verdict:** 🔁 **Superseded — dropped r1: 2026-07-07** (R1.6). Removed from `requirements.txt`; a scheduling note was added to `scrapers/lock.py`. Reinstate only when scheduled scraping (roadmap R4.1) has a real design — persisted job state + DB-level coordination replacing the in-memory lock. See changelog 2026-07-07.
 
 ### E6. The rebrand carries old names in code
 **Chosen:** The platform is **Anton** (assistant: **Son of Anton**) while the repo, API title, and DB filename retain "running-shoe-deals" / "Running Shoe Deal Finder."
@@ -346,8 +346,9 @@
 | Single free-text `notes` column on owned shoes | Original journal | B12 — `shoe_notes` timestamped/mileage-anchored rows | recorded in `docs/changelog.md` |
 | Scraper monolith (`scraper_manager` as implementation) | Pre-refactor | D1/D7 — decomposed modules behind a shim | 2026 refactor |
 | `scraper_manager.py` compat shim (`ScraperManager` alias) | Post-refactor transition scaffolding | D7 — deleted; consumers import `ScrapeOrchestrator`/`lock`/`registry` directly | 2026-07-07 (R1.5b) |
+| APScheduler dependency (declared, unused) | Anticipatory install for scheduled scraping | E5 — dropped from `requirements.txt`; reinstate with an R4.1 design | 2026-07-07 (R1.6) |
 | Per-size shoe tracking | Original watchlist shape | B2 — size-less tracking | recorded in code comment |
 
 ---
 
-*Maintenance note: add an entry when a decision is made that a future session might reasonably reverse; move reversed decisions to the Superseded table with the succeeding entry named. The verdicts above marked ⚠️ are this document's standing to-do list — A6, C8, E1, E5 — and should flip to Superseded entries as they're executed. (D7 shim was executed 2026-07-07, R1.5b.)*
+*Maintenance note: add an entry when a decision is made that a future session might reasonably reverse; move reversed decisions to the Superseded table with the succeeding entry named. The verdicts above marked ⚠️ are this document's standing to-do list — A6, C8, E1 — and should flip to Superseded entries as they're executed. (D7 shim and E5 APScheduler were executed 2026-07-07, R1.5b/R1.6.)*
