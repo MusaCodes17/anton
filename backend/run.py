@@ -10,7 +10,10 @@ from dotenv import load_dotenv
 load_dotenv()
 
 if __name__ == "__main__":
-    host = os.getenv("API_HOST", "0.0.0.0")
+    # Default to loopback-only (R2.1): "localhost only" is now an app property,
+    # not an accident of the network. Set API_HOST=0.0.0.0 to serve the LAN —
+    # safe now that the bearer token (ANTON_SECRET) is required on every request.
+    host = os.getenv("API_HOST", "127.0.0.1")
     port = int(os.getenv("API_PORT", 8000))
     
     print(f"""
