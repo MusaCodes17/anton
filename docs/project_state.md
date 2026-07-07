@@ -1,6 +1,6 @@
 # Anton — Project State
 
-**Snapshot date:** 2026-07-06 (late — after the `msrp_drives_deals` migration, the docs-reconciliation session, and the documentation-completion session: R1.1 committed, CLAUDE.md §14 INVARIANTS, `.claude/skills/` implemented).
+**Snapshot date:** 2026-07-07 (after Phase 2 Session B — the R1 debt sweep: R1.3–R1.6 closed, suite 64 → 67. All of R1 is now done).
 **Read this first, then:** `docs/ai_context.md` → `docs/architecture.md` → `docs/domain_model.md`. This file is the *perishable* one — it describes a moment, and staleness here is expected and fixable; update it at the end of every working session.
 
 ---
@@ -9,7 +9,7 @@
 
 Anton (repo name: `running-shoe-deals`) is a **single-user personal running platform**: shoe-deal watching across 8 Canadian retailers + a canonical run/training history + shoe rotation wear tracking, with an embedded AI assistant (Son of Anton) and a full MCP server used by Claude Desktop. FastAPI + SQLite + React SPA, all local, no auth (deliberate, deferred).
 
-**Where things stand right now:** the multi-phase **Anton redesign is functionally complete** — all five tabs (Home / Training / Shoes / Deals / Son of Anton) are built. The two most recent structural events: the canonical `activities` table (2026-07-04, reversible reconciled migration) and **MSRP-drives-deals** (2026-07-06 — deal qualification and savings now measured against MSRP; `target_price` demoted to an optional threshold; migration `d4e5f6a7b8c9`). The suite is green at **64 tests**. What remains of Phase 5 is the agent work (Deal Alert / Weekly Rotation Summary) and durability items. The **documentation program** (`documentation_creation.md`) is **complete and committed** (R1.1, 2026-07-06): the full suite + final review + reconciliation + the completion session (CLAUDE.md §14 INVARIANTS, `.claude/skills/` 13-skill library). Phase 2 (implementation work on the R1 backlog) can begin.
+**Where things stand right now:** the multi-phase **Anton redesign is functionally complete** — all five tabs (Home / Training / Shoes / Deals / Son of Anton) are built. The two most recent structural events: the canonical `activities` table (2026-07-04, reversible reconciled migration) and **MSRP-drives-deals** (2026-07-06 — deal qualification and savings now measured against MSRP; `target_price` demoted to an optional threshold; migration `d4e5f6a7b8c9`). The suite is green at **67 tests**. What remains of Phase 5 is the agent work (Deal Alert / Weekly Rotation Summary) and durability items. The **documentation program** (`documentation_creation.md`) is **complete and committed** (R1.1, 2026-07-06). **Phase 2 implementation has begun: all of roadmap R1 is now closed** (Session B, 2026-07-07 — R1.3 replacement-deals sizes, R1.4 proxy guards, R1.5 four-part debt sweep, R1.6 APScheduler removed). The next gate is **R2.1 (security pass)**, alongside the review's same-day safety fixes (refactor.md C1 / M3).
 
 **The stated Current Focus** (per `docs/changelog.md`): *"Product images, colorway consolidation, scraper durability + coverage."* Note: images/colorways largely shipped in June — read this focus line as the *durability/polish pass* over those features plus scraper coverage, not greenfield work. (If that reading is wrong, correct this line.)
 
@@ -22,9 +22,10 @@ Anton (repo name: `running-shoe-deals`) is a **single-user personal running plat
 | Anton redesign Phases 1–4 (IA, Deals watchlist, Training tab, Home) | ✅ Complete (Phase 4 landed 2026-07-03) |
 | Phase 5 backlog | 🟡 3 of 4 items done (canonical activities ✅ 2026-07-04 · `/shoes` lifecycle reframe ✅ · app mark ✅ · **agents remaining**) |
 | Strava historical import (694-run, 8-year archive) | ✅ Complete and now *structurally* permanent (absorbed into `activities`) |
-| Test suite | ✅ 64 passing, 12 modules (`test_deals.py` added 2026-07-06 with the MSRP rules; count dropped from 69 to 61 when backfill tests retired, back up since) |
-| Documentation program | ✅ **Complete and committed** (R1.1, 2026-07-06) — full `docs/` suite + `CLAUDE.md` (incl. §14 INVARIANTS) + `refactoring/` + final review + reconciliation + `.claude/skills/` (13 workflow skills). Phase 2 (implementation) unblocked |
-| Security pass | ⛔ Not started — explicitly deferred; the gate for any exposure-increasing feature |
+| Test suite | ✅ 67 passing, 13 modules (`test_replacement_deals.py` added 2026-07-07, +3; `test_deals.py` added 2026-07-06 with the MSRP rules) |
+| Documentation program | ✅ **Complete and committed** (R1.1, 2026-07-06) — full `docs/` suite + `CLAUDE.md` (incl. §14 INVARIANTS) + `refactoring/` + final review + reconciliation + `.claude/skills/` (13 workflow skills) |
+| Roadmap R1 (loose ends) | ✅ **Complete** (2026-07-07) — R1.1/R1.2 docs, R1.3 replacement-deals card, R1.4 proxy guards, R1.5 debt sweep (Task D · shim delete · pure `pace` · chat catalog), R1.6 APScheduler removed |
+| Security pass (R2.1) | ⛔ Not started — explicitly deferred; the gate for any exposure-increasing feature, and the next priority |
 
 The app is in **daily real use** (live DB is the only DB: 933 activities, 698 runs, 8,028 km, 667 attributed).
 
@@ -61,6 +62,10 @@ Grouped; dates are `docs/changelog.md` entries.
 **Engineering**
 - 2026 refactor: services extraction, scraper decomposition (orchestrator/registry/deal-store/lock), Alembic adoption; Strava import pipeline with self-checking assumptions.
 - **Documentation program shipped and committed (R1.1, 2026-07-06):** full `docs/` suite, `refactoring/` reviews, `CLAUDE.md` (with the §14 INVARIANTS checkable list, INV-1…INV-8), the `claude.md → docs/changelog.md` rename, and the `.claude/skills/` library (13 workflow skills per `docs/skills_library.md`; the `shoe_type` vocabulary table landed in domain_model §4.3 the same session).
+- **R1 debt sweep (Phase 2 Session B, 2026-07-07):** `ShoeRun.activity` eager-loaded at all five run-list seams (R1.4); `rotation.attach_computed_fields` extracted, killing the last router→router import (R1.5a); `scraper_manager` shim deleted, consumers on `ScrapeOrchestrator`/`lock`/`registry` (R1.5b); pure `app/utils/pace.py` replacing three copies (R1.5c); `chat_service.MODELS` single-sourcing the model catalog + id-based provider routing (R1.5d); APScheduler removed from `requirements.txt` (R1.6). D7 and E5 → Superseded.
+
+**Rotation & training (cont.)**
+- **Replacement Deals card on `/shoes/:id`** — live section (shipped in PR #9): same-type active deals, worst-discount-first, with brand/model/retailer/price/savings-badge/link and **size availability** (added 2026-07-07, R1.3), plus loading/error/empty/no-type states.
 
 ---
 
@@ -68,7 +73,6 @@ Grouped; dates are `docs/changelog.md` entries.
 
 | Item | State | The missing piece |
 |---|---|---|
-| **Replacement Deals card on `/shoes/:id`** | Explicit "Coming soon" placeholder since 2026-06-24 | The *data* now exists (pipeline computation + deal counts shipped 2026-07-04) — the detail-page card was never wired to it. Verify current state before building; may be a small task now. |
 | **Server-side COROS sync** | Code complete (`coros_client`, `coros.py`, REST endpoints), cleanly disabled | COROS won't issue Open-API credentials to individuals. Dormant by decision (design_decisions.md C6); revives only if COROS opens access. |
 | **Anton rebrand** | UI, mark, favicon done | Repo name, API title ("Running Shoe Deal Finder"), DB filename still pre-brand — kept deliberately (E6). |
 | **P2.3 price-history sparkline** (watchlist rows) | Was declared a cut-first stretch goal in Phase 2 | Unverified whether it shipped; treat as *probably not built*. Check `Deals.jsx` before planning. |
@@ -82,7 +86,7 @@ From the Phase-5 backlog and standing wishlist (roadmap.md — prompt 3 — will
 - **Deal Alert Agent** and **Weekly Rotation Summary Agent** — the last Phase-5 backlog items; their natural surfaces (Home modules, Training tab) now exist by design.
 - **Security pass** — API auth, rate limiting, MCP endpoint auth; the acknowledged precondition for everything below.
 - **Native mobile client** — mobile-first constraints and API-first discipline already embedded for this.
-- **Scheduled scraping** — implied by the unused APScheduler dependency; needs a real design (persisted job state) first.
+- **Scheduled scraping** (roadmap R4.1) — needs a real design (persisted job state + DB-level coordination replacing the in-memory scrape lock) before a scheduler is (re)introduced; APScheduler was removed 2026-07-07 pending that design.
 - **Scraper coverage**: Sport Experts (custom FGL platform, "future"); Sporting Life only via paid unblocking (declined on principle — likely permanent no).
 - Explored & deferred: remote MCP transport for ChatGPT; Email MCP; Coupon Hunting Agent.
 - Server-side chat/conversation persistence (currently localStorage — design_decisions.md C8, scheduled to change).
@@ -94,7 +98,7 @@ From the Phase-5 backlog and standing wishlist (roadmap.md — prompt 3 — will
 No open *defect* list exists — bugs get fixed in-session and logged in `docs/changelog.md`. Standing known quirks (working-as-designed-but-sharp):
 
 1. **MCP `trigger_scrape` full-catalog reliably times out client-side** (20–30 min job vs client timeouts). Workaround: per-shoe scrapes or the web UI. Documented, not fixed.
-2. **`ShoeRun` proxy hazards (since the 2026-07-04 migration):** proxied fields (`distance_km`, `avg_pace`, …) do a lazy `Activity` load per row (N+1 in un-eager-loaded loops) and **silently don't work in SQLAlchemy `filter()`** — query against `Activity` columns instead. All existing code was migrated correctly; *new* code is where this will bite.
+2. **`ShoeRun` proxy hazards (since the 2026-07-04 migration):** proxied fields (`distance_km`, `avg_pace`, …) do a lazy `Activity` load per row (N+1 in un-eager-loaded loops) and **silently don't work in SQLAlchemy `filter()`** — query against `Activity` columns instead. All five run-list seams now `contains_eager(ShoeRun.activity)` (R1.4, 2026-07-07) and the model carries a WARNING comment; *new* run-list code is still where this will bite — add the eager-load.
 3. **Le Coureur titles sometimes remain French** despite the `/en` locale — cosmetic, known.
 4. **Two retailers permanently dark** (Sporting Life: Cloudflare; Sport Experts: unbuilt custom platform) — the deal feed silently excludes them.
 5. **Checkpoint "already prompted" state is per-browser** (localStorage) — a second device will re-prompt at the same checkpoint.
@@ -106,15 +110,12 @@ No open *defect* list exists — bugs get fixed in-session and logged in `docs/c
 
 Full ranked treatment: `refactoring/tech_debt.md` — **the ranked authority** (P0–P3 with states); actionable detail in `refactoring/refactor.md`; deletions in `refactoring/dead_code.md`. The short list a new session must know:
 
-- **No auth on three mutation surfaces** + default `0.0.0.0` bind (deliberate; gates all exposure).
+- **No auth on three mutation surfaces** + default `0.0.0.0` bind (deliberate; gates all exposure). **Now the top open item.**
 - **Dual schema authority** (`create_all` + Alembic) and DB + dated `.bak` files in the working tree.
-- **`scraper_manager` compat shim** still fronting the decomposed scraper modules (4 call sites).
-- **"Task D" leftover**: `coros_sync` router imports a private helper from `owned_shoes` router.
 - **Fat legacy routers** (`watchlist`, `deals`, `dashboard`) with inline ORM logic — also what blocks MCP watchlist parity.
 - **Whole-table in-Python reads** (`unified_activities`, watchlist reduction) — fine at 933 activities; the canonical table now makes indexed queries possible.
-- Chat model catalogs hard-coded in the router vs prefix routing in the service; agentic loop implemented 3× (per provider).
-- ~~**`claude.md`'s bottom overview sections are stale**~~ Fixed 2026-07-06: the changelog's stale tail was pruned (Retailer Status table relocated to `architecture.md` §10); the `docs/` suite is the reference material.
-- APScheduler installed, unwired.
+- **Provider agentic loop implemented 3×** (per provider) — the model-catalog duplication half was fixed (R1.5d, 2026-07-07); the loop triplication remains (tech_debt 5.2, consolidate before the R3 agents extend it).
+- ~~`scraper_manager` compat shim~~ deleted (R1.5b, 2026-07-07). ~~"Task D" router→router import~~ resolved (R1.5a). ~~Pace formatting ×3~~ resolved (R1.5c). ~~Chat catalog duplication~~ resolved (R1.5d). ~~APScheduler installed, unwired~~ removed (R1.6).
 
 ---
 
@@ -135,6 +136,7 @@ Nothing blocks day-to-day development. External blockers, all worked around or a
 
 Last ~10 days, newest first (full record: `docs/design_decisions.md`):
 
+0. **D7 and E5 executed** (2026-07-07) — the `scraper_manager` shim was **deleted** (D7 → Superseded) and the unused **APScheduler** dependency **removed** (E5 → Superseded). Both flipped from the ⚠️ scheduled-to-change set to the Superseded table. The remaining ⚠️ set is A6 (schema authority), C8 (chat memory), E1 (auth).
 1. **MSRP drives deals (B9-v2)** (2026-07-06) — a deal is any price strictly below MSRP; savings measured against MSRP; `target_price` optional/nullable. Migration `d4e5f6a7b8c9`; design_decisions B9 → Superseded, B9-v2 + B8 amended same day.
 2. **Canonical `activities` table; `shoe_runs` → attribution with property proxies** (2026-07-04) — B4/B5. Also set the migration-discipline precedent (E4: reversible, backed-up, reconciled).
 3. **Shared retirement-pipeline computation** (2026-07-04) — Home alerts became a projection over `rotation.retirement_pipeline`; Home and `/shoes` structurally cannot disagree.
@@ -156,14 +158,14 @@ Last ~10 days, newest first (full record: `docs/design_decisions.md`):
 
 ## 11. Areas Requiring Immediate Attention
 
-Ordered; "immediate" means *next few sessions*, not emergencies — nothing is on fire.
+Ordered; "immediate" means *next few sessions*, not emergencies — nothing is on fire. **All of R1 is done** (2026-07-07); focus moves to R2 and the review's safety fixes.
 
-1. **Guard the N+1/filter trap** while it's fresh: add eager-loading at the run-list seams and a short comment on `ShoeRun` warning against `filter()` on proxies — the one place the Phase-5 migration left future code exposed. (R1.4 — first per the R1 ordering now that R1.1/R1.2 are done)
-2. **Wire the Replacement Deals card on `/shoes/:id`** — a placeholder whose data dependency shipped; likely small, closes a visible loose end. (R1.3)
-3. **Debt sweep #1** (R1.5): Task D, `scraper_manager` shim deletion, pure `pace` module, chat model-catalog single-sourcing — plus the review's same-day safety fixes (refactor.md C1 `rotation.adjust_mileage()` and M3) as candidates for the same run of sessions.
-4. **Decide APScheduler** (design deliberately or remove) before any drive-by wiring collides with the single-process scrape lock. (R1.6)
-5. **The security pass** stays the standing gate: schedule it before the agents if those agents will ever run unattended or the MCP port ever leaves the machine. (R2.1)
+1. **The security pass (R2.1)** is now the top item and the standing gate: shared bearer token on `/api` + `/mcp`, default bind to `127.0.0.1`, basic rate limiting on `/api/chat/message`. Nothing exposure-increasing (agents unattended, mobile, remote MCP) proceeds before it.
+2. **Same-day-sized safety fixes from the review** (candidates alongside/before R2.1): refactor.md **C1** — the writable `current_mileage` via `PUT /owned-shoes/{id}` (the one P0 invariant breach; make it an explicit `rotation.adjust_mileage()`), and **M3** — the scrape-lock wedge.
+3. **Deal-domain test gaps** beyond today's coverage: retirement/requalification, the orphan guard + its H2 partial-failure gap, promo manual-beats-scraped (refactor.md H1/H2).
+4. **Provider agentic-loop consolidation** (tech_debt 5.2) — the model-catalog half is done (R1.5d); collapse the 3× loop **before** the R3 agents extend it.
+5. **R2.2 schema authority** (Alembic sole source; relocate DB/`.bak` out of the tree) — prerequisite hygiene before any table-adding work (R2.5/R2.6).
 
 ---
 
-*Maintenance note: this file describes 2026-07-06 and decays fastest of all the docs. Update the Snapshot date, §2 table, §9, and §11 at session end; move shipped items from §4/§5 into §3. When in doubt, the `docs/changelog.md` top entries are the source of truth for what happened; this file is the source of truth for what it means.*
+*Maintenance note: this file describes 2026-07-07 and decays fastest of all the docs. Update the Snapshot date, §2 table, §9, and §11 at session end; move shipped items from §4/§5 into §3. When in doubt, the `docs/changelog.md` top entries are the source of truth for what happened; this file is the source of truth for what it means.*
