@@ -23,10 +23,9 @@ def release_scrape_lock_endpoint():
     wedge should no longer happen — but this endpoint stays as the recovery
     door of last resort short of a process restart.
 
-    Auth note: intentionally unauthenticated *for now*, consistent with the
-    rest of the API under design_decisions E1. The security pass (R2.1) will
-    gate it behind the shared bearer token like every other mutation surface —
-    see SECURITY_PASS_PLAN.md §4 (task 8).
+    Auth: gated behind the shared bearer token by the app-wide auth middleware
+    (R2.1, app/middleware/auth.py) like every other mutation surface — an
+    unauthenticated call gets 401 (asserted in tests/test_auth.py).
     """
     return {"was_held": force_release_scrape_lock()}
 
