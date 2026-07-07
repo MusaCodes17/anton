@@ -26,7 +26,7 @@ def release_scrape_lock_endpoint():
     Auth note: intentionally unauthenticated *for now*, consistent with the
     rest of the API under design_decisions E1. The security pass (R2.1) will
     gate it behind the shared bearer token like every other mutation surface —
-    see SECURITY_PASS_PLAN.md §4.7.
+    see SECURITY_PASS_PLAN.md §4 (task 8).
     """
     return {"was_held": force_release_scrape_lock()}
 
