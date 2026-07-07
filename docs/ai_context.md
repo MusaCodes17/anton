@@ -10,8 +10,8 @@
 
 The repo moves between sessions. Before acting on any time-sensitive claim in this file or its companions:
 
-1. `stat backend/app/models/models.py` — canonical state for this document is **18,858 bytes (2026-07-06)**. A different size means schema work has landed since; read the changelog before proceeding.
-2. Read the **top entry of `docs/changelog.md`** — anything newer than *"MSRP drives deals — 2026-07-06"* is not reflected here.
+1. `stat backend/app/models/models.py` — **19,246 bytes (since 2026-07-07, R1.4 — a comment, no schema change)**. A *different* size means schema work has landed since; read the changelog before proceeding. (This doc's prose below still reflects the 2026-07-06 schema; no table has changed since.)
+2. Read the **top entry of `docs/changelog.md`** — the current top is *"R2.1 — the security pass — 2026-07-07"* (suite **88**). Anything newer than that is not reflected here.
 3. `docs/project_state.md` carries its own snapshot date in its header; if it's older than the changelog's top entry, trust the changelog.
 
 `refactoring/refactor.md` and `refactoring/tech_debt.md` carry the same protocol in their maintenance notes (re-stamped 2026-07-06 against the MSRP-drives-deals state — see their headers).
@@ -48,10 +48,10 @@ CLAUDE.md             the coding guide — conventions, patterns, traps, session
 documentation_creation.md   the prompt program that produced docs/ + refactoring/
 REDESIGN_PLAN.md etc. root planning docs — append-only history; code cites them as §N/P3.4
 backend/
-  run.py              uvicorn entrypoint (binds 0.0.0.0:8000 by default — see E1)
+  run.py              uvicorn entrypoint (binds 127.0.0.1:8000 by default since R2.1; API_HOST=0.0.0.0 opts into LAN — see E7)
   shoe_deals.db       the live DB (+ .bak* restore points, incl. .bak-msrp-drives-deals)
   alembic/            baseline + 5 migrations; latest d4e5f6a7b8c9_msrp_drives_deals
-  tests/              pytest, 12 modules, 64 passing
+  tests/              pytest, 16 modules, 88 passing
   app/
     main.py           assembly only · database.py engine/session · mcp_server.py MCP adapters
     models/models.py  12 ORM models · models/schemas.py Pydantic
@@ -82,7 +82,7 @@ Full reference: `docs/architecture.md` (§1 overview diagram, §4 request lifecy
 
 The historical record is `docs/design_decisions.md` (A=platform, B=domain, C=AI, D=scraping, E=process; each entry carries a verdict). The load-bearing ✅ Keeps: A1 local-first single-process · A4 API-first server-computed numbers · B1 no shoe↔owned-shoe FK · B4/B5 canonical activities + proxy bridge · B6/B7 mileage ledger + single write path · **B9-v2 MSRP-drives-deals (current; supersedes B9)** · B10 orphan-retirement non-empty guard · B11 frozen Strava archive · B13 derived-never-stored · B14 Toronto calendar · C1 MCP as the single AI substrate · C9 confirmation gates · D3 politeness/no-bot-bypass · D4 one scrape lock, refuse-don't-queue · E4 the migration-discipline bar.
 
-The ⚠️ **scheduled-to-change set** (the standing to-do list of decided change): **E1** no-auth (the gate on all exposure) · **A6** dual schema authority · **C8** chat history in localStorage · **D7** `scraper_manager` shim · **E5** APScheduler declared-unused. The Superseded table at the bottom of design_decisions is required reading before "fixing" anything that looks odd — several oddities are the corpses of already-reversed decisions.
+The ⚠️ **scheduled-to-change set** (the standing to-do list of decided change): **A6** dual schema authority · **C8** chat history in localStorage. (Executed and now Superseded: **E1** no-auth → **E7** bearer token, 2026-07-07 R2.1; **D7** `scraper_manager` shim + **E5** APScheduler, 2026-07-07 R1.) The Superseded table at the bottom of design_decisions is required reading before "fixing" anything that looks odd — several oddities are the corpses of already-reversed decisions.
 
 ## 7. Coding conventions
 
@@ -101,7 +101,7 @@ These are the load-bearing decisions and invariants a well-meaning session is mo
 7. **The FastAPI/Starlette/sse-starlette pin triple** resolves an `mcp[cli]` version conflict. Never bump any of the three independently. (design_decisions A7, CLAUDE.md §6)
 8. **`ShoeRun` proxies are read-only presentation.** They lazy-load (N+1 in loops — eager-load `activity` at list seams) and **silently do not work in `.filter()`** — query `Activity` columns. (dependency_graph §8.2, CLAUDE.md §6, refactor.md H4)
 9. **The `shoe_type` string vocabulary is the cross-domain join key.** It exists in four places with zero validation; treat any edit to the vocabulary as schema-grade. (domain_model §4.3/§7.1, tech_debt P1-5)
-10. **No auth — but never widen exposure casually.** Any surface that increases reach (agents unattended, mobile, remote MCP, non-loopback bind) is explicitly gated on the R2.1 security pass. (design_decisions E1, architecture §11)
+10. **Auth is a shared bearer token (R2.1 shipped 2026-07-07) — send it, don't widen exposure casually.** Every request to `/api/*` and `/mcp` needs `Authorization: Bearer <ANTON_SECRET>` (app-wide pure-ASGI middleware, `app/middleware/auth.py`); exempt: `/`, `/health`, `/api/health`, OPTIONS. Default bind is `127.0.0.1`; the app fails fast if `ANTON_SECRET` is unset. The SPA (`VITE_ANTON_SECRET`), Claude Desktop (`mcp-remote --header`), and the loopback client all send it. Any *further* reach increase (unattended agents, mobile, remote MCP) still gets weighed. (design_decisions **E7** ← E1; `SECURITY_PASS_PLAN.md`; `CLAUDE_DESKTOP_SETUP.md`; architecture §11)
 11. **`MCP_SERVER_URL` is a self-reference.** It points back at this same process; changing bind/port silently degrades Son of Anton to "no tools." (dependency_graph §8.1)
 12. **The scrape lock's posture is refuse, not queue** — and it assumes exactly one process/worker. Don't wire APScheduler or add workers without reading D4/D5/E5 and roadmap R4.1. (design_decisions D4)
 13. **Migrations that move data follow the E4 bar** — reversible downgrade, named `.bak` backup, pre/post reconciliation recorded in the changelog. `c3d4e5f6a7b8` (canonical activities) and `d4e5f6a7b8c9` (MSRP) are the reference implementations. (design_decisions E4, CLAUDE.md §9)
@@ -114,7 +114,7 @@ These are the load-bearing decisions and invariants a well-meaning session is mo
 2. **Same-day-sized safety fixes from the review:** refactor.md **C1** (writable `current_mileage` — the one P0 invariant breach; make the UI's mileage-adjust an explicitly sanctioned `rotation.adjust_mileage()`) and **M3** (scrape-lock wedge). Note: refactor.md's own maintenance rule says re-verify C1/H3/H4 now that `models.py` changed size — the MSRP change touched schemas/orchestrator/deal_store, not the rotation paths, so the findings almost certainly stand, but check before acting.
 3. **R1 loose ends** (roadmap R1, order 1→2→4→3→5→6): prune the changelog's stale bottom sections; guard the `ShoeRun` proxy traps (eager-loading — refactor.md H4); wire the Replacement Deals card on `/shoes/:id` (data shipped 2026-07-04); debt sweep #1 (Task D, shim deletion, pure `pace` module, model-catalog single-sourcing); decide APScheduler.
 4. **Deal-domain tests beyond today's three:** `test_deals.py` now pins MSRP savings/refresh/no-MSRP — but retirement/requalification, the orphan guard (and its H2 partial-failure gap), and promo manual-beats-scraped remain untested (refactor.md H1/H2).
-5. **The security pass (R2.1) stays the standing gate** before any agent runs unattended or any port leaves the machine.
+5. **The security pass (R2.1) shipped** (2026-07-07, Session D) — bearer token on `/api`+`/mcp`, loopback default bind, E1 → E7. The exposure gate is closed; **live go-live is a documented human step** (`CLAUDE_DESKTOP_SETUP.md`). Next in R2: rate limiting (`/api/chat/message`), then R2.2 schema authority.
 
 ## 10. Current roadmap
 

@@ -297,7 +297,7 @@
 **Why:** Single user on a trusted machine; auth earlier would have taxed every iteration of every surface.
 **Advantages:** Frictionless development of three parallel interfaces.
 **Trade-offs:** Anyone reaching port 8000 can mutate data and spend LLM credits; every exposure-increasing feature is gated on fixing this.
-**Verdict:** ⚠️ Scheduled to change — the acknowledged precondition for mobile/remote anything (architecture.md §16.1). Until then, the loopback-bind default should be considered part of this decision's repair.
+**Verdict:** 🔁 **Superseded by E7 (R2.1 bearer-token auth, 2026-07-07).** The security pass shipped: a shared bearer token now gates `/api/*` and `/mcp`, the default bind moved to `127.0.0.1`, and the loopback client sends the token. The `SECURITY_PASS_PLAN.md` threat model, alternatives, and rollout are the historical record. See E7 and changelog 2026-07-07.
 
 ### E2. Live DB + manual `.bak` copies in the working tree; `export.py` as code-as-backup
 **Chosen:** `shoe_deals.db` and five point-in-time `.bak*` siblings live beside the code; separately, `/api/export` regenerates `seed_data.py` from live retailers/shoes so a fresh DB can be reseeded to current curation.
@@ -334,6 +334,13 @@
 **Trade-offs:** Mild permanent confusion for newcomers (including AI sessions) — mitigated by the glossary (`domain_model.md` §7.1).
 **Verdict:** ✅ Keep until some other forcing event (e.g., repo migration) makes the rename free.
 
+### E7. Single shared bearer token for all surfaces (R2.1 — supersedes E1)
+**Chosen:** One random secret (`ANTON_SECRET` in `.env`); every request to `/api/*` and the mounted `/mcp` must carry `Authorization: Bearer <ANTON_SECRET>` (constant-time compare in one app-wide ASGI middleware), with a tiny public allowlist (`/`, `/health`, `/api/health`) and OPTIONS preflight exempt. Default bind moved to `127.0.0.1` (`API_HOST=0.0.0.0` is the explicit, now-safe LAN opt-in); the app fails fast if the secret is unset. All three consumers send the token: the SPA (baked-in `VITE_ANTON_SECRET`, on the axios interceptor **and** the raw chat `fetch`/scrape SSE paths), Claude Desktop (`mcp-remote --header`), and the loopback client (Son of Anton, injected at connect time — scoped so the secret never reaches an external MCP server).
+**Why:** Zero UX friction for one user, uniform across all three consumers, symmetric-secret verification with no cert/JWT lifecycle. The threat model is an untrusted process/person on the same LAN — not the internet, not local root. Full rationale and rejected alternatives (per-client keys, cookies+login, mTLS, OAuth, reverse-proxy-only): `SECURITY_PASS_PLAN.md` §3 + §8.
+**Advantages:** No anonymous mutations, no anonymous LLM spend; the precondition for every exposure-increasing R3–R5 feature. Middleware is pure-ASGI so SSE and the `/mcp` stream pass through untouched.
+**Trade-offs:** One static secret in cleartext on the trusted LAN (accepted — §1); rotation is a deliberate `.env`-edit + restart, not hot-rotation (§8 Q3); no rate limiting yet (separate R2 item, §6); `/docs`/`/openapi.json` now require the token too.
+**Verdict:** ✅ Keep. Revisit per-client keys / revocation only when remote or third-party clients appear (R5.2).
+
 ---
 
 ## Superseded Decisions (kept as history)
@@ -348,7 +355,8 @@
 | `scraper_manager.py` compat shim (`ScraperManager` alias) | Post-refactor transition scaffolding | D7 — deleted; consumers import `ScrapeOrchestrator`/`lock`/`registry` directly | 2026-07-07 (R1.5b) |
 | APScheduler dependency (declared, unused) | Anticipatory install for scheduled scraping | E5 — dropped from `requirements.txt`; reinstate with an R4.1 design | 2026-07-07 (R1.6) |
 | Per-size shoe tracking | Original watchlist shape | B2 — size-less tracking | recorded in code comment |
+| No authentication anywhere (`0.0.0.0` default bind) | Trust = network posture, single trusted machine | E7 — shared bearer token on `/api`+`/mcp`, `127.0.0.1` default bind | 2026-07-07 (R2.1) |
 
 ---
 
-*Maintenance note: add an entry when a decision is made that a future session might reasonably reverse; move reversed decisions to the Superseded table with the succeeding entry named. The verdicts above marked ⚠️ are this document's standing to-do list — A6, C8, E1 — and should flip to Superseded entries as they're executed. (D7 shim and E5 APScheduler were executed 2026-07-07, R1.5b/R1.6.)*
+*Maintenance note: add an entry when a decision is made that a future session might reasonably reverse; move reversed decisions to the Superseded table with the succeeding entry named. The verdicts above marked ⚠️ are this document's standing to-do list — A6, C8 (E1 executed 2026-07-07, R2.1 → E7) — and should flip to Superseded entries as they're executed. (D7 shim and E5 APScheduler were executed 2026-07-07, R1.5b/R1.6.)*

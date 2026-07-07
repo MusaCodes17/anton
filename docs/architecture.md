@@ -57,7 +57,7 @@ The system is also **self-referential by design**: the embedded assistant (Son o
 |---|---|---|
 | Language / runtime | Python 3.11+ | |
 | Web framework | FastAPI 0.109 (Starlette 0.35.1, pinned) | Pin exists to resolve an `mcp[cli]` ↔ `sse-starlette` ↔ Starlette version triangle (documented in `requirements.txt`) |
-| ASGI server | Uvicorn 0.34 (`reload=True` dev mode via `run.py`) | Binds `0.0.0.0:8000` by default |
+| ASGI server | Uvicorn 0.34 (`reload=True` dev mode via `run.py`) | Binds `127.0.0.1:8000` by default (R2.1); `API_HOST=0.0.0.0` opts into LAN |
 | ORM / DB | SQLAlchemy 2.0.25 → SQLite (`shoe_deals.db`) | `check_same_thread=False` |
 | Migrations | Alembic 1.13 (batch mode for SQLite) + `init_db()` `create_all` | Baseline + incremental migrations — the **authoritative list lives in §5**; plus a retained `legacy_migrations/` folder of pre-Alembic scripts |
 | MCP | `mcp[cli]` 1.28.0 — FastMCP server, `ClientSessionGroup` client | Streamable HTTP transport, mounted at `/mcp` |
@@ -259,7 +259,7 @@ Transaction ownership is heterogeneous by design: `rotation` functions commit th
 
 ## 8. API Layer (REST)
 
-Seventeen routers under `/api`, all unauthenticated (see §11). Grouped by maturity/pattern:
+Seventeen routers under `/api`, all behind the shared bearer token (R2.1 — see §11). Grouped by maturity/pattern:
 
 **Newer, service-backed, aggregate-per-page endpoints** (the "API-first" pattern):
 - `GET /api/home` — all four Home modules in one round trip.
@@ -348,19 +348,20 @@ _Removed: RunAsYouAre (custom front-end), Adidas & Nike (bot-protected)._
 
 ## 11. Authentication & Security Posture
 
-**There is no authentication anywhere in the system.** This is a known, deliberately deferred state (the project backlog explicitly lists "security pass: API auth, rate limiting, MCP endpoint auth"), acceptable only under the current trust model: single user, single machine, localhost clients.
+**Authentication is a single shared bearer token (R2.1, shipped 2026-07-07 — design_decisions E7, supersedes E1).** Every request to `/api/*` and `/mcp` must carry `Authorization: Bearer <ANTON_SECRET>`; a mismatch or absence returns **401 with an empty body**. Enforced by one app-wide **pure-ASGI** middleware (`app/middleware/auth.py`) — pure-ASGI so SSE and the `/mcp` Streamable-HTTP stream pass through untouched, and app-wide so it covers the mounted `/mcp` sub-app without per-router work. The trust model it defends is an **untrusted process/person on the same LAN** (not the internet, not local root); full threat model and rejected alternatives in `SECURITY_PASS_PLAN.md`.
 
 Facts a due-diligence review must state plainly:
 
-- Every REST endpoint — including destructive ones (delete shoe cascades price history; `DELETE /owned-shoes/{id}` destroys run attributions) and expensive ones (scrape triggers) — is open.
-- The **MCP endpoint is unauthenticated**, and MCP write tools mutate the database.
-- `POST /api/chat/message` is an **unauthenticated proxy to paid LLM APIs** using the server's `ANTHROPIC_API_KEY` / `OPENAI_API_KEY` / `GOOGLE_API_KEY` — anyone who can reach port 8000 can spend those credits.
-- The server **binds `0.0.0.0:8000` by default** (`run.py` / `.env.example`), so "localhost-only" is a property of the network environment, not the application. CORS restricts browsers but is irrelevant to non-browser clients.
-- Secrets live in `backend/.env` (gitignored per `.env.example` convention; the live `.env` file exists in the working tree). No secret ever ships to the frontend — the chat proxy pattern is the correct shape here.
+- **Public allowlist (no token):** `GET /`, `GET /health`, `GET /api/health`, and all CORS `OPTIONS` preflight. Everything else — every destructive REST endpoint (delete shoe cascades price history; `DELETE /owned-shoes/{id}` destroys run attributions), the scrape triggers, the admin scrape-lock release, the **MCP write tools**, and `POST /api/chat/message` (the paid-LLM proxy) — is behind the token.
+- **The three consumers all send it:** the SPA (baked-in `VITE_ANTON_SECRET`, on the axios interceptor **and** the raw chat `fetch`/scrape-SSE paths — the scrape stream was moved off native `EventSource`, which can't set the header, to a `fetch` reader); Claude Desktop (`mcp-remote --header`); the loopback client (Son of Anton, injected at connect time, scoped to the loopback so the secret never reaches an external MCP server — dependency_graph §8.1).
+- The server **binds `127.0.0.1:8000` by default** (`run.py`); `API_HOST=0.0.0.0` is the explicit, now-safe LAN opt-in. The app **fails fast** at startup if `ANTON_SECRET` is unset.
+- Secrets live in `backend/.env` (gitignored). The bearer token is *also* baked into the SPA bundle via `VITE_ANTON_SECRET` — accepted under the LAN threat model (the bundle reaches only the trusted single user on the trusted machine; §8 Q1). The provider API keys still never ship to the frontend — the chat proxy pattern holds.
 - Scraper-side: a distinct, honest User-Agent is configurable; rate-limiting sleeps are baked into the base scraper. The system deliberately declined to add paid Cloudflare-bypass services.
 - Persisted external content (product URLs, scraped promo text, image URLs) is rendered by the frontend; scraped strings are treated as data, and deal links render as outbound anchors.
 
-Net: the security architecture is "trusted LAN, single tenant." Every future step that increases exposure (remote MCP transport for ChatGPT integration — already explored and deferred; mobile client; any non-localhost deployment) is gated on the security pass.
+**Not covered by R2.1 (deliberately):** rate limiting on `/api/chat/message` (a separate R2 item — R2.1 stops *anonymous* spend, not an authenticated client looping); HTTPS/TLS (network layer, remote-access story R5.2 — the token is cleartext on the trusted LAN by accepted design); secret rotation UX / per-client keys (one static secret, rotate via `.env` edit + restart). `/docs` and `/openapi.json` now require the token too.
+
+Net: the security architecture is "trusted LAN, single tenant, one shared secret." Every future step that further increases exposure (remote MCP transport; mobile client; any non-localhost deployment) still builds on this gate.
 
 ---
 
@@ -432,7 +433,7 @@ Critical library pins with recorded reasons: FastAPI 0.109 + Starlette 0.35.1 + 
 
 Ordered roughly by how much they constrain the "long-term platform" ambition. (Import-level detail for several of these lives in `dependency_graph.md` §§7–10.)
 
-1. **Zero authentication across three mutation surfaces** (REST, MCP, chat-as-LLM-proxy) on a default `0.0.0.0` bind. Acceptable today only by network posture; it is the hard gate in front of every growth direction (remote MCP, mobile, any hosting). Already on the backlog — listed here because it dominates everything else.
+1. ~~**Zero authentication across three mutation surfaces**~~ **RESOLVED (R2.1, 2026-07-07).** A shared bearer token now gates all three surfaces (REST, MCP, chat-as-LLM-proxy) and the default bind moved to `127.0.0.1` — see §11 and design_decisions E7. What remains in this space is *rate limiting* on the LLM proxy (a separate R2 item) and, further out, TLS for any off-machine access (R5.2). The item is kept here (struck through) rather than deleted so the "this dominated everything" history stays visible.
 2. **Single-process assumptions baked into operational state.** The scrape lock is a `threading.Lock`; scrape progress is in-memory pub/sub; both silently break under multiple Uvicorn workers or any horizontal move. Fine now, but it's an invisible constraint — nothing enforces or documents "must run with one worker."
 3. **The run feed is canonical now, but still computed whole-table in Python.** Phase 5 removed the union/dedup cost, yet `unified_activities` still loads every run row (933 activities and growing) and filters/sorts in Python on every call — and Home calls it too, against its own <200 ms budget. The watchlist endpoint similarly reduces all price records in Python. Both remain explicitly justified at personal scale; the next step is indexed date-range queries against the table that now exists.
 4. **The `ShoeRun` proxy layer is a compatibility asset with hidden costs.** The property proxies preserved every response shape through the migration (a real win), but: each proxied "column" read is a lazy `Activity` load — an N+1 pattern in any un-eager-loaded loop over runs; the attributes silently stopped working in SQLAlchemy `filter()` expressions (query-site code must use `Activity` columns — `coros.py` was migrated correctly, future code must know to); and `avg_pace` re-implements pace formatting inside the ORM class, the third copy of that logic (`rotation`, `coros_client`, the proxy).
