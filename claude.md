@@ -1,359 +1,202 @@
-# Running Shoe Deal Finder - Project State 📋
+# CLAUDE.md — Anton Development Guide
 
-**Last Updated:** 2026-07-04
-**Project Status:** Anton redesign — Phase 5 backlog (started)
-**Current Focus:** Product images, colorway consolidation, scraper durability + coverage
-
----
-
-## 🆕 Anton redesign Phase 5 — canonical `activities` table (§3 v2) — 2026-07-04
-
-**[CHANGED] The two run stores collapsed into one canonical `activities` table; `shoe_runs` is now a pure attribution row.**
-- New `Activity` model (`models.py`) — superset of the old `strava_activities` columns + a `source`
-  discriminator (`strava`|`coros`|`manual`) + `coros_activity_id`. Every physical run (Strava export,
-  COROS sync, manual log) is one Activity row. `StravaActivity` model + table **removed**.
-- `ShoeRun` rewritten to attribution only: `{id, activity_id (FK, unique), owned_shoe_id, created_at}`.
-  Read-only proxy properties (`distance_km`, `run_date`, `source`, `avg_pace`, `avg_hr`, `notes`,
-  `coros_activity_id`) pull from the joined activity so `ShoeRunResponse` and every reader keep the
-  **identical response shape** — no frontend/MCP consumer changes.
-- Migration `alembic/versions/c3d4e5f6a7b8_canonical_activities.py` (reversible): migrates
-  `strava_activities` → `activities` (source='strava'); linked `shoe_runs` become attribution for the
-  matching strava activity (stamping its `coros_activity_id`); unlinked post-export runs mint fresh
-  activities; rebuilds `shoe_runs`; drops `strava_activities`. Downgrade reconstitutes both old tables.
-  **`current_mileage` counters untouched** — storage restructured, totals unchanged.
-- Write path (`rotation.log_run`) now creates an Activity then the attribution row; `delete_run`
-  removes the attribution + decrements mileage, deleting the activity too **except** source='strava'
-  (frozen archive preserved). `coros.confirm_run`/`is_already_logged` dedup on
-  `activities.coros_activity_id`. `activities._build` (the union seam) simplifies to one join — no more
-  dedup-by-link. `strava_import` upserts into `activities`; `strava /status` + MCP readers repoint.
-- **[REMOVED]** `strava_backfill.py` + its CLI + test — the two-store reconciliation it performed is
-  exactly what this migration makes permanent (Strava export is frozen; no new cross-store dups).
-- Verified on the live DB: pre/post reconciliation exact (698 runs · 8028.02 km · 667 attributed ·
-  0 per-shoe mileage drift; 933 activities), `downgrade -1` round-trips clean, full suite **61 passed**
-  (new `tests/test_activities_model.py`), `/training` + `/shoes/:id` + `/` render identical numbers,
-  0 console errors. Clean pre-migration backup kept at `backend/shoe_deals.db.bak-pre-activities`.
+**Audience:** Claude Code (and any AI coding session) working in this repository.
+**Read with:** `docs/project_state.md` (what's true right now) and `docs/ai_context.md` (orientation, once it exists). Deep references: `docs/architecture.md`, `docs/domain_model.md`, `docs/design_decisions.md`, `docs/dependency_graph.md`.
+**Session changelog lives at `docs/changelog.md`** (formerly this file) — append a session entry there at the top after every working session. This file is the *stable* guide; the changelog is the *running* history.
 
 ---
 
-## 🆕 Anton redesign Phase 5 — true app mark for Anton — 2026-07-04
+## 1. Project Overview
 
-**[ADDED] A real logo mark: a forward-leaning "A" monogram, replacing the placeholder diamond.**
-- New `frontend/src/components/layout/BrandMark.jsx` — an italic "A" (apex shifted right of its
-  base so the letter leans into a stride) with the crossbar drawn as a motion line that overshoots
-  the right leg into a trail. Strokes use `currentColor`, so callers pick the colour.
-- Wired into `Layout.jsx` `Brand` (green `bg-primary` tile, `text-background` strokes — same
-  negative-space treatment as before, real glyph now) for both the desktop sidebar and mobile top
-  bar. Legible at 28px.
-- `public/favicon.svg` replaced (was a pulse-line) with the matching mark: green rounded tile +
-  dark "A". `index.html` already points at it.
-- Nav active/inactive **diamond dots left as-is** — they're a functional indicator motif, not the
-  logo. Verified desktop + ~380px, `vite build` clean, 0 console errors.
+Anton (repo: `running-shoe-deals` — old name kept deliberately) is a **single-user personal running platform** for a competitive runner in Montreal:
+
+- **Deal watching** — track shoe models across 8 Canadian retailers; scrape, qualify, and surface genuine price opportunities.
+- **Rotation & training** — canonical history of every run (`activities` table: Strava archive + COROS sync + manual), attribution of runs to owned shoes, wear/retirement lifecycle, training analytics, planned races.
+- **AI surfaces** — an MCP server at `/mcp` (tools/resources/prompts/sampling) consumed by Claude Desktop, and an embedded assistant (**Son of Anton**) that is an MCP *client* of that same server.
+
+Stack: FastAPI + SQLAlchemy 2 + SQLite + Alembic; React 18 + Vite + Tailwind + React Query (JSX, no TypeScript); `mcp[cli]` FastMCP. One process, one user, local-first, **no auth by explicit deferral** — never widen exposure casually.
+
+The two business domains are **deliberately independent** (no FK between `shoes` and `owned_shoes`; they meet only through the `shoe_type` string heuristic). Do not "fix" this. See `docs/domain_model.md` §5.1.
 
 ---
 
-## 🆕 Anton redesign Phase 5 — `/shoes` lifecycle reframe — 2026-07-04
+## 2. Coding Philosophy
 
-**[ADDED] Retirement pipeline + group-by-type on `/shoes`; shared server-side pipeline computation.**
-- New `rotation.retirement_pipeline(db, threshold=0.75)` + `rotation.active_deal_counts_by_type(db)`
-  in `app/services/rotation.py` — the single authoritative "which active shoes are ≥75% of their
-  `mileage_limit`, worst-first, and how many replacement deals exist" computation. Replacement deals
-  are the heuristic §4 bridge: active deals on a tracked `Shoe` of the same `shoe_type` (no FK).
-- **[REFACTORED]** `home._shoe_alerts` is now a thin projection over `retirement_pipeline` (dropped
-  its duplicated query + local `ALERT_THRESHOLD`), so the Home shoe-alerts module and the Shoes page
-  can never disagree about thresholds/ordering/counts.
-- New thin endpoint `GET /api/owned-shoes/rotation-overview` → `{threshold, pipeline[]}` where each
-  entry is `{owned_shoe_id, pct, current_mileage, mileage_limit, replacement_deals}`. Deliberately
-  id-keyed/lightweight — the page already has full shoe rows from `GET /owned-shoes` and groups them
-  by type client-side (trivial); the endpoint supplies only the server-computed pieces (API-first §2.1).
-- Frontend (`pages/MyShoes.jsx`): active rotation now renders **grouped by shoe type** (groups ordered
-  like the type filter, `Uncategorized` last; header = label · count · total km) with a **Retirement
-  pipeline** band above it (`RetirementPipeline`/`PipelineRow`, worst-first, red/warning mileage bar,
-  pct badge, "N replacement deals" button deep-linking to `/deals`; pipeline shoes still appear in
-  their type group — the band is an attention surface, not a move). `useRotationOverview` hook +
-  `ownedShoesApi.rotationOverview`. "Add a shoe" is now a full-width button below the groups.
-- Tests: `tests/test_rotation_overview.py` (6) — threshold + boundary (exactly 75% included),
-  worst-first ordering, replacement-deal counting (type-scoped, active-only, case-insensitive),
-  untyped→0, empty pipeline. Full suite 69 passed. Desktop (grouped) + ~380px (stacked) pass, 0
-  console errors.
+1. **Correct numbers, once.** Every derived value is computed server-side in exactly one place and served to all clients. If two surfaces could disagree about a number, the design is wrong.
+2. **One sanctioned write path per invariant.** Run records go through `rotation.log_run()`. Deal-domain writes go through `DealStore`. Never add a parallel path; add parameters to the sanctioned one.
+3. **Decisions are written down.** Non-obvious choices get a comment saying *why*; session results go in the changelog; reversible-decision candidates go in `docs/design_decisions.md`. Code that surprises without explaining is a defect here even when it works.
+4. **The human is the tiebreaker.** Automation prepares and proposes; the runner confirms. No externally-sourced or AI-initiated write bypasses confirmation.
+5. **Personal scale is a feature.** Prefer the simple O(N) that's honest about itself over speculative infrastructure — but respect declared budgets and never make scale decisions silently (label them, as the code already does).
+6. **History is sacred in the training domain, disposable in the deals domain.** Runs, notes, and the Strava archive are never destroyed by normal operations; watchlist data dies with the interest. Keep the asymmetry.
 
 ---
 
-## 🆕 Anton redesign Phase 4 — Home rebuilt as an attention surface — 2026-07-03
+## 3. Folder Conventions
 
-**[ADDED] `GET /api/home` + a rebuilt Home page (`/`) — four attention modules in one round trip.**
-- New `app/services/home.py` (`home_summary(db, today)`) aggregates all four §4 modules; thin
-  router `app/routers/home.py` (`GET /api/home`, ~110ms locally). API-first: every number computed
-  server-side.
-  - **Training pulse**: this-week vs last-week km (Monday-anchored, computed off the unioned run
-    feed so an empty week reads 0), + newest run (distance, pace, HR, shoe, source).
-  - **Shoe alerts**: active owned shoes at/over 75% of `mileage_limit`, worst-first, each with a
-    replacement-deal count (active deals on a tracked `Shoe` of the same `shoe_type` — heuristic,
-    no FK). Empty = "Rotation healthy" shown small + proud.
-  - **Top deals**: 3 deepest active discounts, biggest savings % first.
-  - **Activity strip**: last COROS sync (`app_settings.last_coros_sync_at`), last scrape
-    (`max(retailers.last_scraped_at)`), newest active deal detected.
-- Frontend: `pages/Home.jsx` (Dashboard convention — inline sub-components), `useHome` hook,
-  `homeApi.summary`. Every module deep-links into its tab (`/training`, `/deals?deal=id`, `/shoes`).
-- **[REMOVED]** old `pages/Dashboard.jsx` + `components/TrainingVolumeCard.jsx` (+ now-dead
-  `useRecentDeals`/`useBestDeals` hooks). `useDashboardStats` kept — still used by Layout + Settings.
-- Tests: `tests/test_home.py` (10) — week-over-week math, empty-week-reads-0, last-run selection,
-  75% threshold + worst-first ordering + replacement-deal counting, top-deals ranking/cap, strip.
-  Full suite 63 passed. Desktop (no-scroll) + ~380px passes clean, 0 console errors.
+```
+backend/app/
+  main.py          app assembly only — routers, CORS, /mcp mount, lifespan
+  database.py      engine/session/get_db/init_db — don't add logic here
+  mcp_server.py    MCP tools/resources/prompts — THIN adapters, like routers
+  models/models.py ORM (12 models)   models/schemas.py Pydantic
+  routers/         one file per resource; thin; HTTP concerns only
+  services/        business logic — the only home for domain rules
+  scrapers/        base + platform bases + one file per bespoke retailer;
+                   orchestrator/registry/deal_store/lock are the real modules
+                   (scraper_manager.py is a legacy shim — don't extend it)
+  scripts/         CLI wrappers around services (argparse + exit codes only)
+backend/tests/     pytest; one module per feature area
+backend/alembic/   migrations — every schema change gets one (see §9)
+frontend/src/
+  pages/           route components; page-local sub-components inline in the page file
+  components/      shared components; ui/ = shadcn-style primitives; feature
+                   subfolders (chat/, training/, layout/) for cohesive sets
+  hooks/useApi.js  ALL React Query hooks, grouped per API family
+  services/api.js  the single axios client, grouped per domain
+  lib/             pure helpers (no React, no fetch)
+docs/              the documentation suite + changelog.md
+```
 
----
-
-## Project Commands
-
-| Command | What it does |
-|---|---|
-| `/project:run` | Start backend (port 8000) + frontend (port 5173) |
-| `/project:scrape` | Trigger scraping via the API |
-| `/project:seed` | Seed or sync the database with seed_data.py |
-| `/project:migrate` | Run a DB migration (pattern + existing scripts) |
-| `/project:add-retailer` | Step-by-step guide to add a new retailer scraper |
+Placement rules: new business logic → `services/` (never a router, never an MCP tool, never a React component). New endpoint → thin function in the matching router. New scraper → subclass in its own file, registered in `registry.py`. New query hook → `useApi.js`, calling a function added to `api.js`. Root planning docs (`REDESIGN_PLAN.md` etc.) are citable references — code comments cite them as `§N` / `P3.4`.
 
 ---
 
-## 🆕 Shoe detail page, purchase price/cost-per-km, notes journal, mileage checkpoints — 2026-06-24
+## 4. Architecture Principles
 
-**[ADDED] A full `/my-shoes/:id` detail page, replacing the old quick-view dialog as the permanent home for run history.**
-- New route `frontend/src/pages/ShoeDetail.jsx`. Card click target ("Details" button or the
-  image/name header) now navigates here instead of opening a dialog; the old `ShoeDetailDialog`
-  in `MyShoes.jsx` was removed entirely (run history moved into the new page, nothing duplicated).
-- Layout: image/brand/model/nickname header with status badge and purchase-price line → stats row
-  (mileage bar, total runs, lifetime avg pace/HR when present) → a **Replacement Deals** placeholder
-  card (explicitly empty — "Coming soon" badge, no logic, just holding the layout slot for later) →
-  **Shoe Notes Journal** → **Run History**.
-- **[ADDED]** `purchase_price` (nullable float) on `owned_shoes` (migration
-  `backend/migrate_add_shoe_notes.py`, same idempotent-`ALTER TABLE` pattern as prior owned_shoes
-  migrations). Exposed in `OwnedShoeBase`/`Update` and as computed `cost_per_km` on
-  `OwnedShoeResponse` (`purchase_price / current_mileage`, rounded 2dp, only when both are set) —
-  computed server-side in `_attach_computed_fields` so the REST API, MCP tools, and frontend all
-  show the identical number instead of each recomputing it. `OwnedShoeForm` gained a "Purchase
-  price ($)" field.
-- **[ADDED]** "Adjust mileage" action on the detail page — a small two-step dialog (enter value →
-  explicit confirm showing old/new) that PUTs `current_mileage` directly via the existing
-  `OwnedShoeUpdate` endpoint. Deliberately not a new endpoint — `current_mileage` was already
-  updatable via `PUT /owned-shoes/{id}`; this just gives it dedicated UI with a confirmation step
-  since it silently overrides accumulated run mileage rather than logging a run.
-
-**[ADDED] Shoe Notes Journal — replaces the old single free-text `owned_shoes.notes` column.**
-- New table `shoe_notes` (`id`, `owned_shoe_id`, `body`, `mileage_at_note`, `triggered_by`
-  ["manual"|"checkpoint"], `created_at`) — a timestamped, mileage-anchored history instead of one
-  overwritable text blob. `migrate_add_shoe_notes.py` migrates any existing `owned_shoes.notes`
-  text into a `triggered_by="manual"` entry (mileage_at_note = current_mileage at migration time),
-  then drops the old column. Ran live: 2 existing notes migrated cleanly.
-- Endpoints (`routers/owned_shoes.py`): `GET/POST /api/owned-shoes/{id}/notes`,
-  `DELETE /api/owned-shoes/notes/{note_id}`. `mileage_at_note` is always set server-side from the
-  shoe's current mileage at write time — never client-supplied.
-- MCP: `update_shoe_notes` removed (the column it wrote no longer exists); replaced by
-  `get_shoe_notes(owned_shoe_id)` and `add_shoe_note(owned_shoe_id, body)`.
-- Frontend: vertical timeline in `ShoeDetail.jsx` (date · mileage · checkpoint badge when
-  applicable · body), "Add note" button, per-entry delete with confirmation, empty state.
-
-**[ADDED] 100km mileage checkpoints prompt for a journal entry.**
-- `POST /owned-shoes/{id}/log-run` now returns `LogRunResponse` (`run_logged`, `updated_mileage`,
-  `checkpoint_reached`, `checkpoint_km`, `shoe`) instead of the bare shoe — a breaking response-
-  shape change for that one endpoint. Checkpoint crossing is `floor(new_mileage/100) >
-  floor(old_mileage/100)`, e.g. 290.06km + 10km run → checkpoint_km=300.
-- New shared `frontend/src/components/LogRunDialog.jsx` — logs the run, and if `checkpoint_reached`
-  is true and this checkpoint hasn't been prompted before, swaps to a "Your [shoe] just hit Xkm —
-  add a note?" view. "Already prompted" is tracked client-side only
-  (`frontend/src/lib/checkpoints.js`, localStorage keyed by shoe id + checkpoint km).
+1. **Thin adapters.** Routers and MCP tools translate transport ↔ service calls. If an adapter grows a loop with domain meaning, extract to a service. (Legacy fat routers — `watchlist`, `deals`, `dashboard` — are debt to migrate, not precedent to copy.)
+2. **REST/MCP parity.** A new capability ships as: service function → REST endpoint → MCP tool over the *same* function. If MCP can't expose it, the logic is in the wrong layer.
+3. **Aggregate-per-page endpoints.** Pages get one round trip (`/api/home`, `/api/watchlist`). Derived fields attach at the boundary (`_attach_computed_fields`, `attach_derived`) — never stored, never recomputed client-side.
+4. **Seams over rewrites.** `activities.unified_activities()` is the model: a read seam whose internals were swapped (two-store union → canonical table) with zero caller changes. When you can't fix something now, build the seam and note the plan.
+5. **Graceful degradation.** Missing credentials disable a feature (return "not configured", don't raise); failed enrichment falls back (resource preload → tools; image → heuristic → placeholder); an unsupported MCP client gets an actionable message.
+6. **Single-process assumptions are real.** The scrape lock and SSE state are in-memory. Do not add workers, schedulers, or background daemons without reading `docs/design_decisions.md` D4/D5/E5 first.
 
 ---
 
-## 🆕 Run pace/HR, lifetime averages, run deletion — 2026-06-24
+## 5. Coding Standards
 
-**[ADDED] avg_pace/avg_hr wired through properly, lifetime stats, and the ability to remove a logged run.**
-- `log_run_to_shoe` (MCP) gained `avg_pace`/`avg_hr` params. New computed fields on
-  `OwnedShoeResponse`: `lifetime_avg_pace`, `lifetime_avg_hr`, `total_runs`. Pace strings are
-  averaged correctly — converted to seconds, averaged, formatted back (`_pace_to_seconds` /
-  `_seconds_to_pace` in `routers/owned_shoes.py`). Computed by `_attach_computed_fields`, called
-  from every owned_shoes endpoint that returns a shoe.
-- **[ADDED]** `DELETE /api/owned-shoes/runs/{run_id}` — deletes the run and subtracts its
-  `distance_km` back out of the parent shoe's `current_mileage` (floored at 0), returns the
-  updated shoe. New MCP tool `delete_shoe_run(run_id)` mirrors it. Frontend: Trash icon per row
-  with confirmation dialog. `useDeleteShoeRun` optimistically patches the cache in `onMutate`.
+**Python**
+- Python 3.11+, type hints on all service signatures (`Optional[...]`, `list[...]` both in use — match the file you're in). `from __future__ import annotations` in newer service modules.
+- Dataclasses for service-layer value objects (`RunLogResult`, `PipelineEntry`, `UnifiedActivity`); Pydantic only at the API boundary.
+- Module docstring states the module's *job and rationale*; function docstrings explain behavior, edge cases, and **who owns the commit** where relevant; `Raises:` documented when callers must handle.
+- Keyword-only arguments (`*,`) for multi-param service functions.
+- Constants at module top with a comment (`RETIREMENT_THRESHOLD = 0.75  # §4 attention threshold...`).
+- Units live in names: `distance_km`, `moving_time_s`, `avg_pace_s_per_km`, `mileage_at_note`. `*_at` = timestamp, `*_date` = local calendar date. Never an unlabeled number.
 
----
+**JavaScript/React**
+- Functional components + hooks; JSX; no TypeScript (don't introduce it piecemeal).
+- Server state via React Query only — no bespoke fetch-in-useEffect. Mutations invalidate or optimistically patch (`onMutate`) their query keys.
+- Tailwind with **design tokens**: colors/spacing through `index.css` variables and the theme — no hard-coded hex in components. Reuse `components/ui/` primitives.
+- No new heavy frontend dependencies; charts stay on recharts.
+- Every UI change passes desktop **and** ~380 px mobile before it's done.
 
-## 🆕 My Shoes UI polish — 2026-06-24
-
-**[ADDED] Search, active/retired split, compact mileage text, and product images on owned shoe cards.**
-- Renamed "Shoes" nav tab to **"Tracked Shoes"** to disambiguate from "My Shoes".
-- My Shoes page has a client-side search bar and splits cards into **Active** and **Retired** sections.
-- **Images on owned shoe cards**: priority is manual `image_url` (new nullable column on
-  `owned_shoes`, migration `backend/migrate_add_owned_shoe_image.py`) → best-effort
-  `matched_image_url` (heuristic join against `price_records.image_url` by brand/model substring)
-  → placeholder. Never a broken `<img>`.
+**Both:** small diffs, phase-prefixed conventional commits (`p5: canonical activities migration`), one commit per numbered task.
 
 ---
 
-## 🆕 "My Shoes" personal rotation tracker — 2026-06-24
+## 6. Preferred Patterns (copy these)
 
-**[ADDED] Track owned shoes (mileage, notes, run history) — separate from deal tracking.**
-- New tables `owned_shoes` + `shoe_runs` (`models.py`), created automatically by `init_db()`.
-  Deliberately **not** the same table as `Shoe` (deal tracking).
-- Backend: `app/routers/owned_shoes.py` — full CRUD + `POST /{id}/log-run` + `GET /{id}/runs`.
-  `shoe_runs.source` is `"manual"` for now; `"coros"` is reserved for future COROS sync.
-- MCP: 5 tools — `get_owned_shoes`, `get_shoe_runs`, `log_run_to_shoe`, `add_shoe_note`,
-  `get_shoe_notes`, `delete_shoe_run`, `retire_shoe`.
-- Frontend: `pages/MyShoes.jsx`, `OwnedShoeForm.jsx`, `LogRunDialog.jsx`,
-  `MileageProgressBar.jsx` (green <500km / yellow 500–800km / red >800km).
+- **Service function shape:** `def thing(db: Session, id: int, *, option: bool = True) -> Result:` — session first, keyword options, dataclass or ORM return, docstring with commit ownership.
+- **Escape hatches over parallel paths:** `log_run(..., increment_mileage=False, commit=False)` lets batch callers reuse the invariant-preserving path. Extend this way.
+- **Shared computation, thin projections:** `home._shoe_alerts` is a projection over `rotation.retirement_pipeline` — when two surfaces need the same answer, one computes, the other projects.
+- **Idempotency by external ID:** unique `strava_activity_id`; dedup on `coros_activity_id` + date/distance fallback; re-running an import updates in place. Any new ingestion follows suit.
+- **MCP write-tool envelope:** return `{"success": bool, ...}` dicts; read tools return plain data; resources return markdown *with* an embedded JSON block.
+- **Confirmation protocol for synced/AI writes:** fetch → dedup → suggest (with stated heuristic) → **wait** → write via the sanctioned path → summarize → threshold check. (`sync_coros_runs` is the reference.)
+- **Frontend data flow:** `api.js` function → `useApi.js` hook → page. Deep links carry state (`/deals?deal=id`), not globals.
 
----
-
-## 🆕 Sporting Life investigated — blocked by Cloudflare — 2026-06-22
-
-**[BLOCKED]** Sits behind a Cloudflare managed JS challenge — 403s plain requests AND headless
-Playwright. Would need a paid proxy/unblocking service (ScraperAPI, Bright Data). Not added.
-
----
-
-## 🆕 New retailer — En Route Run — 2026-06-22
-
-**[ADDED] `EnRouteRunScraper`** (`app/scrapers/enroute_run.py`).
-- Shopify-backed but headless Astro storefront — `/products.json`, `/products/<handle>.js`,
-  `/search/suggest.json` all 404. Bespoke scraper parses inline Astro/Qwik hydration JSON
-  (`_parse_variant_blocks()` unescapes HTML-entity-encoded variant data).
-- Verified: Adidas Adizero Adios Pro 4 — genuine markdowns found end-to-end.
+**Known traps (do not rediscover these):**
+- `ShoeRun`'s run fields (`distance_km`, `avg_pace`, …) are **property proxies** onto the joined `Activity`: they trigger lazy loads (N+1 in loops — eager-load the `activity` relationship at list seams) and they **silently do not work in `.filter()`** — query `Activity` columns instead.
+- Pace: persisted as int seconds/km; `"M:SS/km"` strings are presentation only (`rotation.pace_to_seconds`/`seconds_to_pace`).
+- "Shoe" is ambiguous: `Shoe` = watchlist entry, `OwnedShoe` = physical pair. Name variables accordingly.
+- Timezone: run dates are **America/Toronto local dates**; converting from UTC first is mandatory.
+- The Starlette/FastAPI/sse-starlette pins resolve an `mcp[cli]` conflict — don't bump them independently.
+- `MCP_SERVER_URL` points the chat service back at *this same app*; changing bind/port affects Son of Anton.
+- `strava_stats` imports the private-by-convention `activities._effective_moving_s` — renaming it "safely" inside `activities.py` breaks stats with no import-level signal.
+- Router prefixes ↔ `api.js` paths (and the SSE event names on both sides of `useChatStream` / the scrape stream) are hand-matched string contracts — change one side, grep for the other.
 
 ---
 
-## 🆕 Phase 5 — 2026-06-18 (images, colorway consolidation, +3 retailers)
+## 7. Error Handling
 
-**Task 2 — Product images + colorway.**
-- New nullable columns `image_url` + `colorway` on `price_records` and `deals`
-  (migration `backend/migrate_add_images.py`).
-- Algolia scrapers: image from S3 CDN URL, colorway from `thumbnails[].color_name`.
-- Shopify scrapers: `image`/`featured_image`, protocol-relative normalized to `https:`,
-  colorway from the Color option.
-
-**Task 3 — Colorway consolidation UI.**
-- `Deals.jsx` groups active deals by `shoe_id` — one card per model.
-- `ShoeProductCard.jsx` + `ColorwaySelector.jsx` (thumbnail gallery switching active colorway).
-
-**Task 1 — Automatic Algolia credential rediscovery.**
-- `base_scraper.discover_algolia_credentials()` drives the site's own search with headless
-  Playwright, intercepts `*.algolia.net` XHR to recover app id/key/index.
-- `algolia_scraper._algolia_query` detects 401/403, rediscovers once per session, caches creds.
-
-**Task 4 — +3 Shopify retailers.** Boutique Endurance, Le Coureur, BlackToe Running added.
+- **Services raise, adapters translate.** Services raise `LookupError` (missing entity), `ValueError` (bad input/state), or let `requests.RequestException` propagate. Routers map: `LookupError → 404`, `ValueError → 400/502` (502 for upstream), `RequestException → 502`, scrape-in-progress → `409`. MCP tools catch and return `{"success": False, "error": "..."}` — tools never raise raw to the client.
+- **Absence ≠ error:** unconfigured COROS returns `coros_configured=False` with empty results; empty pipelines/feeds return empty lists. Reserve errors for *broken*, not *missing*.
+- **Idempotent no-ops are silent successes:** confirming an already-logged run returns `None`/skips — not an error.
+- **Batch loops skip-and-continue with intent:** per-item failures in confirmations/scrapes are isolated (one retailer's failure never aborts the others) and surfaced in the summary, not swallowed.
+- **Protective interlocks over cleverness:** the orphan-retirement "non-empty search" guard is the model — when a bulk operation could destroy data on a transient failure, require positive evidence first.
+- Frontend: axios interceptor normalizes FastAPI error shapes; user-facing failures get a toast/inline state, never a blank crash; destructive actions get a confirmation dialog.
 
 ---
 
-## 🌐 Retailer Status
+## 8. Logging Expectations
 
-See `/project:add-retailer` for the full platform detection checklist and steps to add a new scraper.
-
-| Retailer | Platform | Scraper | Notes |
-|---|---|---|---|
-| The Last Hunt | Algolia | ✅ | index `PRODUCTS_TLH_en-CA` |
-| Altitude Sports | Algolia | ✅ | index `PRODUCTS_ALS_en-CA` |
-| JD Sports Canada | Shopify | ✅ | |
-| Boutique Endurance | Shopify | ✅ | `/en` locale required |
-| Le Coureur | Shopify | ✅ | `/en` locale; some titles stay French |
-| BlackToe Running | Shopify | ✅ | English-only |
-| ForeRunners | Shopify | ✅ | `shop.forerunners.ca` |
-| En Route Run | Shopify (headless Astro) | ✅ | inline variant hydration JSON |
-| Sport Experts | FGL/Canadian Tire | ❌ future | custom platform |
-| Sporting Life | Cloudflare-protected | ❌ blocked | paid unblocking service needed |
-
-_Removed: RunAsYouAre (custom front-end), Adidas & Nike (bot-protected)._
+- Python `logging` with module loggers (`logger = logging.getLogger(__name__)`) in scrapers and services; log per-retailer/per-item outcomes at INFO, degradations at WARNING, isolated failures at ERROR *with context* (retailer, shoe, URL).
+- MCP tools additionally use `ctx.log` for advisory notifications that should reach the LLM client (scrape completion, mileage thresholds).
+- Startup prints (`✅ Database initialized`) are fine at boot; don't `print` inside request paths.
+- Long-running jobs publish progress events (`scrape_state`) — user-visible progress is part of the feature, not optional telemetry.
+- No secrets in logs, ever (API keys, COROS credentials).
 
 ---
 
-## 🎯 Project Overview
+## 9. Database Conventions
 
-**Purpose:** Find deals on running shoes from Canadian retailers
-**Tech Stack:** Python FastAPI + React + Vite + Tailwind CSS
-**Target Users:** Personal use (Montreal-based runner)
-
----
-
-## 🏗️ Architecture
-
-### Backend (Python/FastAPI)
-- `app/main.py` - FastAPI app setup
-- `app/routers/` - API endpoints
-  - `shoes.py` - Shoe CRUD
-  - `retailers.py` - Retailer CRUD
-  - `deals.py` - Deal queries
-  - `scraping.py` - Trigger scrapes
-  - `dashboard.py` - Statistics
-  - `owned_shoes.py` - My Shoes CRUD + run logging
-  - `export.py` - Export DB → seed_data.py source
-- `app/models/` - Database models + schemas
-- `app/scrapers/`
-  - `base_scraper.py` - Framework (HTTP, Playwright, Algolia rediscovery)
-  - `algolia_scraper.py` - Generic Algolia base (auto credential rediscovery)
-  - `shopify_scraper.py` - Generic Shopify JSON base
-  - `the_last_hunt.py`, `altitude_sports.py` - Algolia subclasses
-  - `jd_sports.py`, `boutique_endurance.py`, `le_coureur.py`, `blacktoe_running.py`, `forerunners.py` - Shopify subclasses
-  - `enroute_run.py` - Bespoke (headless Astro)
-  - `scraper_manager.py` - Orchestration
-- `app/mcp_server.py` - MCP tools (mirrors REST API)
-
-### Frontend (React/Vite)
-- `src/pages/` — Dashboard, Deals, Shoes, Retailers, PriceHistory, MyShoes, ShoeDetail
-- `src/components/` — DealCard, ShoeProductCard, ColorwaySelector, MileageProgressBar, LogRunDialog, etc.
-- `src/services/api.js` - API wrapper
-- `src/hooks/useApi.js` - React Query hooks
+- **Every schema change = an Alembic migration** (batch mode / `render_as_batch=True` for SQLite). `init_db()`'s `create_all` exists for fresh setups only — never rely on it to apply a change to the live DB. (Resolving this dual-track is planned; until then, the migration is the source of truth.)
+- **Structural/data-moving migrations follow the `canonical_activities` bar** (`docs/design_decisions.md` E4): reversible `downgrade`, explicit pre-migration backup (`shoe_deals.db.bak-<name>`), pre/post reconciliation of counts/totals against the live DB, suite green, UI spot-check — all recorded in the changelog entry.
+- Tables: plural snake_case. Enums: lowercase strings from small closed sets (`active|retired|for_sale`). External IDs: `<system>_activity_id`, unique when they're the idempotency key. Server-side stamps (`mileage_at_note`, `created_at server_default=func.now()`) — never client-supplied.
+- **Derived values are not stored** (cost/km, countdowns, pipeline %). The two blessed exceptions: the `current_mileage` ledger (single-write-path maintained) and a deal's qualifying-savings snapshot (MSRP-based since B9-v2; the deal's `target_price` column is a nullable reference only).
+- Deletes are rare and rule-bound: price history is append-only; `source='strava'` activities survive attribution deletion; retirement is a status, not a delete.
+- Sessions: `Depends(get_db)` in routers; `get_session()` context manager in MCP tools; one session per scraper worker thread. Don't share sessions across threads.
+- Model relationship changes: check both `back_populates` sides and cascade intent; `activities ↔ shoe_runs` is `uselist=False` + unique FK on purpose.
 
 ---
 
-## 📊 Database Schema
+## 10. Testing Expectations
 
-### Core deal-tracking tables
-
-**shoes** — brand, model, target_price, notes, is_active (size removed 2026-06-17)
-**retailers** — name, base_url, scraping_enabled, last_scraped_at, scraper_config
-**price_records** — shoe_id, retailer_id, product_url, price, original_price, in_stock, size_available, image_url, colorway, scraped_at
-**deals** — shoe_id, retailer_id, current_price, target_price, savings_amount, savings_percent, product_url, in_stock, image_url, colorway, is_active, detected_at, discount_codes, expires_at
-
-### My Shoes tables
-
-**owned_shoes** — brand, model, nickname, status (active/retired/for_sale), starting_mileage, current_mileage, mileage_limit, purchase_price, image_url, created_at
-**shoe_runs** — owned_shoe_id, distance_km, run_date, avg_pace, avg_hr, notes, source (manual/coros)
-**shoe_notes** — owned_shoe_id, body, mileage_at_note, triggered_by (manual/checkpoint), created_at
+- pytest in `backend/tests/`, one module per feature area, mirroring `test_home.py` / `test_rotation_overview.py` style: **test the rules, not the plumbing** — boundary cases named explicitly (exactly 75% is *in* the pipeline; empty week reads 0; case-insensitive type matching; race-today = 0 days).
+- **Backend endpoints land with their tests before the consuming UI task starts** (REDESIGN_PLAN §5 — standing rule).
+- Invariants deserve tests when touched: mileage ledger arithmetic (log + delete round-trip), dedup idempotency, checkpoint crossings, deal qualification/retirement.
+- The full suite must be green at session end — 64 passing as of 2026-07-06 (the live count is authoritative in `docs/changelog.md`'s newest entry and `project_state.md` §2); a session that lowers that number isn't done. Removed features take their tests with them (as `strava_backfill` did).
+- No frontend test harness exists; the frontend bar is: `vite build` clean, **0 console errors**, desktop + ~380 px visual pass. State the pass in the changelog entry.
+- Scrapers: use the no-DB smoke endpoints / `POST /shoes/test` dry-run for live verification; don't build brittle HTML-fixture tests for retailer DOMs.
 
 ---
 
-## 🔧 API Endpoints
+## 11. Refactoring Philosophy
 
-### Shoes
-- `GET/POST /api/shoes` · `GET/PUT/DELETE /api/shoes/{id}` · `GET /api/shoes/{id}/prices`
-
-### Retailers
-- `GET/POST /api/retailers` · `GET/PUT/DELETE /api/retailers/{id}`
-
-### Deals
-- `GET /api/deals` · `GET /api/deals/{id}` · `PUT /api/deals/{id}/deactivate`
-- `GET /api/deals/shoe/{shoe_id}` · `GET /api/deals/retailer/{retailer_id}`
-
-### Scraping
-- `POST /api/scrape/shoe/{id}` · `POST /api/scrape/all` · `POST /api/scrape/retailer/{id}`
-- `GET /api/scrape/test/the-last-hunt` · `/test/altitude-sports` · `/test/jd-sports`
-
-### My Shoes
-- `GET/POST /api/owned-shoes` · `GET/PUT/DELETE /api/owned-shoes/{id}`
-- `POST /api/owned-shoes/{id}/log-run` · `GET /api/owned-shoes/{id}/runs`
-- `DELETE /api/owned-shoes/runs/{run_id}`
-- `GET/POST /api/owned-shoes/{id}/notes` · `DELETE /api/owned-shoes/notes/{note_id}`
-
-### Export & Dashboard
-- `GET /api/export/seed-data` · `GET /api/dashboard/stats` · `/best-deals` · `/recent-deals`
+- **One phase per session; one commit per numbered task.** Plan in a root doc with §-numbered items first if the work spans sessions; cite those §s from code comments.
+- **Seam first, swap later:** isolate the read/write path behind one function, migrate callers to it, then change the internals invisibly (the `activities` seam is the proof).
+- **Compatibility shims are allowed with an expiry:** proxies/re-exports that keep consumers stable during a restructure are good engineering (`ShoeRun` proxies, `scraper_manager`) — but they go on the debt list (`docs/design_decisions.md` verdict ⚠️) and get a removal sweep, not immortality.
+- **Never refactor storage and behavior in the same change.** Phase 5 restructured storage under a "response shapes identical, counters untouched" contract — preserve observable behavior, prove it (reconciliation), then evolve behavior separately.
+- Don't drive-by-fix debt outside the session's phase; note it in the changelog/backlog instead. Exception: correctness bugs.
+- When reversing a documented decision, update `docs/design_decisions.md` (move to Superseded, name the successor) in the same session.
 
 ---
 
-## 🔗 Useful Links
+## 12. Performance Expectations
 
-- **Backend API:** http://localhost:8000
-- **API Docs:** http://localhost:8000/docs
-- **Frontend:** http://localhost:5173
-- **Database:** `backend/shoe_deals.db`
+- **Budgets that exist:** `GET /api/home` < 200 ms locally (it's the future mobile launch screen). Scrape-all is expected to take 20–30+ min — that's politeness, not slowness; never "optimize" it by removing sleeps.
+- In-Python whole-table passes are **acceptable and labeled** at current scale (~933 activities); if you add one, say so in a comment like the existing ones. The sanctioned path off them is indexed queries against `activities` — take it when a budget is threatened, not before.
+- Watch the real hazards: N+1 via `ShoeRun` proxies (eager-load at list seams); per-request MCP reconnect in chat (known cost); Playwright startup in scrapers (reuse sessions per scraper instance, as `BaseScraper` does).
+- Frontend: React Query caching is the performance strategy — correct query keys and invalidations matter more than memoization. Aggregate endpoints exist so pages make one round trip; don't fan out.
+- No premature infrastructure: no caching layers, no task queues, no worker pools without a named budget being missed and a design-decision entry.
 
 ---
 
-**Note:** Update this file after each development session. Session changelogs go at the top.
+## 13. Documentation Standards
+
+- **Every session ends with a changelog entry** at the top of `docs/changelog.md`: dated title, `[ADDED]/[CHANGED]/[REMOVED]/[BLOCKED]` tags, what/why/how-verified (test counts, visual passes, reconciliations). Write it like the existing entries — they are the project's memory.
+- **Comment the whys:** thresholds cite their rationale, heuristics say "heuristic," pins carry their reason, scale compromises are labeled. A future session should never have to guess *why* — only *what next*.
+- Keep the `docs/` suite truthful: structural changes update `architecture.md`/`domain_model.md`/`dependency_graph.md` sections they invalidate (each file's maintenance note says when); decisions worth reversing go in `design_decisions.md`; `project_state.md` gets refreshed at session end (it decays fastest).
+- Docstrings on every service function and every model class; model docstrings explain the *domain meaning*, not the columns.
+- New MCP tools: the docstring **is** the LLM-facing contract — write it for a model deciding whether/how to call it (args, semantics, side effects, confirmation requirements).
+- Planning docs at root are append-only history once a phase ships — don't rewrite them to match reality; the changelog records what actually happened.
+
+---
+
+## Session Checklist (end of every working session)
+
+1. Full pytest suite green; note the count.
+2. `vite build` clean; 0 console errors; desktop + ~380 px pass for any UI change.
+3. Migration written for any schema change (reversible + backed up if it moves data).
+4. Changelog entry at top of `docs/changelog.md`.
+5. `docs/project_state.md` refreshed (§2 status table, §9 recent decisions, §11 priorities).
+6. Any reversed/new architectural decision recorded in `docs/design_decisions.md`.
+7. Commits: one per numbered task, phase-prefixed.

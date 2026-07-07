@@ -1,0 +1,352 @@
+# Anton — Design Decisions
+
+**Companion to:** `docs/architecture.md`, `docs/domain_model.md`, `docs/dependency_graph.md`.
+**Generated:** 2026-07-04 (post-`canonical_activities`). Sources: the codebase itself, inline decision comments, and the `docs/changelog.md` session log (formerly root `claude.md`) — several rationales below are recorded verbatim in those places; where a rationale is inferred rather than recorded, it says so.
+**Purpose:** The historical record. Before reversing anything here, read its entry; if a decision is reversed, don't delete the entry — mark it superseded and say why.
+
+**Verdict scale:** ✅ **Keep** (sound, load-bearing) · 🕐 **Keep for now** (right at current scale; revisit trigger named) · ⚠️ **Scheduled to change** (already acknowledged as transitional) · 🔁 **Superseded** (kept as history).
+
+---
+
+## A. Platform & Stack
+
+### A1. Local-first, single-user, single-process
+**Chosen:** One FastAPI process + SQLite file on the runner's own machine; no hosting, no tenancy, no accounts.
+**Why:** Anton is a personal platform for exactly one person; operational simplicity maximizes iteration speed and the data (running history, purchases) stays on-device.
+**Advantages:** Zero infra cost/ops; full-fidelity local data; refactors like `canonical_activities` can be verified against *the* production DB directly; backups are file copies.
+**Trade-offs:** Concurrency and scale ceilings (see A2, F3); no access away from the machine except via LAN; "production" and "dev" are the same database.
+**Verdict:** ✅ Keep. Every future exposure step (mobile, remote MCP) should be an *interface* onto this core, gated on the security pass — not a rehosting.
+
+### A2. SQLite with `check_same_thread=False`, default pooling, no WAL config
+**Chosen:** SQLite as the only store, accessed from request threads and scraper worker threads.
+**Why:** Right-sized for one user; zero administration; trivially backed up.
+**Advantages:** The whole DB is one inspectable, copyable file; Alembic batch mode handles its ALTER limitations.
+**Trade-offs:** Write concurrency limits (scrape workers + requests share one writer); the safety flags lean on "one process, low contention" being true; silently invalid under multiple Uvicorn workers.
+**Verdict:** 🕐 Keep for now. Revisit trigger: scheduled scraping, multi-worker serving, or any second concurrent writer pattern. A WAL pragma would be a cheap hedge before then.
+
+### A3. Services layer with thin adapters (the 2026 refactor)
+**Chosen:** Business logic extracted into `app/services/`; routers and MCP tools are adapters; one sanctioned write path per invariant (`rotation.log_run`, `DealStore`).
+**Why (recorded):** Pre-refactor drift bugs — the same computation implemented differently in two places disagreeing on screen.
+**Advantages:** REST/MCP parity is nearly free; invariants have single owners; the Phase-5 migration touched services and left adapters untouched.
+**Trade-offs:** Older routers (`deals`, `dashboard`, `watchlist`) predate the pattern and still hold inline logic — two generations coexist; discipline is by convention, not enforced.
+**Verdict:** ✅ Keep, and finish: the remaining fat routers should migrate on the schedule in `dependency_graph.md` §11.
+
+### A4. API-first: every number computed server-side
+**Chosen:** All derived figures (cost/km, retirement %, countdowns, weekly volume) computed in services; clients only render. Aggregate-per-page endpoints (`/home`, `/watchlist`).
+**Why (recorded):** A future native mobile client must show identical numbers without reimplementing math; embedded as a first-class requirement.
+**Advantages:** Web, MCP, assistant, and future mobile cannot disagree; frontends stay thin.
+**Trade-offs:** Chattier server work per request; aggregate endpoints do more in one call (accepted deliberately at personal scale).
+**Verdict:** ✅ Keep. This is the platform's most valuable standing discipline.
+
+### A5. React 18 + Vite, JSX without TypeScript
+**Chosen:** Plain JSX SPA with React Query, Tailwind/shadcn-style components.
+**Why (inferred):** Solo-developer velocity; the API-first rule (A4) moves correctness-critical logic server-side, lowering the payoff of frontend typing.
+**Advantages:** Fast iteration; no build-type friction; React Query centralizes server state.
+**Trade-offs:** The API contract exists only as matching string literals and shape knowledge on both sides; refactors of response shapes are grep-verified, not compiler-verified.
+**Verdict:** 🕐 Keep for now. Revisit trigger: the mobile client — a second consumer is the moment a generated/typed API contract starts paying for itself.
+
+### A6. Alembic (batch mode) **plus** startup `create_all`
+**Chosen:** Alembic owns migrations (`render_as_batch` for SQLite), while `init_db()` still runs `create_all` at boot; pre-Alembic scripts retained in `legacy_migrations/`.
+**Why:** `create_all` predates Alembic and was kept as a convenience (fresh setups work with zero steps); legacy scripts kept as history.
+**Advantages:** Fresh clones boot instantly; migration history exists and is now high quality (D1).
+**Trade-offs:** Two authorities over the schema — a model edit without a migration "works" on fresh DBs and diverges on real ones; ambiguity about the canonical path.
+**Verdict:** ⚠️ Scheduled to change (architecture.md §16.2): Alembic as sole authority, `create_all` demoted to test fixtures, `legacy_migrations/` archived.
+
+### A7. The pinned dependency triangle
+**Chosen:** FastAPI 0.109 + Starlette 0.35.1 + sse-starlette 1.8.2 pinned together, with the reason documented in `requirements.txt`.
+**Why (recorded):** `mcp[cli]` 1.28.0's transitive requirements conflict with newer/older combinations; this triple is the verified-working resolution.
+**Advantages:** Reproducible environment; the *reason* traveling with the pin prevents well-meaning upgrades from breaking MCP transport.
+**Trade-offs:** Frozen off the FastAPI/Starlette upgrade path until the MCP SDK moves; security patches to pinned versions need manual watching.
+**Verdict:** ✅ Keep the practice (pin + documented reason); revisit the specific pins whenever `mcp` is upgraded.
+
+---
+
+## B. Domain Modeling
+
+### B1. Tracked Shoe and Owned Shoe are separate entities with **no relationship**
+**Chosen:** `shoes` (watchlist) and `owned_shoes` (rotation) share no FK; buying is not modeled as a transition.
+**Why (recorded in code):** Wanting and owning are independent facts with independent lifecycles.
+**Advantages:** Each domain evolves freely; deleting watchlist interest can't damage run history; no forced purchase workflow.
+**Trade-offs:** The domains can only meet heuristically (B3); "I bought the shoe I was tracking" is untracked knowledge.
+**Verdict:** ✅ Keep. The single most load-bearing *absence* in the schema — see `domain_model.md` §5.1 before ever "fixing" it.
+
+### B2. Size-less shoe tracking
+**Chosen:** A tracked shoe is brand+model across **all** sizes.
+**Why (recorded):** Restricting to one size hides deals whenever that size is out of stock; size availability is captured per-observation instead.
+**Advantages:** Far higher deal recall; simpler matching.
+**Trade-offs:** A deal may exist only in unusable sizes — triage moves to the human reading `sizes_available`.
+**Verdict:** ✅ Keep. (A "my sizes" filter would be a *view* refinement, not a model change.)
+
+### B3. Cross-domain bridge via `shoe_type` strings, not foreign keys
+**Chosen:** "Replacement deals" for a wearing-out shoe = active deals on tracked shoes with the same free-string `shoe_type`.
+**Why:** Preserves B1's independence while still connecting retirement to shopping; honest about being a heuristic (labeled so in code).
+**Advantages:** Domains stay decoupled; zero migration cost; degrades silently rather than erroring.
+**Trade-offs:** Stringly-typed — a typo yields zero hints with no signal; vocabulary duplicated in three places (backend, frontend `shoeTypes.js`, MCP docstrings).
+**Verdict:** 🕐 Keep the bridge; formalize the vocabulary (controlled list served by the backend — architecture.md §16.5). The *no-FK* principle stands; the *free-string* part is the debt.
+
+### B4. Canonical `activities` table; `shoe_runs` reduced to attribution (Phase 5)
+**Chosen:** One row per physical run regardless of source; shoe attribution is a separate row; the old `strava_activities`/data-bearing-`shoe_runs` split and its reconciliation machinery removed.
+**Why (recorded):** The two-store union required permanent dedup-by-link logic; the seam (`activities.py`) was explicitly designed so this swap could happen invisibly — and did.
+**Advantages:** "Never double-count" enforced structurally; one pace representation (seconds/km); COROS/manual/archive runs are uniform; backfill service deleted outright.
+**Trade-offs:** See B5; also `strava_gear_mappings` becomes dormant history.
+**Verdict:** ✅ Keep. Also a *process* precedent: reversible migration, pre/post reconciliation, backup, suite green — the bar for future structural changes.
+
+### B5. Compatibility via `ShoeRun` property proxies instead of renaming/reshaping
+**Chosen:** `shoe_runs` kept its name and its old field names as read-only properties resolving through the joined Activity, so every response shape and consumer survived Phase 5 unchanged.
+**Why (recorded):** Zero frontend/MCP churn during a deep storage restructure; continuity of meaning over naming purity.
+**Advantages:** The migration shipped in one day with no consumer changes; API stability honored.
+**Trade-offs:** Hidden N+1 on un-eager-loaded run loops; proxied attributes silently unusable in `filter()`; pace formatting duplicated into the ORM class.
+**Verdict:** 🕐 Keep **as a bridge, not a permanent API** (architecture.md §16.4): eager-load at list seams now, migrate readers over time, shrink the proxy surface.
+
+### B6. Mileage as a maintained counter, not a derived sum
+**Chosen:** `current_mileage = starting_mileage + Σ attributed distances`, updated on every write/delete, never recomputed on read.
+**Why (recorded):** `starting_mileage` honors pre-tracking wear; displayed totals are a promise (Phase 5 shipped under an explicit "counters untouched" guarantee); reads stay trivial.
+**Advantages:** Cheap reads; totals stable through storage restructures; the invariant is testable.
+**Trade-offs:** A ledger can drift if any writer bypasses the sanctioned path — which is exactly why B7 exists; reconciliation checks are manual (the migration ran one).
+**Verdict:** ✅ Keep, paired inseparably with B7.
+
+### B7. One sanctioned write path for runs (`rotation.log_run`)
+**Chosen:** Every run — manual, COROS, (historically) backfill — enters through one function that creates the Activity, the attribution, updates the ledger, and detects checkpoints; escape hatches (`increment_mileage`, `commit`) exist for batch callers rather than parallel paths.
+**Why (recorded):** The counter invariant (B6) is only defensible with a single writer.
+**Advantages:** Whole classes of drift bugs impossible; checkpoint detection can't be forgotten on a new ingestion path.
+**Trade-offs:** The function accumulates flags as callers diversify; discipline is conventional.
+**Verdict:** ✅ Keep. This is the domain's strongest guarantee.
+
+### B8. Append-only price history; deals as qualified snapshots
+**Chosen:** `price_records` never edited/deleted; a `Deal` snapshots the savings that qualified it (refreshed on change) rather than joining live. As of B9-v2 the snapshot is measured against MSRP; `target_price` is retained on the row only as a reference threshold.
+**Why:** Price *history* is the product (best-ever, trends); the snapshot records *why this qualified* at detection.
+**Advantages:** Honest analytics; deal rows are self-explanatory historical records.
+**Trade-offs:** Unbounded (slow) growth; the denormalized savings are a second copy requiring the refresh rule.
+**Verdict:** ✅ Keep. Growth is glacial at personal scale.
+
+### B9. Deal qualification requires *both* a genuine markdown *and* target hit
+**Chosen:** `original_price > price` **and** `price ≤ current target`; targets read fresh each evaluation; `msrp` stored separately from `target_price`.
+**Why (recorded):** "At my number but full price" isn't an opportunity; "big markdown, still too expensive" isn't either; and list-price vs willingness-to-pay must never be conflated.
+**Advantages:** High-precision alerts — the deal feed means something; target edits take effect immediately.
+**Trade-offs:** Misses genuine price drops the retailer doesn't flag as sales (rare on these platforms).
+**Verdict:** 🔁 **Superseded by B9-v2 (2026-07-06).**
+
+### B9-v2. Deal qualification is *price below MSRP*; target_price is an optional threshold
+**Chosen:** a deal is any `price < shoe.msrp` (MSRP read fresh each evaluation); savings % is measured against MSRP (`(msrp - price)/msrp`). The retailer's own compare-at/markdown flag is no longer consulted, and `target_price` no longer affects qualification or savings — it is demoted to an optional personal "ping me at" threshold (both `target_price` columns made nullable).
+**Why (recorded):** The runner wants a single, self-evident meaning of "on sale" — below list price — and a savings % anchored to a real reference (MSRP) rather than a private willingness-to-pay number. MSRP was populated on every active shoe first, so nothing became silently un-dealable.
+**Advantages:** One honest number everywhere ("% off retail"); no dependence on retailers correctly flagging compare-at prices; higher recall.
+**Trade-offs:** Lower precision than B9 — a retailer that habitually prices below MSRP will always read as "on sale"; shoes without an MSRP produce no deals at all. Reverses B9's markdown-required guard (e.g. the Adios Pro 4 full-price-at-target false positive is now handled by MSRP instead).
+**Verdict:** ✅ Keep (current). Revisit if below-MSRP-always retailers make the feed noisy — a per-retailer floor or an optional markdown-required flag would be the escape hatch.
+
+### B10. Orphan retirement with the non-empty-search guard
+**Chosen:** Deals whose URLs vanish from a *successful, non-empty* search are deactivated; empty/failed scrapes retire nothing.
+**Why (recorded):** Renamed/delisted products left zombie deals; but a transient outage must never mass-extinguish the feed.
+**Advantages:** Self-cleaning feed with a safety interlock.
+**Trade-offs:** A retailer legitimately dropping to zero matching products delays cleanup until a manual pass.
+**Verdict:** ✅ Keep.
+
+### B11. The frozen archive rule
+**Chosen:** `source='strava'` activities are the immutable 8-year record: deleting a run attribution deletes the underlying activity *except* archive rows, which merely un-attribute.
+**Why (recorded):** The bulk export is irreplaceable history; attribution is an opinion, the run is a fact.
+**Advantages:** History can be re-curated without risk of destruction.
+**Trade-offs:** Asymmetric delete semantics that every future writer must know (documented in `domain_model.md` §4.8).
+**Verdict:** ✅ Keep.
+
+### B12. Journal notes: timestamped, mileage-anchored, append-only
+**Chosen:** `shoe_notes` rows with server-stamped `mileage_at_note` and `triggered_by`, replacing an earlier single free-text column.
+**Why (recorded):** "How it felt at 400 km" is only meaningful anchored to 400 km; checkpoint prompts (every 100 km) create the anchors.
+**Advantages:** A genuine wear diary; the raw material MCP's review-drafting consumes.
+**Trade-offs:** No edit story (append-only by convention).
+**Verdict:** ✅ Keep.
+
+### B13. Derived values never stored (races, cost/km, pipeline %)
+**Chosen:** Countdowns, required paces, cost/km, retirement % computed at read time, attached at the boundary.
+**Why (recorded on `planned_races`):** Time-relative values stored are values guaranteed stale.
+**Advantages:** Can't go stale; one computation shared by REST and MCP.
+**Trade-offs:** Recomputed per request (trivial at scale). The two stored exceptions are deliberate: the mileage ledger (B6) and the deal's qualifying-savings snapshot (MSRP-based since B9-v2; see B8).
+**Verdict:** ✅ Keep.
+
+### B14. America/Toronto as the calendar
+**Chosen:** Run dates are local dates in a hard-coded home timezone; UTC and local timestamps stored under explicit names.
+**Why (recorded):** 145 evening runs in the Strava export shift calendar days if UTC dates are used naively.
+**Advantages:** Dates match lived experience; dedup-by-date works.
+**Trade-offs:** Hard-coded home zone (travel racing logs to Toronto dates); acceptable and known.
+**Verdict:** ✅ Keep. Revisit only if multi-timezone life becomes real.
+
+---
+
+## C. AI Layer
+
+### C1. MCP as the single AI substrate; the assistant is a client of its own server
+**Chosen:** All AI capability defined once as MCP tools/resources/prompts; Son of Anton connects as an MCP client to the app's own `/mcp` over loopback and discovers tools dynamically (`list_tools`, not Python imports).
+**Why (recorded):** One tool registry for Claude Desktop *and* the embedded chat; a new `@mcp.tool()` becomes a chat capability with zero further wiring; an earlier direct-import coupling was deliberately removed in favor of discovery.
+**Advantages:** Perfect capability parity across AI surfaces; the assistant can never do what the platform can't; dogfoods the MCP server continuously.
+**Trade-offs:** A runtime self-dependency over TCP (`MCP_SERVER_URL` must reach the app itself — the hidden loop in `dependency_graph.md` §7.3); per-conversation connection overhead.
+**Verdict:** ✅ Keep the architecture; make the loopback explicit or in-process per architecture.md §16 / dependency_graph.md §11.7.
+
+### C2. Multi-provider chat via strategy pattern, routed by model-name prefix
+**Chosen:** Anthropic/OpenAI/Gemini providers implementing one streaming agentic-loop contract; availability driven by which API keys exist.
+**Why:** Freedom to compare/switch models; key-presence-as-feature-flag keeps config zero-touch.
+**Advantages:** Model experimentation is a dropdown; no provider lock-in.
+**Trade-offs:** The loop is implemented three times (~100 lines each) and must change in triplicate; model catalogs hard-coded in the router drift from prefix routing in the service.
+**Verdict:** 🕐 Keep the strategy; consolidate the catalog (single source) and consider whether three loops still pay rent at next protocol change.
+
+### C3. Resources return markdown **with** embedded JSON
+**Chosen:** Every MCP resource renders human-readable markdown plus a machine-parseable JSON payload in one body.
+**Why:** The same resource serves a human skimming Claude Desktop and a model needing structured data.
+**Advantages:** No dual-endpoint maintenance; resources are self-documenting.
+**Trade-offs:** Bigger payloads; two renderings to keep consistent within one function.
+**Verdict:** ✅ Keep.
+
+### C4. Context priming + trust rules in the system prompt
+**Chosen:** Rotation and active-deals resources are pre-read into the chat system prompt as "live context," with explicit rules for when to trust it vs. re-query, plus behavioral guardrails (verify-before-claiming, check-before-adding).
+**Why (recorded):** Cuts redundant tool calls for the two most-referenced datasets while preventing stale-context assertions.
+**Advantages:** Faster, cheaper conversations; fewer hallucinated states.
+**Trade-offs:** Prompt-encoded policy is invisible to type systems and easy to forget when resources change shape.
+**Verdict:** ✅ Keep.
+
+### C5. `MAX_AGENTIC_TURNS = 25` + isolated-task/queue streaming
+**Chosen:** A hard loop cap independent of model behavior; the agentic loop runs in one isolated asyncio task communicating over a queue so anyio cancel scopes never cross the SSE generator.
+**Why (recorded):** Loop termination must be a *server* guarantee; a real class of cancel-scope bugs was confined this way.
+**Advantages:** No runaway loops or hung streams regardless of model/provider behavior.
+**Trade-offs:** Very long legitimate tool chains truncate at 25 (unobserved in practice).
+**Verdict:** ✅ Keep.
+
+### C6. COROS sync as a **client-side agent prompt**, not a backend integration
+**Chosen:** The `sync_coros_runs` MCP prompt instructs Claude Desktop to read the *external* COROS MCP connector, dedup, propose, wait for confirmation, then write via this server's tools. A prior direct backend integration of the COROS MCP was **removed**.
+**Why (recorded):** COROS blocks Open-API keys for individuals, and the COROS MCP's OAuth is desktop-client-managed — un-drivable from backend code. The server-side `coros_client` path remains, dormant, behind env credentials.
+**Advantages:** Works today with zero credential access; the protocol is versioned prose, editable without deploys; human confirmation is built into the script.
+**Trade-offs:** Depends on a third party's tool names/schemas (a rename breaks silently); requires Claude Desktop in the loop; two parallel sync paths exist (one dormant).
+**Verdict:** 🕐 Keep — it's the pragmatic optimum under COROS's constraints. 🔁 The removed direct integration stays superseded unless COROS opens API keys, which would revive the dormant server path.
+
+### C7. MCP sampling for review drafting
+**Chosen:** `draft_shoe_review` asks the *connected client's* LLM (server→client `create_message`) to draft from journal notes, degrading gracefully when unsupported.
+**Why:** The client already has a paid, user-chosen model; the server shouldn't spend its own tokens or hardcode a model for a generative nicety.
+**Advantages:** Zero server-side LLM cost/config; exercises the rarest MCP primitive.
+**Trade-offs:** Capability varies by client; output quality is client-dependent.
+**Verdict:** ✅ Keep.
+
+### C8. Chat history in browser localStorage
+**Chosen:** Conversations (cap 50) and checkpoint-prompt state live only client-side; the backend is stateless per chat request.
+**Why (inferred):** Simplest possible persistence during the assistant's build-out; avoided premature schema for conversations.
+**Advantages:** Zero backend surface; privacy-by-locality.
+**Trade-offs:** Device-bound memory at odds with the multi-client trajectory (A4); quota-trimming silently discards history; invisible to future server-side agents.
+**Verdict:** ⚠️ Scheduled to change (architecture.md §16.7): move platform memory server-side when agents need shared context.
+
+### C9. Human confirmation gates all AI/synced writes
+**Chosen:** No externally-sourced run is auto-logged; assistants present suggestions (pace-primary, distance-secondary, active shoes, low-mileage tiebreak) and wait. Retirement is advised, never enacted.
+**Why (recorded everywhere — prompt text, service docstrings, memories):** The runner is the tiebreaker; automation prepares, the human disposes.
+**Advantages:** Trust in the data stays absolute; wrong suggestions are cheap.
+**Trade-offs:** Sync is never fully hands-free — by design.
+**Verdict:** ✅ Keep. This is Anton's automation posture, not a missing feature.
+
+---
+
+## D. Scraping
+
+### D1. Platform base classes + bespoke subclasses + DB-driven dynamic registry
+**Chosen:** Generic `AlgoliaScraper`/`ShopifyScraper` bases; eight named subclasses for quirks; unknown retailers get a dynamic scraper built from `Retailer.platform` + `scraper_config`, with platform auto-detected at creation.
+**Why:** Retailer frontends are the highest-churn boundary; shared mechanics belong in one place, quirks in named files, and adding a mainstream retailer shouldn't require code.
+**Advantages:** New Shopify/Algolia retailers are a DB row; fixes to shared logic (price parsing, stock phrases) propagate everywhere.
+**Trade-offs:** Bespoke subclasses accumulate; `custom` platforms (En Route's headless Astro) always need real code; two retailers remain unscrapable behind Cloudflare.
+**Verdict:** ✅ Keep.
+
+### D2. Algolia credential self-rediscovery
+**Chosen:** On 401/403, headless Playwright drives the retailer's own search box and intercepts `*.algolia.net` XHR to recover fresh app-id/key/index (stripping sort-replica suffixes).
+**Why (recorded):** Retailers rotate public search credentials; manual re-harvesting was toil.
+**Advantages:** Self-healing against the most common Algolia breakage.
+**Trade-offs:** Playwright as a hard operational dependency; rediscovery itself breaks if the search UI changes.
+**Verdict:** ✅ Keep.
+
+### D3. Politeness by construction; no bot-evasion arms race
+**Chosen:** 2–3 s sleeps per request, sequential shoes within a retailer, configurable honest User-Agent; an explicit decision **against** paid Cloudflare-bypass services (two retailers simply marked unreachable).
+**Why (recorded):** Personal-scale scraping should be a good citizen; the arms race costs money and ethics for marginal coverage.
+**Advantages:** Low ban risk; clean conscience; predictable load.
+**Trade-offs:** Full scrapes take 20–30+ minutes; two retailers' prices are invisible.
+**Verdict:** ✅ Keep.
+
+### D4. One process-wide scrape lock; refuse rather than queue
+**Chosen:** A single `threading.Lock` guards *every* scrape entry point; concurrent triggers get 409/`started:false`, never a queue. The background job owns release in `finally`.
+**Why (recorded):** Stacked triggers once meant "scraping forever"; refusing is legible, queuing hides cost.
+**Advantages:** At most one scrape exists; trivially reasoned about.
+**Trade-offs:** In-memory ⇒ single-process assumption (invalid under multi-worker); coarse — a one-shoe scrape blocks everything.
+**Verdict:** 🕐 Keep for now. Revisit trigger: scheduled scraping or any multi-process move ⇒ persist coordination (architecture.md §16.6).
+
+### D5. Background scrape = per-retailer threads over the same primitive; SSE with full-history replay
+**Chosen:** `/scrape/all` runs retailers concurrently (one thread + one DB session each; shoes sequential within), publishing progress to an in-memory pub/sub whose late subscribers receive the full event history. Documented as an *additional* path over the same per-(shoe, retailer) unit, not a replacement.
+**Why (recorded):** Wall-clock relief without touching per-retailer politeness; replay so a refreshed browser doesn't lose the picture.
+**Advantages:** ~8× wall-clock; progress UX survives reconnects; one scraping primitive.
+**Trade-offs:** In-memory state shares D4's single-process assumption; no persisted scrape history (observability gap flagged in architecture.md §15.8).
+**Verdict:** ✅ Keep the shape; the persistence gap is the roadmap item.
+
+### D6. Kids filtering and promo heuristics centralized in `BaseScraper`
+**Chosen:** Junior/kids exclusion applied once in `search_products_filtered`; promo codes found by regex pairing codes with nearby "% off" text; **manual promo codes never overwritten by scraped ones**.
+**Why:** Every subclass inherits hygiene it can't forget; human-entered knowledge outranks a crawl.
+**Advantages:** Uniform catalog cleanliness; safe manual curation.
+**Trade-offs:** Regex promo detection has inherent precision limits (accepted).
+**Verdict:** ✅ Keep.
+
+### D7. `scraper_manager.py` retained as a compat shim post-refactor
+**Chosen:** The monolith's names re-exported from a shim while orchestrator/registry/lock/deal_store became real modules; all four consumers still import the shim.
+**Why (recorded in the shim itself):** Decompose without touching every call site in the same change.
+**Advantages:** The refactor landed safely in one session.
+**Trade-offs:** Real module boundaries invisible at call sites; the "temporary" is aging.
+**Verdict:** ⚠️ Scheduled to change — four call sites, one sweep (dependency_graph.md §11.2).
+
+---
+
+## E. Operations & Process
+
+### E1. No authentication anywhere (deferred, not forgotten)
+**Chosen:** REST, MCP, and the chat LLM-proxy are all open; trust = network posture (with a `0.0.0.0` default bind). The backlog explicitly holds "security pass: API auth, rate limiting, MCP endpoint auth."
+**Why:** Single user on a trusted machine; auth earlier would have taxed every iteration of every surface.
+**Advantages:** Frictionless development of three parallel interfaces.
+**Trade-offs:** Anyone reaching port 8000 can mutate data and spend LLM credits; every exposure-increasing feature is gated on fixing this.
+**Verdict:** ⚠️ Scheduled to change — the acknowledged precondition for mobile/remote anything (architecture.md §16.1). Until then, the loopback-bind default should be considered part of this decision's repair.
+
+### E2. Live DB + manual `.bak` copies in the working tree; `export.py` as code-as-backup
+**Chosen:** `shoe_deals.db` and five point-in-time `.bak*` siblings live beside the code; separately, `/api/export` regenerates `seed_data.py` from live retailers/shoes so a fresh DB can be reseeded to current curation.
+**Why:** File-copy backups are the honest SQLite recovery story at this scale; the seed export solved recorded drift (UI-added shoes lost on reset).
+**Advantages:** Every risky migration had a named restore point (`.bak-pre-activities`); curation survives DB resets via version-controlled code.
+**Trade-offs:** Backups jumbled with source; "which file is canonical" ambiguity; large binaries near git.
+**Verdict:** 🕐 Keep the *practices* (pre-migration backups, seed export); relocate the files out of the tree with a naming convention (architecture.md §16.2).
+
+### E3. The session changelog (`docs/changelog.md`, formerly root `claude.md`) as decision log + §-referenced planning docs
+**Chosen:** A living changelog file (now `docs/changelog.md`; originally at the root as `claude.md`), with code comments citing planning-doc sections (`§3 Phase-5`, `P3.4`) as an internal citation system.
+**Why:** Solo, AI-assisted development across many sessions needs durable institutional memory more than most teams do.
+**Advantages:** Rationales are recoverable (this document is largely built from them); every AI session starts with real context; plans and code cross-reference.
+**Trade-offs:** The log's *overview* sections drift from reality between sweeps; discipline is manual.
+**Verdict:** ✅ Keep — arguably the project's defining practice. The `docs/` suite generated by this workflow is its extension, not its replacement.
+
+### E4. Migration discipline as demonstrated by `canonical_activities`
+**Chosen (as precedent):** Structural migrations are reversible, preceded by an explicit backup, verified by pre/post reconciliation against live data (counts, totals, zero drift), and land with the suite green and UI spot-checks recorded.
+**Why:** The live DB is the only DB (A1); there is no staging to save you.
+**Advantages:** Deep restructures are survivable and provably lossless.
+**Trade-offs:** Costly ceremony — appropriate exactly because of A1.
+**Verdict:** ✅ Keep as the standing bar for any migration that moves data, not just adds columns.
+
+### E5. APScheduler declared, unused
+**Chosen (implicitly):** The dependency was added ahead of a scheduled-scraping feature that hasn't been designed; all scraping remains manual-trigger.
+**Why (inferred):** Anticipatory install.
+**Advantages:** None yet.
+**Trade-offs:** A dependency without an architecture invites drive-by wiring that would collide with D4's lock assumptions.
+**Verdict:** ⚠️ Decide deliberately: either design scheduled scraping (with persisted job state, per architecture.md §16.6) or drop the dependency until then.
+
+### E6. The rebrand carries old names in code
+**Chosen:** The platform is **Anton** (assistant: **Son of Anton**) while the repo, API title, and DB filename retain "running-shoe-deals" / "Running Shoe Deal Finder."
+**Why:** Renaming repos/paths mid-flight is churn with near-zero user value for a single user.
+**Advantages:** Zero breakage; identity lives in the UI and docs where it matters.
+**Trade-offs:** Mild permanent confusion for newcomers (including AI sessions) — mitigated by the glossary (`domain_model.md` §7.1).
+**Verdict:** ✅ Keep until some other forcing event (e.g., repo migration) makes the rename free.
+
+---
+
+## Superseded Decisions (kept as history)
+
+| Decision | Was | Superseded by | When |
+|---|---|---|---|
+| Two run stores (`strava_activities` + data-bearing `shoe_runs`) with dedup-by-link union | The Phase-3 accommodation of a frozen import beside live logging | B4 — canonical `activities` (`c3d4e5f6a7b8`) | 2026-07-04 |
+| `strava_backfill` MATCH/BACKFILL reconciliation (plan-then-execute, mileage policies) | The bridge between the two stores | Made permanent, then deleted with them (its *process* pattern lives on in E4) | 2026-07-04 |
+| Direct backend integration of the external COROS MCP in `chat_service` | First attempt at watch sync | C6 — client-side agent prompt (OAuth constraint) | recorded in `docs/changelog.md` |
+| Single free-text `notes` column on owned shoes | Original journal | B12 — `shoe_notes` timestamped/mileage-anchored rows | recorded in `docs/changelog.md` |
+| Scraper monolith (`scraper_manager` as implementation) | Pre-refactor | D1/D7 — decomposed modules behind a (still-standing) shim | 2026 refactor |
+| Per-size shoe tracking | Original watchlist shape | B2 — size-less tracking | recorded in code comment |
+
+---
+
+*Maintenance note: add an entry when a decision is made that a future session might reasonably reverse; move reversed decisions to the Superseded table with the succeeding entry named. The verdicts above marked ⚠️ are this document's standing to-do list — A6, C8, D7, E1, E5 — and should flip to Superseded entries as they're executed.*
