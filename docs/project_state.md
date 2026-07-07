@@ -1,6 +1,6 @@
 # Anton — Project State
 
-**Snapshot date:** 2026-07-07 (after Phase 2 Session B — the R1 debt sweep: R1.3–R1.6 closed, suite 64 → 67. All of R1 is now done).
+**Snapshot date:** 2026-07-07 (after Phase 2 Session C — the R1→R2 bridge: safety fixes C1 + M3 landed and `SECURITY_PASS_PLAN.md` written; suite 67 → 75. R2.1 is now "plan exists, ready to execute").
 **Read this first, then:** `docs/ai_context.md` → `docs/architecture.md` → `docs/domain_model.md`. This file is the *perishable* one — it describes a moment, and staleness here is expected and fixable; update it at the end of every working session.
 
 ---
@@ -9,7 +9,7 @@
 
 Anton (repo name: `running-shoe-deals`) is a **single-user personal running platform**: shoe-deal watching across 8 Canadian retailers + a canonical run/training history + shoe rotation wear tracking, with an embedded AI assistant (Son of Anton) and a full MCP server used by Claude Desktop. FastAPI + SQLite + React SPA, all local, no auth (deliberate, deferred).
 
-**Where things stand right now:** the multi-phase **Anton redesign is functionally complete** — all five tabs (Home / Training / Shoes / Deals / Son of Anton) are built. The two most recent structural events: the canonical `activities` table (2026-07-04, reversible reconciled migration) and **MSRP-drives-deals** (2026-07-06 — deal qualification and savings now measured against MSRP; `target_price` demoted to an optional threshold; migration `d4e5f6a7b8c9`). The suite is green at **67 tests**. What remains of Phase 5 is the agent work (Deal Alert / Weekly Rotation Summary) and durability items. The **documentation program** (`documentation_creation.md`) is **complete and committed** (R1.1, 2026-07-06). **Phase 2 implementation has begun: all of roadmap R1 is now closed** (Session B, 2026-07-07 — R1.3 replacement-deals sizes, R1.4 proxy guards, R1.5 four-part debt sweep, R1.6 APScheduler removed). The next gate is **R2.1 (security pass)**, alongside the review's same-day safety fixes (refactor.md C1 / M3).
+**Where things stand right now:** the multi-phase **Anton redesign is functionally complete** — all five tabs (Home / Training / Shoes / Deals / Son of Anton) are built. The two most recent structural events: the canonical `activities` table (2026-07-04, reversible reconciled migration) and **MSRP-drives-deals** (2026-07-06 — deal qualification and savings now measured against MSRP; `target_price` demoted to an optional threshold; migration `d4e5f6a7b8c9`). The suite is green at **67 tests**. What remains of Phase 5 is the agent work (Deal Alert / Weekly Rotation Summary) and durability items. The **documentation program** (`documentation_creation.md`) is **complete and committed** (R1.1, 2026-07-06). **Phase 2 implementation has begun: all of roadmap R1 is now closed** (Session B, 2026-07-07 — R1.3 replacement-deals sizes, R1.4 proxy guards, R1.5 four-part debt sweep, R1.6 APScheduler removed). **The R1→R2 bridge (Session C, 2026-07-07) then landed the two same-day safety fixes — C1 (writable mileage ledger) and M3 (scrape-lock wedge) — and wrote `SECURITY_PASS_PLAN.md`, the doc that gates R2.1.** The next gate is **R2.1 (security pass)** — its plan now exists and is ready to execute.
 
 **The stated Current Focus** (per `docs/changelog.md`): *"Product images, colorway consolidation, scraper durability + coverage."* Note: images/colorways largely shipped in June — read this focus line as the *durability/polish pass* over those features plus scraper coverage, not greenfield work. (If that reading is wrong, correct this line.)
 
@@ -22,10 +22,11 @@ Anton (repo name: `running-shoe-deals`) is a **single-user personal running plat
 | Anton redesign Phases 1–4 (IA, Deals watchlist, Training tab, Home) | ✅ Complete (Phase 4 landed 2026-07-03) |
 | Phase 5 backlog | 🟡 3 of 4 items done (canonical activities ✅ 2026-07-04 · `/shoes` lifecycle reframe ✅ · app mark ✅ · **agents remaining**) |
 | Strava historical import (694-run, 8-year archive) | ✅ Complete and now *structurally* permanent (absorbed into `activities`) |
-| Test suite | ✅ 67 passing, 13 modules (`test_replacement_deals.py` added 2026-07-07, +3; `test_deals.py` added 2026-07-06 with the MSRP rules) |
+| Test suite | ✅ 75 passing, 15 modules (`test_owned_shoes.py` +4 and `test_scrape_lock.py` +4 added 2026-07-07 Session C; `test_replacement_deals.py` +3 Session B; `test_deals.py` the MSRP rules) |
 | Documentation program | ✅ **Complete and committed** (R1.1, 2026-07-06) — full `docs/` suite + `CLAUDE.md` (incl. §14 INVARIANTS) + `refactoring/` + final review + reconciliation + `.claude/skills/` (13 workflow skills) |
 | Roadmap R1 (loose ends) | ✅ **Complete** (2026-07-07) — R1.1/R1.2 docs, R1.3 replacement-deals card, R1.4 proxy guards, R1.5 debt sweep (Task D · shim delete · pure `pace` · chat catalog), R1.6 APScheduler removed |
-| Security pass (R2.1) | ⛔ Not started — explicitly deferred; the gate for any exposure-increasing feature, and the next priority |
+| Review safety fixes (C1 / M3) | ✅ **Resolved** (Session C, 2026-07-07) — mileage ledger no longer writable via PUT (sanctioned `adjust_mileage` path); scrape-lock wedge closed + admin force-release/status endpoints |
+| Security pass (R2.1) | 🟡 **Planned, ready to execute** — `SECURITY_PASS_PLAN.md` written (Session C); still the gate for any exposure-increasing feature, and the next priority. No auth code yet. |
 
 The app is in **daily real use** (live DB is the only DB: 933 activities, 698 runs, 8,028 km, 667 attributed).
 
@@ -110,11 +111,12 @@ No open *defect* list exists — bugs get fixed in-session and logged in `docs/c
 
 Full ranked treatment: `refactoring/tech_debt.md` — **the ranked authority** (P0–P3 with states); actionable detail in `refactoring/refactor.md`; deletions in `refactoring/dead_code.md`. The short list a new session must know:
 
-- **No auth on three mutation surfaces** + default `0.0.0.0` bind (deliberate; gates all exposure). **Now the top open item.**
+- **No auth on three mutation surfaces** + default `0.0.0.0` bind (deliberate; gates all exposure). **The top open item; its plan now exists** (`SECURITY_PASS_PLAN.md`, ready to execute as R2.1).
 - **Dual schema authority** (`create_all` + Alembic) and DB + dated `.bak` files in the working tree.
 - **Fat legacy routers** (`watchlist`, `deals`, `dashboard`) with inline ORM logic — also what blocks MCP watchlist parity.
 - **Whole-table in-Python reads** (`unified_activities`, watchlist reduction) — fine at 933 activities; the canonical table now makes indexed queries possible.
 - **Provider agentic loop implemented 3×** (per provider) — the model-catalog duplication half was fixed (R1.5d, 2026-07-07); the loop triplication remains (tech_debt 5.2, consolidate before the R3 agents extend it).
+- ~~**Writable mileage ledger** via `PUT /owned-shoes/{id}` (P0-1)~~ resolved (C1, Session C, 2026-07-07 — sanctioned `rotation.adjust_mileage()` path). ~~**Scrape-lock wedge**~~ resolved (M3, same session — lock-releasing `finally` covers setup; admin force-release endpoint).
 - ~~`scraper_manager` compat shim~~ deleted (R1.5b, 2026-07-07). ~~"Task D" router→router import~~ resolved (R1.5a). ~~Pace formatting ×3~~ resolved (R1.5c). ~~Chat catalog duplication~~ resolved (R1.5d). ~~APScheduler installed, unwired~~ removed (R1.6).
 
 ---
@@ -136,6 +138,7 @@ Nothing blocks day-to-day development. External blockers, all worked around or a
 
 Last ~10 days, newest first (full record: `docs/design_decisions.md`):
 
+-1. **Mileage ledger enforced at the schema boundary** (2026-07-07, Session C — C1 fix) — `current_mileage`/`starting_mileage` removed from `OwnedShoeUpdate`; the only way to override the counter is now the sanctioned `rotation.adjust_mileage()` (`POST /owned-shoes/{id}/adjust-mileage`), which journals the drift. INV-1 moves from "convention + one known breach" to structurally enforced. Same session: M3 scrape-lock wedge closed (whole `run_scrape_job` body under the lock-releasing `finally`; admin force-release endpoint), and `SECURITY_PASS_PLAN.md` written to gate R2.1. **These stay unauthenticated for now under E1**; R2.1 gates the new admin endpoint.
 0. **D7 and E5 executed** (2026-07-07) — the `scraper_manager` shim was **deleted** (D7 → Superseded) and the unused **APScheduler** dependency **removed** (E5 → Superseded). Both flipped from the ⚠️ scheduled-to-change set to the Superseded table. The remaining ⚠️ set is A6 (schema authority), C8 (chat memory), E1 (auth).
 1. **MSRP drives deals (B9-v2)** (2026-07-06) — a deal is any price strictly below MSRP; savings measured against MSRP; `target_price` optional/nullable. Migration `d4e5f6a7b8c9`; design_decisions B9 → Superseded, B9-v2 + B8 amended same day.
 2. **Canonical `activities` table; `shoe_runs` → attribution with property proxies** (2026-07-04) — B4/B5. Also set the migration-discipline precedent (E4: reversible, backed-up, reconciled).
@@ -158,13 +161,12 @@ Last ~10 days, newest first (full record: `docs/design_decisions.md`):
 
 ## 11. Areas Requiring Immediate Attention
 
-Ordered; "immediate" means *next few sessions*, not emergencies — nothing is on fire. **All of R1 is done** (2026-07-07); focus moves to R2 and the review's safety fixes.
+Ordered; "immediate" means *next few sessions*, not emergencies — nothing is on fire. **All of R1 is done, and the review's same-day safety fixes (C1 + M3) are done** (2026-07-07); focus moves to R2, starting with the security pass.
 
-1. **The security pass (R2.1)** is now the top item and the standing gate: shared bearer token on `/api` + `/mcp`, default bind to `127.0.0.1`, basic rate limiting on `/api/chat/message`. Nothing exposure-increasing (agents unattended, mobile, remote MCP) proceeds before it.
-2. **Same-day-sized safety fixes from the review** (candidates alongside/before R2.1): refactor.md **C1** — the writable `current_mileage` via `PUT /owned-shoes/{id}` (the one P0 invariant breach; make it an explicit `rotation.adjust_mileage()`), and **M3** — the scrape-lock wedge.
-3. **Deal-domain test gaps** beyond today's coverage: retirement/requalification, the orphan guard + its H2 partial-failure gap, promo manual-beats-scraped (refactor.md H1/H2).
-4. **Provider agentic-loop consolidation** (tech_debt 5.2) — the model-catalog half is done (R1.5d); collapse the 3× loop **before** the R3 agents extend it.
-5. **R2.2 schema authority** (Alembic sole source; relocate DB/`.bak` out of the tree) — prerequisite hygiene before any table-adding work (R2.5/R2.6).
+1. **Execute the security pass (R2.1)** — the plan now exists (`SECURITY_PASS_PLAN.md`); this is the standing gate. Shared bearer token on `/api` + `/mcp` (incl. the loopback client), default bind to `127.0.0.1` via the existing `API_HOST` env, and — before starting — resolve §7's open questions (browser token delivery; `mcp-remote --header` support). Basic rate limiting on `/api/chat/message` is a *separate* R2 item (plan §6). Nothing exposure-increasing proceeds before this.
+2. **Deal-domain test gaps** beyond today's coverage: retirement/requalification, the orphan guard + its H2 partial-failure gap, promo manual-beats-scraped (refactor.md H1/H2).
+3. **Provider agentic-loop consolidation** (tech_debt 5.2) — the model-catalog half is done (R1.5d); collapse the 3× loop **before** the R3 agents extend it.
+4. **R2.2 schema authority** (Alembic sole source; relocate DB/`.bak` out of the tree) — prerequisite hygiene before any table-adding work (R2.5/R2.6).
 
 ---
 
