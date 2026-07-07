@@ -5,6 +5,20 @@
 
 ---
 
+## 🏁 Documentation completion — R1.1 committed, invariants, skills library, vocab table — 2026-07-06
+
+**[DOCS] The documentation program is committed and its review backlog (§8 steps 2–4) is closed. No application code changed.**
+
+- **[ADDED] R1.1 shipped:** the entire suite (`docs/`, `refactoring/`, `CLAUDE.md`, `documentation_creation.md`, the `claude.md → docs/changelog.md` rename) committed as `docs: complete Phase 1 documentation program`. Verified first: `backend/.gitignore` (`*.db`) + root `.gitignore` (`*.db.bak*`) exclude the live DB and all seven backups — no `.gitignore` change needed.
+- **[ADDED] `CLAUDE.md` §14 — Invariants:** the checkable list (INV-1…INV-8), one line each: what must hold → owning code path → covering test (or an explicit "no test / documentation-only" note). Test claims verified against the suite first-hand (e.g. `test_delete_run_keeps_strava_archive` covers INV-4; the ledger round-trip covers INV-1). `ai_context.md` §8 repointed: a lead-in cites §14 as canonical and the five invariant items carry surgical `INV-n` citations — the third "don't break these" list the review warned about (§4.3) now cannot form.
+- **[ADDED] `.claude/skills/` implemented — all 13 skill files** per `docs/skills_library.md`, in its specified order (S13 → S01 → S03/S04 → S05/S06/S07 → the rest). Six-section structure, ≤ ~120 lines each, cite-don't-restate. Addendum A4 honored: S07 carries the `sync_coros_runs` step list + external-contract summary with a "the prompt source wins" disclaimer. S05 points at the Retailer Status table's new home (architecture §10). S11 makes "exactly one uvicorn worker" explicit (review §5). One-line index added to `CLAUDE.md` §3.
+- **[ADDED] `shoe_type` vocabulary table** (review Addendum A2, completing the reconciliation session's inline enumeration): Value/Meaning table in `domain_model.md` §4.3, marked as-of 2026-07-06 / canonical until R2.4; §7.1 glossary row repointed at it; one sentence added to `design_decisions.md` B3 naming where the list lives.
+- **[CHANGED] Bookkeeping:** review §8 steps 2–4 struck with pointers here; roadmap R1.1 row marked done and moved to project_state §3; project_state refreshed (snapshot note, §1/§2/§3/§10, §11 re-ordered — R1.4 now first); ai_context §9 item 1 and §12 skills line updated to reflect committed/implemented state.
+- **Noted, not re-done:** session-prompt Tasks 4 (two CLAUDE.md §6 trap lines) and 5 (roadmap "watched shoe") were already executed by the same-day reconciliation session — verified present/clean first-hand.
+- **Verified:** no application code touched; suite expected unchanged at **64** (run recorded by the runner at commit time). Committed as `docs: documentation completion — invariants, skills library, vocab table`.
+
+---
+
 ## 📚 Documentation program complete — final review + docs reconciliation — 2026-07-06
 
 **[DOCS] All prompts of `documentation_creation.md` are done. The final review (`docs/documentation_review.md` + same-day addendum) audited the suite; this session executed its §8.1 reconciliation backlog. No code changed.**

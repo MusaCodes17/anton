@@ -90,14 +90,14 @@ The ⚠️ **scheduled-to-change set** (the standing to-do list of decided chang
 
 ## 8. Things that should never be changed casually
 
-These are the load-bearing decisions and invariants a well-meaning session is most likely to accidentally violate. Each names its authority — read it before touching.
+These are the load-bearing decisions and invariants a well-meaning session is most likely to accidentally violate. Each names its authority — read it before touching. **The canonical checkable form of the invariants below — one line each with owning code path and covering test — is `CLAUDE.md` §14 (INV-1…INV-8); this section cites it rather than restating the rules.** (`CLAUDE.md` §6 remains the separate mechanical-traps list.)
 
 1. **`Shoe` ≠ `OwnedShoe`, and there is no FK between them.** Wanting and owning are independent facts; the *absence* of a relationship is the design. Do not "fix" it, do not model purchases as a transition. (design_decisions B1, domain_model §5.1)
-2. **`rotation.log_run` is the only run writer.** Manual, COROS, and Strava ingestion all go through it; a second write path breaks the mileage-ledger identity. Extend it with keyword escape hatches, never parallel it. (domain_model §4.6, design_decisions B7 — and see tech_debt P0-1 for the one known breach)
-3. **`source='strava'` activities are the frozen archive.** Deleting an attribution must never delete an archive activity; the 8-year history is re-curatable, never destructible. (domain_model §4.8, design_decisions B11)
-4. **Confirmation gates on all AI/synced writes.** No run is ever auto-logged; agents present suggestions (heuristic stated) and *wait*. There is no confidence exception. (design_decisions C9, domain_model §5.3/§5.5)
-5. **Derived values are never stored.** Cost/km, countdowns, retirement %, weekly volume — computed at read time. Blessed exceptions only: the mileage ledger (stored counter, B6) and a deal's qualifying-savings snapshot (now MSRP-based, B8/B9-v2). (design_decisions B13)
-6. **Deals qualify against MSRP, not target_price** (since 2026-07-06). `target_price` is an optional personal threshold with no role in qualification or savings; a shoe without MSRP produces no deals by design. Don't reintroduce target into deal math. (design_decisions B9-v2; changelog 2026-07-06)
+2. **`rotation.log_run` is the only run writer.** Manual, COROS, and Strava ingestion all go through it; a second write path breaks the mileage-ledger identity. Extend it with keyword escape hatches, never parallel it. (Canonical: CLAUDE.md §14 **INV-2**, with the ledger identity itself as **INV-1**; narrative: domain_model §4.6, design_decisions B7 — and see tech_debt P0-1 for the one known breach)
+3. **`source='strava'` activities are the frozen archive.** Deleting an attribution must never delete an archive activity; the 8-year history is re-curatable, never destructible. (Canonical: CLAUDE.md §14 **INV-4**; narrative: domain_model §4.8, design_decisions B11)
+4. **Confirmation gates on all AI/synced writes.** No run is ever auto-logged; agents present suggestions (heuristic stated) and *wait*. There is no confidence exception. (Canonical: CLAUDE.md §14 **INV-8**; narrative: design_decisions C9, domain_model §5.3/§5.5)
+5. **Derived values are never stored.** Cost/km, countdowns, retirement %, weekly volume — computed at read time. Blessed exceptions only: the mileage ledger (stored counter, B6) and a deal's qualifying-savings snapshot (now MSRP-based, B8/B9-v2). (Canonical: CLAUDE.md §14 **INV-7**; narrative: design_decisions B13)
+6. **Deals qualify against MSRP, not target_price** (since 2026-07-06). `target_price` is an optional personal threshold with no role in qualification or savings; a shoe without MSRP produces no deals by design. Don't reintroduce target into deal math. (Canonical: CLAUDE.md §14 **INV-6**; narrative: design_decisions B9-v2; changelog 2026-07-06)
 7. **The FastAPI/Starlette/sse-starlette pin triple** resolves an `mcp[cli]` version conflict. Never bump any of the three independently. (design_decisions A7, CLAUDE.md §6)
 8. **`ShoeRun` proxies are read-only presentation.** They lazy-load (N+1 in loops — eager-load `activity` at list seams) and **silently do not work in `.filter()`** — query `Activity` columns. (dependency_graph §8.2, CLAUDE.md §6, refactor.md H4)
 9. **The `shoe_type` string vocabulary is the cross-domain join key.** It exists in four places with zero validation; treat any edit to the vocabulary as schema-grade. (domain_model §4.3/§7.1, tech_debt P1-5)
@@ -108,9 +108,9 @@ These are the load-bearing decisions and invariants a well-meaning session is mo
 
 ## 9. Current priorities
 
-(Adjusted from `project_state.md` §11, which is dated 2026-07-04 — see §11 staleness register.)
+(Aligned with `project_state.md` §11 as of 2026-07-06.)
 
-1. **Finish the documentation program:** this file completes prompt 10; only the **final review prompt** remains. Then commit the whole `docs/` + `refactoring/` + `CLAUDE.md` batch — uncommitted docs are one `git clean` from gone (roadmap R1.1).
+1. **Documentation program: ✅ complete and committed** (2026-07-06, R1.1) — the full suite, `CLAUDE.md` (incl. the §14 INVARIANTS list), `refactoring/`, and the `.claude/skills/` library are in git. The review backlog (`docs/documentation_review.md` §8) is closed through step 4; the anti-drift process rules (step 5) are adopted going forward.
 2. **Same-day-sized safety fixes from the review:** refactor.md **C1** (writable `current_mileage` — the one P0 invariant breach; make the UI's mileage-adjust an explicitly sanctioned `rotation.adjust_mileage()`) and **M3** (scrape-lock wedge). Note: refactor.md's own maintenance rule says re-verify C1/H3/H4 now that `models.py` changed size — the MSRP change touched schemas/orchestrator/deal_store, not the rotation paths, so the findings almost certainly stand, but check before acting.
 3. **R1 loose ends** (roadmap R1, order 1→2→4→3→5→6): prune the changelog's stale bottom sections; guard the `ShoeRun` proxy traps (eager-loading — refactor.md H4); wire the Replacement Deals card on `/shoes/:id` (data shipped 2026-07-04); debt sweep #1 (Task D, shim deletion, pure `pace` module, model-catalog single-sourcing); decide APScheduler.
 4. **Deal-domain tests beyond today's three:** `test_deals.py` now pins MSRP savings/refresh/no-MSRP — but retirement/requalification, the orphan guard (and its H2 partial-failure gap), and promo manual-beats-scraped remain untested (refactor.md H1/H2).
@@ -154,7 +154,7 @@ The ranked ledger is `refactoring/tech_debt.md` (P0–P3 with states); actionabl
 **For refactoring:** + `refactoring/refactor.md` (findings with solutions) → `dependency_graph.md` §§7–11 (the debt map and its sequencing) → `CLAUDE.md` §11 (seam-first philosophy).
 **For debt triage:** + `refactoring/tech_debt.md` (the ranked ledger and what's decided vs. open) → `design_decisions.md` ⚠️ verdicts → `refactoring/dead_code.md` before deleting anything.
 
-`docs/skills_library.md` designs 13 workflow skills (S01 add-service-capability through S13 session-wrapup) that trace curated paths through all of the above; they are specified but not yet written to `.claude/skills/`.
+`docs/skills_library.md` designs 13 workflow skills (S01 add-service-capability through S13 session-wrapup) that trace curated paths through all of the above; **implemented 2026-07-06 in `.claude/skills/`** (index in CLAUDE.md §3). The library file remains the design authority; the skill files cite rather than restate.
 
 ---
 

@@ -82,7 +82,7 @@
 **Why:** Preserves B1's independence while still connecting retirement to shopping; honest about being a heuristic (labeled so in code).
 **Advantages:** Domains stay decoupled; zero migration cost; degrades silently rather than erroring.
 **Trade-offs:** Stringly-typed — a typo yields zero hints with no signal; vocabulary duplicated in three places (backend, frontend `shoeTypes.js`, MCP docstrings).
-**Verdict:** 🕐 Keep the bridge; formalize the vocabulary (controlled list served by the backend — architecture.md §16.5). The *no-FK* principle stands; the *free-string* part is the debt.
+**Verdict:** 🕐 Keep the bridge; formalize the vocabulary (controlled list served by the backend — architecture.md §16.5). The *no-FK* principle stands; the *free-string* part is the debt. The current value set is enumerated in `domain_model.md` §4.3 (as-of 2026-07-06, mirrored in `frontend/src/lib/shoeTypes.js`) — the canonical list until R2.4 formalizes it.
 
 ### B4. Canonical `activities` table; `shoe_runs` reduced to attribution (Phase 5)
 **Chosen:** One row per physical run regardless of source; shoe attribution is a separate row; the old `strava_activities`/data-bearing-`shoe_runs` split and its reconciliation machinery removed.

@@ -1,6 +1,6 @@
 # Anton — Project State
 
-**Snapshot date:** 2026-07-06 (evening — after the `msrp_drives_deals` migration and the docs-reconciliation session).
+**Snapshot date:** 2026-07-06 (late — after the `msrp_drives_deals` migration, the docs-reconciliation session, and the documentation-completion session: R1.1 committed, CLAUDE.md §14 INVARIANTS, `.claude/skills/` implemented).
 **Read this first, then:** `docs/ai_context.md` → `docs/architecture.md` → `docs/domain_model.md`. This file is the *perishable* one — it describes a moment, and staleness here is expected and fixable; update it at the end of every working session.
 
 ---
@@ -9,7 +9,7 @@
 
 Anton (repo name: `running-shoe-deals`) is a **single-user personal running platform**: shoe-deal watching across 8 Canadian retailers + a canonical run/training history + shoe rotation wear tracking, with an embedded AI assistant (Son of Anton) and a full MCP server used by Claude Desktop. FastAPI + SQLite + React SPA, all local, no auth (deliberate, deferred).
 
-**Where things stand right now:** the multi-phase **Anton redesign is functionally complete** — all five tabs (Home / Training / Shoes / Deals / Son of Anton) are built. The two most recent structural events: the canonical `activities` table (2026-07-04, reversible reconciled migration) and **MSRP-drives-deals** (2026-07-06 — deal qualification and savings now measured against MSRP; `target_price` demoted to an optional threshold; migration `d4e5f6a7b8c9`). The suite is green at **64 tests**. What remains of Phase 5 is the agent work (Deal Alert / Weekly Rotation Summary) and durability items. The **documentation program** (`documentation_creation.md`) is **complete**: all content prompts + the final review (`docs/documentation_review.md`) + the 2026-07-06 docs-reconciliation pass — the suite is ready to be the primary context for future sessions; committing it is the outstanding step.
+**Where things stand right now:** the multi-phase **Anton redesign is functionally complete** — all five tabs (Home / Training / Shoes / Deals / Son of Anton) are built. The two most recent structural events: the canonical `activities` table (2026-07-04, reversible reconciled migration) and **MSRP-drives-deals** (2026-07-06 — deal qualification and savings now measured against MSRP; `target_price` demoted to an optional threshold; migration `d4e5f6a7b8c9`). The suite is green at **64 tests**. What remains of Phase 5 is the agent work (Deal Alert / Weekly Rotation Summary) and durability items. The **documentation program** (`documentation_creation.md`) is **complete and committed** (R1.1, 2026-07-06): the full suite + final review + reconciliation + the completion session (CLAUDE.md §14 INVARIANTS, `.claude/skills/` 13-skill library). Phase 2 (implementation work on the R1 backlog) can begin.
 
 **The stated Current Focus** (per `docs/changelog.md`): *"Product images, colorway consolidation, scraper durability + coverage."* Note: images/colorways largely shipped in June — read this focus line as the *durability/polish pass* over those features plus scraper coverage, not greenfield work. (If that reading is wrong, correct this line.)
 
@@ -23,7 +23,7 @@ Anton (repo name: `running-shoe-deals`) is a **single-user personal running plat
 | Phase 5 backlog | 🟡 3 of 4 items done (canonical activities ✅ 2026-07-04 · `/shoes` lifecycle reframe ✅ · app mark ✅ · **agents remaining**) |
 | Strava historical import (694-run, 8-year archive) | ✅ Complete and now *structurally* permanent (absorbed into `activities`) |
 | Test suite | ✅ 64 passing, 12 modules (`test_deals.py` added 2026-07-06 with the MSRP rules; count dropped from 69 to 61 when backfill tests retired, back up since) |
-| Documentation program | ✅ **Complete** — full `docs/` suite + `CLAUDE.md` + `refactoring/` + final review (`docs/documentation_review.md`) + docs-reconciliation pass (2026-07-06). Outstanding: **commit the batch** (R1.1); then Phase 2 (implementation planning) may begin |
+| Documentation program | ✅ **Complete and committed** (R1.1, 2026-07-06) — full `docs/` suite + `CLAUDE.md` (incl. §14 INVARIANTS) + `refactoring/` + final review + reconciliation + `.claude/skills/` (13 workflow skills). Phase 2 (implementation) unblocked |
 | Security pass | ⛔ Not started — explicitly deferred; the gate for any exposure-increasing feature |
 
 The app is in **daily real use** (live DB is the only DB: 933 activities, 698 runs, 8,028 km, 667 attributed).
@@ -60,6 +60,7 @@ Grouped; dates are `docs/changelog.md` entries.
 
 **Engineering**
 - 2026 refactor: services extraction, scraper decomposition (orchestrator/registry/deal-store/lock), Alembic adoption; Strava import pipeline with self-checking assumptions.
+- **Documentation program shipped and committed (R1.1, 2026-07-06):** full `docs/` suite, `refactoring/` reviews, `CLAUDE.md` (with the §14 INVARIANTS checkable list, INV-1…INV-8), the `claude.md → docs/changelog.md` rename, and the `.claude/skills/` library (13 workflow skills per `docs/skills_library.md`; the `shoe_type` vocabulary table landed in domain_model §4.3 the same session).
 
 ---
 
@@ -148,7 +149,7 @@ Last ~10 days, newest first (full record: `docs/design_decisions.md`):
 
 - **HEAD is on `main`** (`.git/HEAD` verified). No long-lived branches are part of the workflow.
 - **Convention** (REDESIGN_PLAN.md §5): one phase per Claude Code session; one commit per numbered task with phase-prefixed conventional messages (`p5: canonical activities migration`); backend endpoints land *with tests* before their consuming UI task; every phase ends suite-green + desktop & ~380 px visual pass.
-- **Unverified from this audit:** working-tree cleanliness. The `docs/` files generated by the documentation program (and this file) are likely **uncommitted** — commit them as a docs batch. The `.bak*` DB files' git status should be checked against `.gitignore` while you're there.
+- **Unverified from this audit:** ~~working-tree cleanliness. The `docs/` files generated by the documentation program (and this file) are likely **uncommitted** — commit them as a docs batch.~~ Resolved 2026-07-06: the batch is committed (R1.1). The `.bak*` DB files were checked against `.gitignore` the same session — `backend/.gitignore` ignores `*.db` and the root ignores `*.db.bak*`; nothing DB-related can be committed.
 - The live SQLite DB sits in the tree; treat `main` + the DB file as jointly constituting "production."
 
 ---
@@ -157,12 +158,11 @@ Last ~10 days, newest first (full record: `docs/design_decisions.md`):
 
 Ordered; "immediate" means *next few sessions*, not emergencies — nothing is on fire.
 
-1. **Commit the documentation suite** — the program is complete (all prompts + final review + reconciliation); uncommitted, it's one `git clean` from gone. One batch: `docs/`, `refactoring/`, `CLAUDE.md`, `documentation_creation.md`, the rename. (R1.1)
-2. **Guard the N+1/filter trap** while it's fresh: add eager-loading at the run-list seams and a short comment on `ShoeRun` warning against `filter()` on proxies — the one place the Phase-5 migration left future code exposed. (R1.4)
-3. **Wire the Replacement Deals card on `/shoes/:id`** — a placeholder whose data dependency shipped; likely small, closes a visible loose end. (R1.3)
+1. **Guard the N+1/filter trap** while it's fresh: add eager-loading at the run-list seams and a short comment on `ShoeRun` warning against `filter()` on proxies — the one place the Phase-5 migration left future code exposed. (R1.4 — first per the R1 ordering now that R1.1/R1.2 are done)
+2. **Wire the Replacement Deals card on `/shoes/:id`** — a placeholder whose data dependency shipped; likely small, closes a visible loose end. (R1.3)
+3. **Debt sweep #1** (R1.5): Task D, `scraper_manager` shim deletion, pure `pace` module, chat model-catalog single-sourcing — plus the review's same-day safety fixes (refactor.md C1 `rotation.adjust_mileage()` and M3) as candidates for the same run of sessions.
 4. **Decide APScheduler** (design deliberately or remove) before any drive-by wiring collides with the single-process scrape lock. (R1.6)
 5. **The security pass** stays the standing gate: schedule it before the agents if those agents will ever run unattended or the MCP port ever leaves the machine. (R2.1)
-6. **Follow the review backlog**: `docs/documentation_review.md` §8 + addendum — next up after the commit: the INVARIANTS section in `CLAUDE.md`, then the skills implementation (S13 + S01 first).
 
 ---
 

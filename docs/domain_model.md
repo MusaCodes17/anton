@@ -104,6 +104,19 @@ Deactivated deals are kept as history, not deleted.
 ### 4.3 The replacement-deal bridge — *"the only place the domains touch"*
 An owned shoe nearing retirement gets a hint: the count of active deals on tracked shoes of the **same `shoe_type`**. This is a *category-label match, explicitly heuristic* — the domains stay independent, and the bridge degrades silently (a typo'd type simply yields zero hints). The `shoe_type` vocabulary is therefore the single most load-bearing set of strings in the system.
 
+The current value set — **as-of 2026-07-06; canonical source until R2.4 formalizes the vocabulary** (the live copies are the backend strings, mirrored in `frontend/src/lib/shoeTypes.js`):
+
+| Value | Meaning |
+|---|---|
+| `daily_trainer` | Everyday easy-mileage shoe — the rotation's workhorse. |
+| `tempo` | Uptempo / threshold-workout shoe. |
+| `intervals` | Track and interval-session shoe. |
+| `long_run` | Cushioned shoe for the weekly long run. |
+| `recovery` | Max-cushion shoe for recovery days. |
+| `trail` | Off-road / trail shoe. |
+| `long_distance_racer` | Race-day shoe for marathon / half-marathon (carbon-plate class). |
+| `short_distance_racer` | Race-day shoe for 5K–10K. |
+
 ### 4.4 Catalog hygiene
 - **Kids/junior products are filtered at the source** — they never enter observations or deals, for every retailer uniformly.
 - **Manual promo codes outrank scraped ones**: human knowledge is never overwritten by a crawl.
@@ -225,7 +238,7 @@ The asymmetry is deliberate and worth stating: **the deal domain forgets on comm
 | **checkpoint** | A 100 km wear milestone inviting a journal note. | |
 | **retirement pipeline** | Attention state for shoes ≥ 75% of mileage limit. Not a status. | |
 | **replacement deal** | Active deal on a tracked shoe whose `shoe_type` matches an owned shoe's — the heuristic bridge (4.3). | |
-| **shoe_type** | The runner's category vocabulary — the cross-domain join key. **Current values** (as of 2026-07-06; source of truth is the backend strings, mirrored in `lib/shoeTypes.js`): `daily_trainer` · `tempo` · `intervals` · `long_run` · `recovery` · `trail` · `long_distance_racer` · `short_distance_racer`. To be formalized as a controlled vocabulary by roadmap R2.4. | Free strings today, four unvalidated copies (tech_debt P1-5); treat edits as schema-grade changes. |
+| **shoe_type** | The runner's category vocabulary — the cross-domain join key. **Current values enumerated in the §4.3 table** (as-of 2026-07-06; source of truth is the backend strings, mirrored in `lib/shoeTypes.js`). To be formalized as a controlled vocabulary by roadmap R2.4. | Free strings today, four unvalidated copies (tech_debt P1-5); treat edits as schema-grade changes. |
 | **personal best** | Whole-activity best within a distance band (4.12). | Never present as a segment PB. |
 | **Anton** | The platform. **Son of Anton** — the embedded assistant. | Repo/API still carry the pre-rebrand name "running-shoe-deals" / "Running Shoe Deal Finder." |
 

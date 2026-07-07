@@ -105,12 +105,12 @@ Also: when R1 items execute, remember the standing rule — **D7, A6, C8, E1, E5
 
 ## 8. Recommended actions, in order
 
-> **Progress 2026-07-06:** step 1 ✅ executed (the reconciliation session, including addendum items A1/A2/A3/A5 — A1's retailer-table relocation was sequenced before the changelog prune as required). Steps 2–6 remain open; **step 2 (commit the batch) is now the single most urgent action.** A4 stays gated on step 4.
+> **Progress 2026-07-06:** step 1 ✅ executed (the reconciliation session, including addendum items A1/A2/A3/A5 — A1's retailer-table relocation was sequenced before the changelog prune as required). **Steps 2–4 ✅ executed by the documentation-completion session later the same day** (see that changelog entry); step 5's rules are adopted as standing process; step 6 remains the queue of gated items. A4 was folded into step 4 as specified (S07 carries the protocol step list).
 
 1. **One "docs reconciliation" session (≤ half a session, no code):** apply every §2.1 MSRP-ripple fix; §2.2 changelog retitle + tail amputation (R1.2); §2.3 claude.md reference sweep; §2.4 count-drift fixes + the "counts live in two places" rule; §2.5 project_state refresh (which also records prompt 10 + this review as done); §2.6 small fixes; prune ai_context §11's staleness register. End with a changelog entry.
-2. **Commit the entire suite as the R1.1 batch** — docs/, refactoring/, CLAUDE.md, ai_context.md, this file. Uncommitted, all of this is one `git clean` from gone.
-3. **Write the INVARIANTS section** in CLAUDE.md (§3.1 above) and repoint ai_context §8 at it.
-4. **Implement the skills library** (S13 + S01 first, per skills_library's own ordering), adding the one-line index to CLAUDE.md §3.
+2. ~~**Commit the entire suite as the R1.1 batch** — docs/, refactoring/, CLAUDE.md, ai_context.md, this file. Uncommitted, all of this is one `git clean` from gone.~~ **Struck 2026-07-06** — committed as `docs: complete Phase 1 documentation program` (R1.1); see the documentation-completion changelog entry.
+3. ~~**Write the INVARIANTS section** in CLAUDE.md (§3.1 above) and repoint ai_context §8 at it.~~ **Struck 2026-07-06** — `CLAUDE.md` §14 (INV-1…INV-8, each with owning path + covering test or an explicit "no test" note); ai_context §8 now cites it per item.
+4. ~~**Implement the skills library** (S13 + S01 first, per skills_library's own ordering), adding the one-line index to CLAUDE.md §3.~~ **Struck 2026-07-06** — all 13 files written to `.claude/skills/` in the specified order; index added to CLAUDE.md §3; A4's protocol step list carried in S07.
 5. **Adopt the three anti-drift process rules** this review derives: live counts in exactly two files; the authoritative migration list in architecture §5 only; every ⚠️-execution session flips design_decisions + strikes tech_debt/refactor in the same commit.
 6. **Queue the gated items:** env-var reference table and QUICKSTART/TROUBLESHOOTING audit (any quiet session); S14 + the B-series mileage-adjust entry (with C1's fix); the security-pass plan doc (before R2.1).
 
