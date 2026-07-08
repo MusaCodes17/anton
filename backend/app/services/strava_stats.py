@@ -73,17 +73,27 @@ def _period_key(d: date, period: str) -> str:
     return f"{d.year}-{d.month:02d}"
 
 
-def training_summary(db: Session, period: str = "monthly") -> list[PeriodSummary]:
+def training_summary(
+    db: Session,
+    period: str = "monthly",
+    *,
+    date_from: Optional[date] = None,
+    date_to: Optional[date] = None,
+) -> list[PeriodSummary]:
     """
     Aggregate the unioned run history by week or month, newest period first.
     Pace is a distance-weighted average via total moving time / total distance
     (moving time reconstructed from average pace for runs that lack it); HR is
     a simple mean over runs that recorded it.
+
+    `date_from`/`date_to` (inclusive, R2.7 T4b) restrict the runs aggregated so
+    the Training-tab summary card can honour the same date-range picker as the
+    volume chart and activities list.
     """
     if period not in ("weekly", "monthly"):
         raise ValueError("period must be 'weekly' or 'monthly'")
 
-    runs = activities_svc.unified_activities(db)
+    runs = activities_svc.unified_activities(db, date_from=date_from, date_to=date_to)
 
     buckets: dict[str, dict] = {}
     for r in runs:

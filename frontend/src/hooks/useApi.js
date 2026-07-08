@@ -34,7 +34,7 @@ export const queryKeys = {
   replacementDeals: (id) => ['owned-shoes', id, 'replacement-deals'],
   rotationOverview: () => ['owned-shoes', 'rotation-overview'],
   corosSyncStatus: () => ['coros', 'sync-status'],
-  trainingSummary: (period) => ['training', 'summary', period],
+  trainingSummary: (period, range) => ['training', 'summary', period, range ?? {}],
   trainingRecords: () => ['training', 'records'],
   stravaStatus: () => ['strava', 'status'],
   watchlist: () => ['watchlist'],
@@ -208,10 +208,10 @@ export function useHome() {
 }
 
 // ============== TRAINING ==============
-export function useTrainingSummary(period = 'monthly') {
+export function useTrainingSummary(period = 'monthly', range) {
   return useQuery({
-    queryKey: queryKeys.trainingSummary(period),
-    queryFn: () => trainingApi.summary(period),
+    queryKey: queryKeys.trainingSummary(period, range),
+    queryFn: () => trainingApi.summary(period, range),
   })
 }
 

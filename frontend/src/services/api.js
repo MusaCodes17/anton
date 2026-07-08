@@ -179,8 +179,14 @@ export const ownedShoesApi = {
 
 // ============== TRAINING ==============
 export const trainingApi = {
-  summary: (period = 'monthly') =>
-    client.get('/api/training/summary', { params: { period } }).then((r) => r.data),
+  summary: (period = 'monthly', range = {}) =>
+    client.get('/api/training/summary', {
+      params: {
+        period,
+        ...(range.date_from ? { date_from: range.date_from } : {}),
+        ...(range.date_to ? { date_to: range.date_to } : {}),
+      },
+    }).then((r) => r.data),
   records: () => client.get('/api/training/records').then((r) => r.data),
 }
 

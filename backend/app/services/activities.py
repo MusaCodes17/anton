@@ -118,6 +118,8 @@ def unified_activities(
     *,
     year: Optional[int] = None,
     month: Optional[int] = None,
+    date_from: Optional[date] = None,
+    date_to: Optional[date] = None,
     shoe_id: Optional[int] = None,
     min_distance_km: Optional[float] = None,
     limit: Optional[int] = None,
@@ -130,6 +132,8 @@ def unified_activities(
     `min_distance_km` is an extension over the §3 signature so the Training
     activities list can filter short runs server-side (keeping it consistent
     with server-side pagination rather than filtering a single page in React).
+    `date_from`/`date_to` (inclusive, R2.7 T4b) are the range the Training-tab
+    date picker uses; they compose with, and are a superset of, `year`/`month`.
     """
     items = _build(db)
 
@@ -137,6 +141,10 @@ def unified_activities(
         items = [a for a in items if a.date.year == year]
     if month is not None:
         items = [a for a in items if a.date.month == month]
+    if date_from is not None:
+        items = [a for a in items if a.date >= date_from]
+    if date_to is not None:
+        items = [a for a in items if a.date <= date_to]
     if shoe_id is not None:
         items = [a for a in items if a.shoe is not None and a.shoe.id == shoe_id]
     if min_distance_km is not None:

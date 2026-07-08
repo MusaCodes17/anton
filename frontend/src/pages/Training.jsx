@@ -57,6 +57,17 @@ function labelWeek(period) {
   }
 }
 
+// Local-date ISO strings (YYYY-MM-DD) for the date-range picker (T4b).
+function isoToday() {
+  const d = new Date()
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
+function isoDaysAgo(n) {
+  const d = new Date()
+  d.setDate(d.getDate() - n)
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
+
 function currentMonthKey(d = new Date()) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
 }
@@ -97,26 +108,37 @@ function SectionHeading({ id, icon: Icon, title, hint }) {
 
 export default function Training() {
   const [period, setPeriod] = useState('weekly')
-  const monthly = useTrainingSummary('monthly')
-  const weekly = useTrainingSummary('weekly')
+
+  // Shared date range (T4b) — drives the volume chart, the summary, and the
+  // activities list. Default: last 90 days. React state only (resets on nav).
+  const [dateFrom, setDateFrom] = useState(() => isoDaysAgo(90))
+  const [dateTo, setDateTo] = useState(() => isoToday())
+  const range = useMemo(() => ({
+    ...(dateFrom ? { date_from: dateFrom } : {}),
+    ...(dateTo ? { date_to: dateTo } : {}),
+  }), [dateFrom, dateTo])
+
+  const monthly = useTrainingSummary('monthly')          // unranged — the stat tiles' fixed windows
+  const weekly = useTrainingSummary('weekly')            // unranged — this-week tile
+  const ranged = useTrainingSummary(period, range)       // the volume chart honours the range
   const records = useTrainingRecords()
   const ownedShoes = useOwnedShoes()
 
   // Activities filters + "load more" (limit grows; offset stays 0 so the list
   // is one coherent page — cheap at personal scale and avoids client accumulation).
-  const [year, setYear] = useState(ALL)
   const [shoeId, setShoeId] = useState(ALL)
   const [minKm, setMinKm] = useState('')
   const [pages, setPages] = useState(1)
 
   const activityParams = useMemo(() => {
     const p = { limit: pages * PAGE, offset: 0 }
-    if (year !== ALL) p.year = Number(year)
+    if (dateFrom) p.date_from = dateFrom
+    if (dateTo) p.date_to = dateTo
     if (shoeId !== ALL) p.shoe_id = Number(shoeId)
     const min = parseFloat(minKm)
     if (!Number.isNaN(min) && min > 0) p.min_distance_km = min
     return p
-  }, [year, shoeId, minKm, pages])
+  }, [dateFrom, dateTo, shoeId, minKm, pages])
 
   const activities = useActivities(activityParams)
   const hasMore = activities.data && activities.data.length === pages * PAGE
@@ -135,13 +157,13 @@ export default function Training() {
     return { thisWeek, thisMonth, total12, runs12 }
   }, [monthly.data, weekly.data])
 
-  // Chart data (chronological, last 12 periods)
+  // Chart data (chronological, last 12 periods of the selected range)
   const chartData = useMemo(() => {
-    const src = period === 'weekly' ? weekly.data : monthly.data
+    const src = ranged.data
     if (!src) return []
     const label = period === 'weekly' ? labelWeek : labelMonth
     return [...src].slice(0, 12).reverse().map((b) => ({ ...b, ...label(b.period) }))
-  }, [period, monthly.data, weekly.data])
+  }, [period, ranged.data])
 
   // Weekly view (T4a): label the x-axis by month instead of week number. One
   // tick at the first week of each month; the formatter maps that week's label
@@ -158,13 +180,10 @@ export default function Training() {
     return { xTicks: ticks, xTickFormatter: (lab) => map[lab] ?? lab }
   }, [period, chartData])
 
-  // Year options from the monthly periods (span all history)
-  const years = useMemo(() => {
-    const set = new Set((monthly.data || []).map((b) => b.period.split('-')[0]))
-    return Array.from(set).sort((a, b) => b - a)
-  }, [monthly.data])
-
   const summaryLoading = monthly.isLoading || weekly.isLoading
+
+  // A range edit invalidates the current "load more" depth.
+  const setRange = (from, to) => { setDateFrom(from); setDateTo(to); resetPages() }
 
   return (
     <div className="space-y-8">
@@ -179,7 +198,38 @@ export default function Training() {
 
       {/* ── Trends (volume first) ──────────────────────────────── */}
       <section className="space-y-4">
-        <SectionHeading id="trends" icon={TrendingUp} title="Trends" />
+        <div className="flex flex-wrap items-baseline justify-between gap-3">
+          <SectionHeading id="trends" icon={TrendingUp} title="Trends" />
+          <div className="flex flex-wrap items-center gap-2 text-xs">
+            <Input
+              type="date"
+              value={dateFrom}
+              max={dateTo || undefined}
+              onChange={(e) => setRange(e.target.value, dateTo)}
+              className="h-8 w-[9.5rem] px-2 py-1"
+              aria-label="From date"
+            />
+            <span className="text-muted-foreground">→</span>
+            <Input
+              type="date"
+              value={dateTo}
+              min={dateFrom || undefined}
+              onChange={(e) => setRange(dateFrom, e.target.value)}
+              className="h-8 w-[9.5rem] px-2 py-1"
+              aria-label="To date"
+            />
+            {[['90d', 90], ['6mo', 182], ['1y', 365]].map(([label, days]) => (
+              <button
+                key={label}
+                type="button"
+                onClick={() => setRange(isoDaysAgo(days), isoToday())}
+                className="focus-ring rounded-md border border-border px-2 py-1 font-medium text-muted-foreground hover:text-foreground"
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        </div>
 
         {summaryLoading ? (
           <Skeleton className="h-[88px] w-full rounded-[12px]" />
@@ -219,13 +269,15 @@ export default function Training() {
                 </div>
               </div>
               <div className="p-4">
-                {chartData.length ? (
+                {ranged.isLoading ? (
+                  <Skeleton className="h-[220px] w-full rounded-[12px]" />
+                ) : chartData.length ? (
                   <VolumeChart data={chartData} {...xAxis} />
                 ) : (
                   <EmptyState
                     icon={Activity}
-                    title="No training history"
-                    description="Runs will appear here as they sync."
+                    title="No runs in this range"
+                    description="Widen the date range or sync more runs."
                   />
                 )}
               </div>
@@ -276,19 +328,9 @@ export default function Training() {
 
       {/* ── Activities ─────────────────────────────────────────── */}
       <section className="space-y-4">
-        <SectionHeading id="activities" icon={ListOrdered} title="Activities" />
+        <SectionHeading id="activities" icon={ListOrdered} title="Activities" hint="within the selected date range" />
 
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-          <div className="space-y-1.5">
-            <Label>Year</Label>
-            <Select value={year} onValueChange={(v) => { setYear(v); resetPages() }}>
-              <SelectTrigger><SelectValue placeholder="All years" /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value={ALL}>All years</SelectItem>
-                {years.map((y) => <SelectItem key={y} value={y}>{y}</SelectItem>)}
-              </SelectContent>
-            </Select>
-          </div>
+        <div className="grid grid-cols-2 gap-3">
           <div className="space-y-1.5">
             <Label>Shoe</Label>
             <Select value={shoeId} onValueChange={(v) => { setShoeId(v); resetPages() }}>

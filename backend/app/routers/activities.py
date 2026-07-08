@@ -52,6 +52,8 @@ def get_activity_tags():
 def get_activities(
     year: Optional[int] = None,
     month: Optional[int] = Query(None, ge=1, le=12),
+    date_from: Optional[date] = None,
+    date_to: Optional[date] = None,
     shoe_id: Optional[int] = None,
     min_distance_km: Optional[float] = Query(None, ge=0),
     limit: int = Query(20, ge=1, le=200),
@@ -60,14 +62,17 @@ def get_activities(
 ):
     """
     The unioned run feed (imported Strava + live shoe_runs), newest first.
-    Filter by year, month, shoe, and minimum distance; paginate with
-    limit/offset. Fetch `limit + 1`-style "load more" by requesting the next
-    offset — a short page means the end.
+    Filter by year/month or an inclusive date_from..date_to range (R2.7 T4b),
+    plus shoe and minimum distance; paginate with limit/offset. Fetch
+    `limit + 1`-style "load more" by requesting the next offset — a short page
+    means the end.
     """
     return activities_svc.unified_activities(
         db,
         year=year,
         month=month,
+        date_from=date_from,
+        date_to=date_to,
         shoe_id=shoe_id,
         min_distance_km=min_distance_km,
         limit=limit,

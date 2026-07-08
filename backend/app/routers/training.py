@@ -4,6 +4,7 @@ API routes for imported Strava training analytics.
 Thin router-level adapter over app.services.strava_stats — no aggregation
 logic lives here; it only exposes the service's PeriodSummary results.
 """
+from datetime import date
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, Query
@@ -68,11 +69,13 @@ class PersonalBestsResponse(BaseModel):
 @router.get("/summary", response_model=List[PeriodSummaryResponse])
 def get_training_summary(
     period: str = Query("monthly", pattern="^(monthly|weekly)$"),
+    date_from: Optional[date] = None,
+    date_to: Optional[date] = None,
     db: Session = Depends(get_db),
 ):
     """Aggregated run volume by month or week (union of Strava + shoe_runs),
-    newest period first."""
-    return strava_stats.training_summary(db, period=period)
+    newest period first. Optional inclusive date_from..date_to range (R2.7 T4b)."""
+    return strava_stats.training_summary(db, period=period, date_from=date_from, date_to=date_to)
 
 
 @router.get("/records", response_model=PersonalBestsResponse)

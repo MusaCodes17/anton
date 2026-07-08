@@ -129,6 +129,30 @@ def test_summary_includes_all_sources(db):
     assert jun.total_km == 15.0
 
 
+def test_date_range_filters_activities_and_summary(db):
+    # Three runs across three months; a from..to window keeps only the middle.
+    _activity(db, said=30, run_date=date(2026, 4, 10), dist=6.0)
+    _activity(db, said=31, run_date=date(2026, 5, 15), dist=7.0)
+    _activity(db, said=32, run_date=date(2026, 6, 20), dist=8.0)
+    db.commit()
+
+    # Inclusive window May 1 – May 31 → only the May run.
+    ranged = activities_svc.unified_activities(
+        db, date_from=date(2026, 5, 1), date_to=date(2026, 5, 31))
+    assert [a.distance_km for a in ranged] == [7.0]
+
+    # date_from only (open-ended upper bound) keeps May + June.
+    since_may = activities_svc.unified_activities(db, date_from=date(2026, 5, 1))
+    assert sorted(a.distance_km for a in since_may) == [7.0, 8.0]
+
+    # The summary honours the same window.
+    summary = strava_stats.training_summary(
+        db, period="monthly", date_from=date(2026, 5, 1), date_to=date(2026, 5, 31))
+    assert len(summary) == 1
+    assert summary[0].period == "2026-05"
+    assert summary[0].total_km == 7.0
+
+
 def test_records_attribute_shoe(db):
     shoe = _owned(db)
     # A fast 10k attributed to a shoe, and a slower unattributed 10k.
