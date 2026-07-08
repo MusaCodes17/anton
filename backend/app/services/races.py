@@ -19,10 +19,10 @@ from app.services import rotation
 def create_completed_from_activity(db: Session, activity_id: int) -> PlannedRace:
     """Promote an activity to a *completed* race row (R2.7 T6) — the workflow for
     "I ran a race and want it in the races dashboard". Pre-fills date, distance,
-    and the activity's time as the result. Raises LookupError if the activity is
-    missing, ValueError if it has no distance to race over. Owns the commit.
-
-    T7 will add the planned_races.activity_id back-link and set it here.
+    and the activity's time as the result, and back-links the race to the
+    activity (T7) so the past-race row deep-links to its full stats. Raises
+    LookupError if the activity is missing, ValueError if it has no distance to
+    race over. Owns the commit.
     """
     a = db.query(Activity).filter(Activity.id == activity_id).first()
     if a is None:
@@ -44,6 +44,7 @@ def create_completed_from_activity(db: Session, activity_id: int) -> PlannedRace
         status="completed",
         result_time_s=result_s,
         planned_shoe_id=attr.owned_shoe_id if attr else None,
+        activity_id=activity_id,   # T7: back-link the race to the run it was
     )
     db.add(race)
     db.commit()
@@ -83,6 +84,7 @@ def race_to_dict(race: PlannedRace, today: Optional[date] = None) -> dict:
         "location": race.location,
         "status": race.status,
         "result_time_s": race.result_time_s,
+        "activity_id": race.activity_id,
         "days_remaining": race.days_remaining,
         "weeks_remaining": race.weeks_remaining,
         "planned_shoe": (

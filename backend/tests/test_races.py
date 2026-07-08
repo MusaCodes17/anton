@@ -4,7 +4,7 @@ nullable handling, and past-race filtering. Exercised at the service level.
 """
 from datetime import date, timedelta
 
-from app.models.models import OwnedShoe, PlannedRace
+from app.models.models import Activity, OwnedShoe, PlannedRace
 from app.services import races as races_svc
 
 
@@ -79,3 +79,22 @@ def test_race_to_dict_shape_with_shoe(db):
     assert d["weeks_remaining"] == 10
     assert d["target_pace"] is not None
     assert d["planned_shoe"]["nickname"] == "race day"
+
+
+def test_activity_id_nullable_and_absent_by_default(db):
+    # R2.7 T7 — a plain planned/manual race carries no linked activity.
+    r = _race(db, "Unlinked", date(2026, 8, 1))
+    db.commit()
+    assert r.activity_id is None
+    assert races_svc.race_to_dict(r)["activity_id"] is None
+
+
+def test_promote_sets_activity_link(db):
+    # R2.7 T7 — promoting an activity back-links the completed race to the run.
+    a = Activity(source="strava", activity_type="Run", run_date=date(2026, 5, 4),
+                 distance_km=10.0, moving_time_s=2400, name="10k", activity_tag="Race")
+    db.add(a); db.commit(); db.refresh(a)
+
+    race = races_svc.create_completed_from_activity(db, a.id)
+    assert race.activity_id == a.id
+    assert races_svc.race_to_dict(race)["activity_id"] == a.id

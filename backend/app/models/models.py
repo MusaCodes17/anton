@@ -385,10 +385,15 @@ class PlannedRace(Base):
     notes = Column(Text, nullable=True)
     status = Column(String(20), nullable=False, default="planned", server_default="planned")  # planned | completed | skipped
     result_time_s = Column(Integer, nullable=True)   # actual finish time, set on completion
+    # R2.7 T7: the canonical run this race *was*, set on completion/promotion so the
+    # past-race row deep-links to the activity's full stats. Nullable — planned and
+    # manually-completed races have no linked Activity.
+    activity_id = Column(Integer, ForeignKey("activities.id"), nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
-    # Relationship (no back_populates — owned_shoes doesn't need to know)
+    # Relationships (no back_populates — neither owned_shoes nor activities needs to know)
     planned_shoe = relationship("OwnedShoe")
+    activity = relationship("Activity")
 
     def __repr__(self):
         return f"<PlannedRace {self.name!r} @ {self.race_date}>"

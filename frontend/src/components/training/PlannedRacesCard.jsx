@@ -125,8 +125,24 @@ function ResultDelta({ race }) {
 
 function PastRow({ race }) {
   const label = race.status === 'skipped' ? 'Skipped' : null
+  // T7: a completed race linked to its Activity deep-links to the run's full stats.
+  const Wrapper = race.activity_id
+    ? ({ children }) => (
+        <Link
+          to={`/activities/${race.activity_id}`}
+          className="focus-ring flex items-center justify-between gap-3 rounded-[10px] border border-border/60 bg-surface/60 px-3.5 py-2.5 text-xs transition-colors hover:border-primary/40 hover:bg-surface"
+          title="Open activity"
+        >
+          {children}
+        </Link>
+      )
+    : ({ children }) => (
+        <div className="flex items-center justify-between gap-3 rounded-[10px] border border-border/60 bg-surface/60 px-3.5 py-2.5 text-xs">
+          {children}
+        </div>
+      )
   return (
-    <div className="flex items-center justify-between gap-3 rounded-[10px] border border-border/60 bg-surface/60 px-3.5 py-2.5 text-xs">
+    <Wrapper>
       <div className="min-w-0">
         <span className="font-semibold text-foreground">{race.name}</span>
         <span className="ml-2 text-faint">{formatDate(race.race_date)}</span>
@@ -140,7 +156,7 @@ function PastRow({ race }) {
         <ResultDelta race={race} />
         {label && <span className="text-faint">{label}</span>}
       </div>
-    </div>
+    </Wrapper>
   )
 }
 

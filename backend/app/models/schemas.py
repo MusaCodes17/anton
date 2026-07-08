@@ -474,6 +474,7 @@ class PlannedRaceResponse(PlannedRaceBase):
     id: int
     status: str
     result_time_s: Optional[int] = None
+    activity_id: Optional[int] = None      # R2.7 T7 — linked run for a completed race
     created_at: datetime
     planned_shoe: Optional[PlannedShoeBrief] = None
     # Computed server-side:
