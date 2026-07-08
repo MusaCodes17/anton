@@ -5,6 +5,18 @@
 
 ---
 
+## 👁️ R2.6 live browser visual pass — Phase 2 Session P — 2026-07-08
+
+**[VERIFIED] The desktop + ~380 px live pass on R2.6 that Session M deferred (the dev backend on `:8000` was down then). Backend + frontend both up this session; no source change — verification only. project_state §11 item 0 → resolved.**
+
+- **[VERIFIED · desktop] Server-persisted chat loads through the real app.** A fresh navigation to `/assistant` (1440 px) pulled the saved conversation *and* its messages from the backend via React Query (`useConversations` → `GET /api/chat/conversations`, messages via `qc.fetchQuery` on select) — the R2.6 core (localStorage → server) working end-to-end in the browser, not just in tests. 0 console errors (the 2 warnings are pre-existing React Router v7 future-flag notices, unrelated to R2.6).
+- **[VERIFIED · mobile] The mobile chat surface (ChatDrawer) is clean at 380 px** — full-width, correct empty state with prompt suggestions, input pinned at the bottom. This is the surface a phone actually uses (the app nav collapses to a hamburger; the floating "Open Son of Anton" drawer is the entry point).
+- **[VERIFIED · checkpoint substrate] `LogRunDialog` mounts and its R2.6 server read fires cleanly.** Opening Log run from a rotation card mounts `useCheckpointPrompts()` → `GET /api/checkpoint-prompts` returned **200 OK** (confirmed in the network panel), dialog rendered, 0 console errors. The "Checkpoint reached 🎯" prompt branch itself was **not** exercised live because triggering it requires logging a run that crosses a 100 km boundary — a write into the live/production DB, deliberately declined; that branch's logic is covered by `test_checkpoints.py` and the end-to-end ASGI checks (Session M).
+- **[FINDING · pre-existing, not a regression] The full-page `/assistant` view does not collapse its `w-[280px]` conversation sidebar at 380 px** — the list takes the full width and the chat panel is squished off the right edge (one word per line). This fixed-width sidebar (`ChatPage.jsx:368`) predates R2.6, which only swapped the data source behind the same layout — so it is **not** an R2.6 defect. On mobile the drawer (verified above) is the intended surface, so this is low-priority responsive debt on a desktop-oriented route, noted for a future pass (project_state §11).
+- **[VERIFIED] No source files touched; suite count unchanged at 185.** No `vite build` needed (no code change). Inspection screenshots were captured and discarded; the tree is clean apart from the pre-existing `docs/roadmap.md`/`settings.local.json` edits and the untracked `training-default.png`. **[DOCS]** this entry; project_state §11 item 0 → resolved + snapshot refresh.
+
+---
+
 ## 🩹 H2 orphan-guard fix + H1 HTTP-layer smoke tests — Phase 2 Session O — 2026-07-08
 
 **[FIXED/ADDED] Close the two deal-domain findings the Session N tests exposed: fix the B10/H2 partial-failure gap (a routine detail-fetch timeout could orphan a live deal), and add the HTTP-layer smoke slice that completes refactor.md H1. One source-behaviour change (orphan retirement) + one new test module. Suite 172 (+1 xfailed) → 185 passing (the former xfail is now a real pass; +12 smoke).**
