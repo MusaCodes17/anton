@@ -4,7 +4,7 @@ Chat API — streaming endpoint that calls Claude (or OpenAI) with access to MCP
 import json
 import os
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
 from sse_starlette.sse import EventSourceResponse
 from sqlalchemy.orm import Session
@@ -12,10 +12,29 @@ from sqlalchemy.orm import Session
 from app.database import get_db
 from app.models.models import OwnedShoe
 from app.services.chat_service import PROVIDERS, get_models, read_mcp_resource, stream_chat
+from app.services.rate_limit import chat_limiter
 
 router = APIRouter(prefix="/chat", tags=["chat"])
 
 DEFAULT_MODEL = "claude-haiku-4-5-20251001"
+
+
+def enforce_chat_rate_limit(request: Request) -> None:
+    """FastAPI dependency: throttle `POST /chat/message` per client so an
+    authenticated-but-looping caller can't burn paid LLM credits (R2, the
+    R2.1-adjacent throttle — SECURITY_PASS_PLAN §6). Keyed by client IP; on
+    exceed it raises 429 with `Retry-After` before the stream starts. Auth is
+    still the security boundary — this only bounds spend/loops."""
+    client = request.client
+    key = client.host if client else "unknown"
+    result = chat_limiter.take(key)
+    if not result.allowed:
+        retry_after = max(1, round(result.retry_after_s))
+        raise HTTPException(
+            status_code=429,
+            detail="Chat rate limit exceeded — please slow down.",
+            headers={"Retry-After": str(retry_after)},
+        )
 
 
 class ChatMessage(BaseModel):
@@ -115,7 +134,7 @@ async def read_resource_endpoint(request: ResourceReadRequest):
 
 
 @router.post("/message")
-async def chat_message(request: ChatRequest):
+async def chat_message(request: ChatRequest, _rl: None = Depends(enforce_chat_rate_limit)):
     """
     Stream a chat response as Server-Sent Events. Each event is a JSON object:
       {"type": "tool_call",   "tool": "..."}
