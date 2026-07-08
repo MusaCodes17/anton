@@ -1,7 +1,7 @@
 """
 Database models using SQLAlchemy ORM
 """
-from sqlalchemy import BigInteger, Column, Index, Integer, String, Float, Boolean, DateTime, Date, ForeignKey, Text, JSON
+from sqlalchemy import BigInteger, Column, Index, Integer, String, Float, Boolean, DateTime, Date, ForeignKey, Text, JSON, UniqueConstraint
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from app.database import Base
@@ -489,3 +489,53 @@ class AthleteMetric(Base):
 
     def __repr__(self):
         return f"<AthleteMetric vo2max={self.vo2max} @ {self.captured_at}>"
+
+
+class ChatConversation(Base):
+    """
+    A persisted Son of Anton conversation (R2.6) — memory moved off browser
+    localStorage so it's device-independent and (later, R3) readable by
+    server-side agents. The streaming endpoint stays stateless per request;
+    this table is written by a separate CRUD surface on stream-end.
+
+    The two message arrays are stored as JSON, not a normalized messages
+    table: `display_messages` carries pure UI concerns (tool-call events, pill
+    previews, dividers) that don't relationally model well, and at single-user
+    scale (cap 50 conversations) normalizing would be speculative infra
+    (CLAUDE.md §2.5). `id` is the client-generated UUID — keeping it preserves
+    the frontend's in-memory-first / persist-on-first-message flow.
+    """
+    __tablename__ = "chat_conversations"
+
+    id = Column(String(36), primary_key=True, index=True)  # client crypto.randomUUID()
+    title = Column(String(200), nullable=True)
+    model = Column(String(60), nullable=True)
+    display_messages = Column(JSON, nullable=False, default=list)  # rich UI message array
+    api_messages = Column(JSON, nullable=False, default=list)      # LLM-facing message array
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+    def __repr__(self):
+        return f"<ChatConversation {self.id} {self.title!r}>"
+
+
+class CheckpointPrompt(Base):
+    """
+    Records that the 100 km-checkpoint note prompt was already shown for a shoe
+    (R2.6) — UI-state persistence moved off localStorage so it doesn't
+    re-prompt on a second device. Not a mileage-ledger fact: the checkpoint
+    itself is derived from `current_mileage`; this row only remembers that we
+    asked. The (shoe, km) pair is unique — "mark prompted" is idempotent.
+    """
+    __tablename__ = "checkpoint_prompts"
+    __table_args__ = (
+        UniqueConstraint("owned_shoe_id", "checkpoint_km", name="uq_checkpoint_prompt_shoe_km"),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    owned_shoe_id = Column(Integer, ForeignKey("owned_shoes.id"), nullable=False, index=True)
+    checkpoint_km = Column(Integer, nullable=False)
+    prompted_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    def __repr__(self):
+        return f"<CheckpointPrompt shoe={self.owned_shoe_id} @ {self.checkpoint_km}km>"

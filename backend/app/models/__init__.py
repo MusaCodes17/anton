@@ -1,7 +1,7 @@
 """
 Models package - exports all models and schemas
 """
-from app.models.models import Shoe, Retailer, PriceRecord, Deal, PromoCode, OwnedShoe, ShoeRun, ShoeNote, AppSettings, Activity, ScrapeRun
+from app.models.models import Shoe, Retailer, PriceRecord, Deal, PromoCode, OwnedShoe, ShoeRun, ShoeNote, AppSettings, Activity, ScrapeRun, ChatConversation, CheckpointPrompt
 from app.models.schemas import (
     ShoeCreate, ShoeUpdate, ShoeResponse,
     RetailerCreate, RetailerUpdate, RetailerResponse,
@@ -14,12 +14,14 @@ from app.models.schemas import (
     ShoeNoteCreate, ShoeNoteResponse,
     CorosRun, CorosFetchResponse, CorosAssignment, CorosConfirmRequest,
     CorosConfirmResponse, CorosSyncStatus,
+    ConversationUpsert, ConversationSummary, ConversationResponse,
+    CheckpointPromptCreate, CheckpointPromptResponse,
 )
 
 __all__ = [
     # Database models
     "Shoe", "Retailer", "PriceRecord", "Deal", "PromoCode", "OwnedShoe", "ShoeRun", "ShoeNote",
-    "AppSettings", "Activity", "ScrapeRun",
+    "AppSettings", "Activity", "ScrapeRun", "ChatConversation", "CheckpointPrompt",
 
     # Pydantic schemas
     "ShoeCreate", "ShoeUpdate", "ShoeResponse",
@@ -33,4 +35,6 @@ __all__ = [
     "ShoeNoteCreate", "ShoeNoteResponse",
     "CorosRun", "CorosFetchResponse", "CorosAssignment", "CorosConfirmRequest",
     "CorosConfirmResponse", "CorosSyncStatus",
+    "ConversationUpsert", "ConversationSummary", "ConversationResponse",
+    "CheckpointPromptCreate", "CheckpointPromptResponse",
 ]
