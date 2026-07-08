@@ -336,6 +336,53 @@ def delete_run(db: Session, run_id: int) -> OwnedShoe:
     return shoe
 
 
+def reassign_attribution(db: Session, activity_id: int, new_shoe_id: int) -> RunLogResult:
+    """
+    Move an activity's shoe attribution to a different owned shoe, keeping the
+    mileage ledger correct (INV-1): the old shoe loses this run's distance, the
+    new shoe gains it. Creates the attribution if the activity was unattributed.
+
+    Unlike delete_run this never touches the Activity row itself — only the
+    ShoeRun attribution (which is UNIQUE per activity, INV-3) and the two shoes'
+    counters. Idempotent no-op when `new_shoe_id` already owns the run.
+
+    Raises LookupError if the activity or the target shoe is missing.
+    Owns the commit.
+    """
+    activity = db.query(Activity).filter(Activity.id == activity_id).first()
+    if not activity:
+        raise LookupError(f"Activity {activity_id} not found")
+    new_shoe = db.query(OwnedShoe).filter(OwnedShoe.id == new_shoe_id).first()
+    if not new_shoe:
+        raise LookupError(f"Owned shoe {new_shoe_id} not found")
+
+    existing = db.query(ShoeRun).filter(ShoeRun.activity_id == activity_id).first()
+    if existing and existing.owned_shoe_id == new_shoe_id:
+        return RunLogResult(run=existing, activity=activity, shoe=new_shoe,
+                            checkpoint_reached=False, checkpoint_km=None)
+
+    dist = activity.distance_km or 0.0
+    if existing:
+        old_shoe = db.query(OwnedShoe).filter(OwnedShoe.id == existing.owned_shoe_id).first()
+        if old_shoe:
+            old_shoe.current_mileage = max(0.0, old_shoe.current_mileage - dist)
+        db.delete(existing)
+        db.flush()  # release the UNIQUE activity_id before inserting the new one
+
+    old_new_mileage = new_shoe.current_mileage
+    run = ShoeRun(activity_id=activity_id, owned_shoe_id=new_shoe_id)
+    db.add(run)
+    new_shoe.current_mileage += dist
+    db.commit()
+    db.refresh(run)
+    db.refresh(new_shoe)
+    db.refresh(activity)
+
+    cp = crossed_checkpoint(old_new_mileage, new_shoe.current_mileage)
+    return RunLogResult(run=run, activity=activity, shoe=new_shoe,
+                        checkpoint_reached=cp is not None, checkpoint_km=cp)
+
+
 def adjust_mileage(db: Session, owned_shoe_id: int, new_mileage: float) -> OwnedShoe:
     """
     Manually override a shoe's current_mileage, recording the change as a

@@ -157,3 +157,64 @@ def unified_activities(
     if limit is not None:
         items = items[:limit]
     return items
+
+
+_UNSET = object()  # "field not supplied" sentinel for the partial update below
+
+
+def get_activity_detail(db: Session, activity_id: int) -> dict:
+    """Full field set for one activity (R2.7 T6 detail view), including the fields
+    the list projection omits (description, elevation, cadence, calories, training
+    load/focus) and the current shoe attribution. Raises LookupError if missing."""
+    a = db.query(Activity).filter(Activity.id == activity_id).first()
+    if a is None:
+        raise LookupError(f"Activity {activity_id} not found")
+    attr = db.query(ShoeRun).filter(ShoeRun.activity_id == activity_id).first()
+    shoe = db.query(OwnedShoe).filter(OwnedShoe.id == attr.owned_shoe_id).first() if attr else None
+    return {
+        "id": a.id,
+        "source": a.source,
+        "name": a.name,
+        "description": a.description,
+        "run_date": a.run_date.isoformat() if a.run_date else None,
+        "distance_km": a.distance_km,
+        "moving_time_s": a.moving_time_s,
+        "elapsed_time_s": a.elapsed_time_s,
+        "avg_pace": rotation.seconds_to_pace(a.avg_pace_s_per_km) if a.avg_pace_s_per_km else None,
+        "avg_hr": a.avg_hr,
+        "max_hr": a.max_hr,
+        "elevation_gain_m": a.elevation_gain_m,
+        "avg_cadence": a.avg_cadence,
+        "calories": a.calories,
+        "training_load": a.training_load,
+        "training_focus": a.training_focus,
+        "activity_tag": a.activity_tag,
+        "strava_activity_id": a.strava_activity_id,
+        "shoe": {"id": shoe.id, "brand": shoe.brand, "model": shoe.model, "nickname": shoe.nickname} if shoe else None,
+    }
+
+
+def update_activity(
+    db: Session,
+    activity_id: int,
+    *,
+    activity_tag=_UNSET,
+    name=_UNSET,
+    description=_UNSET,
+) -> Activity:
+    """Partial-update the editable fields of an activity (R2.7 T6): tag, name,
+    description. Only supplied fields change (the `_UNSET` sentinel distinguishes
+    "clear to null" from "leave alone"). Tag validity is the caller's contract.
+    Raises LookupError if the activity is missing."""
+    a = db.query(Activity).filter(Activity.id == activity_id).first()
+    if a is None:
+        raise LookupError(f"Activity {activity_id} not found")
+    if activity_tag is not _UNSET:
+        a.activity_tag = activity_tag
+    if name is not _UNSET:
+        a.name = name
+    if description is not _UNSET:
+        a.description = description
+    db.commit()
+    db.refresh(a)
+    return a

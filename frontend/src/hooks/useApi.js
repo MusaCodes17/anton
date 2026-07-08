@@ -239,6 +239,56 @@ export function useActivities(params) {
   })
 }
 
+export function useActivityTags() {
+  return useQuery({
+    queryKey: ['activities', 'tags'],
+    queryFn: () => activitiesApi.tags(),
+    staleTime: Infinity, // the vocabulary is effectively constant
+  })
+}
+
+export function useActivity(id) {
+  return useQuery({
+    queryKey: ['activities', 'detail', id],
+    queryFn: () => activitiesApi.get(id),
+    enabled: id != null,
+  })
+}
+
+// Any activity write can shift the ledger, PBs, volume, and shoe mileage — so
+// these invalidate the activity feed, this detail, owned shoes, and training.
+function invalidateAfterActivityWrite(qc, id) {
+  qc.invalidateQueries({ queryKey: ['activities'] })
+  qc.invalidateQueries({ queryKey: ['activities', 'detail', id] })
+  qc.invalidateQueries({ queryKey: ['owned-shoes'] })
+  qc.invalidateQueries({ queryKey: ['training'] })
+  qc.invalidateQueries({ queryKey: ['home'] })
+}
+
+export function useUpdateActivity(id) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (data) => activitiesApi.update(id, data),
+    onSuccess: () => invalidateAfterActivityWrite(qc, id),
+  })
+}
+
+export function useReassignShoe(id) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (shoeId) => activitiesApi.reassignShoe(id, shoeId),
+    onSuccess: () => invalidateAfterActivityWrite(qc, id),
+  })
+}
+
+export function usePromoteToRace(id) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: () => activitiesApi.promoteToRace(id),
+    onSuccess: () => { invalidateAfterActivityWrite(qc, id); qc.invalidateQueries({ queryKey: ['races'] }) },
+  })
+}
+
 // ============== PLANNED RACES ==============
 export function useRaces() {
   return useQuery({
