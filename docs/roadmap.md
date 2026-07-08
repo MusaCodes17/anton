@@ -52,7 +52,7 @@
 
 **Internal dependency order: T1 → T2 → T3 (schema foundation), then T4/T5/T6 in parallel, then T7, then T8.**
 
-**Progress:** ✅ **Session 1 done (2026-07-07, Session F): T1 · T2 · T3** — tag vocabulary + 4 `activities` columns (migration `e5f6a7b8c9d0`), COROS field population, PB eligibility fix. Remaining: T4/T5/T6 (Session 2), T7/T8 (Session 3). See changelog 2026-07-07 and project_state §3.
+**Progress:** ✅ **Sessions 1–2 done: T1–T6.** Session 1 (2026-07-07, F): T1 tag vocabulary + 4 `activities` columns (migration `e5f6a7b8c9d0`), T2 COROS field population, T3 PB eligibility fix. Session 2 (2026-07-08, G): T4a month volume axis, T4b date-range picker (backend `date_from`/`date_to` + UI), T5 `athlete_metrics` table + fitness card (migration `f6a7b8c9d0e1`), T6 `/activities/:id` edit + shoe reassignment (INV-1 ledger) + race promotion. **Remaining: Session 3 — T7 (race↔activity FK) · T8 (COROS-name tag inference).** See changelog and project_state §3.
 
 ### T1 — Extend the Activity model
 
