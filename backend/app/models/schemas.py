@@ -1,9 +1,26 @@
 """
 Pydantic schemas for API request/response validation
 """
-from pydantic import BaseModel, Field, HttpUrl
+from pydantic import BaseModel, Field, HttpUrl, field_validator
 from typing import List, Optional
 from datetime import date, datetime
+
+from app.utils.shoe_types import SHOE_TYPES, is_valid_shoe_type
+
+
+def validate_optional_shoe_type(v: Optional[str]) -> Optional[str]:
+    """Shared `shoe_type` validator for the write schemas (R2.4): `None`/`""`
+    clears the type; any other value must be a member of the backend-owned
+    vocabulary (`app.utils.shoe_types.SHOE_TYPES`). Rejects typos that used to
+    fail silently at the cross-domain join. Read schemas deliberately do NOT
+    validate — legacy data must never break a GET."""
+    if v is None or v == "":
+        return None
+    if not is_valid_shoe_type(v):
+        raise ValueError(
+            f"Invalid shoe_type '{v}'. Use one of: {', '.join(SHOE_TYPES)} (or omit)."
+        )
+    return v
 
 
 # ============== SHOE SCHEMAS ==============
@@ -21,7 +38,7 @@ class ShoeBase(BaseModel):
 
 class ShoeCreate(ShoeBase):
     """Schema for creating a new shoe"""
-    pass
+    _check_shoe_type = field_validator("shoe_type")(validate_optional_shoe_type)
 
 
 class ShoeUpdate(BaseModel):
@@ -33,6 +50,8 @@ class ShoeUpdate(BaseModel):
     msrp: Optional[float] = Field(None, gt=0)
     notes: Optional[str] = None
     is_active: Optional[bool] = None
+
+    _check_shoe_type = field_validator("shoe_type")(validate_optional_shoe_type)
 
 
 class ShoeResponse(ShoeBase):
@@ -252,7 +271,7 @@ class OwnedShoeBase(BaseModel):
 
 class OwnedShoeCreate(OwnedShoeBase):
     """Schema for adding a shoe to the rotation"""
-    pass
+    _check_shoe_type = field_validator("shoe_type")(validate_optional_shoe_type)
 
 
 class OwnedShoeUpdate(BaseModel):
@@ -276,6 +295,8 @@ class OwnedShoeUpdate(BaseModel):
     purchase_price: Optional[float] = Field(None, gt=0)
     mileage_limit: Optional[float] = Field(None, gt=0)
     image_url: Optional[str] = None
+
+    _check_shoe_type = field_validator("shoe_type")(validate_optional_shoe_type)
 
 
 class MileageAdjust(BaseModel):
