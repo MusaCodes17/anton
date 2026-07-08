@@ -1,6 +1,6 @@
 # Anton — Project State
 
-**Snapshot date:** 2026-07-07 (after Phase 2 Session E — **R2.2 schema authority resolved**: Alembic is now the sole schema source — startup runs `alembic upgrade head`, `create_all` is test-only, the baseline recreates the pre-Alembic schema, `legacy_migrations/` deleted, and the live DB + backups moved to `~/anton-data/`. Suite 88 (unchanged — management change, not behavior). design_decisions A6 → Superseded. Prior: Session D shipped **R2.1** — bearer token on `/api`+`/mcp`, `127.0.0.1` bind, suite 75 → 88; both R2.1 and R2.2 go-live need a server restart — `CLAUDE_DESKTOP_SETUP.md`).
+**Snapshot date:** 2026-07-07 (after Phase 2 Session F — **R2.7 Session 1: training-depth foundation (T1–T3)**. `TRAINING_DEPTH_PLAN.md` committed as the T1–T8 contract; then T1 (activity-tag vocabulary + 4 nullable `activities` columns + seam), T2 (COROS field population through the sanctioned write path), T3 (PB eligibility fix — interval/track + stop-heavy exclusion, with excluded-count transparency; `/api/training/records` is now an object). Migration `e5f6a7b8c9d0` (E4-reconciled). Suite 88 → **97**. design_decisions +B15/+B16. Prior: Session E shipped **R2.2** (Alembic sole schema authority; DB moved to `~/anton-data/`); Session D shipped **R2.1** (bearer token). Both R2.1 and R2.2 go-live still need a server restart — `CLAUDE_DESKTOP_SETUP.md`.)
 **Read this first, then:** `docs/ai_context.md` → `docs/architecture.md` → `docs/domain_model.md`. This file is the *perishable* one — it describes a moment, and staleness here is expected and fixable; update it at the end of every working session.
 
 ---
@@ -22,12 +22,13 @@ Anton (repo name: `running-shoe-deals`) is a **single-user personal running plat
 | Anton redesign Phases 1–4 (IA, Deals watchlist, Training tab, Home) | ✅ Complete (Phase 4 landed 2026-07-03) |
 | Phase 5 backlog | 🟡 3 of 4 items done (canonical activities ✅ 2026-07-04 · `/shoes` lifecycle reframe ✅ · app mark ✅ · **agents remaining**) |
 | Strava historical import (694-run, 8-year archive) | ✅ Complete and now *structurally* permanent (absorbed into `activities`) |
-| Test suite | ✅ 88 passing, 16 modules (`test_auth.py` +13 added 2026-07-07 Session D — the suite's first HTTP-layer tests; `test_owned_shoes.py`/`test_scrape_lock.py` +4 each Session C; `test_replacement_deals.py` +3 Session B) |
+| Test suite | ✅ **97 passing**, 17 modules (`test_activity_tags.py` +3 Session F; +2 `test_activities_model.py` / +4 `test_activities_union.py` R2.7 T2/T3; `test_auth.py` +13 Session D; `test_owned_shoes.py`/`test_scrape_lock.py` +4 each Session C; `test_replacement_deals.py` +3 Session B) |
 | Documentation program | ✅ **Complete and committed** (R1.1, 2026-07-06) — full `docs/` suite + `CLAUDE.md` (incl. §14 INVARIANTS) + `refactoring/` + final review + reconciliation + `.claude/skills/` (13 workflow skills) |
 | Roadmap R1 (loose ends) | ✅ **Complete** (2026-07-07) — R1.1/R1.2 docs, R1.3 replacement-deals card, R1.4 proxy guards, R1.5 debt sweep (Task D · shim delete · pure `pace` · chat catalog), R1.6 APScheduler removed |
 | Review safety fixes (C1 / M3) | ✅ **Resolved** (Session C, 2026-07-07) — mileage ledger no longer writable via PUT (sanctioned `adjust_mileage` path); scrape-lock wedge closed + admin force-release/status endpoints |
 | Security pass (R2.1) | ✅ **Shipped** (Session D, 2026-07-07) — shared bearer token on `/api`+`/mcp` (pure-ASGI middleware), `127.0.0.1` default bind, fail-fast on missing secret, SPA + Desktop + loopback all send the token, 13 HTTP-layer tests. E1 → Superseded by E7. **Live activation (set `.env` secret, update Desktop `--header`, restart) is a human step** — `CLAUDE_DESKTOP_SETUP.md`. Rate limiting is a separate R2 item. |
 | Schema authority (R2.2) | ✅ **Shipped** (Session E, 2026-07-07) — Alembic sole source: startup runs `alembic upgrade head` (`database.run_migrations()`), `create_all` demoted to test fixtures, baseline revision recreates the pre-Alembic schema (fresh DB builds from Alembic alone), `legacy_migrations/` deleted, live DB + backups moved to `~/anton-data/`. A6 → Superseded. **Server restart needed** to pick up the new `DATABASE_URL` (pairs with the R2.1 restart). |
+| Training depth (R2.7) | 🟡 **Session 1 done** (Session F, 2026-07-07) — `TRAINING_DEPTH_PLAN.md` (T1–T8 contract) + T1 (tag vocabulary + 4 `activities` columns, migration `e5f6a7b8c9d0`) + T2 (COROS field population) + T3 (PB eligibility fix). Remaining: T4 (display) · T5 (fitness metrics) · T6 (activity edit) · T7 (race↔activity link) · T8 (tag inference). B15/B16 added. |
 
 The app is in **daily real use** (live DB is the only DB: 933 activities, 698 runs, 8,028 km, 667 attributed).
 
@@ -165,13 +166,14 @@ Last ~10 days, newest first (full record: `docs/design_decisions.md`):
 
 ## 11. Areas Requiring Immediate Attention
 
-Ordered; "immediate" means *next few sessions*, not emergencies — nothing is on fire. **All of R1 is done, the review's same-day safety fixes (C1 + M3) are done, R2.1 (security pass) and R2.2 (schema authority) have shipped** (2026-07-07); the exposure gate in front of R3–R5 is closed and the schema hygiene before table-adding work is done. Focus continues down R2.
+Ordered; "immediate" means *next few sessions*, not emergencies — nothing is on fire. **R1 done; C1/M3 safety fixes done; R2.1 (security) + R2.2 (schema authority) shipped; R2.7 Session 1 (T1–T3) shipped** (2026-07-07). The active thread is R2.7 (training depth); R2.3–R2.6 remain queued.
 
 0. **Restart the backend to activate R2.1 + R2.2 (a human step, not code).** Two committed-but-not-live changes now depend on a restart: (a) R2.1 auth — set `ANTON_SECRET` in `backend/.env` + `VITE_ANTON_SECRET` in `frontend/.env`, update the Claude Desktop `mcp-remote --header` (`CLAUDE_DESKTOP_SETUP.md` §"Rollout order"), rebuild/hard-reload the SPA; (b) R2.2 — the running server still reads the old DB path via its open file descriptor (the live DB was moved to `~/anton-data/` by rename this session); a restart repoints it at the new `DATABASE_URL`. **Until the restart, the running server is still old, unauthenticated code reading the moved DB via its inode.**
-1. **Rate limiting on `/api/chat/message`** — the remaining R2 auth-adjacent item (plan §6). R2.1 stopped *anonymous* spend; it does not stop an authenticated client from looping.
-2. **R2.3 indexed read paths** — swap `unified_activities` internals from whole-table Python to SQL date-range/shoe/pagination queries (the seam guarantees zero caller changes); extract `services/watchlist.py` from the fat router. Unlocks MCP watchlist parity (R3.4).
-3. **Deal-domain test gaps** beyond today's coverage: retirement/requalification, the orphan guard + its H2 partial-failure gap, promo manual-beats-scraped (refactor.md H1/H2).
-4. **Provider agentic-loop consolidation** (tech_debt 5.2) — the model-catalog half is done (R1.5d); collapse the 3× loop **before** the R3 agents extend it.
+1. **R2.7 Session 2 (T4/T5/T6)** — `TRAINING_DEPTH_PLAN.md`: T4 Training-tab display (month axis, date-range picker + backend `date_from/date_to`), T5 `athlete_metrics` table + fitness card (needs COROS discovery D1), T6 activity detail/edit + shoe reassignment. Then Session 3 (T7 race↔activity link, T8 tag inference).
+2. **Rate limiting on `/api/chat/message`** — the remaining R2.1-adjacent item (plan §6). R2.1 stopped *anonymous* spend; it does not stop an authenticated client from looping.
+3. **R2.3 indexed read paths** — swap `unified_activities` internals from whole-table Python to SQL date-range/shoe/pagination queries (the seam guarantees zero caller changes); extract `services/watchlist.py` from the fat router. Unlocks MCP watchlist parity (R3.4). *(T4b's `date_from/date_to` work overlaps this — coordinate.)*
+4. **Deal-domain test gaps**: retirement/requalification, the orphan guard + its H2 partial-failure gap, promo manual-beats-scraped (refactor.md H1/H2).
+5. **Provider agentic-loop consolidation** (tech_debt 5.2) — the model-catalog half is done (R1.5d); collapse the 3× loop **before** the R3 agents extend it.
 
 ---
 

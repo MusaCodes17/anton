@@ -168,6 +168,20 @@
 **Trade-offs:** Hard-coded home zone (travel racing logs to Toronto dates); acceptable and known.
 **Verdict:** ✅ Keep. Revisit only if multi-timezone life becomes real.
 
+### B15. Activity-tag controlled vocabulary (R2.7 T1)
+**Chosen:** `activity_tag` is a small closed set (Easy · Long Run · Recovery · Tempo · Intervals · Track · Workout · Trail · Parkrun · Race) owned by the backend in one pure module (`app/utils/activity_tags.py`) and served to the frontend (`GET /api/activities/tags`), not a free-text string.
+**Why:** the tag governs PB eligibility (B16), race promotion (T6), and the weekly-summary agent (R3.1) — a load-bearing set where a typo would fail silently. One served source avoids the three-copies problem that `shoe_type` still has (R2.4 will mirror this pattern).
+**Advantages:** typed/validated at the MCP boundary; one edit point; frontend never drifts.
+**Trade-offs:** growing the list is a schema-grade change (a test pins the exact set), deliberately — tags must not proliferate casually.
+**Verdict:** ✅ Keep. This is the reference pattern for R2.4's `shoe_type` vocabulary.
+
+### B16. PB eligibility: tag exclusion + elapsed-time guard (R2.7 T3)
+**Chosen:** personal bests exclude Intervals/Track tags always, include Race/Parkrun always, include other run tags, and for untagged runs apply an elapsed-time guard (`elapsed > 1.5 × moving` ⇒ stop-heavy ⇒ excluded). The dropped count + reason ride along in the response.
+**Why:** the PB algorithm bands *whole-activity* times, so a stop-heavy interval session could fake a record at its rep distance. The tag is the clean intentional signal; the ratio is the honest fallback for the untagged 8-year archive.
+**Advantages:** removes false records without hiding legitimate fast efforts; transparent (the UI can prompt tagging).
+**Trade-offs:** untagged history relies on a heuristic ratio (1.5× is a judgment call); tagging improves accuracy over time. These are still whole-activity bests, not segment PBs (unchanged).
+**Verdict:** 🕐 Keep for now. Revisit the ratio if it proves too tight/loose once more history is tagged.
+
 ---
 
 ## C. AI Layer
