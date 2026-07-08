@@ -239,6 +239,14 @@ class Activity(Base):
     elevation_gain_m = Column(Float, nullable=True)
     avg_cadence = Column(Float, nullable=True)
     calories = Column(Float, nullable=True)
+    # Training depth (R2.7 T1). All nullable — existing rows stay untagged/unscored.
+    training_load = Column(Float, nullable=True)  # COROS training-load score; null if unavailable
+    training_focus = Column(String(50), nullable=True)  # coaching label, e.g. "Aerobic base"
+    # Controlled vocabulary (app/utils/activity_tags.py, ACTIVITY_TAGS) — the
+    # governing input for PB eligibility (R2.7 T3), race promotion (T6), and the
+    # weekly-summary agent (R3.1). Indexed: the PB query filters on it.
+    activity_tag = Column(String(30), nullable=True, index=True)
+    best_km_pace_s = Column(Integer, nullable=True)  # best consecutive-km pace within the run (s/km); null if <1km
     strava_activity_id = Column(BigInteger, nullable=True, unique=True, index=True)
     coros_activity_id = Column(String(100), nullable=True, index=True)
     gear_name = Column(String(200), nullable=True, index=True)

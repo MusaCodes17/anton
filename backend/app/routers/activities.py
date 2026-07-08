@@ -12,6 +12,7 @@ from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.services import activities as activities_svc
+from app.utils.activity_tags import ACTIVITY_TAGS
 
 router = APIRouter(prefix="/activities", tags=["activities"])
 
@@ -32,9 +33,18 @@ class ActivityResponse(BaseModel):
     avg_hr: Optional[int] = None
     elevation_m: Optional[float] = None
     name: Optional[str] = None
+    activity_tag: Optional[str] = None
+    activity_id: Optional[int] = None
     shoe: Optional[ActivityShoe] = None
     strava_activity_id: Optional[int] = None
     shoe_run_id: Optional[int] = None
+
+
+@router.get("/tags", response_model=List[str])
+def get_activity_tags():
+    """The controlled `activity_tag` vocabulary (R2.7 T1), served so the frontend
+    keeps no independent copy. Ordered for display. See app/utils/activity_tags.py."""
+    return list(ACTIVITY_TAGS)
 
 
 @router.get("", response_model=List[ActivityResponse])

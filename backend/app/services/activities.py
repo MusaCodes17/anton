@@ -42,6 +42,9 @@ class UnifiedActivity:
     avg_hr: Optional[int] = None
     elevation_m: Optional[float] = None
     name: Optional[str] = None
+    elapsed_time_s: Optional[int] = None   # for the PB elapsed-time guard (R2.7 T3)
+    activity_tag: Optional[str] = None     # controlled vocab; drives PB eligibility (R2.7 T3)
+    activity_id: Optional[int] = None      # canonical Activity id (for edit/detail — R2.7 T6)
     shoe: Optional[UnifiedShoe] = None
     strava_activity_id: Optional[int] = None
     shoe_run_id: Optional[int] = None
@@ -99,6 +102,9 @@ def _build(db: Session) -> list[UnifiedActivity]:
             avg_hr=a.avg_hr,
             elevation_m=a.elevation_gain_m,
             name=a.name,
+            elapsed_time_s=a.elapsed_time_s,
+            activity_tag=a.activity_tag,
+            activity_id=a.id,
             shoe=_shoe_of(attr),
             strava_activity_id=a.strava_activity_id,
             shoe_run_id=attr.id if attr else None,
