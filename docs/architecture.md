@@ -182,7 +182,7 @@ Single-shoe and single-retailer scrapes remain synchronous request-scoped calls 
 
 **The live DB and backups live outside the repo tree** (R2.2): `~/anton-data/shoe_deals.db`, with dated `.bak*` restore points under `~/anton-data/backups/` (convention `shoe_deals.db.<YYYY-MM-DD>-<label>.bak`; see design_decisions E2/A6) — manual file copies taken before each structural migration, an informal but real recovery mechanism.
 
-### Tables (12 models)
+### Tables (16 models)
 
 **Deal-tracking domain**
 - `shoes` — tracked models to monitor. Key fields: `brand`, `model`, `shoe_type`, `msrp` (**the deal driver** since B9-v2 — a deal is any price below it; a shoe without an MSRP cannot produce deals), `target_price` (optional personal threshold, nullable, no longer part of qualification), `is_active`. **Deliberately size-less** — a model is tracked across all sizes.
@@ -190,6 +190,7 @@ Single-shoe and single-retailer scrapes remain synchronous request-scoped calls 
 - `price_records` — append-only price history per (shoe, retailer, product_url): `price`, `original_price`, `in_stock`, `sizes_available` (JSON list), `image_url`, `colorway`, `scraped_at`.
 - `deals` — qualified active deals: prices, savings (measured against MSRP since B9-v2), `sizes_available`, `is_active`, `detected_at`. `target_price` retained as a nullable reference snapshot only — it no longer drives qualification or savings.
 - `promo_codes` — per-retailer discount codes, `source` = scraped | manual (manual never overwritten by scraped data).
+- `scrape_runs` — durable scrape observability (R2.5): one row per retailer per full-catalog attempt (`status`, counts, `error`), written only by `ScrapeOrchestrator.scrape_retailer`; per-retailer health derived at read time.
 
 **Rotation / training domain (post-Phase-5)**
 - `activities` — **the canonical record of every physical activity.** One row per activity regardless of origin, discriminated by `source` (`strava` | `coros` | `manual`); `activity_type` (Run/Ride/Walk/…). Columns are a superset of the old `strava_activities` schema so the frozen bulk-export archive survives intact (`raw_json`, `fit_filename`, cadence, calories, grade-adjusted distance, UTC + America/Toronto timestamps, `run_date` local-date key). External IDs are the dedup/idempotency keys: `strava_activity_id` (unique) for re-imports, `coros_activity_id` for COROS sync. **Pace is stored as integer seconds-per-km**; formatting to `"M:SS/km"` happens only at boundaries. Per-run manual notes live on `description`.
@@ -198,6 +199,11 @@ Single-shoe and single-retailer scrapes remain synchronous request-scoped calls 
 - `shoe_notes` — timestamped, mileage-anchored journal (`mileage_at_note` always captured server-side; `triggered_by` = manual | checkpoint).
 - `strava_gear_mappings` — exact stripped gear string → owned shoe; nullable `owned_shoe_id` encodes "known but deliberately unmapped". (Historical: consumed by the one-time backfill; retained as the record of those decisions.)
 - `planned_races` — races with target time; countdown/target-pace derived at the boundary, never stored.
+- `athlete_metrics` — periodic COROS athlete-level fitness snapshots (R2.7 T5): `vo2max`, `threshold_pace_s_per_km`, `race_predictions` JSON; newest read for the Training fitness card.
+- `checkpoint_prompts` — records which 100 km-checkpoint note prompts have been shown per owned shoe (R2.6), unique `(owned_shoe_id, checkpoint_km)`. Moved off browser localStorage so a second device doesn't re-prompt; UI-state, not a mileage fact.
+
+**AI / assistant**
+- `chat_conversations` — persisted Son of Anton conversations (R2.6): client-UUID PK, `title`, `model`, and both message arrays (`display_messages` = rich UI shape, `api_messages` = LLM shape) as JSON columns. The streaming endpoint stays stateless; a CRUD surface writes here on stream-end. Replaces the former localStorage store (design_decisions C10 ← C8).
 
 **Removed in Phase 5:** the `strava_activities` table and `StravaActivity` model (contents migrated into `activities` with `source='strava'`), and the `strava_backfill` service — the two-store reconciliation it performed is exactly what the migration made permanent.
 
@@ -457,7 +463,7 @@ Directional, in dependency order — no implementation detail intended. (Item 3 
 4. **Shrink the `ShoeRun` proxy surface deliberately.** Treat the proxies as a migration bridge, not a permanent API: eager-load the attribution→activity join at every list seam now (killing the N+1), single-source pace formatting in a pure module importable by both models and services, and over time move readers onto `UnifiedActivity`/`Activity` directly so the filter-vs-attribute trap disappears.
 5. **Promote the shoe-type bridge from string to reference.** A small controlled vocabulary (lookup table or enum) shared by `shoes` and `owned_shoes` — and served to the frontend — keeps the deliberate no-FK independence between domains while eliminating silent string-mismatch failures in replacement-deal logic.
 6. **Make scraping an observable job system.** A persisted scrape-run/attempt record (per retailer: started, finished, products, errors) turns "is Altitude quietly broken?" from log archaeology into a queryable trend — and is the natural substrate if the unused APScheduler dependency ever becomes real scheduled scraping. This also forces a decision on the single-process lock (either document one-worker as a hard invariant or move coordination into the DB).
-7. **Move Anton's memory server-side.** Chat conversations (and checkpoint-prompt state) persisted in the backend align the assistant with the platform's own API-first, multi-client principle, and open the door to the backlogged agents (deal alerts, weekly rotation summary, retirement advisor) sharing conversational context.
+7. **Move Anton's memory server-side.** ✅ **Done (R2.6, 2026-07-08).** Chat conversations and checkpoint-prompt state now persist in `chat_conversations` / `checkpoint_prompts` (design_decisions C10 ← C8); the assistant is aligned with the API-first, multi-client principle and the backlogged agents (R3) can share conversational context.
 8. **Retire the transition scaffolding on a schedule.** The `scraper_manager` shim, the `coros_sync → owned_shoes` private-helper import (Task D), and hard-coded chat model catalogs are each one-session cleanups; batching them into an explicit "debt sweep" keeps the decision-log habit trustworthy. (`dependency_graph.md` §11 sequences these. The changelog's stale overview tail, formerly on this list, was pruned 2026-07-06.)
 9. **Codify the invariants this document describes.** The strongest properties here — single run write path, canonical-activity uniqueness, deal-qualification rule, mileage counter identity, the strava archive-preservation rule — are currently enforced by convention plus tests. A short INVARIANTS section (in `CLAUDE.md`, per the final review §3.1) that future work must check against is cheap insurance for a platform intended to outlive any one refactor.
 

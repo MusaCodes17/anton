@@ -240,7 +240,19 @@
 **Why (inferred):** Simplest possible persistence during the assistant's build-out; avoided premature schema for conversations.
 **Advantages:** Zero backend surface; privacy-by-locality.
 **Trade-offs:** Device-bound memory at odds with the multi-client trajectory (A4); quota-trimming silently discards history; invisible to future server-side agents.
-**Verdict:** ⚠️ Scheduled to change (architecture.md §16.7): move platform memory server-side when agents need shared context.
+**Verdict:** 🔁 **Superseded by C10 (R2.6, 2026-07-08).** Conversations and checkpoint-prompt state now live in the backend (`chat_conversations`, `checkpoint_prompts`); localStorage is no longer read (existing local data was abandoned, not migrated — start-fresh, confirmed with the runner). This was the last ⚠️ scheduled-to-change decision.
+
+### C10. Server-side chat & memory persistence (JSON columns, start-fresh)
+**Chosen (R2.6, 2026-07-08):** Son of Anton conversations and the 100 km checkpoint-prompt state persist in two backend tables (`chat_conversations`, `checkpoint_prompts`, migration `e1f2a3b4c5d6`). The streaming endpoint (`POST /chat/message`) stays stateless per request; a separate CRUD surface (`GET/PUT/DELETE /chat/conversations[/{id}]`, `GET/POST /checkpoint-prompts`) does persistence. The client PUTs the full conversation on stream-end (whole-conversation replace, mirroring the old localStorage save); the server caps the store at 50, trimming oldest-updated.
+**Why:** Device-bound memory contradicted the API-first multi-client principle (A4); server-side agents (R3) need shared context; R2.1 auth (E7) made the chat endpoints no longer anonymous, which was the precondition.
+**Key sub-decisions:**
+- **Message arrays as JSON columns, not a normalized messages table** — `display_messages` carries pure UI concerns (tool-call events, pill previews, dividers) that don't relationally model well; at single-user scale (cap 50) normalizing is speculative infra (CLAUDE.md §2.5). Labelled in the model docstring.
+- **`chat_conversations.id` is the client-generated UUID** — preserves the frontend's in-memory-first / persist-on-first-message flow (an unsaved conversation isn't written until its first message) and avoids remounting the keyed chat area mid-stream.
+- **Start-fresh** — existing localStorage conversations are *not* migrated up; the server starts empty (runner's call). Old local data is simply no longer read.
+- **MCP exposure deferred to R3** — R2.6's only consumer is the SPA; the agent-facing read surface for chat history is R3 work.
+**Advantages:** Memory is device-independent; history survives a browser clear; server-side agents can read it later.
+**Trade-offs:** No per-user scoping (single-user, no auth identity — deliberate); the whole-conversation PUT on stream-end re-sends the full arrays (fine at personal scale). In-process still (single-process assumption, D4).
+**Verdict:** ✅ Keep.
 
 ### C9. Human confirmation gates all AI/synced writes
 **Chosen:** No externally-sourced run is auto-logged; assistants present suggestions (pace-primary, distance-secondary, active shoes, low-mileage tiebreak) and wait. Retirement is advised, never enacted.
@@ -386,7 +398,8 @@
 | Per-size shoe tracking | Original watchlist shape | B2 — size-less tracking | recorded in code comment |
 | No authentication anywhere (`0.0.0.0` default bind) | Trust = network posture, single trusted machine | E7 — shared bearer token on `/api`+`/mcp`, `127.0.0.1` default bind | 2026-07-07 (R2.1) |
 | Dual schema authority (`create_all` + Alembic + `legacy_migrations/`) | `create_all` boot path kept for zero-step fresh setups | A6 — Alembic sole authority; baseline recreates the schema; legacy scripts deleted; DB moved to `~/anton-data/` | 2026-07-07 (R2.2) |
+| Chat history + checkpoint state in browser localStorage | Simplest persistence during assistant build-out | C10 — server-side `chat_conversations` + `checkpoint_prompts`; start-fresh, no migration | 2026-07-08 (R2.6) |
 
 ---
 
-*Maintenance note: add an entry when a decision is made that a future session might reasonably reverse; move reversed decisions to the Superseded table with the succeeding entry named. The verdicts above marked ⚠️ are this document's standing to-do list — now just C8 (chat memory), since A6 was executed 2026-07-07 (R2.2 → Superseded) and E1 by R2.1 (→ E7) — and should flip to Superseded entries as they're executed. (D7 shim and E5 APScheduler were executed 2026-07-07, R1.5b/R1.6.)*
+*Maintenance note: add an entry when a decision is made that a future session might reasonably reverse; move reversed decisions to the Superseded table with the succeeding entry named. The ⚠️ scheduled-to-change to-do list is now **empty** — C8 (chat memory) was executed 2026-07-08 (R2.6 → C10), the last one; A6 was executed 2026-07-07 (R2.2 → Superseded) and E1 by R2.1 (→ E7). (D7 shim and E5 APScheduler were executed 2026-07-07, R1.5b/R1.6.)*
