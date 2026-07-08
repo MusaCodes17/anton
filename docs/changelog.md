@@ -5,6 +5,16 @@
 
 ---
 
+## 🛡️ R2 — Chat rate limiting (the R2.1-adjacent throttle) — Phase 2 Session J — 2026-07-08
+
+**[ADDED] Closes the last R2.1-adjacent gap: R2.1 stopped *anonymous* LLM spend, this stops an *authenticated* client from looping and burning paid credits. One `r2:` commit. Suite 128 → 133. No migration, no UI change.**
+
+- **[ADDED] Token-bucket rate limiter on `POST /api/chat/message`.** New `services/rate_limit.py`: a thread-safe `TokenBucket` (capacity + refill-per-second, injectable clock for deterministic tests) and a `KeyedRateLimiter` (one bucket per client IP, lazily created). A FastAPI dependency `enforce_chat_rate_limit` on the chat endpoint returns **429 + `Retry-After`** before the SSE stream starts when a client exceeds the rate. Default **20 req/min, burst 20**, tunable via `CHAT_RATE_LIMIT_PER_MINUTE` / `CHAT_RATE_LIMIT_BURST` (documented in `.env.example`). Generous for a human, a hard stop for a runaway loop.
+- **[DESIGN] In-process by design, not a security boundary.** State lives in memory like the scrape lock and SSE state (single-process assumption — CLAUDE.md §4.6 / design_decisions D4/E5); a second worker would each keep its own bucket, labelled here (DB-level coordination deferred to R4.1, not solved silently). Auth (E7) remains *the* security boundary; this bounds accidental spend/loops under the single-user LAN threat model, where the realistic adversary is a bug, not a flood. Recorded as **design_decisions E8** (🕐 Keep for now).
+- **[VERIFIED] Suite 128 → 133** (+5 in `test_rate_limit.py`: bucket allows-to-capacity-then-denies, time-based refill + capacity cap, per-client isolation, the 429 + `Retry-After` dependency contract, null-client key fallback). No frontend change — the 429 is a backend guardrail; a client-side "slow down" surface is a possible follow-up but out of scope. No schema change → no migration. **[DOCS]** SECURITY_PASS_PLAN §6's deferred item is now done; design_decisions gains E8; roadmap/project_state updated (this was project_state §11 item 1). **[FOLLOW-UP]** optional: surface the 429 as a chat toast; consider whether `POST /api/chat/resource/read` (the arbitrary-URI proxy) wants the same throttle (it doesn't spend LLM credits, so lower priority).
+
+---
+
 ## ⚡ R2.3 — Indexed reads + watchlist service extraction — Phase 2 Session I — 2026-07-08
 
 **[CHANGED/ADDED] The first non-R2.7 R2 item. Two independent seam-preserving refactors: the `unified_activities` read path moves from a whole-table Python pass to a single indexed SQL query, and the watchlist reduction is extracted out of its fat router into a service. Two `r2:` commits. Suite 127 → 128. One live migration (index-only) — E4 reconciled.**

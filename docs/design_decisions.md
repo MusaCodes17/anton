@@ -355,6 +355,13 @@
 **Trade-offs:** One static secret in cleartext on the trusted LAN (accepted — §1); rotation is a deliberate `.env`-edit + restart, not hot-rotation (§8 Q3); no rate limiting yet (separate R2 item, §6); `/docs`/`/openapi.json` now require the token too.
 **Verdict:** ✅ Keep. Revisit per-client keys / revocation only when remote or third-party clients appear (R5.2).
 
+### E8. In-process token-bucket rate limit on `POST /api/chat/message` (R2 — completes the R2.1 spend story)
+**Chosen:** A token-bucket limiter (`services/rate_limit.py`) capping the request rate on the chat endpoint, keyed by client IP, enforced by a FastAPI dependency that returns **429 + `Retry-After`** before the SSE stream starts. State is in-memory; default 20 req/min with a burst of 20, tunable via `CHAT_RATE_LIMIT_PER_MINUTE` / `CHAT_RATE_LIMIT_BURST`.
+**Why:** E7/R2.1 stopped *anonymous* LLM spend but left an authenticated client free to loop and burn paid credits (SECURITY_PASS_PLAN §6, the explicitly-deferred item). Under the single-user LAN threat model the realistic adversary is a *bug* (retry storm, runaway agent), not a hostile flood — so the goal is bounding accidental spend, not hardening against DoS. A token bucket allows normal bursty human use while hard-capping sustained rate.
+**Advantages:** Closes the last R2.1-adjacent gap; no new dependency; deterministic to test (injectable clock); pure request-time dependency so the SSE stream is untouched.
+**Trade-offs:** In-process only — like the scrape lock (D4/E5), it assumes one worker; a second process would each keep its own bucket (labelled, not silent; DB-level coordination deferred to whenever a scheduler/worker arrives, R4.1). Per-IP keying means all requests behind one NAT share a bucket, and the bucket dict is unevicted (bounded by the owner's device count at single-user scale). Not a security boundary — auth (E7) is; this is a spend guardrail.
+**Verdict:** 🕐 Keep for now. Revisit (shared store, per-token quotas, or eviction) only if a second worker or remote/multi-client access appears (R5.2).
+
 ---
 
 ## Superseded Decisions (kept as history)
