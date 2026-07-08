@@ -5,6 +5,17 @@
 
 ---
 
+## 🔧 R2.7 Session 3 — Training-tab polish (range/records UX) — Phase 2 Session H — 2026-07-08
+
+**[CHANGED/ADDED] Three user-reported Training-tab fixes after the T7/T8 landing, all verified live (0 console errors). Two `r2:` commits. Suite 126 → 127.**
+
+- **[CHANGED] Date range now drives the *weekly* chart too.** The volume chart was hard-capped at 12 bars (`chartData.slice(0, 12)`), so widening the date range only visibly changed the *monthly* view (12 months = a year) while weekly stayed ~12 weeks regardless — the reported "range makes no difference until you switch to monthly". Dropped the cap: both views now span the full selected range (a 1y range → ~52 weekly bars, confirmed live). `VolumeChart` hides the hollow history markers past 16 points so a year of weeks stays legible; the accent last dot always renders. Month axis labels (T4a) carry the density.
+- **[ADDED] Range totals on Trends.** The Volume card header shows `· {km} km · {runs} runs` for the selected range, summed from the ranged summary buckets (each run lands in exactly one bucket, so the total is range-consistent across weekly/monthly). Live example: 1y → "4635.3 km · 410 runs".
+- **[ADDED] Records deep-link to the activity editor.** Personal-best records now carry the canonical `activity_id` (the `PersonalBest` dataclass + `/api/training/records` response + the `get_personal_bests` MCP tool), and the PB card's date links to `/activities/:id`. This closes the workflow the runner asked for: a false record — verified live on a "Track Session · 5x1K w/ 1mn rest" currently holding the 5K PB at 15:22 — can be opened and retagged Track/Intervals to exclude it (T3 eligibility). +1 test pins `activity_id` on the record. **Past races already deep-link** (T7) when promoted-from-activity; races completed manually via the dialog have no linked Activity and stay unlinked (no speculative date/distance matching).
+- **[VERIFIED] Suite 126 → 127** (+1 `test_pb_carries_canonical_activity_id`). `vite build` clean; live desktop pass on `/training` (weekly 1y span, range totals, PB link → activity editor) with 0 console errors.
+
+---
+
 ## 🏁 R2.7 Session 3 — race↔activity link + COROS-name tag inference (T7–T8) — Phase 2 Session H — 2026-07-08
 
 **[ADDED/CHANGED] The final R2.7 session — closes the milestone (all eight sub-items T1–T8 shipped). T7 back-links a completed race to the canonical run it was; T8 suggests an activity tag from the COROS activity name at sync time. Two `r2:` commits. Suite 106 → 126. One live migration (T7) — E4 reconciled.**
