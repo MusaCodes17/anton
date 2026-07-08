@@ -60,7 +60,15 @@ docs/              the documentation suite + changelog.md
                    data-migration · add-retailer · add-mcp-tool · ai-agent ·
                    add-frontend-page · write-tests · refactor-service ·
                    background-job · debugging · session-wrapup
+.claude/commands/  project automation commands (invoke skills; don't restate them):
+                   migrate · status · next · phase · wrapup
 ```
+
+**Commands index** (`/project:<name>`):
+- **status** — read-only orientation: current phase, last task, next priority, blockers, suite count.
+- **next** — do the single highest-priority task from project_state §11 (execute, or plan-and-confirm if it's a phase).
+- **phase `<name>`** — execute a named roadmap phase end to end, one commit per task, ending in S13.
+- **wrapup** — run the S13 session-wrapup skill to close a session (changelog, project_state, decisions, roadmap).
 
 Placement rules: new business logic → `services/` (never a router, never an MCP tool, never a React component). New endpoint → thin function in the matching router. New scraper → subclass in its own file, registered in `registry.py`. New query hook → `useApi.js`, calling a function added to `api.js`. Root planning docs (`REDESIGN_PLAN.md` etc.) are citable references — code comments cite them as `§N` / `P3.4`.
 
