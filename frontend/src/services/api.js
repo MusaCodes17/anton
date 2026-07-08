@@ -235,6 +235,27 @@ export const watchlistApi = {
   list: () => client.get('/api/watchlist').then((r) => r.data),
 }
 
+// ============== CHAT HISTORY (R2.6) ==============
+export const chatHistoryApi = {
+  list: () => client.get('/api/chat/conversations').then((r) => r.data),
+  get: (id) => client.get(`/api/chat/conversations/${id}`).then((r) => r.data),
+  upsert: (id, payload) =>
+    client.put(`/api/chat/conversations/${id}`, payload).then((r) => r.data),
+  remove: (id) => client.delete(`/api/chat/conversations/${id}`).then((r) => r.data),
+}
+
+// ============== CHECKPOINT PROMPTS (R2.6) ==============
+export const checkpointsApi = {
+  list: () => client.get('/api/checkpoint-prompts').then((r) => r.data),
+  mark: (ownedShoeId, checkpointKm) =>
+    client
+      .post('/api/checkpoint-prompts', {
+        owned_shoe_id: ownedShoeId,
+        checkpoint_km: checkpointKm,
+      })
+      .then((r) => r.data),
+}
+
 // ============== COROS SYNC ==============
 export const corosSyncApi = {
   status: () => client.get('/api/owned-shoes/sync-coros/status').then((r) => r.data),

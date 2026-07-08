@@ -11,8 +11,12 @@ import {
   DialogFooter,
 } from '@/components/ui/dialog'
 import { useToast } from '@/components/ui/toast'
-import { useLogRun, useAddShoeNote } from '@/hooks/useApi'
-import { hasPromptedCheckpoint, markCheckpointPrompted } from '@/lib/checkpoints'
+import {
+  useLogRun,
+  useAddShoeNote,
+  useCheckpointPrompts,
+  useMarkCheckpointPrompted,
+} from '@/hooks/useApi'
 
 /**
  * Log-run dialog shared between the My Shoes list and the shoe detail page.
@@ -26,6 +30,15 @@ export default function LogRunDialog({ shoe, open, onOpenChange }) {
   const logRun = useLogRun()
   const addNote = useAddShoeNote()
   const { toast } = useToast()
+  // Checkpoint-prompt state is server-side since R2.6 (was localStorage). The
+  // set is fetched once; marking is a mutation that invalidates it.
+  const { data: promptedCheckpoints } = useCheckpointPrompts()
+  const markCheckpoint = useMarkCheckpointPrompted()
+
+  const hasPromptedCheckpoint = (shoeId, km) =>
+    (promptedCheckpoints ?? []).some(
+      (p) => p.owned_shoe_id === shoeId && p.checkpoint_km === km
+    )
 
   const close = () => {
     setCheckpointKm(null)
@@ -52,7 +65,7 @@ export default function LogRunDialog({ shoe, open, onOpenChange }) {
   }
 
   const skipCheckpoint = () => {
-    markCheckpointPrompted(shoe.id, checkpointKm)
+    markCheckpoint.mutate({ ownedShoeId: shoe.id, checkpointKm })
     close()
   }
 
@@ -62,7 +75,7 @@ export default function LogRunDialog({ shoe, open, onOpenChange }) {
       { id: shoe.id, data: { body: noteBody.trim(), triggered_by: 'checkpoint' } },
       {
         onSuccess: () => {
-          markCheckpointPrompted(shoe.id, checkpointKm)
+          markCheckpoint.mutate({ ownedShoeId: shoe.id, checkpointKm })
           toast({ variant: 'success', title: 'Note added' })
           close()
         },

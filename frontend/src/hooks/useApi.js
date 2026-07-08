@@ -15,6 +15,8 @@ import {
   racesApi,
   homeApi,
   shoeTypesApi,
+  chatHistoryApi,
+  checkpointsApi,
   SCRAPE_STREAM_URL,
   authHeaders,
 } from '@/services/api'
@@ -44,6 +46,9 @@ export const queryKeys = {
   activities: (params) => ['activities', params ?? {}],
   races: () => ['races'],
   home: () => ['home'],
+  conversations: () => ['conversations'],
+  conversation: (id) => ['conversations', 'detail', id],
+  checkpointPrompts: () => ['checkpoint-prompts'],
 }
 
 // ============== SHOES ==============
@@ -264,6 +269,48 @@ export function useShoeTypes() {
     queryKey: ['shoe-types'],
     queryFn: () => shoeTypesApi.list(),
     staleTime: Infinity, // the vocabulary is effectively constant (R2.4)
+  })
+}
+
+// ============== CHAT HISTORY (R2.6) ==============
+// Server-side conversation persistence — replaces the old localStorage store.
+export function useConversations() {
+  return useQuery({
+    queryKey: queryKeys.conversations(),
+    queryFn: () => chatHistoryApi.list(),
+  })
+}
+
+export function useUpsertConversation() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ id, ...payload }) => chatHistoryApi.upsert(id, payload),
+    onSuccess: () => qc.invalidateQueries({ queryKey: queryKeys.conversations() }),
+  })
+}
+
+export function useDeleteConversation() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (id) => chatHistoryApi.remove(id),
+    onSuccess: () => qc.invalidateQueries({ queryKey: queryKeys.conversations() }),
+  })
+}
+
+// ============== CHECKPOINT PROMPTS (R2.6) ==============
+export function useCheckpointPrompts() {
+  return useQuery({
+    queryKey: queryKeys.checkpointPrompts(),
+    queryFn: () => checkpointsApi.list(),
+  })
+}
+
+export function useMarkCheckpointPrompted() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ ownedShoeId, checkpointKm }) =>
+      checkpointsApi.mark(ownedShoeId, checkpointKm),
+    onSuccess: () => qc.invalidateQueries({ queryKey: queryKeys.checkpointPrompts() }),
   })
 }
 

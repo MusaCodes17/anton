@@ -1,25 +1,25 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
+import { useQueryClient } from '@tanstack/react-query'
 import {
   MessageCircle,
   Plus,
   Trash2,
   ChevronDown,
   Check,
+  Loader2,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { UserMessage, AssistantMessage, ModelDivider, EmptyState } from '@/components/chat/ChatMessages'
 import ChatInput from '@/components/chat/ChatInput'
 import { useChatStream } from '@/hooks/useChatStream'
-import { authHeaders } from '@/services/api'
 import {
-  loadConversations,
-  createConversation,
-  generateTitle,
-  addConversation,
-  updateConversation,
-  deleteConversation,
-  pruneEmptyConversations,
-} from '@/lib/conversations'
+  useConversations,
+  useUpsertConversation,
+  useDeleteConversation,
+  queryKeys,
+} from '@/hooks/useApi'
+import { authHeaders, chatHistoryApi } from '@/services/api'
+import { createConversation, generateTitle } from '@/lib/conversations'
 
 const DEFAULT_MODEL = 'claude-haiku-4-5-20251001'
 
@@ -67,7 +67,7 @@ function ChatArea({
     onModelSwitchApplied()
   }, [modelSwitchMessage])
 
-  // Save to localStorage when streaming ends (skip the initial mount run)
+  // Save when streaming ends (skip the initial mount run)
   useEffect(() => {
     if (isFirstRun.current) {
       isFirstRun.current = false
@@ -123,6 +123,15 @@ function ChatArea({
 }
 
 export default function ChatPage() {
+  const qc = useQueryClient()
+  // Server-persisted conversations (R2.6). `conversations` is the local working
+  // list: summary fields from the server, plus a `displayMessages`/`apiMessages`
+  // pair that is `undefined` until the conversation is opened (loaded on
+  // select), and an in-memory unsaved conversation that isn't on the server yet.
+  const { data: serverConversations } = useConversations()
+  const upsertMutation = useUpsertConversation()
+  const deleteMutation = useDeleteConversation()
+
   const [conversations, setConversations] = useState([])
   const [activeConversationId, setActiveConversationId] = useState(null)
   const [model, setModel] = useState(DEFAULT_MODEL)
@@ -130,18 +139,69 @@ export default function ChatPage() {
   const [showModelMenu, setShowModelMenu] = useState(false)
   const [modelSwitchMessage, setModelSwitchMessage] = useState(null)
   const [deleteConfirm, setDeleteConfirm] = useState(null)
-  // id of a conversation that exists only in memory (not yet written to
-  // localStorage) because the user hasn't sent a message in it yet.
+  // id of a conversation that exists only in memory (not yet written to the
+  // server) because the user hasn't sent a message in it yet.
   const [unsavedId, setUnsavedId] = useState(null)
+  const didAutoSelect = useRef(false)
 
   const activeConv = conversations.find((c) => c.id === activeConversationId) ?? null
 
-  // Load persisted conversations and check for drawer handoff
+  // Fetch a conversation's full message arrays and merge them into local state.
+  // Idempotently upserts the entry (so it works whether or not the merge effect
+  // has added the summary row yet).
+  const loadMessages = useCallback(
+    async (id) => {
+      const full = await qc.fetchQuery({
+        queryKey: queryKeys.conversation(id),
+        queryFn: () => chatHistoryApi.get(id),
+      })
+      setConversations((prev) => {
+        const entry = {
+          id,
+          title: full.title,
+          model: full.model ?? DEFAULT_MODEL,
+          updatedAt: full.updated_at,
+          displayMessages: full.display_messages ?? [],
+          apiMessages: full.api_messages ?? [],
+        }
+        const idx = prev.findIndex((c) => c.id === id)
+        if (idx === -1) return [...prev, entry]
+        return prev.map((c) => (c.id === id ? { ...c, ...entry } : c))
+      })
+    },
+    [qc]
+  )
+
+  // Merge the server summary list into local state, preserving any messages
+  // already loaded and any in-memory unsaved conversation (absent from server).
   useEffect(() => {
-    const saved = loadConversations()
-    // Clean up any empty conversations left behind by a previous session
-    // (e.g. the tab was closed before this fix existed).
-    const cleaned = pruneEmptyConversations(saved)
+    if (!serverConversations) return
+    setConversations((prev) => {
+      const prevById = new Map(prev.map((c) => [c.id, c]))
+      const fromServer = serverConversations.map((s) => {
+        const existing = prevById.get(s.id)
+        return {
+          id: s.id,
+          title: s.title,
+          model: s.model ?? DEFAULT_MODEL,
+          updatedAt: s.updated_at,
+          displayMessages: existing?.displayMessages,
+          apiMessages: existing?.apiMessages,
+        }
+      })
+      const localOnly = prev.filter(
+        (c) => !serverConversations.some((s) => s.id === c.id)
+      )
+      return [...localOnly, ...fromServer]
+    })
+  }, [serverConversations])
+
+  // Once the server list has loaded, auto-select the newest conversation (or a
+  // drawer handoff) — exactly once.
+  useEffect(() => {
+    if (didAutoSelect.current) return
+    if (!serverConversations) return
+    didAutoSelect.current = true
 
     const handoffRaw = sessionStorage.getItem('son-of-anton:drawer-handoff')
     if (handoffRaw) {
@@ -153,21 +213,29 @@ export default function ChatPage() {
         if (firstUser) conv.title = generateTitle(firstUser.content)
         conv.displayMessages = displayMessages
         conv.apiMessages = apiMessages
-        const updated = addConversation(cleaned, conv)
-        setConversations(updated)
+        setConversations((prev) => [conv, ...prev])
         setActiveConversationId(conv.id)
+        // Persist the handoff conversation immediately (it already has messages).
+        upsertMutation.mutate({
+          id: conv.id,
+          title: conv.title,
+          model: conv.model,
+          display_messages: displayMessages,
+          api_messages: apiMessages,
+        })
         return
       } catch {
-        // Fall through to normal load
+        // Fall through to normal auto-select
       }
     }
 
-    setConversations(cleaned)
-    if (cleaned.length > 0) {
-      setActiveConversationId(cleaned[0].id)
-      setModel(cleaned[0].model ?? DEFAULT_MODEL)
+    if (serverConversations.length > 0) {
+      const first = serverConversations[0]
+      setActiveConversationId(first.id)
+      setModel(first.model ?? DEFAULT_MODEL)
+      loadMessages(first.id)
     }
-  }, [])
+  }, [serverConversations, model, loadMessages, upsertMutation])
 
   // Fetch provider/model list
   useEffect(() => {
@@ -177,14 +245,14 @@ export default function ChatPage() {
       .catch(() => {})
   }, [])
 
-  // Drops the current unsaved-empty conversation (if any) from in-memory
-  // state without ever touching localStorage — used whenever we're about to
-  // navigate away from it (new conversation, switching, unmount).
+  // Drops the current unsaved-empty conversation (if any) from in-memory state
+  // — used whenever we're about to navigate away from it. Nothing was ever
+  // persisted, so there's no server call.
   const discardUnsavedIfEmpty = useCallback(() => {
     if (!unsavedId) return
     setConversations((prev) => {
       const conv = prev.find((c) => c.id === unsavedId)
-      if (conv && conv.displayMessages.length === 0) {
+      if (conv && (conv.displayMessages?.length ?? 0) === 0) {
         return prev.filter((c) => c.id !== unsavedId)
       }
       return prev
@@ -195,8 +263,8 @@ export default function ChatPage() {
   const handleNewConversation = () => {
     discardUnsavedIfEmpty()
     const conv = createConversation(model)
-    // Held in memory only — NOT persisted to localStorage until the first
-    // message is sent (see handleMessagesUpdate).
+    // Held in memory only — NOT persisted to the server until the first message
+    // is sent (see handleMessagesUpdate).
     setConversations((prev) => [conv, ...prev])
     setActiveConversationId(conv.id)
     setUnsavedId(conv.id)
@@ -209,44 +277,55 @@ export default function ChatPage() {
     setActiveConversationId(id)
     const conv = conversations.find((c) => c.id === id)
     if (conv?.model) setModel(conv.model)
+    if (conv && conv.displayMessages === undefined) loadMessages(id)
     setModelSwitchMessage(null)
     setDeleteConfirm(null)
   }
 
   const handleDeleteConversation = (id) => {
-    // deleteConversation persists the full remaining array, but
-    // saveConversations strips empty/unsaved conversations before writing —
-    // so this never accidentally persists an in-progress "New conversation".
     setConversations((prev) => {
-      const updated = deleteConversation(prev, id)
+      const updated = prev.filter((c) => c.id !== id)
       if (id === activeConversationId) {
         setActiveConversationId(updated.length > 0 ? updated[0].id : null)
       }
       return updated
     })
+    // Only the never-persisted (unsaved) conversation skips the server delete.
     if (id === unsavedId) setUnsavedId(null)
+    else deleteMutation.mutate(id)
     setDeleteConfirm(null)
   }
 
-  // Called by ChatArea when streaming ends; persists the updated messages.
-  // This is also the moment an unsaved (brand-new, empty) conversation gets
-  // written to localStorage for the first time.
+  // Called by ChatArea when streaming ends; persists the updated messages to
+  // the server. This is also the moment an unsaved (brand-new) conversation
+  // gets written for the first time.
   const handleMessagesUpdate = useCallback(
     (displayMessages, apiMessages) => {
       if (!activeConversationId) return
-      setConversations((prev) => {
-        const conv = prev.find((c) => c.id === activeConversationId)
-        if (!conv) return prev
-        let title = conv.title
-        if (!title) {
-          const firstUser = displayMessages.find((m) => m.role === 'user')
-          if (firstUser) title = generateTitle(firstUser.content)
-        }
-        return updateConversation(prev, activeConversationId, { displayMessages, apiMessages, title })
+      const conv = conversations.find((c) => c.id === activeConversationId)
+      if (!conv) return
+      let title = conv.title
+      if (!title) {
+        const firstUser = displayMessages.find((m) => m.role === 'user')
+        if (firstUser) title = generateTitle(firstUser.content)
+      }
+      setConversations((prev) =>
+        prev.map((c) =>
+          c.id === activeConversationId
+            ? { ...c, displayMessages, apiMessages, title, updatedAt: new Date().toISOString() }
+            : c
+        )
+      )
+      upsertMutation.mutate({
+        id: activeConversationId,
+        title,
+        model: conv.model,
+        display_messages: displayMessages,
+        api_messages: apiMessages,
       })
       if (activeConversationId === unsavedId) setUnsavedId(null)
     },
-    [activeConversationId, unsavedId]
+    [activeConversationId, conversations, unsavedId, upsertMutation]
   )
 
   const getModelName = (modelId) => {
@@ -263,10 +342,22 @@ export default function ChatPage() {
     if (newModelId === model) return
     setModelSwitchMessage(`── Switched to ${getModelName(newModelId)} ──`)
     setModel(newModelId)
-    if (activeConversationId) {
-      setConversations((prev) =>
-        updateConversation(prev, activeConversationId, { model: newModelId })
-      )
+    if (!activeConversationId) return
+    setConversations((prev) =>
+      prev.map((c) => (c.id === activeConversationId ? { ...c, model: newModelId } : c))
+    )
+    // Persist the model change on an already-saved conversation so it survives
+    // a reload even if no further message is sent. An unsaved/empty conversation
+    // just updates in memory (it persists on its first message).
+    const conv = conversations.find((c) => c.id === activeConversationId)
+    if (conv && conv.id !== unsavedId && conv.displayMessages !== undefined) {
+      upsertMutation.mutate({
+        id: conv.id,
+        title: conv.title,
+        model: newModelId,
+        display_messages: conv.displayMessages,
+        api_messages: conv.apiMessages,
+      })
     }
   }
 
@@ -428,17 +519,23 @@ export default function ChatPage() {
           </div>
         </header>
 
-        {/* Chat area — keyed so useChatStream resets on conversation change */}
-        {activeConversationId ? (
+        {/* Chat area — keyed so useChatStream resets on conversation change.
+            While a selected conversation's messages are still loading, show a
+            spinner rather than mounting ChatArea with an empty history. */}
+        {activeConversationId && activeConv && activeConv.displayMessages !== undefined ? (
           <ChatArea
             key={activeConversationId}
-            initialDisplayMessages={activeConv?.displayMessages ?? []}
-            initialApiMessages={activeConv?.apiMessages ?? []}
+            initialDisplayMessages={activeConv.displayMessages}
+            initialApiMessages={activeConv.apiMessages}
             model={model}
             onUpdate={handleMessagesUpdate}
             modelSwitchMessage={modelSwitchMessage}
             onModelSwitchApplied={() => setModelSwitchMessage(null)}
           />
+        ) : activeConversationId ? (
+          <div className="flex flex-1 items-center justify-center">
+            <Loader2 className="h-6 w-6 animate-spin text-muted-foreground/40" />
+          </div>
         ) : (
           <div className="flex flex-1 flex-col items-center justify-center gap-4 text-center">
             <MessageCircle className="h-10 w-10 text-muted-foreground/20" />
