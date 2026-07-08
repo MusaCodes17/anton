@@ -19,6 +19,7 @@ import {
 } from '@/components/ui/select'
 import { ErrorState, EmptyState, CardSkeletonGrid } from '@/components/StatusViews'
 import { useDeals, useShoes, useRetailers, useWatchlist } from '@/hooks/useApi'
+import { formatShoeType } from '@/lib/shoeTypes'
 
 const SORTS = {
   savings_desc: (a, b) => b.savings_percent - a.savings_percent,
@@ -28,10 +29,6 @@ const SORTS = {
 }
 
 const ALL = '__all__'
-
-// "long_distance_racer" → "Long distance racer"
-const formatShoeType = (t) =>
-  t.replace(/_/g, ' ').replace(/^\w/, (c) => c.toUpperCase())
 
 export default function Deals() {
   const [brand, setBrand] = useState(ALL)

@@ -220,6 +220,14 @@ export const stravaApi = {
   status: () => client.get('/api/strava/status').then((r) => r.data),
 }
 
+// ============== SHOE-TYPE VOCABULARY ==============
+// The backend-owned controlled vocabulary (R2.4). The frontend fetches this
+// instead of hard-coding the list; display labels are derived by title-casing
+// in lib/shoeTypes.js (presentation only).
+export const shoeTypesApi = {
+  list: () => client.get('/api/shoe-types').then((r) => r.data),
+}
+
 // ============== WATCHLIST ==============
 export const watchlistApi = {
   list: () => client.get('/api/watchlist').then((r) => r.data),

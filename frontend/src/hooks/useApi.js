@@ -14,6 +14,7 @@ import {
   activitiesApi,
   racesApi,
   homeApi,
+  shoeTypesApi,
   SCRAPE_STREAM_URL,
   authHeaders,
 } from '@/services/api'
@@ -244,6 +245,14 @@ export function useActivityTags() {
     queryKey: ['activities', 'tags'],
     queryFn: () => activitiesApi.tags(),
     staleTime: Infinity, // the vocabulary is effectively constant
+  })
+}
+
+export function useShoeTypes() {
+  return useQuery({
+    queryKey: ['shoe-types'],
+    queryFn: () => shoeTypesApi.list(),
+    staleTime: Infinity, // the vocabulary is effectively constant (R2.4)
   })
 }
 
