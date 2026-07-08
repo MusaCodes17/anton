@@ -9,7 +9,7 @@ RETAILERS and SHOES below are the source of truth. Edit them, then run --sync.
 """
 import sys
 
-from app.database import SessionLocal, init_db
+from app.database import SessionLocal, run_migrations
 from app.models.models import Retailer, Shoe
 
 
@@ -223,8 +223,8 @@ def sync_database():
 if __name__ == "__main__":
     do_sync = "--sync" in sys.argv
     print("🌱 Starting database " + ("sync" if do_sync else "seeding") + "...")
-    print("\n📦 Initializing database...")
-    init_db()
+    print("\n📦 Migrating database to head...")
+    run_migrations()
 
     if do_sync:
         print("\n🔁 Syncing retailers (add missing, remove absent)...")

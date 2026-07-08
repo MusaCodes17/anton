@@ -7,11 +7,12 @@ const BAND_LABEL = { '5k': '5K', '10k': '10K', half: 'Half', full: 'Full' }
 /**
  * One personal-record card for a distance band. Headline is the fastest
  * whole-activity time in that band, with average pace and HR beneath. Honest
- * labelling: whole-activity times, not segment PBs. Links to the attributed
- * owned shoe when the record run was on a tracked shoe.
+ * labelling: whole-activity times, not segment PBs. The date deep-links to the
+ * activity's detail/editor (to retag/exclude it), and the shoe chip to the
+ * attributed owned shoe.
  */
 export default function PBCard({ record }) {
-  const { band, total_time_s, avg_pace, avg_hr, run_date, distance_km, shoe } = record
+  const { band, total_time_s, avg_pace, avg_hr, run_date, distance_km, shoe, activity_id } = record
   return (
     <div className="flex flex-col gap-3 rounded-[14px] border border-border bg-surface p-4">
       <div className="flex items-center justify-between">
@@ -37,7 +38,17 @@ export default function PBCard({ record }) {
       </div>
 
       <div className="mt-auto flex items-center justify-between gap-2 text-xs text-muted-foreground">
-        <span>{run_date ? formatDate(run_date) : '—'}</span>
+        {activity_id != null ? (
+          <Link
+            to={`/activities/${activity_id}`}
+            className="focus-ring rounded font-medium hover:text-foreground hover:underline"
+            title="Open activity — retag to exclude from records"
+          >
+            {run_date ? formatDate(run_date) : 'Open activity'}
+          </Link>
+        ) : (
+          <span>{run_date ? formatDate(run_date) : '—'}</span>
+        )}
         {shoe && (
           <Link
             to={`/shoes/${shoe.id}`}

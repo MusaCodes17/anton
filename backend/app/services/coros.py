@@ -79,6 +79,15 @@ def confirm_run(
     avg_pace: Optional[str] = None,
     avg_hr: Optional[int] = None,
     notes: Optional[str] = None,
+    name: Optional[str] = None,
+    elevation_gain_m: Optional[float] = None,
+    moving_time_s: Optional[int] = None,
+    elapsed_time_s: Optional[int] = None,
+    avg_cadence: Optional[float] = None,
+    calories: Optional[float] = None,
+    training_load: Optional[float] = None,
+    training_focus: Optional[str] = None,
+    activity_tag: Optional[str] = None,
 ) -> Optional[rotation.RunLogResult]:
     """
     Log a single confirmed COROS run to an owned shoe.
@@ -87,6 +96,13 @@ def confirm_run(
     Delegates to rotation.log_run(source='coros') so checkpoint detection
     fires on the COROS path (previously it didn't on the REST confirm path).
     Stamps last_coros_sync_at after a successful write.
+
+    The `name`..`activity_tag` fields (R2.7 T2) are the richer per-run data the
+    COROS sync now captures instead of discarding; all optional/nullable and
+    passed straight through to the canonical Activity. `activity_tag` must be a
+    member of the ACTIVITY_TAGS vocabulary — the caller (the confirmation-gated
+    MCP prompt) is responsible for confirming a suggested tag with the runner
+    before it reaches here (C9); this function does not infer.
 
     Raises LookupError if the shoe doesn't exist (caller decides whether to
     skip or surface the error).
@@ -106,6 +122,15 @@ def confirm_run(
         avg_pace=avg_pace,
         avg_hr=avg_hr,
         notes=notes,
+        name=name,
+        elevation_gain_m=elevation_gain_m,
+        moving_time_s=moving_time_s,
+        elapsed_time_s=elapsed_time_s,
+        avg_cadence=avg_cadence,
+        calories=calories,
+        training_load=training_load,
+        training_focus=training_focus,
+        activity_tag=activity_tag,
     )
 
     settings_svc.set_setting(db, "last_coros_sync_at", datetime.now(timezone.utc).isoformat())

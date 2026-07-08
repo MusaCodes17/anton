@@ -58,8 +58,8 @@ The system is also **self-referential by design**: the embedded assistant (Son o
 | Language / runtime | Python 3.11+ | |
 | Web framework | FastAPI 0.109 (Starlette 0.35.1, pinned) | Pin exists to resolve an `mcp[cli]` ↔ `sse-starlette` ↔ Starlette version triangle (documented in `requirements.txt`) |
 | ASGI server | Uvicorn 0.34 (`reload=True` dev mode via `run.py`) | Binds `127.0.0.1:8000` by default (R2.1); `API_HOST=0.0.0.0` opts into LAN |
-| ORM / DB | SQLAlchemy 2.0.25 → SQLite (`shoe_deals.db`) | `check_same_thread=False` |
-| Migrations | Alembic 1.13 (batch mode for SQLite) + `init_db()` `create_all` | Baseline + incremental migrations — the **authoritative list lives in §5**; plus a retained `legacy_migrations/` folder of pre-Alembic scripts |
+| ORM / DB | SQLAlchemy 2.0.25 → SQLite (`~/anton-data/shoe_deals.db`, out of tree since R2.2) | `check_same_thread=False`; `DATABASE_URL` absolute path |
+| Migrations | Alembic 1.13 (batch mode for SQLite) — **sole schema authority (R2.2)** | Startup runs `alembic upgrade head` (`database.run_migrations()`); `create_all` is test-fixture-only; the baseline recreates the pre-Alembic schema. Authoritative list in §5. (`legacy_migrations/` deleted R2.2.) |
 | MCP | `mcp[cli]` 1.28.0 — FastMCP server, `ClientSessionGroup` client | Streamable HTTP transport, mounted at `/mcp` |
 | AI SDKs | `anthropic`, `openai`, `google-generativeai` | Provider strategy pattern in `chat_service.py` |
 | Scraping | `requests`, Playwright 1.41 (sync API), BeautifulSoup4/lxml | Playwright used for JS-heavy pages and Algolia credential rediscovery |
@@ -101,10 +101,9 @@ running-shoe-deals/
 │   ├── run.py                   # Uvicorn entrypoint
 │   ├── seed_data.py             # DB seed (retailers + tracked shoes); export.py can regenerate it
 │   ├── requirements.txt
-│   ├── alembic/ + alembic.ini   # Baseline + incremental migrations — authoritative list in §5
+│   ├── alembic/ + alembic.ini   # Sole schema authority (R2.2) — authoritative list in §5
 │   │                            # (latest: d4e5f6a7b8c9 msrp_drives_deals, 2026-07-06)
-│   ├── legacy_migrations/       # Pre-Alembic idempotent ALTER TABLE scripts (historical)
-│   ├── shoe_deals.db (+ dated .bak* restore points, incl. .bak-pre-activities, .bak-msrp-drives-deals)  # Live DB + manual backups, in-tree
+│   │                            # legacy_migrations/ deleted R2.2; live DB moved to ~/anton-data/
 │   ├── tests/                   # pytest suite — one module per feature area
 │   └── app/
 │       ├── main.py              # App assembly, CORS, router includes, /mcp mount, lifespan
@@ -176,12 +175,12 @@ Single-shoe and single-retailer scrapes remain synchronous request-scoped calls 
 
 **Engine:** SQLite, single file `backend/shoe_deals.db`, accessed with `check_same_thread=False` and SQLAlchemy's default pooling. No WAL/pragma configuration is set in code.
 
-**Schema management is dual-track:**
-- `init_db()` runs `Base.metadata.create_all` at startup (creates missing tables, never alters).
-- Alembic (batch mode, `render_as_batch=True` for SQLite ALTER) with a baseline revision and five incremental migrations — **this is the authoritative migration list; other documents cite it rather than counting independently**: `mileage_limit`, the Strava import tables, `planned_races`, `canonical_activities` (`c3d4e5f6a7b8`), and `msrp_drives_deals` (`d4e5f6a7b8c9`, 2026-07-06 — `target_price` relaxed to nullable on `shoes` and `deals`). `canonical_activities` is the model for how structural migrations should be done here: **reversible** (downgrade reconstitutes both old tables), verified against the live DB with pre/post reconciliation (698 runs · 8,028.02 km · 667 attributed · zero per-shoe mileage drift · 933 activities), and preceded by an explicit backup (`shoe_deals.db.bak-pre-activities`).
-- `legacy_migrations/` preserves the earlier hand-rolled idempotent-`ALTER TABLE` scripts that predate Alembic.
+**Schema management is single-authority (R2.2, 2026-07-07):**
+- Alembic is the sole schema source. Startup runs `alembic upgrade head` (`database.run_migrations()`); `Base.metadata.create_all` lives only in the test fixtures. The baseline revision (`cf1eccba0a79`) recreates the exact pre-Alembic schema, so a fresh DB builds entirely from the migration chain — a model edit without a migration no longer silently diverges on the live DB.
+- Alembic runs in batch mode (`render_as_batch=True` for SQLite ALTER) with the baseline plus five incremental migrations — **this is the authoritative migration list; other documents cite it rather than counting independently**: `mileage_limit`, the Strava import tables, `planned_races`, `canonical_activities` (`c3d4e5f6a7b8`), and `msrp_drives_deals` (`d4e5f6a7b8c9`, 2026-07-06 — `target_price` relaxed to nullable on `shoes` and `deals`). `canonical_activities` is the model for how structural migrations should be done here: **reversible** (downgrade reconstitutes both old tables), verified against the live DB with pre/post reconciliation (698 runs · 8,028.02 km · 667 attributed · zero per-shoe mileage drift · 933 activities), and preceded by an explicit backup (`shoe_deals.db.bak-pre-activities`).
+- The former `legacy_migrations/` pre-Alembic scripts were deleted in R2.2 (git history is the archive).
 
-**Backups** are manual file copies committed alongside the live DB (dated `.bak*` restore points — see design_decisions E2; don't count them in prose, the set grows with each structural migration) — an informal but real recovery mechanism.
+**The live DB and backups live outside the repo tree** (R2.2): `~/anton-data/shoe_deals.db`, with dated `.bak*` restore points under `~/anton-data/backups/` (convention `shoe_deals.db.<YYYY-MM-DD>-<label>.bak`; see design_decisions E2/A6) — manual file copies taken before each structural migration, an informal but real recovery mechanism.
 
 ### Tables (12 models)
 
@@ -453,7 +452,7 @@ Uncertainty note: this audit read all services, the MCP/chat layer, the scraper 
 Directional, in dependency order — no implementation detail intended. (Item 3 from the original audit — build the canonical `activities` table — **shipped on 2026-07-04** and has been replaced by its follow-ons.)
 
 1. **Do the security pass before any exposure-increasing feature.** A single shared bearer token covering `/api` and `/mcp`, plus defaulting the bind to loopback, converts the trust model from "network posture" to "application property." Everything on the wishlist that involves remote transports, ChatGPT integration, or mobile sits behind this.
-2. **Resolve schema authority.** Pick Alembic as the single source of truth (startup `create_all` demoted to test fixtures), archive `legacy_migrations/`, and move the live DB + backups out of the repo tree with a deliberate backup convention. The `canonical_activities` migration proved the discipline; make it the only path.
+2. ~~**Resolve schema authority.**~~ **Done (R2.2, 2026-07-07):** Alembic is the single source of truth (startup runs `alembic upgrade head`, `create_all` demoted to test fixtures, baseline recreates the pre-Alembic schema), `legacy_migrations/` deleted, and the live DB + backups moved to `~/anton-data/` with a dated-backup convention. design_decisions A6 → Superseded.
 3. **Cash in the canonical table on the read side.** `unified_activities` (and Home through it) can now be indexed date-range queries instead of whole-table Python passes; the seam guarantees callers won't notice. Same treatment eventually for the watchlist reduction.
 4. **Shrink the `ShoeRun` proxy surface deliberately.** Treat the proxies as a migration bridge, not a permanent API: eager-load the attribution→activity join at every list seam now (killing the N+1), single-source pace formatting in a pure module importable by both models and services, and over time move readers onto `UnifiedActivity`/`Activity` directly so the filter-vs-attribute trap disappears.
 5. **Promote the shoe-type bridge from string to reference.** A small controlled vocabulary (lookup table or enum) shared by `shoes` and `owned_shoes` — and served to the frontend — keeps the deliberate no-FK independence between domains while eliminating silent string-mismatch failures in replacement-deal logic.

@@ -34,8 +34,9 @@ export const queryKeys = {
   replacementDeals: (id) => ['owned-shoes', id, 'replacement-deals'],
   rotationOverview: () => ['owned-shoes', 'rotation-overview'],
   corosSyncStatus: () => ['coros', 'sync-status'],
-  trainingSummary: (period) => ['training', 'summary', period],
+  trainingSummary: (period, range) => ['training', 'summary', period, range ?? {}],
   trainingRecords: () => ['training', 'records'],
+  trainingFitness: () => ['training', 'fitness'],
   stravaStatus: () => ['strava', 'status'],
   watchlist: () => ['watchlist'],
   activities: (params) => ['activities', params ?? {}],
@@ -208,10 +209,10 @@ export function useHome() {
 }
 
 // ============== TRAINING ==============
-export function useTrainingSummary(period = 'monthly') {
+export function useTrainingSummary(period = 'monthly', range) {
   return useQuery({
-    queryKey: queryKeys.trainingSummary(period),
-    queryFn: () => trainingApi.summary(period),
+    queryKey: queryKeys.trainingSummary(period, range),
+    queryFn: () => trainingApi.summary(period, range),
   })
 }
 
@@ -222,12 +223,69 @@ export function useTrainingRecords() {
   })
 }
 
+export function useTrainingFitness() {
+  return useQuery({
+    queryKey: queryKeys.trainingFitness(),
+    queryFn: () => trainingApi.fitness(),
+  })
+}
+
 // ============== ACTIVITIES ==============
 export function useActivities(params) {
   return useQuery({
     queryKey: queryKeys.activities(params),
     queryFn: () => activitiesApi.list(params),
     placeholderData: keepPreviousData,
+  })
+}
+
+export function useActivityTags() {
+  return useQuery({
+    queryKey: ['activities', 'tags'],
+    queryFn: () => activitiesApi.tags(),
+    staleTime: Infinity, // the vocabulary is effectively constant
+  })
+}
+
+export function useActivity(id) {
+  return useQuery({
+    queryKey: ['activities', 'detail', id],
+    queryFn: () => activitiesApi.get(id),
+    enabled: id != null,
+  })
+}
+
+// Any activity write can shift the ledger, PBs, volume, and shoe mileage — so
+// these invalidate the activity feed, this detail, owned shoes, and training.
+function invalidateAfterActivityWrite(qc, id) {
+  qc.invalidateQueries({ queryKey: ['activities'] })
+  qc.invalidateQueries({ queryKey: ['activities', 'detail', id] })
+  qc.invalidateQueries({ queryKey: ['owned-shoes'] })
+  qc.invalidateQueries({ queryKey: ['training'] })
+  qc.invalidateQueries({ queryKey: ['home'] })
+}
+
+export function useUpdateActivity(id) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (data) => activitiesApi.update(id, data),
+    onSuccess: () => invalidateAfterActivityWrite(qc, id),
+  })
+}
+
+export function useReassignShoe(id) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (shoeId) => activitiesApi.reassignShoe(id, shoeId),
+    onSuccess: () => invalidateAfterActivityWrite(qc, id),
+  })
+}
+
+export function usePromoteToRace(id) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: () => activitiesApi.promoteToRace(id),
+    onSuccess: () => { invalidateAfterActivityWrite(qc, id); qc.invalidateQueries({ queryKey: ['races'] }) },
   })
 }
 

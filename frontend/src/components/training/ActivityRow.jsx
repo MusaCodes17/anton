@@ -23,14 +23,20 @@ function Figure({ value, unit, caption }) {
  * card on narrow viewports.
  */
 export default function ActivityRow({ activity }) {
-  const { date, name, distance_km, avg_pace, avg_hr, source, shoe } = activity
+  const { date, name, distance_km, avg_pace, avg_hr, source, shoe, activity_id, activity_tag } = activity
   return (
     <div className="flex flex-col gap-3 rounded-[14px] border border-border bg-surface p-4 sm:flex-row sm:items-center sm:gap-6">
-      {/* Date + name */}
-      <div className="min-w-0 flex-1">
-        <div className="text-sm font-bold text-foreground">{formatDate(date)}</div>
+      {/* Date + name → activity detail (T6) */}
+      <Link
+        to={activity_id != null ? `/activities/${activity_id}` : '#'}
+        className="focus-ring min-w-0 flex-1 rounded-md hover:opacity-80"
+      >
+        <div className="flex items-center gap-2">
+          <span className="text-sm font-bold text-foreground">{formatDate(date)}</span>
+          {activity_tag && <Badge variant="outline" className="text-[10px]">{activity_tag}</Badge>}
+        </div>
         {name && <div className="mt-0.5 truncate text-xs text-muted-foreground">{name}</div>}
-      </div>
+      </Link>
 
       {/* Figures */}
       <div className="flex items-start gap-5">

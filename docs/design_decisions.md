@@ -50,7 +50,7 @@
 **Why:** `create_all` predates Alembic and was kept as a convenience (fresh setups work with zero steps); legacy scripts kept as history.
 **Advantages:** Fresh clones boot instantly; migration history exists and is now high quality (D1).
 **Trade-offs:** Two authorities over the schema — a model edit without a migration "works" on fresh DBs and diverges on real ones; ambiguity about the canonical path.
-**Verdict:** ⚠️ Scheduled to change (architecture.md §16.2): Alembic as sole authority, `create_all` demoted to test fixtures, `legacy_migrations/` archived.
+**Verdict:** 🔁 **Superseded — executed r2: 2026-07-07** (R2.2). Alembic is now the sole schema authority: startup runs `alembic upgrade head` (`database.run_migrations()`) instead of `create_all`, which now lives only in the test fixtures. The formerly-empty baseline revision (`cf1eccba0a79`) recreates the exact pre-Alembic schema, so a fresh DB builds entirely from Alembic (verified table-for-table against the models; round-trips to base). `legacy_migrations/` was **deleted** (git history is the archive), and the live DB + backups moved to `~/anton-data/` (backups under `~/anton-data/backups/`, dated-backup convention). See changelog 2026-07-07.
 
 ### A7. The pinned dependency triangle
 **Chosen:** FastAPI 0.109 + Starlette 0.35.1 + sse-starlette 1.8.2 pinned together, with the reason documented in `requirements.txt`.
@@ -167,6 +167,20 @@
 **Advantages:** Dates match lived experience; dedup-by-date works.
 **Trade-offs:** Hard-coded home zone (travel racing logs to Toronto dates); acceptable and known.
 **Verdict:** ✅ Keep. Revisit only if multi-timezone life becomes real.
+
+### B15. Activity-tag controlled vocabulary (R2.7 T1)
+**Chosen:** `activity_tag` is a small closed set (Easy · Long Run · Recovery · Tempo · Intervals · Track · Workout · Trail · Parkrun · Race) owned by the backend in one pure module (`app/utils/activity_tags.py`) and served to the frontend (`GET /api/activities/tags`), not a free-text string.
+**Why:** the tag governs PB eligibility (B16), race promotion (T6), and the weekly-summary agent (R3.1) — a load-bearing set where a typo would fail silently. One served source avoids the three-copies problem that `shoe_type` still has (R2.4 will mirror this pattern).
+**Advantages:** typed/validated at the MCP boundary; one edit point; frontend never drifts.
+**Trade-offs:** growing the list is a schema-grade change (a test pins the exact set), deliberately — tags must not proliferate casually.
+**Verdict:** ✅ Keep. This is the reference pattern for R2.4's `shoe_type` vocabulary.
+
+### B16. PB eligibility: tag exclusion + elapsed-time guard (R2.7 T3)
+**Chosen:** personal bests exclude Intervals/Track tags always, include Race/Parkrun always, include other run tags, and for untagged runs apply an elapsed-time guard (`elapsed > 1.5 × moving` ⇒ stop-heavy ⇒ excluded). The dropped count + reason ride along in the response.
+**Why:** the PB algorithm bands *whole-activity* times, so a stop-heavy interval session could fake a record at its rep distance. The tag is the clean intentional signal; the ratio is the honest fallback for the untagged 8-year archive.
+**Advantages:** removes false records without hiding legitimate fast efforts; transparent (the UI can prompt tagging).
+**Trade-offs:** untagged history relies on a heuristic ratio (1.5× is a judgment call); tagging improves accuracy over time. These are still whole-activity bests, not segment PBs (unchanged).
+**Verdict:** 🕐 Keep for now. Revisit the ratio if it proves too tight/loose once more history is tagged.
 
 ---
 
@@ -356,7 +370,8 @@
 | APScheduler dependency (declared, unused) | Anticipatory install for scheduled scraping | E5 — dropped from `requirements.txt`; reinstate with an R4.1 design | 2026-07-07 (R1.6) |
 | Per-size shoe tracking | Original watchlist shape | B2 — size-less tracking | recorded in code comment |
 | No authentication anywhere (`0.0.0.0` default bind) | Trust = network posture, single trusted machine | E7 — shared bearer token on `/api`+`/mcp`, `127.0.0.1` default bind | 2026-07-07 (R2.1) |
+| Dual schema authority (`create_all` + Alembic + `legacy_migrations/`) | `create_all` boot path kept for zero-step fresh setups | A6 — Alembic sole authority; baseline recreates the schema; legacy scripts deleted; DB moved to `~/anton-data/` | 2026-07-07 (R2.2) |
 
 ---
 
-*Maintenance note: add an entry when a decision is made that a future session might reasonably reverse; move reversed decisions to the Superseded table with the succeeding entry named. The verdicts above marked ⚠️ are this document's standing to-do list — A6, C8 (E1 executed 2026-07-07, R2.1 → E7) — and should flip to Superseded entries as they're executed. (D7 shim and E5 APScheduler were executed 2026-07-07, R1.5b/R1.6.)*
+*Maintenance note: add an entry when a decision is made that a future session might reasonably reverse; move reversed decisions to the Superseded table with the succeeding entry named. The verdicts above marked ⚠️ are this document's standing to-do list — now just C8 (chat memory), since A6 was executed 2026-07-07 (R2.2 → Superseded) and E1 by R2.1 (→ E7) — and should flip to Superseded entries as they're executed. (D7 shim and E5 APScheduler were executed 2026-07-07, R1.5b/R1.6.)*

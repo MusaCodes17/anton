@@ -26,8 +26,10 @@ env/
 ENV/
 .venv
 
-# Database
+# Database — the live DB + backups live outside the tree (R2.2, ~/anton-data/);
+# these patterns are belt-and-suspenders so nothing DB-shaped can be committed.
 *.db
+*.db.bak*
 *.sqlite
 *.sqlite3
 

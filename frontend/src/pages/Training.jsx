@@ -3,6 +3,7 @@ import { Activity, Trophy, ListOrdered, TrendingUp } from 'lucide-react'
 import PageHeader from '@/components/PageHeader'
 import PlannedRacesCard from '@/components/training/PlannedRacesCard'
 import VolumeChart from '@/components/training/VolumeChart'
+import FitnessCard from '@/components/training/FitnessCard'
 import PBCard from '@/components/training/PBCard'
 import ActivityRow from '@/components/training/ActivityRow'
 import { Button } from '@/components/ui/button'
@@ -20,6 +21,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import {
   useTrainingSummary,
   useTrainingRecords,
+  useTrainingFitness,
   useActivities,
   useOwnedShoes,
 } from '@/hooks/useApi'
@@ -34,10 +36,38 @@ function labelMonth(period) {
   const mon = MONTHS[parseInt(m, 10) - 1] ?? period
   return { label: mon, fullLabel: `${mon} ${y}` }
 }
-// "2026-W27" → { label: "W27", fullLabel: "Week 27 · 2026" }
+// The Thursday of an ISO week (ISO 8601: the week's Thursday fixes its month/year).
+function isoWeekThursday(y, w) {
+  const jan4 = new Date(Date.UTC(y, 0, 4))
+  const jan4Dow = jan4.getUTCDay() || 7 // Mon=1..Sun=7
+  const week1Mon = new Date(jan4)
+  week1Mon.setUTCDate(jan4.getUTCDate() - (jan4Dow - 1))
+  const thu = new Date(week1Mon)
+  thu.setUTCDate(week1Mon.getUTCDate() + (w - 1) * 7 + 3)
+  return thu
+}
+// "2026-W27" → { label: "W27", fullLabel: "Week 27 · 2026", monthAbbrev: "Jul" }
+// monthAbbrev drives the month-based x-axis on the weekly view (T4a) — the data
+// stays weekly, only the axis labels are months.
 function labelWeek(period) {
   const [y, w] = period.split('-W')
-  return { label: `W${w}`, fullLabel: `Week ${parseInt(w, 10)} · ${y}` }
+  const thu = isoWeekThursday(parseInt(y, 10), parseInt(w, 10))
+  return {
+    label: `W${w}`,
+    fullLabel: `Week ${parseInt(w, 10)} · ${y}`,
+    monthAbbrev: MONTHS[thu.getUTCMonth()],
+  }
+}
+
+// Local-date ISO strings (YYYY-MM-DD) for the date-range picker (T4b).
+function isoToday() {
+  const d = new Date()
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
+function isoDaysAgo(n) {
+  const d = new Date()
+  d.setDate(d.getDate() - n)
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 }
 
 function currentMonthKey(d = new Date()) {
@@ -80,26 +110,38 @@ function SectionHeading({ id, icon: Icon, title, hint }) {
 
 export default function Training() {
   const [period, setPeriod] = useState('weekly')
-  const monthly = useTrainingSummary('monthly')
-  const weekly = useTrainingSummary('weekly')
+
+  // Shared date range (T4b) — drives the volume chart, the summary, and the
+  // activities list. Default: last 90 days. React state only (resets on nav).
+  const [dateFrom, setDateFrom] = useState(() => isoDaysAgo(90))
+  const [dateTo, setDateTo] = useState(() => isoToday())
+  const range = useMemo(() => ({
+    ...(dateFrom ? { date_from: dateFrom } : {}),
+    ...(dateTo ? { date_to: dateTo } : {}),
+  }), [dateFrom, dateTo])
+
+  const monthly = useTrainingSummary('monthly')          // unranged — the stat tiles' fixed windows
+  const weekly = useTrainingSummary('weekly')            // unranged — this-week tile
+  const ranged = useTrainingSummary(period, range)       // the volume chart honours the range
   const records = useTrainingRecords()
+  const fitness = useTrainingFitness()
   const ownedShoes = useOwnedShoes()
 
   // Activities filters + "load more" (limit grows; offset stays 0 so the list
   // is one coherent page — cheap at personal scale and avoids client accumulation).
-  const [year, setYear] = useState(ALL)
   const [shoeId, setShoeId] = useState(ALL)
   const [minKm, setMinKm] = useState('')
   const [pages, setPages] = useState(1)
 
   const activityParams = useMemo(() => {
     const p = { limit: pages * PAGE, offset: 0 }
-    if (year !== ALL) p.year = Number(year)
+    if (dateFrom) p.date_from = dateFrom
+    if (dateTo) p.date_to = dateTo
     if (shoeId !== ALL) p.shoe_id = Number(shoeId)
     const min = parseFloat(minKm)
     if (!Number.isNaN(min) && min > 0) p.min_distance_km = min
     return p
-  }, [year, shoeId, minKm, pages])
+  }, [dateFrom, dateTo, shoeId, minKm, pages])
 
   const activities = useActivities(activityParams)
   const hasMore = activities.data && activities.data.length === pages * PAGE
@@ -118,21 +160,46 @@ export default function Training() {
     return { thisWeek, thisMonth, total12, runs12 }
   }, [monthly.data, weekly.data])
 
-  // Chart data (chronological, last 12 periods)
+  // Chart data (chronological). Shows every period inside the selected range —
+  // no fixed 12-bar cap, so widening the range visibly extends the weekly chart
+  // too (a 1-year range → ~52 weeks), not just the monthly one. Month axis
+  // labels (T4a) keep it legible at density.
   const chartData = useMemo(() => {
-    const src = period === 'weekly' ? weekly.data : monthly.data
+    const src = ranged.data
     if (!src) return []
     const label = period === 'weekly' ? labelWeek : labelMonth
-    return [...src].slice(0, 12).reverse().map((b) => ({ ...b, ...label(b.period) }))
-  }, [period, monthly.data, weekly.data])
+    return [...src].reverse().map((b) => ({ ...b, ...label(b.period) }))
+  }, [period, ranged.data])
 
-  // Year options from the monthly periods (span all history)
-  const years = useMemo(() => {
-    const set = new Set((monthly.data || []).map((b) => b.period.split('-')[0]))
-    return Array.from(set).sort((a, b) => b - a)
-  }, [monthly.data])
+  // Totals across the selected range (each run lands in exactly one bucket, so
+  // the sum is range-total regardless of weekly/monthly bucketing).
+  const rangeTotals = useMemo(() => {
+    const src = ranged.data || []
+    return {
+      km: src.reduce((s, b) => s + (b.total_km || 0), 0),
+      runs: src.reduce((s, b) => s + (b.run_count || 0), 0),
+    }
+  }, [ranged.data])
+
+  // Weekly view (T4a): label the x-axis by month instead of week number. One
+  // tick at the first week of each month; the formatter maps that week's label
+  // to its month name. Monthly view already labels by month, so no override.
+  const xAxis = useMemo(() => {
+    if (period !== 'weekly') return {}
+    const map = {}
+    const ticks = []
+    let prev = null
+    for (const d of chartData) {
+      map[d.label] = d.monthAbbrev
+      if (d.monthAbbrev !== prev) { ticks.push(d.label); prev = d.monthAbbrev }
+    }
+    return { xTicks: ticks, xTickFormatter: (lab) => map[lab] ?? lab }
+  }, [period, chartData])
 
   const summaryLoading = monthly.isLoading || weekly.isLoading
+
+  // A range edit invalidates the current "load more" depth.
+  const setRange = (from, to) => { setDateFrom(from); setDateTo(to); resetPages() }
 
   return (
     <div className="space-y-8">
@@ -147,7 +214,38 @@ export default function Training() {
 
       {/* ── Trends (volume first) ──────────────────────────────── */}
       <section className="space-y-4">
-        <SectionHeading id="trends" icon={TrendingUp} title="Trends" />
+        <div className="flex flex-wrap items-baseline justify-between gap-3">
+          <SectionHeading id="trends" icon={TrendingUp} title="Trends" />
+          <div className="flex flex-wrap items-center gap-2 text-xs">
+            <Input
+              type="date"
+              value={dateFrom}
+              max={dateTo || undefined}
+              onChange={(e) => setRange(e.target.value, dateTo)}
+              className="h-8 w-[9.5rem] px-2 py-1"
+              aria-label="From date"
+            />
+            <span className="text-muted-foreground">→</span>
+            <Input
+              type="date"
+              value={dateTo}
+              min={dateFrom || undefined}
+              onChange={(e) => setRange(dateFrom, e.target.value)}
+              className="h-8 w-[9.5rem] px-2 py-1"
+              aria-label="To date"
+            />
+            {[['90d', 90], ['6mo', 182], ['1y', 365]].map(([label, days]) => (
+              <button
+                key={label}
+                type="button"
+                onClick={() => setRange(isoDaysAgo(days), isoToday())}
+                className="focus-ring rounded-md border border-border px-2 py-1 font-medium text-muted-foreground hover:text-foreground"
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        </div>
 
         {summaryLoading ? (
           <Skeleton className="h-[88px] w-full rounded-[12px]" />
@@ -164,9 +262,13 @@ export default function Training() {
 
             <div className="overflow-hidden rounded-2xl border border-border bg-card">
               <div className="flex items-center justify-between border-b border-border px-5 py-3">
-                <div className="flex items-center gap-2.5">
-                  <Activity className="h-4 w-4 text-primary" />
+                <div className="flex min-w-0 items-center gap-2.5">
+                  <Activity className="h-4 w-4 shrink-0 text-primary" />
                   <span className="font-heading text-md-plus font-bold text-foreground">Volume</span>
+                  {/* Range totals — what the selected date range adds up to. */}
+                  <span className="truncate text-xs text-faint tabular-nums">
+                    · {rangeTotals.km.toFixed(1)} km · {rangeTotals.runs} run{rangeTotals.runs === 1 ? '' : 's'}
+                  </span>
                 </div>
                 <div className="flex rounded-lg border border-border p-0.5">
                   {['weekly', 'monthly'].map((p) => (
@@ -187,13 +289,15 @@ export default function Training() {
                 </div>
               </div>
               <div className="p-4">
-                {chartData.length ? (
-                  <VolumeChart data={chartData} />
+                {ranged.isLoading ? (
+                  <Skeleton className="h-[220px] w-full rounded-[12px]" />
+                ) : chartData.length ? (
+                  <VolumeChart data={chartData} {...xAxis} />
                 ) : (
                   <EmptyState
                     icon={Activity}
-                    title="No training history"
-                    description="Runs will appear here as they sync."
+                    title="No runs in this range"
+                    description="Widen the date range or sync more runs."
                   />
                 )}
               </div>
@@ -201,6 +305,13 @@ export default function Training() {
           </>
         )}
       </section>
+
+      {/* ── Fitness (COROS snapshot, T5) — only when recorded ──── */}
+      {fitness.data?.has_data && (
+        <section id="fitness" className="scroll-mt-20">
+          <FitnessCard data={fitness.data} />
+        </section>
+      )}
 
       {/* ── Races (after volume) ───────────────────────────────── */}
       <div id="races" className="scroll-mt-20">
@@ -223,11 +334,19 @@ export default function Training() {
           </div>
         ) : records.isError ? (
           <ErrorState error={records.error} onRetry={records.refetch} />
-        ) : records.data?.length ? (
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            {records.data.map((r) => (
-              <PBCard key={r.band} record={r} />
-            ))}
+        ) : records.data?.records?.length ? (
+          <div className="space-y-3">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+              {records.data.records.map((r) => (
+                <PBCard key={r.band} record={r} />
+              ))}
+            </div>
+            {records.data.excluded_count > 0 && (
+              <p className="text-xs text-muted-foreground">
+                {records.data.excluded_count} {records.data.excluded_count === 1 ? 'activity' : 'activities'} excluded
+                {' '}({records.data.excluded_reason}) — tag interval/track sessions to reconsider.
+              </p>
+            )}
           </div>
         ) : (
           <EmptyState icon={Trophy} title="No records yet" description="Log some runs to see your bests." />
@@ -236,19 +355,9 @@ export default function Training() {
 
       {/* ── Activities ─────────────────────────────────────────── */}
       <section className="space-y-4">
-        <SectionHeading id="activities" icon={ListOrdered} title="Activities" />
+        <SectionHeading id="activities" icon={ListOrdered} title="Activities" hint="within the selected date range" />
 
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-          <div className="space-y-1.5">
-            <Label>Year</Label>
-            <Select value={year} onValueChange={(v) => { setYear(v); resetPages() }}>
-              <SelectTrigger><SelectValue placeholder="All years" /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value={ALL}>All years</SelectItem>
-                {years.map((y) => <SelectItem key={y} value={y}>{y}</SelectItem>)}
-              </SelectContent>
-            </Select>
-          </div>
+        <div className="grid grid-cols-2 gap-3">
           <div className="space-y-1.5">
             <Label>Shoe</Label>
             <Select value={shoeId} onValueChange={(v) => { setShoeId(v); resetPages() }}>

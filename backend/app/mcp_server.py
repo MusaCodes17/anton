@@ -25,7 +25,8 @@ from app.database import SessionLocal
 from app.models.models import Activity, Deal, OwnedShoe, PriceRecord, Retailer, Shoe, ShoeNote, ShoeRun
 from app.scrapers.orchestrator import ScrapeOrchestrator
 from app.scrapers.lock import ScrapeInProgressError, scrape_guard
-from app.services import rotation, coros as coros_svc, settings as settings_svc, strava_stats, races as races_svc
+from app.services import rotation, coros as coros_svc, settings as settings_svc, strava_stats, races as races_svc, fitness as fitness_svc
+from app.utils.activity_tags import ACTIVITY_TAGS, is_valid_tag
 
 # streamable_http_path="/" because the app this is mounted under (see
 # main.py) already adds the "/mcp" prefix — without this override the route
@@ -805,6 +806,15 @@ def confirm_coros_run(
     avg_pace: Optional[str] = None,
     avg_hr: Optional[int] = None,
     notes: Optional[str] = None,
+    name: Optional[str] = None,
+    elevation_gain_m: Optional[float] = None,
+    moving_time_s: Optional[int] = None,
+    elapsed_time_s: Optional[int] = None,
+    avg_cadence: Optional[float] = None,
+    calories: Optional[float] = None,
+    training_load: Optional[float] = None,
+    training_focus: Optional[str] = None,
+    activity_tag: Optional[str] = None,
 ) -> dict:
     """
     Log a single COROS run to an owned shoe after the user confirms the
@@ -819,7 +829,24 @@ def confirm_coros_run(
         avg_pace: Average pace as "M:SS/km", e.g. "4:32/km".
         avg_hr: Average heart rate in bpm.
         notes: Optional notes about this run.
+        name: COROS activity name/title (e.g. "Morning Run").
+        elevation_gain_m: Total ascent in metres.
+        moving_time_s / elapsed_time_s: Moving vs total elapsed time, seconds.
+        avg_cadence: Average cadence (steps/min).
+        calories: Energy in kcal.
+        training_load: COROS training-load score for the run.
+        training_focus: COROS coaching label (e.g. "Aerobic base").
+        activity_tag: One of the ACTIVITY_TAGS vocabulary values (Easy, Long
+            Run, Recovery, Tempo, Intervals, Track, Workout, Trail, Parkrun,
+            Race). Only pass a tag the runner has CONFIRMED — never infer and
+            apply one silently (C9). Omit if the runner didn't set one.
     """
+    if activity_tag is not None and not is_valid_tag(activity_tag):
+        return {
+            "success": False,
+            "error": f"'{activity_tag}' is not a valid activity_tag. "
+                     f"Use one of: {', '.join(ACTIVITY_TAGS)}.",
+        }
     with get_session() as db:
         try:
             result = coros_svc.confirm_run(
@@ -831,6 +858,15 @@ def confirm_coros_run(
                 avg_pace=avg_pace,
                 avg_hr=avg_hr,
                 notes=notes,
+                name=name,
+                elevation_gain_m=elevation_gain_m,
+                moving_time_s=moving_time_s,
+                elapsed_time_s=elapsed_time_s,
+                avg_cadence=avg_cadence,
+                calories=calories,
+                training_load=training_load,
+                training_focus=training_focus,
+                activity_tag=activity_tag,
             )
         except LookupError:
             return {"success": False, "error": f"Owned shoe {owned_shoe_id} not found"}
@@ -920,9 +956,11 @@ def get_personal_bests() -> dict:
     fastest 10k run", not "your 10k PB").
     """
     with get_session() as db:
-        bests = strava_stats.personal_bests(db)
+        result = strava_stats.personal_bests(db)
         return {
             "note": "Whole-activity average-pace bests within a distance tolerance, not segment PBs.",
+            "excluded_count": result.excluded_count,
+            "excluded_reason": result.excluded_reason,
             "bests": [
                 {
                     "band": b.band,
@@ -936,9 +974,52 @@ def get_personal_bests() -> dict:
                     "source": b.source,
                     "shoe": b.shoe,
                     "strava_activity_id": b.strava_activity_id,
+                    "activity_id": b.activity_id,
                 }
-                for b in bests
+                for b in result.records
             ],
+        }
+
+
+@mcp.tool()
+def record_athlete_metrics(
+    vo2max: Optional[float] = None,
+    threshold_pace_s_per_km: Optional[int] = None,
+    race_predictions: Optional[dict] = None,
+) -> dict:
+    """
+    Record a COROS athlete-level fitness snapshot (VO2 max, lactate-threshold
+    pace, race predictions) for the Training tab's fitness card. Append-only:
+    each call stores one dated snapshot; the card shows the most recent.
+
+    Anton cannot fetch these itself (server-side COROS is dormant). Get them from
+    the COROS MCP — `queryFitnessAssessmentOverview` (VO2 max, threshold pace,
+    race predictions) — then CONFIRM the values with the runner before calling
+    this (C9): "COROS reports VO2 max 62, threshold 3:45/km — record this?".
+
+    Args:
+        vo2max: VO2 max in ml/kg/min.
+        threshold_pace_s_per_km: lactate-threshold pace, seconds per km
+            (e.g. 3:45/km → 225).
+        race_predictions: dict of distance_km (as a string key) → predicted time
+            in seconds, e.g. {"5.0": 1005, "10.0": 2100, "21.0975": 4620,
+            "42.195": 9720}.
+    """
+    if vo2max is None and threshold_pace_s_per_km is None and not race_predictions:
+        return {"success": False, "error": "Provide at least one metric to record."}
+    with get_session() as db:
+        snap = fitness_svc.record_snapshot(
+            db,
+            vo2max=vo2max,
+            threshold_pace_s_per_km=threshold_pace_s_per_km,
+            race_predictions=race_predictions,
+        )
+        return {
+            "success": True,
+            "captured_at": snap.captured_at.isoformat() if snap.captured_at else None,
+            "vo2max": snap.vo2max,
+            "threshold_pace_s_per_km": snap.threshold_pace_s_per_km,
+            "race_predictions": snap.race_predictions,
         }
 
 
@@ -1505,6 +1586,22 @@ For each confirmed run call confirm_coros_run with:
 - coros_activity_id (from querySportRecords)
 - owned_shoe_id (the confirmed shoe)
 - date, distance_km, avg_pace, avg_hr from COROS data
+- ALSO pass any of these the COROS data provides (all optional — Anton now
+  stores them instead of discarding them): name, elevation_gain_m,
+  moving_time_s, elapsed_time_s, avg_cadence, calories, training_load,
+  training_focus.
+- activity_tag: only if the runner has set or confirmed one. Infer a *suggestion*
+  from the COROS activity name using these case-insensitive keyword rules (first
+  match wins — the order is precedence):
+    "parkrun" → Parkrun · "interval"/"repeat" → Intervals · "track" → Track ·
+    "tempo"/"threshold" → Tempo · "long run"/"long" → Long Run · "trail" → Trail ·
+    "race"/"marathon" → Race · "recovery"/"easy"/"jog" → Easy · else untagged.
+  Also consider training_focus as a hint. Surface the suggested tag in Step 4 and
+  let the runner confirm or override — e.g. "COROS name 'Tempo 8k' → tag `Tempo`?
+  (y/n)" or "COROS labels this 'Marathon Pace' → tag `Tempo`? (y/n)". The full
+  vocabulary is Easy, Long Run, Recovery, Tempo, Intervals, Track, Workout, Trail,
+  Parkrun, Race. Never infer and apply a tag silently (C9). Omit the tag entirely
+  if unconfirmed.
 
 ## Step 7 — Summarise results
 "Logged [N] runs:

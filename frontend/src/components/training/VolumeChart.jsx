@@ -30,8 +30,12 @@ function VolumeTooltip({ active, payload }) {
  * { label, fullLabel, total_km, run_count }. Kept legible at ~340px:
  * ≤12 points, abbreviated x labels, right-hand y-axis, no fixed pixel widths.
  */
-export default function VolumeChart({ data, height = 220 }) {
+export default function VolumeChart({ data, height = 220, xTicks, xTickFormatter }) {
   const lastIndex = data.length - 1
+  // Dense ranges (e.g. a year of weekly bars) crowd the hollow history markers,
+  // so drop them past a threshold and let the line carry the trend. The accented
+  // most-recent dot always renders.
+  const showHistoryDots = data.length <= 16
 
   // Open circles for history, a solid haloed dot for the most recent period —
   // matching the reference. Hollow fill uses the card background so the ring
@@ -39,6 +43,7 @@ export default function VolumeChart({ data, height = 220 }) {
   const renderDot = ({ cx, cy, index, key }) => {
     if (cx == null || cy == null) return <g key={key} />
     const isLast = index === lastIndex
+    if (!isLast && !showHistoryDots) return <g key={key} />
     return (
       <g key={key}>
         {isLast && <circle cx={cx} cy={cy} r={9} fill={GREEN} fillOpacity={0.18} />}
@@ -69,7 +74,8 @@ export default function VolumeChart({ data, height = 220 }) {
           tick={{ fontSize: 11, fill: '#6A6F76' }}
           stroke="#1E2126"
           fontFamily="JetBrains Mono, monospace"
-          interval="preserveStartEnd"
+          {...(xTicks ? { ticks: xTicks } : { interval: 'preserveStartEnd' })}
+          {...(xTickFormatter ? { tickFormatter: xTickFormatter } : {})}
           tickMargin={8}
         />
         <YAxis

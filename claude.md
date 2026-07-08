@@ -60,7 +60,15 @@ docs/              the documentation suite + changelog.md
                    data-migration · add-retailer · add-mcp-tool · ai-agent ·
                    add-frontend-page · write-tests · refactor-service ·
                    background-job · debugging · session-wrapup
+.claude/commands/  project automation commands (invoke skills; don't restate them):
+                   migrate · status · next · phase · wrapup
 ```
+
+**Commands index** (`/project:<name>`):
+- **status** — read-only orientation: current phase, last task, next priority, blockers, suite count.
+- **next** — do the single highest-priority task from project_state §11 (execute, or plan-and-confirm if it's a phase).
+- **phase `<name>`** — execute a named roadmap phase end to end, one commit per task, ending in S13.
+- **wrapup** — run the S13 session-wrapup skill to close a session (changelog, project_state, decisions, roadmap).
 
 Placement rules: new business logic → `services/` (never a router, never an MCP tool, never a React component). New endpoint → thin function in the matching router. New scraper → subclass in its own file, registered in `registry.py`. New query hook → `useApi.js`, calling a function added to `api.js`. Root planning docs (`REDESIGN_PLAN.md` etc.) are citable references — code comments cite them as `§N` / `P3.4`.
 
@@ -212,7 +220,7 @@ Placement rules: new business logic → `services/` (never a router, never an MC
 
 The checkable list. One line per invariant: what must hold → owning code path → covering test. The narrative behind each is `docs/domain_model.md` §4; this list is the canonical "never break these" reference (`docs/ai_context.md` §8 cites it; CLAUDE.md §6 remains the separate *mechanical traps* list). Verify the relevant lines whenever a session touches their paths.
 
-- **INV-1 · Mileage ledger:** `current_mileage = starting_mileage + Σ attributed distances` — maintained, never recomputed → `rotation.log_run` / `rotation.delete_run` / `rotation.adjust_mileage` (the sole sanctioned manual override, journals the drift) → `tests/test_rotation.py` (increment) + `tests/test_activities_model.py` (delete round-trip) + `tests/test_owned_shoes.py` (PUT drops `current_mileage`/`starting_mileage`; `adjust_mileage` sets + notes). **C1 fixed 2026-07-07** — `PUT /owned-shoes/{id}` can no longer write the ledger; corrections go through `POST /owned-shoes/{id}/adjust-mileage`.
+- **INV-1 · Mileage ledger:** `current_mileage = starting_mileage + Σ attributed distances` — maintained, never recomputed → `rotation.log_run` / `rotation.delete_run` / `rotation.adjust_mileage` (the sole sanctioned manual override, journals the drift) / `rotation.reassign_attribution` (R2.7 T6 — moves a run's distance between two shoes' counters when its attribution changes) → `tests/test_rotation.py` (increment) + `tests/test_activities_model.py` (delete round-trip) + `tests/test_owned_shoes.py` (PUT drops `current_mileage`/`starting_mileage`; `adjust_mileage` sets + notes) + `tests/test_activity_edit.py` (reassignment moves mileage both shoes). **C1 fixed 2026-07-07** — `PUT /owned-shoes/{id}` can no longer write the ledger; corrections go through `POST /owned-shoes/{id}/adjust-mileage`.
 - **INV-2 · Single run writer:** every Activity + Attribution pair is born via `rotation.log_run` (escape hatches, never parallel paths) → `rotation.py` → no direct test of the "no parallel path" rule is possible; **documentation-only** — enforcement is convention + review (see refactor.md C1 for the one known breach).
 - **INV-3 · Attribution uniqueness:** at most one shoe per activity (`shoe_runs.activity_id` UNIQUE) → structural (DB constraint, migration `c3d4e5f6a7b8`) → exercised in `tests/test_activities_model.py`.
 - **INV-4 · Strava archive preservation:** `delete_run` on a `source='strava'` activity removes the attribution only; the archive row survives → `rotation.delete_run` → `tests/test_activities_model.py::test_delete_run_keeps_strava_archive`.

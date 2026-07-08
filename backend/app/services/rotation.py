@@ -215,6 +215,15 @@ def log_run(
     avg_pace: Optional[str] = None,
     avg_hr: Optional[int] = None,
     notes: Optional[str] = None,
+    name: Optional[str] = None,
+    elevation_gain_m: Optional[float] = None,
+    moving_time_s: Optional[int] = None,
+    elapsed_time_s: Optional[int] = None,
+    avg_cadence: Optional[float] = None,
+    calories: Optional[float] = None,
+    training_load: Optional[float] = None,
+    training_focus: Optional[str] = None,
+    activity_tag: Optional[str] = None,
     increment_mileage: bool = True,
     commit: bool = True,
 ) -> RunLogResult:
@@ -230,6 +239,10 @@ def log_run(
     or transaction semantics that manual logging needs.
 
     Args:
+        name..training_focus/activity_tag: optional richer activity fields
+            (R2.7 T2) the COROS sync path now captures — all nullable, written
+            straight onto the canonical Activity. Manual/Strava callers that
+            don't have them simply omit them.
         increment_mileage: add ``distance_km`` to the shoe's current_mileage.
             Set False when the caller manages mileage itself (Strava backfill).
         commit: commit the transaction. Set False to flush only (assigning
@@ -250,10 +263,19 @@ def log_run(
     activity = Activity(
         source=source,
         activity_type="Run",
+        name=name,
         run_date=run_date,
         distance_km=distance_km,
         avg_pace_s_per_km=int(pace_s) if pace_s is not None else None,
         avg_hr=avg_hr,
+        elevation_gain_m=elevation_gain_m,
+        moving_time_s=moving_time_s,
+        elapsed_time_s=elapsed_time_s,
+        avg_cadence=avg_cadence,
+        calories=calories,
+        training_load=training_load,
+        training_focus=training_focus,
+        activity_tag=activity_tag,
         coros_activity_id=coros_activity_id,
         strava_activity_id=strava_activity_id,
         description=notes,
@@ -312,6 +334,53 @@ def delete_run(db: Session, run_id: int) -> OwnedShoe:
     db.commit()
     db.refresh(shoe)
     return shoe
+
+
+def reassign_attribution(db: Session, activity_id: int, new_shoe_id: int) -> RunLogResult:
+    """
+    Move an activity's shoe attribution to a different owned shoe, keeping the
+    mileage ledger correct (INV-1): the old shoe loses this run's distance, the
+    new shoe gains it. Creates the attribution if the activity was unattributed.
+
+    Unlike delete_run this never touches the Activity row itself — only the
+    ShoeRun attribution (which is UNIQUE per activity, INV-3) and the two shoes'
+    counters. Idempotent no-op when `new_shoe_id` already owns the run.
+
+    Raises LookupError if the activity or the target shoe is missing.
+    Owns the commit.
+    """
+    activity = db.query(Activity).filter(Activity.id == activity_id).first()
+    if not activity:
+        raise LookupError(f"Activity {activity_id} not found")
+    new_shoe = db.query(OwnedShoe).filter(OwnedShoe.id == new_shoe_id).first()
+    if not new_shoe:
+        raise LookupError(f"Owned shoe {new_shoe_id} not found")
+
+    existing = db.query(ShoeRun).filter(ShoeRun.activity_id == activity_id).first()
+    if existing and existing.owned_shoe_id == new_shoe_id:
+        return RunLogResult(run=existing, activity=activity, shoe=new_shoe,
+                            checkpoint_reached=False, checkpoint_km=None)
+
+    dist = activity.distance_km or 0.0
+    if existing:
+        old_shoe = db.query(OwnedShoe).filter(OwnedShoe.id == existing.owned_shoe_id).first()
+        if old_shoe:
+            old_shoe.current_mileage = max(0.0, old_shoe.current_mileage - dist)
+        db.delete(existing)
+        db.flush()  # release the UNIQUE activity_id before inserting the new one
+
+    old_new_mileage = new_shoe.current_mileage
+    run = ShoeRun(activity_id=activity_id, owned_shoe_id=new_shoe_id)
+    db.add(run)
+    new_shoe.current_mileage += dist
+    db.commit()
+    db.refresh(run)
+    db.refresh(new_shoe)
+    db.refresh(activity)
+
+    cp = crossed_checkpoint(old_new_mileage, new_shoe.current_mileage)
+    return RunLogResult(run=run, activity=activity, shoe=new_shoe,
+                        checkpoint_reached=cp is not None, checkpoint_km=cp)
 
 
 def adjust_mileage(db: Session, owned_shoe_id: int, new_mileage: float) -> OwnedShoe:

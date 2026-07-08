@@ -8,6 +8,7 @@ import Shoes from '@/pages/Shoes'
 import Retailers from '@/pages/Retailers'
 import MyShoes from '@/pages/MyShoes'
 import ShoeDetail from '@/pages/ShoeDetail'
+import ActivityDetail from '@/pages/ActivityDetail'
 import ChatPage from '@/pages/ChatPage'
 import Settings from '@/pages/Settings'
 import SettingsSync from '@/pages/SettingsSync'
@@ -25,6 +26,7 @@ export default function App() {
         <Route element={<Layout />}>
           <Route index element={<Home />} />
           <Route path="training" element={<Training />} />
+          <Route path="activities/:id" element={<ActivityDetail />} />
           <Route path="deals" element={<Deals />} />
           <Route path="shoes" element={<MyShoes />} />
           <Route path="shoes/:id" element={<ShoeDetail />} />

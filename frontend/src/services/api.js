@@ -179,14 +179,27 @@ export const ownedShoesApi = {
 
 // ============== TRAINING ==============
 export const trainingApi = {
-  summary: (period = 'monthly') =>
-    client.get('/api/training/summary', { params: { period } }).then((r) => r.data),
+  summary: (period = 'monthly', range = {}) =>
+    client.get('/api/training/summary', {
+      params: {
+        period,
+        ...(range.date_from ? { date_from: range.date_from } : {}),
+        ...(range.date_to ? { date_to: range.date_to } : {}),
+      },
+    }).then((r) => r.data),
   records: () => client.get('/api/training/records').then((r) => r.data),
+  fitness: () => client.get('/api/training/fitness').then((r) => r.data),
 }
 
 // ============== ACTIVITIES (unified run feed) ==============
 export const activitiesApi = {
   list: (params) => client.get('/api/activities', { params }).then((r) => r.data),
+  tags: () => client.get('/api/activities/tags').then((r) => r.data),
+  get: (id) => client.get(`/api/activities/${id}`).then((r) => r.data),
+  update: (id, data) => client.patch(`/api/activities/${id}`, data).then((r) => r.data),
+  reassignShoe: (id, shoeId) =>
+    client.post(`/api/activities/${id}/reassign-shoe`, { shoe_id: shoeId }).then((r) => r.data),
+  promoteToRace: (id) => client.post(`/api/activities/${id}/promote-to-race`).then((r) => r.data),
 }
 
 // ============== PLANNED RACES ==============

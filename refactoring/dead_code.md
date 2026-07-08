@@ -38,11 +38,11 @@
 ### 2.1 Superseded DB backups in `backend/` (four of five)
 `shoe_deals.db.bak` (188 KB), `.bak_pre_dealfix` (392 KB), `.bak_pre_variantfix` (464 KB), `.bak-strava` (6.2 MB) — restore points for changes long since verified in production use. **`shoe_deals.db.bak-pre-activities` (10.5 MB) is NOT in this list**: it is one day old and is the designated restore point for the deepest migration ever run here; keep it until the canonical-activities change has aged several weeks of daily use.
 **Why they appear unused:** each protected a specific change whose success has since been proven by weeks of live operation; none is restorable *forward* anyway (their schemas predate later migrations — restoring one means replaying Alembic).
-**Confidence:** High that they're never restored; the *decision* is a data-retention call, not a code call. **Safe to delete:** the four old ones, probably — but the better move is design_decisions E2 🕐 / architecture §16.2 as written: relocate all backups out of the tree with a dated naming convention, in one pass, rather than piecemeal deletion. **Check first:** `git ls-files` — if any `.bak*` is actually tracked in git history it's worth knowing before adding ignore rules; and confirm `.gitignore` covers `*.bak*` going forward.
+**Confidence:** High that they're never restored; the *decision* is a data-retention call, not a code call. **✅ RESOLVED (R2.2, 2026-07-07):** all backups relocated out of the tree to `~/anton-data/backups/` with a dated naming convention (`shoe_deals.db.<YYYY-MM-DD>-<label>.bak`); the three `.bak` files that were tracked in git were `git rm --cached`'d and `*.db.bak*` added to `backend/.gitignore`.
 
 ### 2.2 `backend/legacy_migrations/` (9 scripts + README)
 **Why it appears unused:** pre-Alembic idempotent `ALTER TABLE` scripts; the live DB is far past all of them, Alembic's baseline supersedes them for fresh DBs, and nothing imports them.
-**Confidence:** High that they never execute again. **Safe to delete:** *deliberately deferred* — design_decisions A6 ⚠️ already schedules "archive `legacy_migrations/`" as part of resolving schema authority. Do it there, as one decision, not as a drive-by. **Check first:** nothing technical; just pair it with the A6 sweep so the design-decision entry flips to Superseded correctly.
+**Confidence:** High that they never execute again. **✅ RESOLVED (R2.2, 2026-07-07):** deleted as part of the A6 schema-authority sweep. With the baseline revision now recreating the full pre-Alembic schema, they have no role; git history is the archive. A6 → Superseded.
 
 ---
 

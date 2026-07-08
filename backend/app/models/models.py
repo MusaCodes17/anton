@@ -239,6 +239,14 @@ class Activity(Base):
     elevation_gain_m = Column(Float, nullable=True)
     avg_cadence = Column(Float, nullable=True)
     calories = Column(Float, nullable=True)
+    # Training depth (R2.7 T1). All nullable — existing rows stay untagged/unscored.
+    training_load = Column(Float, nullable=True)  # COROS training-load score; null if unavailable
+    training_focus = Column(String(50), nullable=True)  # coaching label, e.g. "Aerobic base"
+    # Controlled vocabulary (app/utils/activity_tags.py, ACTIVITY_TAGS) — the
+    # governing input for PB eligibility (R2.7 T3), race promotion (T6), and the
+    # weekly-summary agent (R3.1). Indexed: the PB query filters on it.
+    activity_tag = Column(String(30), nullable=True, index=True)
+    best_km_pace_s = Column(Integer, nullable=True)  # best consecutive-km pace within the run (s/km); null if <1km
     strava_activity_id = Column(BigInteger, nullable=True, unique=True, index=True)
     coros_activity_id = Column(String(100), nullable=True, index=True)
     gear_name = Column(String(200), nullable=True, index=True)
@@ -377,10 +385,15 @@ class PlannedRace(Base):
     notes = Column(Text, nullable=True)
     status = Column(String(20), nullable=False, default="planned", server_default="planned")  # planned | completed | skipped
     result_time_s = Column(Integer, nullable=True)   # actual finish time, set on completion
+    # R2.7 T7: the canonical run this race *was*, set on completion/promotion so the
+    # past-race row deep-links to the activity's full stats. Nullable — planned and
+    # manually-completed races have no linked Activity.
+    activity_id = Column(Integer, ForeignKey("activities.id"), nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
-    # Relationship (no back_populates — owned_shoes doesn't need to know)
+    # Relationships (no back_populates — neither owned_shoes nor activities needs to know)
     planned_shoe = relationship("OwnedShoe")
+    activity = relationship("Activity")
 
     def __repr__(self):
         return f"<PlannedRace {self.name!r} @ {self.race_date}>"
@@ -406,3 +419,23 @@ class StravaGearMapping(Base):
 
     def __repr__(self):
         return f"<StravaGearMapping {self.gear_name!r} -> shoe {self.owned_shoe_id}>"
+
+
+class AthleteMetric(Base):
+    """
+    A periodic snapshot of COROS athlete-level fitness (R2.7 T5) — not per
+    activity, but per sync. Append-only: each row is one point in time, so the
+    Training-tab fitness card reads the newest and the history is preserved for
+    future trend views. Written via the Claude-Desktop sync agent (design
+    decisions C6 — server-side COROS is dormant), never computed by Anton.
+    """
+    __tablename__ = "athlete_metrics"
+
+    id = Column(Integer, primary_key=True, index=True)
+    vo2max = Column(Float, nullable=True)                        # ml/kg/min
+    threshold_pace_s_per_km = Column(Integer, nullable=True)     # lactate threshold pace
+    race_predictions = Column(JSON, nullable=True)               # {"5.0": 1234, "10.0": 2468, ...} distance_km → predicted_s
+    captured_at = Column(DateTime(timezone=True), server_default=func.now(), index=True)
+
+    def __repr__(self):
+        return f"<AthleteMetric vo2max={self.vo2max} @ {self.captured_at}>"

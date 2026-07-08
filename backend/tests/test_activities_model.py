@@ -70,6 +70,42 @@ def test_coros_dedup_on_activity_coros_id(db):
     assert db.query(Activity).filter(Activity.coros_activity_id == "abc").count() == 1
 
 
+def test_coros_confirm_populates_richer_activity_fields(db):
+    # R2.7 T2 — the sync path now stores fields it used to discard.
+    shoe = _shoe(db)
+    result = coros_svc.confirm_run(
+        db, coros_activity_id="rich1", owned_shoe_id=shoe.id,
+        run_date=date(2026, 7, 4), distance_km=12.0, avg_pace="4:30/km",
+        name="Morning Tempo", elevation_gain_m=85.0, moving_time_s=3240,
+        elapsed_time_s=3300, avg_cadence=182.0, calories=780.0,
+        training_load=120.5, training_focus="Lactate threshold",
+        activity_tag="Tempo",
+    )
+    assert result is not None
+    act = result.activity
+    assert act.name == "Morning Tempo"
+    assert act.elevation_gain_m == 85.0
+    assert act.moving_time_s == 3240
+    assert act.elapsed_time_s == 3300
+    assert act.avg_cadence == 182.0
+    assert act.calories == 780.0
+    assert act.training_load == 120.5
+    assert act.training_focus == "Lactate threshold"
+    assert act.activity_tag == "Tempo"
+
+
+def test_coros_confirm_leaves_new_fields_null_when_omitted(db):
+    shoe = _shoe(db)
+    result = coros_svc.confirm_run(
+        db, coros_activity_id="bare1", owned_shoe_id=shoe.id,
+        run_date=date(2026, 7, 5), distance_km=8.0,
+    )
+    act = result.activity
+    assert act.training_load is None
+    assert act.activity_tag is None
+    assert act.elevation_gain_m is None
+
+
 def test_delete_run_removes_manual_activity_and_reverts_mileage(db):
     shoe = _shoe(db, mileage=50.0)
     rotation.log_run(db, shoe.id, distance_km=10.0, run_date=date(2026, 7, 1), source="manual")

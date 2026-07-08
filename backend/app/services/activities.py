@@ -42,6 +42,9 @@ class UnifiedActivity:
     avg_hr: Optional[int] = None
     elevation_m: Optional[float] = None
     name: Optional[str] = None
+    elapsed_time_s: Optional[int] = None   # for the PB elapsed-time guard (R2.7 T3)
+    activity_tag: Optional[str] = None     # controlled vocab; drives PB eligibility (R2.7 T3)
+    activity_id: Optional[int] = None      # canonical Activity id (for edit/detail — R2.7 T6)
     shoe: Optional[UnifiedShoe] = None
     strava_activity_id: Optional[int] = None
     shoe_run_id: Optional[int] = None
@@ -99,6 +102,9 @@ def _build(db: Session) -> list[UnifiedActivity]:
             avg_hr=a.avg_hr,
             elevation_m=a.elevation_gain_m,
             name=a.name,
+            elapsed_time_s=a.elapsed_time_s,
+            activity_tag=a.activity_tag,
+            activity_id=a.id,
             shoe=_shoe_of(attr),
             strava_activity_id=a.strava_activity_id,
             shoe_run_id=attr.id if attr else None,
@@ -112,6 +118,8 @@ def unified_activities(
     *,
     year: Optional[int] = None,
     month: Optional[int] = None,
+    date_from: Optional[date] = None,
+    date_to: Optional[date] = None,
     shoe_id: Optional[int] = None,
     min_distance_km: Optional[float] = None,
     limit: Optional[int] = None,
@@ -124,6 +132,8 @@ def unified_activities(
     `min_distance_km` is an extension over the §3 signature so the Training
     activities list can filter short runs server-side (keeping it consistent
     with server-side pagination rather than filtering a single page in React).
+    `date_from`/`date_to` (inclusive, R2.7 T4b) are the range the Training-tab
+    date picker uses; they compose with, and are a superset of, `year`/`month`.
     """
     items = _build(db)
 
@@ -131,6 +141,10 @@ def unified_activities(
         items = [a for a in items if a.date.year == year]
     if month is not None:
         items = [a for a in items if a.date.month == month]
+    if date_from is not None:
+        items = [a for a in items if a.date >= date_from]
+    if date_to is not None:
+        items = [a for a in items if a.date <= date_to]
     if shoe_id is not None:
         items = [a for a in items if a.shoe is not None and a.shoe.id == shoe_id]
     if min_distance_km is not None:
@@ -143,3 +157,64 @@ def unified_activities(
     if limit is not None:
         items = items[:limit]
     return items
+
+
+_UNSET = object()  # "field not supplied" sentinel for the partial update below
+
+
+def get_activity_detail(db: Session, activity_id: int) -> dict:
+    """Full field set for one activity (R2.7 T6 detail view), including the fields
+    the list projection omits (description, elevation, cadence, calories, training
+    load/focus) and the current shoe attribution. Raises LookupError if missing."""
+    a = db.query(Activity).filter(Activity.id == activity_id).first()
+    if a is None:
+        raise LookupError(f"Activity {activity_id} not found")
+    attr = db.query(ShoeRun).filter(ShoeRun.activity_id == activity_id).first()
+    shoe = db.query(OwnedShoe).filter(OwnedShoe.id == attr.owned_shoe_id).first() if attr else None
+    return {
+        "id": a.id,
+        "source": a.source,
+        "name": a.name,
+        "description": a.description,
+        "run_date": a.run_date.isoformat() if a.run_date else None,
+        "distance_km": a.distance_km,
+        "moving_time_s": a.moving_time_s,
+        "elapsed_time_s": a.elapsed_time_s,
+        "avg_pace": rotation.seconds_to_pace(a.avg_pace_s_per_km) if a.avg_pace_s_per_km else None,
+        "avg_hr": a.avg_hr,
+        "max_hr": a.max_hr,
+        "elevation_gain_m": a.elevation_gain_m,
+        "avg_cadence": a.avg_cadence,
+        "calories": a.calories,
+        "training_load": a.training_load,
+        "training_focus": a.training_focus,
+        "activity_tag": a.activity_tag,
+        "strava_activity_id": a.strava_activity_id,
+        "shoe": {"id": shoe.id, "brand": shoe.brand, "model": shoe.model, "nickname": shoe.nickname} if shoe else None,
+    }
+
+
+def update_activity(
+    db: Session,
+    activity_id: int,
+    *,
+    activity_tag=_UNSET,
+    name=_UNSET,
+    description=_UNSET,
+) -> Activity:
+    """Partial-update the editable fields of an activity (R2.7 T6): tag, name,
+    description. Only supplied fields change (the `_UNSET` sentinel distinguishes
+    "clear to null" from "leave alone"). Tag validity is the caller's contract.
+    Raises LookupError if the activity is missing."""
+    a = db.query(Activity).filter(Activity.id == activity_id).first()
+    if a is None:
+        raise LookupError(f"Activity {activity_id} not found")
+    if activity_tag is not _UNSET:
+        a.activity_tag = activity_tag
+    if name is not _UNSET:
+        a.name = name
+    if description is not _UNSET:
+        a.description = description
+    db.commit()
+    db.refresh(a)
+    return a
