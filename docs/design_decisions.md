@@ -50,7 +50,7 @@
 **Why:** `create_all` predates Alembic and was kept as a convenience (fresh setups work with zero steps); legacy scripts kept as history.
 **Advantages:** Fresh clones boot instantly; migration history exists and is now high quality (D1).
 **Trade-offs:** Two authorities over the schema — a model edit without a migration "works" on fresh DBs and diverges on real ones; ambiguity about the canonical path.
-**Verdict:** ⚠️ Scheduled to change (architecture.md §16.2): Alembic as sole authority, `create_all` demoted to test fixtures, `legacy_migrations/` archived.
+**Verdict:** 🔁 **Superseded — executed r2: 2026-07-07** (R2.2). Alembic is now the sole schema authority: startup runs `alembic upgrade head` (`database.run_migrations()`) instead of `create_all`, which now lives only in the test fixtures. The formerly-empty baseline revision (`cf1eccba0a79`) recreates the exact pre-Alembic schema, so a fresh DB builds entirely from Alembic (verified table-for-table against the models; round-trips to base). `legacy_migrations/` was **deleted** (git history is the archive), and the live DB + backups moved to `~/anton-data/` (backups under `~/anton-data/backups/`, dated-backup convention). See changelog 2026-07-07.
 
 ### A7. The pinned dependency triangle
 **Chosen:** FastAPI 0.109 + Starlette 0.35.1 + sse-starlette 1.8.2 pinned together, with the reason documented in `requirements.txt`.
@@ -356,7 +356,8 @@
 | APScheduler dependency (declared, unused) | Anticipatory install for scheduled scraping | E5 — dropped from `requirements.txt`; reinstate with an R4.1 design | 2026-07-07 (R1.6) |
 | Per-size shoe tracking | Original watchlist shape | B2 — size-less tracking | recorded in code comment |
 | No authentication anywhere (`0.0.0.0` default bind) | Trust = network posture, single trusted machine | E7 — shared bearer token on `/api`+`/mcp`, `127.0.0.1` default bind | 2026-07-07 (R2.1) |
+| Dual schema authority (`create_all` + Alembic + `legacy_migrations/`) | `create_all` boot path kept for zero-step fresh setups | A6 — Alembic sole authority; baseline recreates the schema; legacy scripts deleted; DB moved to `~/anton-data/` | 2026-07-07 (R2.2) |
 
 ---
 
-*Maintenance note: add an entry when a decision is made that a future session might reasonably reverse; move reversed decisions to the Superseded table with the succeeding entry named. The verdicts above marked ⚠️ are this document's standing to-do list — A6, C8 (E1 executed 2026-07-07, R2.1 → E7) — and should flip to Superseded entries as they're executed. (D7 shim and E5 APScheduler were executed 2026-07-07, R1.5b/R1.6.)*
+*Maintenance note: add an entry when a decision is made that a future session might reasonably reverse; move reversed decisions to the Superseded table with the succeeding entry named. The verdicts above marked ⚠️ are this document's standing to-do list — now just C8 (chat memory), since A6 was executed 2026-07-07 (R2.2 → Superseded) and E1 by R2.1 (→ E7) — and should flip to Superseded entries as they're executed. (D7 shim and E5 APScheduler were executed 2026-07-07, R1.5b/R1.6.)*
