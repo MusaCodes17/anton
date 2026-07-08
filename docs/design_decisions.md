@@ -286,7 +286,7 @@
 **Why (recorded):** Wall-clock relief without touching per-retailer politeness; replay so a refreshed browser doesn't lose the picture.
 **Advantages:** ~8× wall-clock; progress UX survives reconnects; one scraping primitive.
 **Trade-offs:** In-memory state shares D4's single-process assumption; no persisted scrape history (observability gap flagged in architecture.md §15.8).
-**Verdict:** ✅ Keep the shape; the persistence gap is the roadmap item.
+**Verdict:** ✅ Keep the shape. The persistence gap is **closed by R2.5** (D8) — durable per-retailer runs now live in `scrape_runs`, alongside the transient SSE state, not replacing it.
 
 ### D6. Kids filtering and promo heuristics centralized in `BaseScraper`
 **Chosen:** Junior/kids exclusion applied once in `search_products_filtered`; promo codes found by regex pairing codes with nearby "% off" text; **manual promo codes never overwritten by scraped ones**.
@@ -301,6 +301,14 @@
 **Advantages:** The refactor landed safely in one session.
 **Trade-offs:** Real module boundaries invisible at call sites; the "temporary" is aging.
 **Verdict:** 🔁 **Superseded — shim deleted r1: 2026-07-07** (R1.5b, debt sweep #1). All five consumers (`routers/scraping`, `routers/shoes`, `mcp_server`, `scrape_runner`, `scrapers/__init__`) now import `ScrapeOrchestrator` / `lock` / `registry` directly; the misleading `ScraperManager` alias is gone. See changelog 2026-07-07.
+
+### D8. Durable scrape observability in `scrape_runs`, written by one orchestrator path (R2.5)
+**Chosen:** One `scrape_runs` row per retailer per full-catalog scrape attempt (status/counts/error), written **only** by `ScrapeOrchestrator.scrape_retailer` — stamped `running` and committed up front, finalized to `success`/`error`. Health (`ok`/`warning`/`error`/`unknown`) is derived at read time by `services/scrape_history`, never stored. The `warning` verdict (finished clean, zero products) is the "quietly broken" signal that no error status carries.
+**Why (recorded):** "Is Altitude quietly broken?" was log archaeology; D5's SSE state is transient (current job only). R4.1 (scheduling) / R4.5 (watchdog) need a durable place to record per-retailer outcomes, and this is it.
+**On the single-process lock (the decision R2.5 was said to "force"):** R2.5 records history but deliberately **does not** change D4's in-memory lock. Observability is orthogonal to coordination: a durable `scrape_runs` table does not require durable *locking*. The single-process lock stays as-is (🕐); the forcing function for replacing it is R4.1's *scheduled/unattended* execution, not R2.5's *record-keeping*. Naming it here so a future session doesn't re-open D4 prematurely.
+**Advantages:** Health is a query; up-front `running` commit makes in-flight/crashed scrapes visible (verified live); one write path keeps the invariant (CLAUDE.md §2.2); cascade-deleted with its retailer (disposable deals-domain telemetry, §2.6).
+**Trade-offs:** Only the two full-catalog flows (background `/scrape/all`, synchronous `/scrape/retailer/{id}`) emit runs so far; the shoe-major `scrape_all_shoes` / single-shoe path (MCP `trigger_scrape` sans shoe_id) doesn't yet — deliberate, its grain is wrong for a per-retailer run.
+**Verdict:** ✅ Keep. Revisit when R4.1 adds `trigger="scheduled"` and a watchdog reads the trend.
 
 ---
 
