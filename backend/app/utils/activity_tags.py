@@ -29,8 +29,43 @@ ACTIVITY_TAGS: tuple[str, ...] = (
 
 _VALID = set(ACTIVITY_TAGS)
 
+# --- Personal-best eligibility (R2.7 T3) -----------------------------------
+# The PB algorithm bands whole-activity times; a stop-heavy interval session can
+# otherwise fake a distance record. Tags are the clean intentional signal; the
+# elapsed-time ratio is the fallback for untagged history (the 8-year archive).
+PB_EXCLUDED_TAGS = frozenset({"Intervals", "Track"})   # never set a PB
+PB_ALWAYS_INCLUDED_TAGS = frozenset({"Race", "Parkrun"})  # always eligible
+# Everything else tagged (Easy/Long Run/Recovery/Tempo/Trail/Workout) is eligible:
+# a slow long run won't break a 5k PB, and a tempo that does is legitimate.
+
+# Untagged runs: flag as suspicious when they stop a lot — elapsed ≫ moving.
+PB_ELAPSED_RATIO = 1.5  # elapsed_time_s > 1.5 × moving_time_s → excluded
+
 
 def is_valid_tag(tag: Optional[str]) -> bool:
     """True iff `tag` is a member of the vocabulary. `None` is not valid here —
     callers that allow clearing a tag handle `None` explicitly."""
     return tag in _VALID
+
+
+def pb_exclusion_reason(
+    tag: Optional[str],
+    elapsed_time_s: Optional[int],
+    moving_time_s: Optional[int],
+) -> Optional[str]:
+    """Return a short reason string if this run is INELIGIBLE for personal-best
+    consideration, else None (eligible).
+
+    - Tagged Intervals/Track → excluded ("interval/track session").
+    - Tagged Race/Parkrun and other run tags → eligible.
+    - Untagged → excluded only when stop-heavy (elapsed > 1.5×moving); the ratio
+      needs both times, so an untagged run missing either is treated as eligible.
+    """
+    if tag in PB_EXCLUDED_TAGS:
+        return "interval/track session"
+    if tag is not None:
+        return None  # any other vocabulary tag (Race/Parkrun/Easy/...) is eligible
+    # Untagged: the elapsed-time guard.
+    if elapsed_time_s and moving_time_s and elapsed_time_s > PB_ELAPSED_RATIO * moving_time_s:
+        return "stop-heavy untagged run"
+    return None

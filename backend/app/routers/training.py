@@ -55,6 +55,16 @@ class PersonalBestResponse(BaseModel):
         from_attributes = True
 
 
+class PersonalBestsResponse(BaseModel):
+    """The records plus what the eligibility filter dropped (R2.7 T3)."""
+    records: List[PersonalBestResponse]
+    excluded_count: int = 0
+    excluded_reason: Optional[str] = None
+
+    class Config:
+        from_attributes = True
+
+
 @router.get("/summary", response_model=List[PeriodSummaryResponse])
 def get_training_summary(
     period: str = Query("monthly", pattern="^(monthly|weekly)$"),
@@ -65,8 +75,10 @@ def get_training_summary(
     return strava_stats.training_summary(db, period=period)
 
 
-@router.get("/records", response_model=List[PersonalBestResponse])
+@router.get("/records", response_model=PersonalBestsResponse)
 def get_training_records(db: Session = Depends(get_db)):
     """Fastest average pace at each distance band, over the unioned run history.
-    These are whole-activity average-pace bests, not segment PBs."""
+    These are whole-activity average-pace bests, not segment PBs. Interval/track
+    and stop-heavy untagged runs are excluded (R2.7 T3); the dropped count rides
+    along so the UI can prompt the runner to tag history."""
     return strava_stats.personal_bests(db)

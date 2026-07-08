@@ -223,11 +223,19 @@ export default function Training() {
           </div>
         ) : records.isError ? (
           <ErrorState error={records.error} onRetry={records.refetch} />
-        ) : records.data?.length ? (
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            {records.data.map((r) => (
-              <PBCard key={r.band} record={r} />
-            ))}
+        ) : records.data?.records?.length ? (
+          <div className="space-y-3">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+              {records.data.records.map((r) => (
+                <PBCard key={r.band} record={r} />
+              ))}
+            </div>
+            {records.data.excluded_count > 0 && (
+              <p className="text-xs text-muted-foreground">
+                {records.data.excluded_count} {records.data.excluded_count === 1 ? 'activity' : 'activities'} excluded
+                {' '}({records.data.excluded_reason}) — tag interval/track sessions to reconsider.
+              </p>
+            )}
           </div>
         ) : (
           <EmptyState icon={Trophy} title="No records yet" description="Log some runs to see your bests." />

@@ -19,6 +19,7 @@ from sqlalchemy.orm import Session
 from app.services import activities as activities_svc
 from app.services import rotation
 from app.services.activities import UnifiedActivity, _effective_moving_s
+from app.utils.activity_tags import pb_exclusion_reason
 
 # Distance bands for personal bests: (label, target_km, tolerance_km).
 # These are average-pace-for-the-whole-activity bests, NOT true segment PBs.
@@ -53,6 +54,15 @@ class PersonalBest:
     source: str
     shoe: Optional[dict]              # {id, brand, model, nickname} or None
     strava_activity_id: Optional[int]
+
+
+@dataclass
+class PersonalBestsResult:
+    """PB records plus transparency about what the eligibility filter dropped
+    (R2.7 T3), so the UI can nudge the runner to tag excluded history."""
+    records: list[PersonalBest]
+    excluded_count: int
+    excluded_reason: Optional[str]    # human summary when excluded_count > 0
 
 
 def _period_key(d: date, period: str) -> str:
@@ -107,17 +117,27 @@ def training_summary(db: Session, period: str = "monthly") -> list[PeriodSummary
     return out
 
 
-def personal_bests(db: Session) -> list[PersonalBest]:
+def personal_bests(db: Session) -> PersonalBestsResult:
     """
     Fastest whole-activity time within each distance band, across the unioned
     run history. The record is the run with the lowest total time in the band;
     the card shows that time as the headline, with average pace and HR beneath.
     These are whole-activity times, not true segment PBs — describe accordingly.
     Shoe attribution is included when the winning run is linked to an owned shoe.
+
+    Eligibility (R2.7 T3): interval/track sessions are excluded (they'd fake a
+    record at their rep distance), Race/Parkrun always count, and untagged
+    stop-heavy runs (elapsed ≫ moving) are excluded via the ratio guard. The
+    dropped count + a summary reason ride along so the UI can prompt tagging.
     """
     runs = []
+    excluded_reasons: dict[str, int] = {}
     for r in activities_svc.unified_activities(db):
         if not r.distance_km or r.avg_pace_s_per_km is None:
+            continue
+        reason = pb_exclusion_reason(r.activity_tag, r.elapsed_time_s, r.moving_time_s)
+        if reason is not None:
+            excluded_reasons[reason] = excluded_reasons.get(reason, 0) + 1
             continue
         total_s = _effective_moving_s(r)
         if total_s:
@@ -151,4 +171,16 @@ def personal_bests(db: Session) -> list[PersonalBest]:
             ),
             strava_activity_id=best.strava_activity_id,
         ))
-    return out
+
+    excluded_count = sum(excluded_reasons.values())
+    excluded_reason = None
+    if excluded_count:
+        # "3 interval/track session, 2 stop-heavy untagged run"
+        excluded_reason = ", ".join(
+            f"{n} {reason}" for reason, n in sorted(excluded_reasons.items())
+        )
+    return PersonalBestsResult(
+        records=out,
+        excluded_count=excluded_count,
+        excluded_reason=excluded_reason,
+    )

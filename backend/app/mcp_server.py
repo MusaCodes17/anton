@@ -956,9 +956,11 @@ def get_personal_bests() -> dict:
     fastest 10k run", not "your 10k PB").
     """
     with get_session() as db:
-        bests = strava_stats.personal_bests(db)
+        result = strava_stats.personal_bests(db)
         return {
             "note": "Whole-activity average-pace bests within a distance tolerance, not segment PBs.",
+            "excluded_count": result.excluded_count,
+            "excluded_reason": result.excluded_reason,
             "bests": [
                 {
                     "band": b.band,
@@ -973,7 +975,7 @@ def get_personal_bests() -> dict:
                     "shoe": b.shoe,
                     "strava_activity_id": b.strava_activity_id,
                 }
-                for b in bests
+                for b in result.records
             ],
         }
 

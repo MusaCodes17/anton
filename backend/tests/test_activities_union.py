@@ -143,8 +143,57 @@ def test_records_attribute_shoe(db):
                           min_distance_km=None, limit=20, offset=0, db=db)
     assert len(resp) >= 2
 
-    bests = strava_stats.personal_bests(db)
-    ten = next(b for b in bests if b.band == "10k")
+    result = strava_stats.personal_bests(db)
+    ten = next(b for b in result.records if b.band == "10k")
     assert ten.avg_pace == "4:00/km"          # the faster one won
     assert ten.total_time_s == 2400           # 10km * 240s/km — the headline figure
     assert ten.shoe is not None and ten.shoe["id"] == shoe.id
+    assert result.excluded_count == 0         # nothing tagged/stop-heavy here
+
+
+def _band(result, band):
+    return next((b for b in result.records if b.band == band), None)
+
+
+def test_pb_excludes_interval_and_track_sessions(db):
+    # A blazing "5k" total time from an Intervals session must NOT set a 5k PB.
+    _activity(db, said=10, run_date=date(2026, 6, 2), dist=5.0, pace_s=200)  # untagged, legit
+    fake = _activity(db, said=11, run_date=date(2026, 6, 3), dist=5.0, pace_s=150)
+    fake.activity_tag = "Intervals"
+    db.commit()
+    result = strava_stats.personal_bests(db)
+    five = _band(result, "5k")
+    assert five is not None
+    assert five.total_time_s == 1000          # the untagged 5.0km * 200s/km, not the 150 interval
+    assert result.excluded_count == 1
+    assert "interval/track session" in result.excluded_reason
+
+
+def test_pb_includes_race_even_if_fast(db):
+    race = _activity(db, said=12, run_date=date(2026, 6, 4), dist=5.0, pace_s=175)
+    race.activity_tag = "Race"
+    db.commit()
+    result = strava_stats.personal_bests(db)
+    assert _band(result, "5k").total_time_s == 875   # race counts
+    assert result.excluded_count == 0
+
+
+def test_pb_elapsed_guard_excludes_stop_heavy_untagged(db):
+    # Untagged, elapsed 2000 > 1.5 * moving 1000 → stop-heavy, excluded.
+    a = _activity(db, said=13, run_date=date(2026, 6, 5), dist=5.0, pace_s=200, moving_s=1000)
+    a.elapsed_time_s = 2000
+    db.commit()
+    result = strava_stats.personal_bests(db)
+    assert _band(result, "5k") is None
+    assert result.excluded_count == 1
+    assert "stop-heavy untagged run" in result.excluded_reason
+
+
+def test_pb_elapsed_guard_boundary_keeps_clean_run(db):
+    # elapsed exactly 1.5 * moving is NOT > 1.5x → still eligible.
+    a = _activity(db, said=14, run_date=date(2026, 6, 6), dist=5.0, pace_s=200, moving_s=1000)
+    a.elapsed_time_s = 1500
+    db.commit()
+    result = strava_stats.personal_bests(db)
+    assert _band(result, "5k") is not None
+    assert result.excluded_count == 0
