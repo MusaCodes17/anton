@@ -1,10 +1,12 @@
 """
 Database configuration and session management
 """
+import os
+from pathlib import Path
+
 from sqlalchemy import create_engine
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
-import os
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -37,9 +39,25 @@ def get_db():
         db.close()
 
 
-def init_db():
+def run_migrations() -> None:
     """
-    Initialize database - create all tables
-    Call this when starting the application
+    Bring the database up to Alembic head — the *sole* schema authority (R2.2).
+
+    Called at app startup (see main.py lifespan). Replaces the former
+    `init_db()`/`Base.metadata.create_all` boot path: `create_all` cannot ALTER
+    existing tables, so it silently masked schema drift on a live DB (CLAUDE.md
+    §9's "dual schema authority" trap; design_decisions A6). Running the
+    migrations instead means a fresh DB is built from the baseline forward and an
+    existing one is upgraded in place — one path, always correct.
+
+    Idempotent: a no-op when the DB is already at head. `create_all` now lives
+    only in the test fixtures (tests/conftest.py, tests/test_auth.py), which
+    build a throwaway in-memory/temp schema and never touch Alembic.
     """
-    Base.metadata.create_all(bind=engine)
+    from alembic import command
+    from alembic.config import Config
+
+    backend_root = Path(__file__).resolve().parent.parent
+    alembic_cfg = Config(str(backend_root / "alembic.ini"))
+    # env.py reads DATABASE_URL from the environment itself; no override needed.
+    command.upgrade(alembic_cfg, "head")

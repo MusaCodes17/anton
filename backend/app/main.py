@@ -8,7 +8,7 @@ from fastapi.middleware.cors import CORSMiddleware
 import os
 from dotenv import load_dotenv
 
-from app.database import init_db
+from app.database import run_migrations
 from app.mcp_server import mcp
 from app.middleware.auth import BearerAuthMiddleware
 from app.routers import shoes, retailers, deals, dashboard, scraping, export, owned_shoes, coros_sync, chat, admin, training, strava, watchlist, activities, races, home
@@ -39,14 +39,15 @@ def require_anton_secret() -> None:
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """
-    Validate the auth secret, initialize the database, then run the MCP server's
-    session manager for the lifetime of the app. Streamable HTTP transport needs
-    that session manager's task group active — mounting mcp.streamable_http_app()
-    alone doesn't run a sub-app's lifespan, so it's merged in here instead.
+    Validate the auth secret, upgrade the DB to Alembic head (R2.2 — the sole
+    schema authority), then run the MCP server's session manager for the lifetime
+    of the app. Streamable HTTP transport needs that session manager's task group
+    active — mounting mcp.streamable_http_app() alone doesn't run a sub-app's
+    lifespan, so it's merged in here instead.
     """
     require_anton_secret()
-    init_db()
-    print("✅ Database initialized")
+    run_migrations()
+    print("✅ Database migrated to head")
     async with mcp.session_manager.run():
         yield
 
