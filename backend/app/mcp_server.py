@@ -1589,13 +1589,18 @@ For each confirmed run call confirm_coros_run with:
   stores them instead of discarding them): name, elevation_gain_m,
   moving_time_s, elapsed_time_s, avg_cadence, calories, training_load,
   training_focus.
-- activity_tag: only if the runner has set or confirmed one. If a COROS field
-  (activity name or training_focus) suggests a tag but doesn't map cleanly to
-  Anton's vocabulary (Easy, Long Run, Recovery, Tempo, Intervals, Track,
-  Workout, Trail, Parkrun, Race), surface the best guess in Step 4 and let the
-  runner confirm or override — e.g. "COROS labels this 'Marathon Pace' →
-  tag `Tempo`? (y/n)". Never infer and apply a tag silently (C9). Omit the tag
-  entirely if unconfirmed.
+- activity_tag: only if the runner has set or confirmed one. Infer a *suggestion*
+  from the COROS activity name using these case-insensitive keyword rules (first
+  match wins — the order is precedence):
+    "parkrun" → Parkrun · "interval"/"repeat" → Intervals · "track" → Track ·
+    "tempo"/"threshold" → Tempo · "long run"/"long" → Long Run · "trail" → Trail ·
+    "race"/"marathon" → Race · "recovery"/"easy"/"jog" → Easy · else untagged.
+  Also consider training_focus as a hint. Surface the suggested tag in Step 4 and
+  let the runner confirm or override — e.g. "COROS name 'Tempo 8k' → tag `Tempo`?
+  (y/n)" or "COROS labels this 'Marathon Pace' → tag `Tempo`? (y/n)". The full
+  vocabulary is Easy, Long Run, Recovery, Tempo, Intervals, Track, Workout, Trail,
+  Parkrun, Race. Never infer and apply a tag silently (C9). Omit the tag entirely
+  if unconfirmed.
 
 ## Step 7 — Summarise results
 "Logged [N] runs:

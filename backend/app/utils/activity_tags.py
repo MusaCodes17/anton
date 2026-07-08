@@ -48,6 +48,40 @@ def is_valid_tag(tag: Optional[str]) -> bool:
     return tag in _VALID
 
 
+# --- COROS-name tag inference (R2.7 T8) ------------------------------------
+# Ordered keyword → tag rules for *suggesting* a tag from a COROS activity name.
+# ORDER IS PRECEDENCE: the first matching rule wins, so the more specific/
+# structured labels come first (a "parkrun" is Parkrun, not Race; an "easy long
+# run" is Long Run, not Easy). This is a suggestion only — the sync agent
+# surfaces it in the confirmation table and the runner confirms or overrides;
+# it is NEVER auto-applied (C9). Keep this list aligned with ACTIVITY_TAGS.
+_NAME_TAG_RULES: tuple[tuple[tuple[str, ...], str], ...] = (
+    (("parkrun",), "Parkrun"),
+    (("interval", "repeat"), "Intervals"),
+    (("track",), "Track"),
+    (("tempo", "threshold"), "Tempo"),
+    (("long run", "long"), "Long Run"),
+    (("trail",), "Trail"),
+    (("race", "marathon"), "Race"),
+    (("recovery", "easy", "jog"), "Easy"),
+)
+
+
+def suggest_tag_from_name(name: Optional[str]) -> Optional[str]:
+    """Suggest an `activity_tag` from a COROS activity name via case-insensitive
+    keyword matching (R2.7 T8). Returns a vocabulary tag or None when nothing
+    matches (leave untagged). Suggestion only — the runner confirms it in the
+    `sync_coros_runs` flow; never auto-applied (C9).
+    """
+    if not name:
+        return None
+    lowered = name.lower()
+    for keywords, tag in _NAME_TAG_RULES:
+        if any(kw in lowered for kw in keywords):
+            return tag
+    return None
+
+
 def pb_exclusion_reason(
     tag: Optional[str],
     elapsed_time_s: Optional[int],

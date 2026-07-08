@@ -2,9 +2,11 @@
 `unified_activities` seam (the columns T3's PB fix and T6's editor rely on)."""
 from datetime import date
 
+import pytest
+
 from app.models.models import Activity
 from app.services import activities as activities_svc
-from app.utils.activity_tags import ACTIVITY_TAGS, is_valid_tag
+from app.utils.activity_tags import ACTIVITY_TAGS, is_valid_tag, suggest_tag_from_name
 
 
 def _run(db, **kw):
@@ -42,3 +44,47 @@ def test_untagged_run_surfaces_none_tag(db):
     _run(db)
     (ua,) = activities_svc.unified_activities(db)
     assert ua.activity_tag is None
+
+
+# --- R2.7 T8 — COROS-name tag inference (suggestion only) ------------------
+
+@pytest.mark.parametrize("name,expected", [
+    ("Morning Intervals", "Intervals"),
+    ("6x800 repeats", "Intervals"),
+    ("Track session", "Track"),
+    ("Tempo 8k", "Tempo"),
+    ("Threshold work", "Tempo"),
+    ("Sunday Long Run", "Long Run"),
+    ("long", "Long Run"),
+    ("Mont-Royal trail", "Trail"),
+    ("Ottawa Marathon", "Race"),
+    ("Club Race", "Race"),
+    ("Parkrun", "Parkrun"),
+    ("Recovery shakeout", "Easy"),
+    ("Easy 10k", "Easy"),
+    ("morning jog", "Easy"),
+])
+def test_suggest_tag_maps_keywords(name, expected):
+    assert suggest_tag_from_name(name) == expected
+
+
+def test_suggest_tag_is_case_insensitive():
+    assert suggest_tag_from_name("TEMPO RUN") == "Tempo"
+    assert suggest_tag_from_name("pArKrUn") == "Parkrun"
+
+
+def test_suggest_tag_precedence():
+    # First matching rule wins (specificity ordering).
+    assert suggest_tag_from_name("parkrun race") == "Parkrun"   # Parkrun before Race
+    assert suggest_tag_from_name("easy long run") == "Long Run"  # Long Run before Easy
+
+
+def test_suggest_tag_no_match_returns_none():
+    assert suggest_tag_from_name("Afternoon Run") is None
+    assert suggest_tag_from_name("") is None
+    assert suggest_tag_from_name(None) is None
+
+
+def test_suggested_tags_are_all_valid_vocabulary():
+    for name in ("intervals", "long run", "tempo", "trail", "race", "parkrun", "easy", "track"):
+        assert is_valid_tag(suggest_tag_from_name(name))
