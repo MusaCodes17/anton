@@ -1,6 +1,6 @@
 # Anton — Project State
 
-**Snapshot date:** 2026-07-08 (after Phase 2 Session G — **R2.7 Session 2: training display + fitness + activity edit (T4–T6)**. T4a month volume axis, T4b date-range picker (backend `date_from`/`date_to` + UI), T5 `athlete_metrics` table + fitness card (migration `f6a7b8c9d0e1`), T6 `/activities/:id` detail page with shoe reassignment through the INV-1 ledger + race promotion. Suite 97 → **106**. Server was restarted (R2.1 auth + R2.2 `~/anton-data/` DB now live). Prior: Session F shipped **R2.7 T1–T3** (tag vocabulary + PB fix; +B15/B16); Session E **R2.2**; Session D **R2.1**. **Remaining R2.7: Session 3 — T7/T8.**)
+**Snapshot date:** 2026-07-08 (after Phase 2 Session H — **R2.7 Session 3: race↔activity link + COROS-name tag inference (T7–T8)** — which **closes R2.7 end-to-end, all eight sub-items T1–T8**. T7 `planned_races.activity_id` FK (migration `a7b8c9d0e1f2`) set by the T6 promote flow, deep-linking past-race rows to `/activities/:id`; T8 pure `suggest_tag_from_name` + `sync_coros_runs` prompt extension (suggestion only, C9). Suite 106 → **126**. Prior: Session G shipped **R2.7 T4–T6**; Session F **T1–T3** (+B15/B16); Session E **R2.2**; Session D **R2.1**. **R2.7 done; next active R2 items are R2.3 indexed reads + rate limiting.**)
 **Read this first, then:** `docs/ai_context.md` → `docs/architecture.md` → `docs/domain_model.md`. This file is the *perishable* one — it describes a moment, and staleness here is expected and fixable; update it at the end of every working session.
 
 ---
@@ -22,13 +22,13 @@ Anton (repo name: `running-shoe-deals`) is a **single-user personal running plat
 | Anton redesign Phases 1–4 (IA, Deals watchlist, Training tab, Home) | ✅ Complete (Phase 4 landed 2026-07-03) |
 | Phase 5 backlog | 🟡 3 of 4 items done (canonical activities ✅ 2026-07-04 · `/shoes` lifecycle reframe ✅ · app mark ✅ · **agents remaining**) |
 | Strava historical import (694-run, 8-year archive) | ✅ Complete and now *structurally* permanent (absorbed into `activities`) |
-| Test suite | ✅ **106 passing**, 19 modules (Session G: `test_fitness.py` +2, `test_activity_edit.py` +6, `test_activities_union.py` +1; Session F: `test_activity_tags.py` +3, `test_activities_model.py`/`test_activities_union.py` +2/+4; `test_auth.py` +13 Session D; `test_owned_shoes.py`/`test_scrape_lock.py` +4 each Session C) |
+| Test suite | ✅ **126 passing**, 19 modules (Session H: `test_races.py` +2, `test_activity_tags.py` +18; Session G: `test_fitness.py` +2, `test_activity_edit.py` +6, `test_activities_union.py` +1; Session F: `test_activity_tags.py` +3, `test_activities_model.py`/`test_activities_union.py` +2/+4; `test_auth.py` +13 Session D) |
 | Documentation program | ✅ **Complete and committed** (R1.1, 2026-07-06) — full `docs/` suite + `CLAUDE.md` (incl. §14 INVARIANTS) + `refactoring/` + final review + reconciliation + `.claude/skills/` (13 workflow skills) |
 | Roadmap R1 (loose ends) | ✅ **Complete** (2026-07-07) — R1.1/R1.2 docs, R1.3 replacement-deals card, R1.4 proxy guards, R1.5 debt sweep (Task D · shim delete · pure `pace` · chat catalog), R1.6 APScheduler removed |
 | Review safety fixes (C1 / M3) | ✅ **Resolved** (Session C, 2026-07-07) — mileage ledger no longer writable via PUT (sanctioned `adjust_mileage` path); scrape-lock wedge closed + admin force-release/status endpoints |
 | Security pass (R2.1) | ✅ **Shipped** (Session D, 2026-07-07) — shared bearer token on `/api`+`/mcp` (pure-ASGI middleware), `127.0.0.1` default bind, fail-fast on missing secret, SPA + Desktop + loopback all send the token, 13 HTTP-layer tests. E1 → Superseded by E7. **Live activation (set `.env` secret, update Desktop `--header`, restart) is a human step** — `CLAUDE_DESKTOP_SETUP.md`. Rate limiting is a separate R2 item. |
 | Schema authority (R2.2) | ✅ **Shipped** (Session E, 2026-07-07) — Alembic sole source: startup runs `alembic upgrade head` (`database.run_migrations()`), `create_all` demoted to test fixtures, baseline revision recreates the pre-Alembic schema (fresh DB builds from Alembic alone), `legacy_migrations/` deleted, live DB + backups moved to `~/anton-data/`. A6 → Superseded. **Server restart needed** to pick up the new `DATABASE_URL` (pairs with the R2.1 restart). |
-| Training depth (R2.7) | 🟡 **Sessions 1–2 done** (F 2026-07-07, G 2026-07-08) — T1 tag vocabulary + 4 `activities` columns · T2 COROS field population · T3 PB eligibility fix · T4a month volume axis · T4b date-range picker · T5 `athlete_metrics` + fitness card · T6 `/activities/:id` edit + reassignment + race promotion. Migrations `e5f6a7b8c9d0`, `f6a7b8c9d0e1`. B15/B16 added. **Remaining: Session 3 — T7 (race↔activity FK) · T8 (COROS-name tag inference).** |
+| Training depth (R2.7) | ✅ **Complete** (Sessions 1–3: F/G/H, 2026-07-07→08) — T1 tag vocabulary + 4 `activities` columns · T2 COROS field population · T3 PB eligibility fix · T4a month volume axis · T4b date-range picker · T5 `athlete_metrics` + fitness card · T6 `/activities/:id` edit + reassignment + race promotion · T7 `planned_races.activity_id` link · T8 COROS-name tag inference. Migrations `e5f6a7b8c9d0`, `f6a7b8c9d0e1`, `a7b8c9d0e1f2`. B15/B16 added. |
 
 The app is in **daily real use** (live DB is the only DB: 933 activities, 698 runs, 8,028 km, 667 attributed).
 
@@ -166,11 +166,11 @@ Last ~10 days, newest first (full record: `docs/design_decisions.md`):
 
 ## 11. Areas Requiring Immediate Attention
 
-Ordered; "immediate" means *next few sessions*, not emergencies — nothing is on fire. **R1 done; C1/M3 safety fixes done; R2.1 (security) + R2.2 (schema authority) shipped and now *live* (server restarted 2026-07-08); R2.7 Sessions 1–2 (T1–T6) shipped.** The active thread is R2.7 (training depth); R2.3–R2.6 remain queued.
+Ordered; "immediate" means *next few sessions*, not emergencies — nothing is on fire. **R1 done; C1/M3 safety fixes done; R2.1 (security) + R2.2 (schema authority) shipped and now *live*; R2.7 (training depth) complete end-to-end (T1–T8).** The active R2 thread is now R2.3–R2.6.
 
-1. **R2.7 Session 3 (T7/T8)** — `TRAINING_DEPTH_PLAN.md`: T7 `planned_races.activity_id` FK linking a completed race to its Activity (and the T6 promote flow sets it), T8 COROS-name → tag-suggestion helper wired into the `sync_coros_runs` prompt (C9). Closes R2.7.
+1. **R2.3 indexed read paths** — swap `unified_activities` internals from whole-table Python to SQL date-range/shoe/pagination queries (the seam guarantees zero caller changes); extract `services/watchlist.py` from the fat router. Unlocks MCP watchlist parity (R3.4). *(R2.7 T4b already added `date_from/date_to` to `unified_activities` + `training_summary` — build on it.)*
 2. **Rate limiting on `/api/chat/message`** — the remaining R2.1-adjacent item (plan §6). R2.1 stopped *anonymous* spend; it does not stop an authenticated client from looping.
-3. **R2.3 indexed read paths** — swap `unified_activities` internals from whole-table Python to SQL date-range/shoe/pagination queries (the seam guarantees zero caller changes); extract `services/watchlist.py` from the fat router. Unlocks MCP watchlist parity (R3.4). *(T4b's `date_from/date_to` work overlaps this — coordinate.)*
+3. **R2.4 shoe-type controlled vocabulary** — promote `shoe_type` from free strings to a backend-owned served list (the pattern R2.7 T1's `activity_tag` vocabulary already established), deleting `lib/shoeTypes.js` as an independent copy.
 4. **Deal-domain test gaps**: retirement/requalification, the orphan guard + its H2 partial-failure gap, promo manual-beats-scraped (refactor.md H1/H2).
 5. **Provider agentic-loop consolidation** (tech_debt 5.2) — the model-catalog half is done (R1.5d); collapse the 3× loop **before** the R3 agents extend it.
 
