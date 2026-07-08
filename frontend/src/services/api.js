@@ -156,6 +156,8 @@ export const scrapeApi = {
     client.post(`/api/scrape/promos/${retailerId}`).then((r) => r.data),
   detectAllPromos: () =>
     client.post('/api/scrape/promos').then((r) => r.data),
+  // Per-retailer scrape health + recent-runs log (R2.5 observability).
+  history: () => client.get('/api/scrape/history').then((r) => r.data),
 }
 
 // ============== OWNED SHOES ==============

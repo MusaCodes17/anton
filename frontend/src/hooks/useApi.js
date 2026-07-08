@@ -28,6 +28,7 @@ export const queryKeys = {
   retailers: (params) => ['retailers', params ?? {}],
   deals: (params) => ['deals', params ?? {}],
   dashboardStats: () => ['dashboard', 'stats'],
+  scrapeHistory: () => ['scrape', 'history'],
   ownedShoes: (params) => ['owned-shoes', params ?? {}],
   ownedShoe: (id) => ['owned-shoes', 'detail', id],
   shoeRuns: (id) => ['owned-shoes', id, 'runs'],
@@ -198,6 +199,16 @@ export function useDashboardStats() {
   return useQuery({
     queryKey: queryKeys.dashboardStats(),
     queryFn: () => dashboardApi.stats(),
+  })
+}
+
+// Per-retailer scrape health + recent-runs log (R2.5). Read-only; the scrape
+// stream (useScrapeStream) invalidates this key on "completed" so a fresh scan
+// refreshes the health surface.
+export function useScrapeHistory() {
+  return useQuery({
+    queryKey: queryKeys.scrapeHistory(),
+    queryFn: () => scrapeApi.history(),
   })
 }
 
