@@ -1,15 +1,15 @@
 """
-OAuth 2.1 login page (RA1.1b).
+OAuth 2.1 login page (RA1.1b) with login rate limiting (RA1.3).
 
 Owns the one human-facing step in the OAuth flow: the password gate that
 the Authorization Server redirects to after /authorize validates the client
 and PKCE params.
 
 GET  /oauth/login  — render the password form with all OAuth params as hidden fields
-POST /oauth/login  — validate the password; on success, create an auth code and
-                     redirect to redirect_uri?code=...&state=...; on failure,
-                     re-render the form with an error (no rate-limit here — RA1.3
-                     handles brute-force via the upstream rate limiter).
+POST /oauth/login  — check the per-IP rate limit (RA1.3), then validate the
+                     password; on success, create an auth code and redirect to
+                     redirect_uri?code=...&state=...; on failure, re-render the
+                     form with an error.
 
 All OAuth params are passed stateless through the form's hidden inputs (not
 session state). The code_challenge is not secret; secrecy lives in the client's
@@ -19,14 +19,22 @@ The ANTON_LOGIN_PASSWORD is compared via secrets.compare_digest (timing-safe).
 """
 from __future__ import annotations
 
+import logging
 import os
 import secrets
 from urllib.parse import urlencode
 
 from fastapi import APIRouter, Form, Request
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 
+from app.middleware.auth import _client_ip as _get_client_ip
 from app.services.oauth import create_auth_code
+from app.services.rate_limit import login_failure_limiter
+
+logger = logging.getLogger(__name__)
+
+# Module-level reference so tests can monkeypatch it.
+_login_failure_limiter = login_failure_limiter
 
 router = APIRouter(tags=["oauth"])
 
@@ -161,6 +169,7 @@ async def login_get(request: Request) -> str:
 
 @router.post("/oauth/login", response_class=HTMLResponse)
 async def login_post(
+    request: Request,
     password: str = Form(default=""),
     code_challenge: str = Form(default=""),
     redirect_uri: str = Form(default=""),
@@ -173,10 +182,27 @@ async def login_post(
     """
     Validate the password and complete the authorization code flow.
 
+    RA1.3: per-IP rate limit checked before the password comparison — a brute-force
+    attempt is throttled to LOGIN_FAILURE_LIMIT_PER_MINUTE after the burst is
+    exhausted. Returns 429 with Retry-After when the limit is hit.
+
     On success: create an auth code, redirect to redirect_uri?code=...&state=...
     On failure: re-render the form with a generic error (C9 — no oracle for
     which field was wrong).
     """
+    ip = _get_client_ip(request.scope)
+
+    # Rate-limit check before any password work (RA1.3).
+    rl = _login_failure_limiter.take(ip)
+    if not rl.allowed:
+        retry = str(max(1, int(rl.retry_after_s)))
+        logger.warning("login rate-limited from %s", ip)
+        return HTMLResponse(
+            "<html><body><p>Too many attempts. Please wait and try again.</p></body></html>",
+            status_code=429,
+            headers={"Retry-After": retry},
+        )
+
     expected = os.getenv("ANTON_LOGIN_PASSWORD", "").strip()
     # Refuse entirely if the password is unconfigured.
     if not expected:
@@ -194,6 +220,7 @@ async def login_post(
         )
 
     if not secrets.compare_digest(password.encode(), expected.encode()):
+        logger.warning("login failed from %s", ip)
         return HTMLResponse(
             _render_login(
                 code_challenge=code_challenge,

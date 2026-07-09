@@ -10,10 +10,12 @@
 #   - MCP Streamable HTTP: all /mcp/* requests
 # The flush_interval -1 directive below keeps all three working.
 #
-# Credential-redaction requirement (RA1.3 / hard precondition if the capability-
-# URL connector token is active): the token appears as a path segment in every
-# request URI (/mcp/<CONNECTOR_TOKEN>/...). The log filter below deletes URI
-# fields before they hit disk so no usable credential appears in any log line.
+# Credential-redaction requirement (RA1.3): no usable credential may appear in
+# any log line. The capability-URL path was removed in RA1.1b (OAuth 2.1 is the
+# connector auth), but deleting the URI field remains correct hygiene — OAuth
+# flows include code_challenge, state, and redirect_uri in query strings. The
+# app-layer AccessLogMiddleware applies per-param redaction; the proxy log takes
+# the conservative approach of omitting the URI entirely.
 
 {
     email admin@example.com
@@ -26,7 +28,7 @@ YOUR_DOMAIN {
             roll_keep 7
         }
         # Filter: delete fields that may contain credentials before writing.
-        # `uri` / `request>uri` covers the capability-URL token path segment.
+        # `uri` / `request>uri`: OAuth query params, future path-based routes.
         # `Authorization` and `Cookie` headers are never logged.
         format filter {
             wrap json

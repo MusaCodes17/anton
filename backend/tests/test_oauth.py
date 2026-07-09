@@ -430,3 +430,78 @@ def test_token_path_is_public():
     """/token should return an OAuth error about missing params, not 401."""
     r = call("POST", "/token", follow=False, data={})
     assert r.status_code != 401
+
+
+# --------------------------------------------------------------------------- #
+# RA1.3: login rate limiting                                                   #
+# --------------------------------------------------------------------------- #
+
+def test_login_rate_limit_triggers_429(monkeypatch):
+    """After the burst bucket is exhausted, POST /oauth/login returns 429.
+
+    The monkeypatch replaces the module-level limiter reference in the oauth
+    router so we don't fight the production singleton's state from other tests.
+    """
+    from app.services.rate_limit import KeyedRateLimiter
+    import app.routers.oauth as oauth_router_mod
+
+    tight = KeyedRateLimiter(capacity=2, refill_per_s=0.001)
+    monkeypatch.setattr(oauth_router_mod, "_login_failure_limiter", tight)
+
+    _login_data = {
+        "password": "wrong",
+        "code_challenge": "cc",
+        "redirect_uri": "https://test.example.com/callback",
+        "redirect_uri_provided_explicitly": "1",
+        "client_id": "test-client",
+        "state": "",
+        "scope": "",
+        "resource": "",
+    }
+
+    r1 = call("POST", "/oauth/login", follow=False, data=_login_data)
+    r2 = call("POST", "/oauth/login", follow=False, data=_login_data)
+    r3 = call("POST", "/oauth/login", follow=False, data=_login_data)
+
+    assert r1.status_code == 401   # bucket has tokens
+    assert r2.status_code == 401   # bucket still has a token
+    assert r3.status_code == 429   # bucket exhausted
+    assert "retry-after" in r3.headers
+
+
+def test_login_every_attempt_counts_against_limiter(monkeypatch):
+    """Every POST (success or failure) consumes a rate-limit token.
+
+    This prevents timing oracles: an attacker can't distinguish 'bucket empty
+    after success' from 'bucket empty after failures' — they both throttle the
+    same way. A legitimate single-user needs ~1 attempt; the default capacity of
+    5 leaves ample room for genuine mistakes before throttling kicks in.
+    """
+    from app.services.rate_limit import KeyedRateLimiter
+    import app.routers.oauth as oauth_router_mod
+
+    # Capacity=3: first 3 attempts pass (regardless of success/failure), 4th is 429.
+    tight = KeyedRateLimiter(capacity=3, refill_per_s=0.001)
+    monkeypatch.setattr(oauth_router_mod, "_login_failure_limiter", tight)
+
+    _data_ok = {
+        "password": "correct-horse-battery-staple",
+        "code_challenge": "ch",
+        "redirect_uri": "https://test.example.com/callback",
+        "redirect_uri_provided_explicitly": "1",
+        "client_id": "test-client",
+        "state": "",
+        "scope": "",
+        "resource": "",
+    }
+    _data_bad = {**_data_ok, "password": "wrong"}
+
+    r1 = call("POST", "/oauth/login", follow=False, data=_data_ok)   # success
+    r2 = call("POST", "/oauth/login", follow=False, data=_data_bad)  # failure
+    r3 = call("POST", "/oauth/login", follow=False, data=_data_bad)  # failure
+    r4 = call("POST", "/oauth/login", follow=False, data=_data_bad)  # rate-limited
+
+    assert r1.status_code == 302   # success
+    assert r2.status_code == 401   # failure, bucket still has tokens
+    assert r3.status_code == 401   # failure, bucket still has tokens
+    assert r4.status_code == 429   # bucket exhausted
