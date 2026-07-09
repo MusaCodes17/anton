@@ -502,6 +502,9 @@ class PlannedRaceResponse(PlannedRaceBase):
     days_remaining: int
     weeks_remaining: int
     target_pace: Optional[str] = None      # "M:SS/km" from target_time_s / distance_km
+    # True when synthesized from an Activity tag, not a PlannedRace row — frontend
+    # uses this to suppress edit/done/delete actions on activity-sourced entries.
+    from_activity: bool = False
 
     class Config:
         from_attributes = True

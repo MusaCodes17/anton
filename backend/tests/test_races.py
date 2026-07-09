@@ -98,3 +98,34 @@ def test_promote_sets_activity_link(db):
     race = races_svc.create_completed_from_activity(db, a.id)
     assert race.activity_id == a.id
     assert races_svc.race_to_dict(race)["activity_id"] == a.id
+
+
+def test_activity_tagged_race_appears_in_list(db):
+    # Activities tagged 'Race' with a past run_date are surfaced as synthetic
+    # completed-race entries so the card shows them without a manual promote step.
+    today = date(2026, 7, 9)
+    a = Activity(source="coros", activity_type="Run", run_date=date(2026, 6, 1),
+                 distance_km=10.0, moving_time_s=2400, name="Summer 10k", activity_tag="Race")
+    db.add(a); db.commit(); db.refresh(a)
+
+    races = races_svc.list_races(db, today=today)
+    tagged = [r for r in races if getattr(r, "from_activity", False)]
+    assert len(tagged) == 1
+    assert tagged[0].name == "Summer 10k"
+    assert tagged[0].activity_id == a.id
+    assert tagged[0].status == "completed"
+    assert tagged[0].id == -(a.id)
+
+
+def test_already_linked_activity_not_duplicated(db):
+    # An activity that is already back-linked from a PlannedRace row must NOT
+    # also appear as a synthetic entry — it would show twice on the card.
+    today = date(2026, 7, 9)
+    a = Activity(source="strava", activity_type="Run", run_date=date(2026, 5, 4),
+                 distance_km=10.0, moving_time_s=2400, name="10k", activity_tag="Race")
+    db.add(a); db.commit(); db.refresh(a)
+    races_svc.create_completed_from_activity(db, a.id)  # links PlannedRace → a.id
+
+    races = races_svc.list_races(db, today=today)
+    tagged = [r for r in races if getattr(r, "from_activity", False)]
+    assert len(tagged) == 0   # already covered by the PlannedRace row
