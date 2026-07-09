@@ -1645,36 +1645,38 @@ ask for clarification.
 
 ## Step 6 — Fetch rich per-run detail then log confirmed runs
 
-For each confirmed run, BEFORE calling confirm_coros_run:
-  Call `getActivityDetail(labelId=<coros_activity_id>, sportType=<sport_type>)`
-  to get the rich fields that querySportRecords does not return:
-  elevation_gain_m (totalAscent, convert metres), moving_time_s (movingTime,
-  seconds), elapsed_time_s (totalTime, seconds), avg_cadence (avgCadence),
-  calories (calorie), training_load (trainingLoad), training_focus
-  (coachingZoneLabel or equivalent coaching label).
+For EACH confirmed run you MUST call getActivityDetail before confirm_coros_run.
+Do NOT skip this call — querySportRecords does not return these fields.
 
-  Map the detail response fields to confirm_coros_run parameters — all are
-  optional. If getActivityDetail fails or the field is absent, omit it.
+  Call `getActivityDetail(labelId=<coros_activity_id>, sportType=<sport_type>)`
+
+  Extract from the response:
+  - name            → activity name/label the runner set in COROS
+  - elevation_gain_m → totalAscent (metres)
+  - moving_time_s   → movingTime (seconds)
+  - elapsed_time_s  → totalTime (seconds)
+  - avg_cadence     → avgCadence
+  - calories        → calorie
+  - training_load   → trainingLoad
+  - training_focus  → coachingZoneLabel or equivalent coaching label
+
+  All fields are optional. If getActivityDetail fails or a field is absent, omit it.
+
+Then, using the name and training_focus from getActivityDetail, infer an
+activity_tag suggestion (first match wins — the order is precedence):
+  "parkrun" → Parkrun · "interval"/"repeat" → Intervals · "track" → Track ·
+  "tempo"/"threshold" → Tempo · "long run"/"long" → Long Run · "trail" → Trail ·
+  "race"/"marathon" → Race · "recovery"/"easy"/"jog" → Easy · else untagged.
+If a tag is suggested, ask the runner to confirm or override before logging —
+e.g. "COROS name 'Tempo 8k' → tag `Tempo`? (y/n)". The full vocabulary is
+Easy, Long Run, Recovery, Tempo, Intervals, Track, Workout, Trail, Parkrun, Race.
+Never apply a tag without confirmation (C9). Omit the tag entirely if unconfirmed.
 
 Then call confirm_coros_run with:
 - coros_activity_id (from querySportRecords)
 - owned_shoe_id (the confirmed shoe)
 - date, distance_km, avg_pace, avg_hr from querySportRecords data
-- name from querySportRecords
-- All rich fields from getActivityDetail (elevation_gain_m, moving_time_s,
-  elapsed_time_s, avg_cadence, calories, training_load, training_focus)
-- activity_tag: only if the runner has set or confirmed one. Infer a *suggestion*
-  from the COROS activity name using these case-insensitive keyword rules (first
-  match wins — the order is precedence):
-    "parkrun" → Parkrun · "interval"/"repeat" → Intervals · "track" → Track ·
-    "tempo"/"threshold" → Tempo · "long run"/"long" → Long Run · "trail" → Trail ·
-    "race"/"marathon" → Race · "recovery"/"easy"/"jog" → Easy · else untagged.
-  Also consider training_focus as a hint. Surface the suggested tag in Step 4 and
-  let the runner confirm or override — e.g. "COROS name 'Tempo 8k' → tag `Tempo`?
-  (y/n)" or "COROS labels this 'Marathon Pace' → tag `Tempo`? (y/n)". The full
-  vocabulary is Easy, Long Run, Recovery, Tempo, Intervals, Track, Workout, Trail,
-  Parkrun, Race. Never infer and apply a tag silently (C9). Omit the tag entirely
-  if unconfirmed.
+- All fields extracted from getActivityDetail above
 
 ## Step 7 — Summarise results
 "Logged [N] runs:
@@ -1688,8 +1690,9 @@ to check replacement deals or add a note.
 
 ## General rules
 - Never log a run without explicit user confirmation
-- Never invent data — all run details come from
-  querySportRecords (Step 1)
+- Never invent data — basic fields (date, distance, pace, HR) come from
+  querySportRecords (Step 1); rich fields (name, elevation, times, cadence,
+  calories, load, focus) come from getActivityDetail (Step 6)
 - If confirm_coros_run returns success: false for any run, report
   the specific error and continue processing the rest
 - Keep the tone direct and concise — this user is a competitive
