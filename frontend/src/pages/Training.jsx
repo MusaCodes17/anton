@@ -1,10 +1,11 @@
 import { useMemo, useState } from 'react'
-import { Activity, Trophy, ListOrdered, TrendingUp } from 'lucide-react'
+import { Activity, ListOrdered, TrendingUp } from 'lucide-react'
 import PageHeader from '@/components/PageHeader'
 import PlannedRacesCard from '@/components/training/PlannedRacesCard'
 import VolumeChart from '@/components/training/VolumeChart'
 import FitnessCard from '@/components/training/FitnessCard'
-import PBCard from '@/components/training/PBCard'
+import PredictionsCard from '@/components/training/PredictionsCard'
+import RecordsCard from '@/components/training/RecordsCard'
 import ActivityRow from '@/components/training/ActivityRow'
 import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
@@ -312,51 +313,16 @@ export default function Training() {
         )}
       </section>
 
-      {/* ── Fitness (COROS snapshot, T5) — only when recorded ──── */}
-      {fitness.data?.has_data && (
-        <section id="fitness" className="scroll-mt-20">
-          <FitnessCard data={fitness.data} />
-        </section>
-      )}
-
-      {/* ── Races (after volume) ───────────────────────────────── */}
-      <div id="races" className="scroll-mt-20">
-        <PlannedRacesCard />
-      </div>
-
-      {/* ── Records ────────────────────────────────────────────── */}
-      <section className="space-y-4">
-        <SectionHeading
-          id="records"
-          icon={Trophy}
-          title="Records"
-          hint="fastest whole-activity time · not segment PBs"
-        />
-        {records.isLoading ? (
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            {Array.from({ length: 4 }).map((_, i) => (
-              <Skeleton key={i} className="h-[140px] rounded-[14px]" />
-            ))}
-          </div>
-        ) : records.isError ? (
-          <ErrorState error={records.error} onRetry={records.refetch} />
-        ) : records.data?.records?.length ? (
-          <div className="space-y-3">
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-              {records.data.records.map((r) => (
-                <PBCard key={r.band} record={r} />
-              ))}
-            </div>
-            {records.data.excluded_count > 0 && (
-              <p className="text-xs text-muted-foreground">
-                {records.data.excluded_count} {records.data.excluded_count === 1 ? 'activity' : 'activities'} excluded
-                {' '}({records.data.excluded_reason}) — tag interval/track sessions to reconsider.
-              </p>
-            )}
-          </div>
-        ) : (
-          <EmptyState icon={Trophy} title="No records yet" description="Log some runs to see your bests." />
-        )}
+      {/* ── 2×2 card grid: Races · Records · Fitness · Predictions ── */}
+      <section className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+        <div id="races" className="scroll-mt-20">
+          <PlannedRacesCard />
+        </div>
+        <div id="records" className="scroll-mt-20">
+          <RecordsCard records={records} />
+        </div>
+        <FitnessCard data={fitness.data} />
+        <PredictionsCard data={fitness.data} />
       </section>
 
       {/* ── Activities ─────────────────────────────────────────── */}
