@@ -5,6 +5,28 @@
 
 ---
 
+## 🔐 RA1.1b — OAuth 2.1 connector auth (Path 1: build the server) — 2026-07-09
+
+**[ADDED/CHANGED] OAuth 2.1 authorization-server for the claude.ai connector; capability-URL deleted. Suite 194 → 210 (+18 OAuth tests, −4 capability-URL tests). Migration `0b1c2d3e4f5a` added. 5 source files new, 5 files updated. All changes in one RA1.1b batch commit.**
+
+**Decision gate (RA1.1b):** `mcp[cli]` 1.28 exposes `OAuthAuthorizationServerProvider` Protocol + `create_auth_routes()` (4 pre-built Starlette routes: `/.well-known/oauth-authorization-server`, `/authorize`, `/token`, `/revoke`). Building the provider was a contained task — Path 1 executed; capability-URL deleted (never went public).
+
+- **[ADDED] `backend/alembic/versions/0b1c2d3e4f5a_oauth_tables.py`** — `oauth_auth_codes` (code\_hash SHA-256, client\_id, code\_challenge, redirect\_uri, scopes, expires\_at Float, used Boolean) + `oauth_tokens` (token\_hash SHA-256, token\_type access|refresh, client\_id, scopes, expires\_at, pair\_id). Purely additive; reversible `downgrade`; no E4 backup needed (empty tables).
+- **[ADDED] `OAuthAuthCode` + `OAuthToken`** ORM models in `backend/app/models/models.py`.
+- **[ADDED] `backend/app/services/oauth.py`** — `AntonOAuthProvider` (9 async methods satisfying the SDK Protocol); `verify_access_token_sync` (sync DB check for ASGI middleware); `create_auth_code` (called by login page on successful auth). Token security: `token_hex(32)` (256-bit random); stored as SHA-256 hex; raw value returned once. Access token TTL: 1 h. Refresh token TTL: 30 days; rotated on use (`pair_id` links both so revoking one deletes both). Auth codes: 60 s TTL, single-use (marked `used=True` before issuing tokens, replay raises `TokenError`).
+- **[ADDED] `backend/app/routers/oauth.py`** — `GET /oauth/login`: renders minimal dark-themed HTML form (no JS, mobile-safe); all OAuth params forwarded as hidden inputs (stateless — code\_challenge is not secret under TLS). `POST /oauth/login`: `secrets.compare_digest` on `ANTON_LOGIN_PASSWORD`; wrong password → 401 + form re-render with error; correct → `create_auth_code()` + `302 redirect_uri?code=...&state=...`.
+- **[CHANGED] `backend/app/main.py`** — `require_auth_config()` now checks only `ANTON_TOKENS` (capability-URL removed); `create_auth_routes()` wired conditionally on `ANTON_HOST_URL`; oauth router included unconditionally.
+- **[CHANGED] `backend/app/middleware/auth.py`** — Capability-URL block (`/mcp/<CONNECTOR_TOKEN>/...`) deleted. `PUBLIC_PATHS` expanded: `/.well-known/oauth-authorization-server`, `/authorize`, `/token`, `/revoke`, `/oauth/login`. OAuth fallback in `_authorized()`: when named-bearer check fails and `ANTON_HOST_URL` is set, calls `verify_access_token_sync` (SQLite sync lookup, sub-ms under INV-9). `WWW-Authenticate: Bearer realm="Anton"` added to 401 responses (RFC 6750 compliance).
+- **[CHANGED] `backend/.env.example` + `deploy/.env.production.example`** — `ANTON_CONNECTOR_TOKEN` removed; OAuth vars added: `ANTON_HOST_URL`, `ANTON_LOGIN_PASSWORD`, `ANTON_OAUTH_CLIENT_ID`, `ANTON_OAUTH_CLIENT_SECRET`, `ANTON_OAUTH_REDIRECT_URI`.
+- **[ADDED] `backend/tests/test_oauth.py`** — 18 tests: login GET (renders form, is public); POST wrong password → 401 + form re-render; POST correct password → 302 + code in DB; code replay → `TokenError`; used/expired code → `None`; expired/unknown access token → `False`; valid token → `True`; `get_client` registry; all OAuth protocol paths return non-401; `/.well-known` returns 200.
+- **[CHANGED] `backend/tests/test_auth.py`** — `ANTON_CONNECTOR_TOKEN` env setup removed; 4 capability-URL tests removed (`test_capability_url_*`, `test_wrong_capability_url_rejected`, `test_mcp_root_without_capability_token_still_needs_bearer`).
+- **[CHANGED] `docs/design_decisions.md` E9** — updated in-place to document RA1.1b Path 1 outcome; capability-URL added to Superseded table.
+- **[CHANGED] `REMOTE_ACCESS_PLAN.md` §6 RA1.1** — marked Done with Path 1 outcome.
+
+**[VERIFIED] Suite 210 passing** (`venv/bin/pytest -q`). No UI changes (`vite build` not required). Migration `0b1c2d3e4f5a` is Alembic head — verified with `alembic heads`. **RA1.1b → ✅**
+
+---
+
 ## 🐳 RA1.2 — Deployment substrate (Dockerfile + Caddy + docker-compose + INV-9) — 2026-07-09
 
 **[ADDED] Containerization + reverse-proxy config + invariant documentation. Suite stable at 194 passing (no code changes — "196" in previous entry was a 2-count doc drift). No schema changes. One `ra1:` commit.**

@@ -1,5 +1,5 @@
 """
-HTTP-layer tests for the RA1.1 auth middleware (app/middleware/auth.py).
+HTTP-layer tests for the RA1.1/RA1.1b auth middleware (app/middleware/auth.py).
 
 Two environment notes:
 - `ANTON_TOKENS` is set *before* importing `app.main` so the middleware (which
@@ -11,6 +11,9 @@ Two environment notes:
 
 `get_db` is overridden with a throwaway in-memory SQLite session so the few
 *authenticated* requests that reach a route never touch the live DB.
+
+Note: capability-URL tests were removed in RA1.1b when the capability-URL path
+was replaced by OAuth 2.1 (design_decisions E9). See test_oauth.py instead.
 """
 import os
 
@@ -18,9 +21,7 @@ import os
 # middleware reads the right values at startup.
 TEST_SECRET = "test-anton-secret-0123456789abcdef"
 TEST_OTHER  = "test-other-secret-0123456789abcd00"
-TEST_CONNECTOR = "test-connector-secret-0123456789ab"
 os.environ["ANTON_TOKENS"] = f"desktop:{TEST_SECRET},spa:{TEST_OTHER}"
-os.environ["ANTON_CONNECTOR_TOKEN"] = TEST_CONNECTOR
 
 import asyncio  # noqa: E402
 
@@ -139,43 +140,6 @@ def test_second_named_token_accepted():
 def test_unregistered_token_rejected():
     # A token not in the map is rejected even if it looks plausible.
     r = call("GET", "/api/owned-shoes", token="completely-different-secret")
-    assert r.status_code == 401
-
-
-# --- Capability-URL: /mcp/<CONNECTOR_TOKEN>/... passes without bearer ----------
-#
-# The capability-URL request clears the auth middleware and reaches the MCP app.
-# In the test context the MCP session manager isn't initialized (no lifespan),
-# so the MCP app raises RuntimeError. We distinguish "auth accepted" (RuntimeError
-# from MCP) from "auth rejected" (clean 401 response from the middleware).
-
-def _capability_url_passed_auth(path: str) -> bool:
-    """Return True if the capability URL cleared auth (reached MCP), False if 401."""
-    try:
-        r = call("GET", path)
-        return r.status_code != 401
-    except RuntimeError:
-        # MCP session manager not running in tests — means auth passed (not 401).
-        return True
-
-
-def test_capability_url_reaches_mcp():
-    assert _capability_url_passed_auth(f"/mcp/{TEST_CONNECTOR}/")
-
-
-def test_capability_url_path_without_trailing_slash():
-    assert _capability_url_passed_auth(f"/mcp/{TEST_CONNECTOR}")
-
-
-def test_wrong_capability_url_rejected():
-    # A wrong token in the URL path must not bypass auth — should get a 401.
-    r = call("GET", "/mcp/wrong-connector-token/")
-    assert r.status_code == 401
-
-
-def test_mcp_root_without_capability_token_still_needs_bearer():
-    # /mcp directly (without the capability-URL token) still requires a bearer.
-    r = call("POST", "/mcp", json={}, headers={"Content-Type": "application/json"})
     assert r.status_code == 401
 
 

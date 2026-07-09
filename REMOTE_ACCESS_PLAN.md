@@ -85,9 +85,9 @@ Three candidates; C is rejected outright, A is recommended, B is the fallback if
 ### RA1.0 — D0 decision + spikes S1–S3 ✅ Done (2026-07-09)
 Close §4 and §5; record outcomes in this file (decision record + a short findings note per spike). **Acceptance:** hosting chosen ✓; connector auth mechanism known ✓; mobile prompt story known (uncertain — C6 fallback documented) ✓; MCP-SDK auth capability known ✓. *Complexity: Low (research).* **Spike outcomes recorded in §4 (D0) and §5 (S1/S2/S3 findings blocks). Next: RA1.1 ∥ RA1.2.**
 
-### RA1.1 — Auth v2: per-client tokens + OAuth-first connector auth
+### RA1.1 + RA1.1b — Auth v2: per-client tokens + OAuth 2.1 connector auth ✅ Done (2026-07-09)
 
-**Status:** the per-client token map **and** the capability-URL path shipped 2026-07-09 (suite 188 → 196; `test_auth.py` rewritten; E7 → Superseded by E9). **Revised the same day, before anything goes public:** the capability-URL is demoted from "the chosen mechanism" to **implemented fallback**. OAuth 2.1 is the intended connector mechanism, decided by the timeboxed rule below — the shipped code either stays dark (Path 1 wins) or goes public with hard preconditions (Path 2). Named per-client bearer tokens stand regardless of which path wins.
+**Status:** Complete. RA1.1 shipped the named-token map + capability-URL dark fallback (suite 188 → 196). RA1.1b executed the half-day decision rule — **Path 1 (OAuth 2.1) chosen** — capability-URL deleted before going public. Final suite 194 → 210 (+16 net: +18 OAuth tests, −4 capability-URL tests from test_auth.py; prior 196 was a 2-count doc drift). Design decision E9 updated (capability-URL entered Superseded table).
 
 **Why revised:** three findings tipped it. (a) The capability URL leaks into RA1.3's own logging — request paths in the structured access log plus Caddy's default path logging means the credential lands in every log line, so the stopgap requires redaction work that eats the "simple" budget it was chosen for. (b) The connector is the *primary* long-term consumer, not an edge case — building its real auth once beats interim + migration + connector re-setup later. (c) S1's Client ID/Secret field means **DCR can be skipped**: one statically registered client with claude.ai's fixed callback URL makes a single-user OAuth server much smaller than the general problem.
 

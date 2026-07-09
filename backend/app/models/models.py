@@ -540,3 +540,57 @@ class CheckpointPrompt(Base):
 
     def __repr__(self):
         return f"<CheckpointPrompt shoe={self.owned_shoe_id} @ {self.checkpoint_km}km>"
+
+
+class OAuthAuthCode(Base):
+    """
+    Short-lived PKCE authorization code issued by the OAuth 2.1 login flow (RA1.1b).
+
+    The raw code is shown to the client once and never stored — only the
+    SHA-256 hex digest is persisted here. `used` is set to True when
+    `exchange_authorization_code` consumes it, preventing replay.
+    """
+    __tablename__ = "oauth_auth_codes"
+
+    id = Column(Integer, primary_key=True)
+    code_hash = Column(String(64), unique=True, nullable=False, index=True)
+    client_id = Column(String(255), nullable=False)
+    code_challenge = Column(String(255), nullable=False)  # PKCE S256 challenge
+    redirect_uri = Column(String(2048), nullable=False)
+    redirect_uri_provided_explicitly = Column(Boolean, nullable=False)
+    scopes = Column(String(500), nullable=True)   # space-separated
+    resource = Column(String(2048), nullable=True)
+    expires_at = Column(Float, nullable=False)
+    used = Column(Boolean, nullable=False, default=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    def __repr__(self):
+        return f"<OAuthAuthCode client={self.client_id} used={self.used}>"
+
+
+class OAuthToken(Base):
+    """
+    OAuth 2.1 access and refresh tokens (RA1.1b).
+
+    Only the SHA-256 hex digest of each token is stored; the raw value is
+    returned to the client once. `pair_id` links an access+refresh pair so
+    revoking either token deletes both.
+
+    token_type: 'access' | 'refresh'
+    expires_at: Unix timestamp (float); NULL for non-expiring refresh tokens.
+    """
+    __tablename__ = "oauth_tokens"
+
+    id = Column(Integer, primary_key=True)
+    token_hash = Column(String(64), unique=True, nullable=False, index=True)
+    token_type = Column(String(20), nullable=False)   # 'access' | 'refresh'
+    client_id = Column(String(255), nullable=False)
+    scopes = Column(String(500), nullable=True)
+    expires_at = Column(Float, nullable=True)
+    resource = Column(String(2048), nullable=True)
+    subject = Column(String(255), nullable=True)
+    pair_id = Column(String(32), nullable=True, index=True)  # random hex shared by access+refresh pair
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    def __repr__(self):
+        return f"<OAuthToken type={self.token_type} client={self.client_id}>"
