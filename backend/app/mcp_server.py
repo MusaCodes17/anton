@@ -506,6 +506,15 @@ async def log_run_to_shoe(
     avg_pace: Optional[str] = None,
     avg_hr: Optional[int] = None,
     notes: Optional[str] = None,
+    name: Optional[str] = None,
+    elevation_gain_m: Optional[float] = None,
+    moving_time_s: Optional[int] = None,
+    elapsed_time_s: Optional[int] = None,
+    avg_cadence: Optional[float] = None,
+    calories: Optional[float] = None,
+    training_load: Optional[float] = None,
+    training_focus: Optional[str] = None,
+    activity_tag: Optional[str] = None,
 ) -> dict:
     """
     Log a run against an owned shoe, adding to its current mileage.
@@ -518,7 +527,24 @@ async def log_run_to_shoe(
             (e.g. "3:52/km").
         avg_hr: Optional average heart rate for the run, in beats per minute.
         notes: Optional notes about the run.
+        name: Activity name/title (e.g. "Morning Run").
+        elevation_gain_m: Total ascent in metres.
+        moving_time_s: Moving time in seconds.
+        elapsed_time_s: Elapsed (wall-clock) time in seconds.
+        avg_cadence: Average cadence in steps/min.
+        calories: Energy in kcal.
+        training_load: Training-load score.
+        training_focus: Coaching label (e.g. "Aerobic base").
+        activity_tag: One of the ACTIVITY_TAGS vocabulary values (Easy, Long
+            Run, Recovery, Tempo, Intervals, Track, Workout, Trail, Parkrun,
+            Race). Only pass a tag the runner has CONFIRMED (C9).
     """
+    if activity_tag is not None and not is_valid_tag(activity_tag):
+        return {
+            "success": False,
+            "error": f"'{activity_tag}' is not a valid activity_tag. "
+                     f"Use one of: {', '.join(ACTIVITY_TAGS)}.",
+        }
     try:
         with get_session() as db:
             shoe = db.query(OwnedShoe).filter(OwnedShoe.id == owned_shoe_id).first()
@@ -534,6 +560,15 @@ async def log_run_to_shoe(
                 avg_pace=avg_pace,
                 avg_hr=avg_hr,
                 notes=notes,
+                name=name,
+                elevation_gain_m=elevation_gain_m,
+                moving_time_s=moving_time_s,
+                elapsed_time_s=elapsed_time_s,
+                avg_cadence=avg_cadence,
+                calories=calories,
+                training_load=training_load,
+                training_focus=training_focus,
+                activity_tag=activity_tag,
             )
             shoe = result.shoe
 
@@ -1605,15 +1640,26 @@ Do not log anything until the user responds. Accept any natural
 language mix of confirmations, changes, and skips. If ambiguous,
 ask for clarification.
 
-## Step 6 — Log confirmed runs
-For each confirmed run call confirm_coros_run with:
+## Step 6 — Fetch rich per-run detail then log confirmed runs
+
+For each confirmed run, BEFORE calling confirm_coros_run:
+  Call `getActivityDetail(labelId=<coros_activity_id>, sportType=<sport_type>)`
+  to get the rich fields that querySportRecords does not return:
+  elevation_gain_m (totalAscent, convert metres), moving_time_s (movingTime,
+  seconds), elapsed_time_s (totalTime, seconds), avg_cadence (avgCadence),
+  calories (calorie), training_load (trainingLoad), training_focus
+  (coachingZoneLabel or equivalent coaching label).
+
+  Map the detail response fields to confirm_coros_run parameters — all are
+  optional. If getActivityDetail fails or the field is absent, omit it.
+
+Then call confirm_coros_run with:
 - coros_activity_id (from querySportRecords)
 - owned_shoe_id (the confirmed shoe)
-- date, distance_km, avg_pace, avg_hr from COROS data
-- ALSO pass any of these the COROS data provides (all optional — Anton now
-  stores them instead of discarding them): name, elevation_gain_m,
-  moving_time_s, elapsed_time_s, avg_cadence, calories, training_load,
-  training_focus.
+- date, distance_km, avg_pace, avg_hr from querySportRecords data
+- name from querySportRecords
+- All rich fields from getActivityDetail (elevation_gain_m, moving_time_s,
+  elapsed_time_s, avg_cadence, calories, training_load, training_focus)
 - activity_tag: only if the runner has set or confirmed one. Infer a *suggestion*
   from the COROS activity name using these case-insensitive keyword rules (first
   match wins — the order is precedence):
