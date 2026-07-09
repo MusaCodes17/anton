@@ -17,22 +17,24 @@ from app.routers import shoes, retailers, deals, dashboard, scraping, export, ow
 load_dotenv()
 
 
-def require_anton_secret() -> None:
+def require_auth_config() -> None:
     """
-    Fail fast if the R2.1 auth secret is missing.
+    Fail fast if no auth credentials are configured (RA1.1).
 
-    Auth is *not* an optional feature (contrast the graceful-degradation pattern
-    for optional creds in CLAUDE.md §4.6): absence is fatal, never a silently
-    unauthenticated server. Called at startup, before the app serves any request.
-    The `.env.example` placeholder is an empty string, so empty/whitespace counts
-    as unset. Raises RuntimeError so uvicorn aborts the boot with a clear message.
+    Auth is *not* an optional feature: absence is fatal, never a silently
+    unauthenticated server. At least one of `ANTON_TOKENS` or
+    `ANTON_CONNECTOR_TOKEN` must be non-empty. An empty-but-present env var is
+    treated as unset. Raises RuntimeError so uvicorn aborts with a clear message.
     """
-    if not os.getenv("ANTON_SECRET", "").strip():
+    tokens = os.getenv("ANTON_TOKENS", "").strip()
+    connector = os.getenv("ANTON_CONNECTOR_TOKEN", "").strip()
+    if not tokens and not connector:
         raise RuntimeError(
-            "ANTON_SECRET is not set. The API refuses to start without it "
-            "(R2.1 security pass — SECURITY_PASS_PLAN.md). Generate one with: "
-            'python -c "import secrets; print(secrets.token_hex(32))" '
-            "and set ANTON_SECRET (and VITE_ANTON_SECRET) in backend/.env."
+            "No auth credentials configured. Set ANTON_TOKENS (RA1.1) in backend/.env. "
+            "Example: ANTON_TOKENS=\"desktop:$(python -c 'import secrets; print(secrets.token_hex(32))')\""
+            ",loopback:$(python -c 'import secrets; print(secrets.token_hex(32))')"
+            ",spa:$(python -c 'import secrets; print(secrets.token_hex(32))')\""
+            " — see REMOTE_ACCESS_PLAN.md §6 RA1.1."
         )
 
 
@@ -45,7 +47,7 @@ async def lifespan(app: FastAPI):
     active — mounting mcp.streamable_http_app() alone doesn't run a sub-app's
     lifespan, so it's merged in here instead.
     """
-    require_anton_secret()
+    require_auth_config()
     run_migrations()
     print("✅ Database migrated to head")
     async with mcp.session_manager.run():

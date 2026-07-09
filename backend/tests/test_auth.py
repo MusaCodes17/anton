@@ -1,12 +1,10 @@
 """
-HTTP-layer tests for the R2.1 bearer-token auth middleware
-(app/middleware/auth.py). These are the suite's first tests that exercise the
-real ASGI routing stack — the middleware is only meaningful through it.
+HTTP-layer tests for the RA1.1 auth middleware (app/middleware/auth.py).
 
 Two environment notes:
-- `ANTON_SECRET` is set *before* importing `app.main` so the middleware (which
-  reads the secret once when the stack is built) and the lifespan fail-fast see
-  it. `load_dotenv(override=False)` inside main won't clobber it.
+- `ANTON_TOKENS` is set *before* importing `app.main` so the middleware (which
+  reads the token map once when the stack is built) and the lifespan fail-fast
+  see it. `load_dotenv(override=False)` inside main won't clobber it.
 - The installed httpx (0.28) dropped Starlette `TestClient`'s `app=` shortcut,
   so we drive the app via `httpx.ASGITransport` + `AsyncClient`, run through
   `asyncio.run` in plain sync test functions (no pytest-asyncio needed).
@@ -16,8 +14,13 @@ Two environment notes:
 """
 import os
 
+# Named token map: "client:token,..." — set before importing app.main so the
+# middleware reads the right values at startup.
 TEST_SECRET = "test-anton-secret-0123456789abcdef"
-os.environ["ANTON_SECRET"] = TEST_SECRET  # must precede the app import below
+TEST_OTHER  = "test-other-secret-0123456789abcd00"
+TEST_CONNECTOR = "test-connector-secret-0123456789ab"
+os.environ["ANTON_TOKENS"] = f"desktop:{TEST_SECRET},spa:{TEST_OTHER}"
+os.environ["ANTON_CONNECTOR_TOKEN"] = TEST_CONNECTOR
 
 import asyncio  # noqa: E402
 
@@ -31,10 +34,6 @@ from app.main import app  # noqa: E402
 from app.models import models  # noqa: E402,F401 — registers tables on Base.metadata
 
 # In-memory DB for the authenticated requests that actually reach a route.
-# StaticPool + check_same_thread=False keeps every connection pointed at the
-# *same* in-memory database, so the tables created here are visible to the route
-# handler even though FastAPI runs it in a threadpool worker (a fresh :memory:
-# connection per thread would otherwise see an empty, table-less database).
 _engine = create_engine(
     "sqlite:///:memory:",
     connect_args={"check_same_thread": False},
@@ -78,7 +77,6 @@ def test_owned_shoes_list_requires_token():
 
 
 def test_chat_message_requires_token():
-    # The LLM-proxy: rejected before any provider call, so no key/spend needed.
     r = call("POST", "/api/chat/message", json={"messages": [], "model": "x"})
     assert r.status_code == 401
 
@@ -88,12 +86,11 @@ def test_owned_shoes_delete_requires_token():
 
 
 def test_admin_scrape_lock_release_requires_token():
-    # §4.7: the M3 admin force-release is now behind the token via the middleware.
     assert call("POST", "/api/admin/scrape-lock/release").status_code == 401
 
 
 def test_mcp_mount_requires_token():
-    # §4 open-question Q4: a top-level middleware must cover the mounted /mcp app.
+    # The top-level middleware must cover the mounted /mcp app.
     r = call("POST", "/mcp", json={}, headers={"Content-Type": "application/json"})
     assert r.status_code == 401
 
@@ -103,7 +100,6 @@ def test_wrong_token_rejected():
 
 
 def test_unauthorized_body_is_empty():
-    # 401 leaks nothing — no reason string, no path-existence signal.
     assert call("GET", "/api/owned-shoes").content == b""
 
 
@@ -125,18 +121,67 @@ def test_health_ok_with_token_too():
     assert call("GET", "/api/health", token=TEST_SECRET).status_code == 200
 
 
-# --- Authenticated requests pass the gate -------------------------------------
+# --- Named per-client tokens: any registered token is accepted -----------------
 
-def test_owned_shoes_list_authorized():
-    # With the right token the request clears auth and reaches the route
-    # (empty in-memory DB → 200 []). The point is: not 401.
+def test_first_named_token_accepted():
     r = call("GET", "/api/owned-shoes", token=TEST_SECRET, follow=True)
     assert r.status_code != 401
     assert r.status_code == 200
 
 
+def test_second_named_token_accepted():
+    # A different client's token must also pass the gate.
+    r = call("GET", "/api/owned-shoes", token=TEST_OTHER, follow=True)
+    assert r.status_code != 401
+    assert r.status_code == 200
+
+
+def test_unregistered_token_rejected():
+    # A token not in the map is rejected even if it looks plausible.
+    r = call("GET", "/api/owned-shoes", token="completely-different-secret")
+    assert r.status_code == 401
+
+
+# --- Capability-URL: /mcp/<CONNECTOR_TOKEN>/... passes without bearer ----------
+#
+# The capability-URL request clears the auth middleware and reaches the MCP app.
+# In the test context the MCP session manager isn't initialized (no lifespan),
+# so the MCP app raises RuntimeError. We distinguish "auth accepted" (RuntimeError
+# from MCP) from "auth rejected" (clean 401 response from the middleware).
+
+def _capability_url_passed_auth(path: str) -> bool:
+    """Return True if the capability URL cleared auth (reached MCP), False if 401."""
+    try:
+        r = call("GET", path)
+        return r.status_code != 401
+    except RuntimeError:
+        # MCP session manager not running in tests — means auth passed (not 401).
+        return True
+
+
+def test_capability_url_reaches_mcp():
+    assert _capability_url_passed_auth(f"/mcp/{TEST_CONNECTOR}/")
+
+
+def test_capability_url_path_without_trailing_slash():
+    assert _capability_url_passed_auth(f"/mcp/{TEST_CONNECTOR}")
+
+
+def test_wrong_capability_url_rejected():
+    # A wrong token in the URL path must not bypass auth — should get a 401.
+    r = call("GET", "/mcp/wrong-connector-token/")
+    assert r.status_code == 401
+
+
+def test_mcp_root_without_capability_token_still_needs_bearer():
+    # /mcp directly (without the capability-URL token) still requires a bearer.
+    r = call("POST", "/mcp", json={}, headers={"Content-Type": "application/json"})
+    assert r.status_code == 401
+
+
+# --- CORS preflight passes through without token ------------------------------
+
 def test_options_preflight_not_blocked():
-    # CORS preflight must never require the token or the browser preflight breaks.
     r = call(
         "OPTIONS",
         "/api/owned-shoes",

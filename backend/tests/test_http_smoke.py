@@ -15,17 +15,22 @@ family is hit once. Assertions are deliberately shallow — status 200 plus a
 couple of *nested* fields to prove serialization actually ran, not a schema
 contract (that's the unit tests' job).
 
-Env/transport notes mirror test_auth.py: ANTON_SECRET is set before importing
-app.main (same literal, so the shared middleware secret matches regardless of
-which auth-touching module imports first); the app is driven via
+Env/transport notes mirror test_auth.py: ANTON_TOKENS is set before importing
+app.main so the middleware (lazily built on the first request) sees the right
+token map regardless of which test module imports first; the app is driven via
 httpx.ASGITransport since httpx 0.28 dropped TestClient's app= shortcut.
 """
 import os
 
-# Must match test_auth.TEST_SECRET: the middleware reads the secret once when
-# app.main is imported, and whichever module imports first wins for the process.
-TEST_SECRET = "test-anton-secret-0123456789abcdef"
-os.environ["ANTON_SECRET"] = TEST_SECRET  # must precede the app import below
+# Must match test_auth's values exactly: Starlette builds the middleware stack
+# lazily on the first request, so whichever test module's env settings are active
+# at that moment win. Both test files must agree on the full token map so that
+# whichever loads first, the other's tests still pass.
+TEST_SECRET    = "test-anton-secret-0123456789abcdef"
+TEST_OTHER     = "test-other-secret-0123456789abcd00"
+TEST_CONNECTOR = "test-connector-secret-0123456789ab"
+os.environ["ANTON_TOKENS"]          = f"desktop:{TEST_SECRET},spa:{TEST_OTHER}"
+os.environ["ANTON_CONNECTOR_TOKEN"] = TEST_CONNECTOR
 
 import asyncio  # noqa: E402
 from datetime import date, datetime  # noqa: E402

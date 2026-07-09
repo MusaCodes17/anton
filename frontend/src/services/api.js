@@ -10,17 +10,17 @@ const client = axios.create({
   timeout: 120000, // scraping can be slow
 })
 
-// R2.1 bearer token. Baked into the build via VITE_ANTON_SECRET (must equal the
-// backend's ANTON_SECRET) — see SECURITY_PASS_PLAN §8 Q1. Undefined in dev if no
-// frontend/.env: warn once and continue so dev isn't hard-blocked (requests will
+// RA1.1 bearer token for the SPA client. Baked into the build via
+// VITE_ANTON_SECRET — must equal the `spa` entry in the backend's ANTON_TOKENS.
+// Undefined in dev if no frontend/.env: warn once and continue (requests will
 // 401 until the token is set, rather than failing to compile).
 export const ANTON_SECRET = import.meta.env.VITE_ANTON_SECRET
 if (!ANTON_SECRET) {
   // eslint-disable-next-line no-console
   console.warn(
     'VITE_ANTON_SECRET is not set — API requests are unauthenticated and will ' +
-      '401 once R2.1 auth is active. Set it in frontend/.env (same value as the ' +
-      "backend's ANTON_SECRET)."
+      '401 once auth is active. Set it in frontend/.env (the `spa` token from ' +
+      "the backend's ANTON_TOKENS)."
   )
 }
 

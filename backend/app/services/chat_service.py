@@ -80,7 +80,9 @@ def _server_headers(server: dict) -> dict | None:
     """
     headers = dict(server.get("headers") or {})
     if server.get("auth_loopback"):
-        headers["Authorization"] = f"Bearer {os.getenv('ANTON_SECRET', '')}"
+        from app.middleware.auth import get_named_token
+        token = get_named_token("loopback")
+        headers["Authorization"] = f"Bearer {token}"
     return headers or None
 
 # Single source of truth for the chat model catalog (R1.5d). Each entry names
