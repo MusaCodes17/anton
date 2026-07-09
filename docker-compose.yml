@@ -1,0 +1,35 @@
+# Anton local-dev / integration-test compose file.
+#
+# For production: use the host's secret store instead of env_file, and deploy
+# with the Caddyfile in deploy/ for TLS termination.
+#
+# Usage:
+#   ANTON_DATA_DIR=~/anton-data docker compose up --build
+#
+# The database lives at /data/shoe_deals.db inside the container, which maps
+# to $ANTON_DATA_DIR on the host (default: ~/anton-data — R2.2 location).
+# SQLite must be on a local disk volume; network filesystems cause corruption.
+services:
+  anton:
+    build:
+      context: ./backend
+    image: anton-backend:latest
+    ports:
+      # Bind to loopback only on the host — Caddy (or your reverse proxy)
+      # forwards from 443 to this port. Never expose 8000 to 0.0.0.0 directly.
+      - "127.0.0.1:8000:8000"
+    volumes:
+      - ${ANTON_DATA_DIR:-${HOME}/anton-data}:/data
+    environment:
+      - DATABASE_URL=sqlite:////data/shoe_deals.db
+      - MCP_SERVER_URL=http://localhost:8000/mcp
+      - TZ=America/Toronto
+    env_file:
+      - ./backend/.env
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s

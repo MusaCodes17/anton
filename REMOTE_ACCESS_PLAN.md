@@ -85,35 +85,50 @@ Three candidates; C is rejected outright, A is recommended, B is the fallback if
 ### RA1.0 — D0 decision + spikes S1–S3 ✅ Done (2026-07-09)
 Close §4 and §5; record outcomes in this file (decision record + a short findings note per spike). **Acceptance:** hosting chosen ✓; connector auth mechanism known ✓; mobile prompt story known (uncertain — C6 fallback documented) ✓; MCP-SDK auth capability known ✓. *Complexity: Low (research).* **Spike outcomes recorded in §4 (D0) and §5 (S1/S2/S3 findings blocks). Next: RA1.1 ∥ RA1.2.**
 
-### RA1.1 — Auth v2: per-client tokens + capability-URL for connector
+### RA1.1 — Auth v2: per-client tokens + OAuth-first connector auth
 
-**Chosen mechanism (S1 + D0 decision, 2026-07-09):** capability-URL stopgap for the claude.ai connector, named per-client bearer tokens for all other surfaces. OAuth 2.1 deferred (explicitly interim, recorded here).
+**Status:** the per-client token map **and** the capability-URL path shipped 2026-07-09 (suite 188 → 196; `test_auth.py` rewritten; E7 → Superseded by E9). **Revised the same day, before anything goes public:** the capability-URL is demoted from "the chosen mechanism" to **implemented fallback**. OAuth 2.1 is the intended connector mechanism, decided by the timeboxed rule below — the shipped code either stays dark (Path 1 wins) or goes public with hard preconditions (Path 2). Named per-client bearer tokens stand regardless of which path wins.
 
-**What changes:**
+**Why revised:** three findings tipped it. (a) The capability URL leaks into RA1.3's own logging — request paths in the structured access log plus Caddy's default path logging means the credential lands in every log line, so the stopgap requires redaction work that eats the "simple" budget it was chosen for. (b) The connector is the *primary* long-term consumer, not an edge case — building its real auth once beats interim + migration + connector re-setup later. (c) S1's Client ID/Secret field means **DCR can be skipped**: one statically registered client with claude.ai's fixed callback URL makes a single-user OAuth server much smaller than the general problem.
 
-1. **Named per-client bearer tokens** replacing the single shared `ANTON_SECRET`. Env-var registry: `ANTON_TOKENS="desktop:xxx,spa:yyy,loopback:zzz"` (one entry per named consumer). The existing pure-ASGI middleware is updated to: (a) load the token map at startup, (b) constant-time compare the Authorization header against the map, (c) log the *client name* on success and source IP + path on every 401.
+**Decision rule (timeboxed: half a day, before RA1.5 cutover — this is now item RA1.1b on the roadmap):** do the S3 targeted code read + an OAuth skeleton attempt. If `mcp[cli]` 1.28 — or a contained `mcp` bump that survives the A7 triangle re-verification — exposes the authorization-server plumbing (provider interface + `/authorize`, `/token`, metadata routes), **build Path 1 before cutover; the capability-URL path then never goes public** (prefer deleting it over keeping it dark — the dead-code rule). If the protocol endpoints would be hand-rolled from scratch, **the shipped capability-URL goes public** with RA1.3's log redaction as a hard precondition and a dated revisit note in design_decisions (E9) — hand-rolled OAuth on the public internet is worse than an honest interim.
 
-2. **Capability-URL for the claude.ai connector.** Add `ANTON_CONNECTOR_TOKEN=<long-random-32+-char-hex>` to `.env`. Mount (or redirect) the MCP server at `/mcp/<CONNECTOR_TOKEN>` in addition to `/mcp`. The ASGI middleware exempts paths matching `/mcp/<CONNECTOR_TOKEN>/*` from bearer-header auth — the URL token IS the credential. **Implementation note:** the cleanest approach is path-rewriting in the ASGI middleware: strip the token prefix and forward as `/mcp/...`, keeping the FastMCP mount at a single point. Alternatively, `app.mount(f"/mcp/{CONNECTOR_TOKEN}", mcp_app)` alongside `app.mount("/mcp", mcp_app)` — test for FastMCP lifespan idempotency before choosing. The connector URL is `https://<host>/mcp/<CONNECTOR_TOKEN>` — entered as-is in Settings → Connectors; no auth credentials needed in the UI.
+**Path 1 — OAuth 2.1 (preferred), scoped ruthlessly to single-user:**
+- One **statically registered client** (ID + secret entered in the connector's Advanced settings); no Dynamic Client Registration.
+- Redirect-URI allowlist = exactly claude.ai's fixed callback URL (verify the current value during the build); no wildcards, exact-match compare.
+- **PKCE S256 enforced**; authorization codes single-use and short-lived (≤60 s).
+- `/authorize` gated by a minimal login page checking **one password** (env-var stored as a hash; constant-time compare; rate-limited per RA1.3) — the identity check for a platform with exactly one identity.
+- Access tokens short-lived + refresh tokens; ≥256-bit random; stored **hashed** in SQLite (new table, ordinary Alembic migration, E4-light).
+- The existing pure-ASGI middleware accepts *either* a valid named bearer token (below) *or* a valid OAuth access token on `/mcp` — one gate, two credential types.
 
-3. **Rotate `ANTON_SECRET` unconditionally.** The old shared secret is baked into every SPA bundle ever built; it dies with RA1.1. The SPA gets its own named token (`spa:...`).
+**Path 2 — capability-URL fallback (implemented 2026-07-09; goes public only if the decision rule forces it):** `ANTON_CONNECTOR_TOKEN=<long-random-32+-char-hex>`; MCP path-rewritten at `/mcp/<CONNECTOR_TOKEN>` in the ASGI middleware (strip the prefix, forward to the single FastMCP mount — as shipped). The URL is the credential — which is exactly why RA1.3's **credential redaction is a hard precondition** for this path going public, and why the E9 design_decisions entry carries a dated revisit note if it does.
 
-**Acceptance:** every consumer authenticates with its own token; revoking one client (`del ANTON_TOKENS["desktop"]`) doesn't touch the others; the claude.ai connector URL authenticates successfully over HTTPS; the old shared secret is gone from `.env`. Tests extend `test_auth.py`. Capability-URL is documented as interim in `design_decisions.md`. *Complexity: Low–Medium (capability-URL path).*
+**Both paths:**
+1. **Named per-client bearer tokens** replacing the single shared `ANTON_SECRET`. Env-var registry: `ANTON_TOKENS="desktop:xxx,spa:yyy,loopback:zzz"` (one entry per named consumer). The middleware: (a) loads the token map at startup, (b) constant-time compares the Authorization header against the map, (c) logs the *client name* on success and source IP + path on every 401.
+2. **Rotate `ANTON_SECRET` unconditionally.** The old shared secret is baked into every SPA bundle ever built; it dies with RA1.1. The SPA gets its own named token (`spa:...`).
 
-### RA1.2 — Deployment substrate
-- **Containerize:** one Dockerfile — Python 3.11, Playwright + browser deps, `requirements.txt` pins intact (A7). The image is host-agnostic (Option A or B).
-- **Data:** `~/anton-data` equivalent on a **local-disk volume** (never a network filesystem under SQLite). `DATABASE_URL` already supports the path.
-- **One worker, pinned and documented.** D4's scrape lock and E8's rate limiter are in-process; the deployment config hard-pins a single Uvicorn worker and the constraint is promoted to a checkable invariant (**INV-9 candidate** in `CLAUDE.md` §14).
-- **TLS:** platform-provided (Fly) or Caddy with Let's Encrypt (VM) or the tunnel's cert (Option B). The proxy must pass **streaming unbuffered** — chat SSE, scrape SSE, and `/mcp` Streamable HTTP all break behind a buffering proxy. HTTP→HTTPS redirect; HSTS.
-- **Boot:** startup already runs `alembic upgrade head` (R2.2) — deploy therefore *is* migrate; keep it, and keep E4's pre-migration named backup as a deploy-runbook step for structural migrations.
-- **Env:** secrets via the host's secret store / `.env` outside the image; `TZ` explicit (run-date logic already passes `America/Toronto` explicitly — verify nothing implicitly reads server-local time).
-**Acceptance:** the container runs the full suite locally; deployed instance serves `/health` over HTTPS; SSE + MCP streaming verified through the proxy; exactly one worker. *Complexity: Medium.*
+**Acceptance:** every consumer authenticates with its own credential; revoking one client doesn't touch the others; the claude.ai connector completes its auth flow and calls tools over HTTPS; the old shared secret is gone from `.env`; **no usable credential appears in any log** (app or proxy). Tests extend `test_auth.py`; Path 1 adds OAuth flow tests for the failure cases that matter — wrong `redirect_uri` rejected, PKCE mismatch rejected, code replay rejected, expired/revoked token rejected. *Complexity: Medium–High (Path 1) / Low–Medium (Path 2).*
+
+### RA1.2 — Deployment substrate ✅ Done (2026-07-09)
+
+**Shipped:** `backend/Dockerfile` (Python 3.11-slim + `playwright install --with-deps chromium`, `TZ=America/Toronto`, `--workers 1` CMD); `backend/.dockerignore`; `docker-compose.yml` (root — loopback-only port, `/data` volume, healthcheck); `deploy/Caddyfile` (TLS via Let's Encrypt, `flush_interval -1` for unbuffered SSE + MCP streaming, credential-redacting log filter); `deploy/.env.production.example`; **INV-9** added to `CLAUDE.md §14` (single-worker invariant, owned by deployment config).
+
+- **Containerize:** `backend/Dockerfile` — Python 3.11-slim, Playwright + Chromium via `playwright install --with-deps chromium`, requirements.txt pins intact (A7). Host-agnostic (works on Option A cloud VM or Option B home box).
+- **Data:** `/data` volume mount in `docker-compose.yml`; `DATABASE_URL=sqlite:////data/shoe_deals.db` — local disk only (network filesystem note in compose comments).
+- **One worker, pinned and documented.** `--workers 1` in Dockerfile CMD; INV-9 in `CLAUDE.md §14`; design_decisions D4/E8 cited.
+- **TLS:** `deploy/Caddyfile` — Caddy with Let's Encrypt; `flush_interval -1` passes SSE + MCP streaming unbuffered; credential-redacting log filter (hard precondition for capability-URL going public, RA1.3).
+- **Boot:** startup already runs `alembic upgrade head` (R2.2); `TZ=America/Toronto` set in Dockerfile ENV.
+- **Env:** `deploy/.env.production.example` template; secrets injected at runtime via env_file or host secret store; nothing secret baked into the image.
+
+**Remaining acceptance criteria (human steps — cannot be verified without a provisioned host):** deployed instance serves `/health` over HTTPS; SSE + MCP streaming verified through the proxy; exactly one worker confirmed in process list. Execute during RA1.5 cutover. *Complexity: Medium.*
 
 ### RA1.3 — Surface & abuse hardening
 - Auth-failure handling: log every 401 with source IP + path; add a cheap in-process failure-rate limiter or rely on the proxy/host firewall (fail2ban-style) — the goal is that a credential-stuffing bot is *slow and visible*, not that we build a WAF.
 - Structured access log (one line per request: method, path, client-name-or-anon, status, duration).
-- Uptime monitoring: an external pinger on `/health` (free tier of any uptime service) so "Anton is down" is a notification, not a discovery mid-sync in an airport.
+- **Credential redaction in all logs (hard requirement):** no usable credential may appear in the app access log or the proxy (Caddy) log — Authorization headers are never logged, and if RA1.1's capability-URL fallback ships, the token path segment is redacted in **both** log layers before the endpoint goes public. If Path 1 (OAuth) ships, the same rule covers auth codes and tokens in any query string or error trace. The RA1.1 login page (Path 1) is rate-limited here too.
+- Uptime monitoring: an external pinger on `/health` (free tier of any uptime service) so "Anton is down" is a notification, not a discovery mid-sync in an airport. If the fallback capability URL is in play, the monitor watches `/health` only — never a token-bearing path.
 - Review the public surface: `/docs`/`/openapi.json` stay token-gated (already, E7); admin endpoints (scrape-lock force-release) stay token-gated and are candidates for an admin-scoped token later — noted, not built.
-**Acceptance:** a wrong-token request appears in the log and repeated failures are throttled; uptime alerts fire on a test outage. *Complexity: Low–Medium.*
+**Acceptance:** a wrong-token request appears in the log and repeated failures are throttled; uptime alerts fire on a test outage; a grep of app + proxy logs after a full test pass finds no credential material. *Complexity: Low–Medium.*
 
 ### RA1.4 — Backups off-laptop
 The recovery story today is "file copies on the laptop." Once the live DB lives elsewhere, that must be automated:
@@ -171,7 +186,9 @@ RA2 slots after RA1 and before/with R5.1; R3 agents can proceed before it (they 
 
 | Risk | Exposure | Mitigation |
 |---|---|---|
-| Connector auth doesn't support headers | Blocks RA1.1 option 1 | S1 first; OAuth path (S3) or capability-URL stopgap, explicitly interim |
+| ~~Connector auth doesn't support headers~~ | ~~Blocks RA1.1 option 1~~ | **Resolved by S1 (2026-07-09):** confirmed — no header field, OAuth is the only connector-UI mechanism. RA1.1 is now OAuth-first with the capability-URL fallback behind the decision rule. |
+| Hand-rolled OAuth endpoint bugs (redirect-URI validation, PKCE, code replay) | Auth bypass on the public internet | RA1.1 decision rule: build Path 1 **only** on SDK-provided plumbing; explicit flow tests for the failure cases; otherwise fall back to Path 2 rather than hand-roll |
+| Capability URL leaks via logs / monitor config (Path 2 only) | Credential disclosure | RA1.3 redaction is a hard precondition for going public; monitor pings `/health` only; documented rotation procedure |
 | MCP prompts not invocable from mobile | Sync UX degrades | S2; protocol-as-instructions fallback (C6 — it's versioned prose) |
 | Datacenter IP degrades scraping | Deal feed quietly rots | RA1.5 validation #2 with `scrape_runs` comparison; Option B escape hatch; **no** paid-bypass escalation (D3 stands) |
 | Buffering proxy breaks SSE / Streamable HTTP | Chat, scrape progress, MCP all break | RA1.2 acceptance explicitly tests streaming through the proxy |
