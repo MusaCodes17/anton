@@ -1,0 +1,27 @@
+# Litestream continuous replication config — RA1.4.
+#
+# Used by entrypoint.sh when LITESTREAM_BUCKET is set; the entrypoint
+# restores from replica on first boot then replicates continuously while
+# uvicorn runs (litestream replicate -exec).
+#
+# Storage: Backblaze B2 (preferred) or any S3-compatible store.
+#   B2 endpoint format: https://s3.<region>.backblazeb2.com
+#   e.g.                https://s3.us-west-004.backblazeb2.com
+# To use AWS S3 directly, leave LITESTREAM_ENDPOINT empty.
+#
+# All credentials are injected at runtime via environment variables;
+# nothing secret is baked into the image.
+dbs:
+  - path: /data/shoe_deals.db
+    replicas:
+      - name: main
+        type: s3
+        bucket: ${LITESTREAM_BUCKET}
+        path: shoe_deals
+        endpoint: ${LITESTREAM_ENDPOINT}
+        access-key-id: ${LITESTREAM_ACCESS_KEY_ID}
+        secret-access-key: ${LITESTREAM_SECRET_ACCESS_KEY}
+        # Keep 14 days of WAL segments for point-in-time restore.
+        retention: 336h
+        # Write a full snapshot daily so long restores don't replay months of WAL.
+        snapshot-interval: 24h

@@ -3,8 +3,13 @@
 # For production: use the host's secret store instead of env_file, and deploy
 # with the Caddyfile in deploy/ for TLS termination.
 #
-# Usage:
+# Usage (dev, no replication):
 #   ANTON_DATA_DIR=~/anton-data docker compose up --build
+#
+# Usage (production, with Litestream replication — RA1.4):
+#   Set LITESTREAM_BUCKET and the four LITESTREAM_* credentials in .env or
+#   the host secret store. entrypoint.sh detects the variable and activates
+#   replication automatically; without it the image runs as plain uvicorn.
 #
 # The database lives at /data/shoe_deals.db inside the container, which maps
 # to $ANTON_DATA_DIR on the host (default: ~/anton-data — R2.2 location).
@@ -24,6 +29,12 @@ services:
       - DATABASE_URL=sqlite:////data/shoe_deals.db
       - MCP_SERVER_URL=http://localhost:8000/mcp
       - TZ=America/Toronto
+      # Litestream replication (RA1.4) — leave unset in dev to skip replication.
+      # Set all four to enable; see deploy/.env.production.example for format.
+      - LITESTREAM_BUCKET=${LITESTREAM_BUCKET:-}
+      - LITESTREAM_ENDPOINT=${LITESTREAM_ENDPOINT:-}
+      - LITESTREAM_ACCESS_KEY_ID=${LITESTREAM_ACCESS_KEY_ID:-}
+      - LITESTREAM_SECRET_ACCESS_KEY=${LITESTREAM_SECRET_ACCESS_KEY:-}
     env_file:
       - ./backend/.env
     restart: unless-stopped
