@@ -5,6 +5,33 @@
 
 ---
 
+## 💾 RA1.4 — Backups off-laptop (Litestream + restore scripts) — 2026-07-09
+
+**[ADDED] Continuous SQLite replication via Litestream; restore drill procedure; laptop snapshot-pull script. No schema changes. No UI changes. Suite stable at 231 passing. One `ra1:` commit.**
+
+- **[ADDED] `backend/litestream.yml`** — Litestream replication config. Points at `/data/shoe_deals.db` (the Docker volume path). Replica target: S3-compatible object storage (Backblaze B2 preferred — privacy-respecting, generous free tier). All credentials injected via env vars at runtime (`LITESTREAM_BUCKET`, `LITESTREAM_ENDPOINT`, `LITESTREAM_ACCESS_KEY_ID`, `LITESTREAM_SECRET_ACCESS_KEY`) — nothing secret is baked into the image. Retention: 336 h (14 days of WAL segments). Snapshot interval: 24 h (daily full snapshot so restores don't replay months of WAL).
+
+- **[ADDED] `backend/entrypoint.sh`** — Container startup script replacing the Dockerfile CMD. Behaviour when `LITESTREAM_BUCKET` is set: (1) if `/data/shoe_deals.db` is absent, attempts `litestream restore -if-replica-exists` (no-op if no replica exists yet — alembic creates a fresh DB instead); (2) execs `litestream replicate -exec "uvicorn ... --workers 1"` so Litestream is the foreground process and forwards signals cleanly. Without `LITESTREAM_BUCKET`: runs uvicorn directly — dev/no-backup mode, behaviour identical to before RA1.4. INV-9 (`--workers 1`) is preserved in both paths.
+
+- **[CHANGED] `backend/Dockerfile`** — Three changes: (1) adds `sqlite3` to the apt install list (used by `pull-snapshot.sh` to verify restored DB row counts); (2) installs Litestream binary from GitHub releases (`LITESTREAM_VERSION=v0.3.13`, pinned; `dpkg --print-architecture` selects the right arch so the same Dockerfile works on amd64 cloud VMs and arm64 home boxes); (3) switches CMD from `uvicorn ...` to `/app/entrypoint.sh`.
+
+- **[ADDED] `deploy/restore.sh`** — Standalone restore script for the **restore drill** and disaster recovery. Run from the laptop with Litestream and credentials exported. Documents the drill procedure in comments: export vars → restore to `/tmp/drill-restore.db` → verify counts match live (`SELECT COUNT(*) FROM activities` → 933+) → record drill in changelog. Supports point-in-time restore via `RESTORE_TIMESTAMP` env var. Guards against overwriting an existing file (must be intentional).
+
+- **[ADDED] `deploy/pull-snapshot.sh`** — Pulls the latest Litestream replica snapshot to `~/anton-data-mirror/shoe_deals.db`. Intended for periodic laptop use: keeps a local dev-DB seed in sync with production without ever writing to the live DB. Prints activity count for quick sanity check; keeps the previous snapshot as `.prev` until the new one is confirmed.
+
+- **[CHANGED] `docker-compose.yml`** — Documents the four `LITESTREAM_*` env var passthroughs in the `environment` block (all default to empty string — dev compose is unchanged; non-empty `LITESTREAM_BUCKET` activates replication).
+
+- **[CHANGED] `deploy/.env.production.example`** — Adds a Litestream credentials section with B2 setup instructions (create private bucket → create App Key → fill in the four vars). Notes that empty `LITESTREAM_ENDPOINT` falls back to AWS S3.
+
+- **[NOTED — human steps before RA1.4 is fully done]:**
+  1. **Provision the B2 bucket** (or equivalent S3-compatible store) and fill in the four `LITESTREAM_*` vars in the production `.env`.
+  2. **Run the restore drill** (`deploy/restore.sh`) against a scratch path before RA1.5 cutover. A backup that has never been restored is a hope. Record the drill result in the next changelog entry.
+  3. **Pull a laptop snapshot** (`deploy/pull-snapshot.sh`) to seed the dev DB in `~/anton-data-mirror/` for local sessions after the live DB moves to the host in RA1.5.
+
+**[VERIFIED] Suite 231 passing** (`backend/venv/bin/pytest tests/ -q`). No UI changes (`vite build` not required). No schema changes (Litestream is a replication layer, not a schema layer). **RA1.4 code → ✅; restore drill = human step before RA1.5.**
+
+---
+
 ## 🛡️ RA1.3 — Surface & abuse hardening — 2026-07-09
 
 **[ADDED/CHANGED] Auth-failure logging, per-IP rate limiting, structured access log, OAuth login rate limit, Caddyfile comment update. No schema changes. No UI changes. Suite 208 → 231 (+23 tests). Two `ra1:` commits.**
