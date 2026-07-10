@@ -239,6 +239,9 @@ class OwnedShoe(Base):
     purchase_price = Column(Float, nullable=True)  # what was paid; cost-per-km is derived, not stored
     mileage_limit = Column(Float, nullable=True)   # km at which this shoe should be retired (user-set)
     image_url = Column(Text, nullable=True)  # manually-set product image; overrides any auto-matched image
+    # R3.3: runner-authored (or LLM-drafted + runner-edited) review stored alongside the shoe.
+    # Written by rotation.store_shoe_review; null until the review workflow runs.
+    review_draft = Column(Text, nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 

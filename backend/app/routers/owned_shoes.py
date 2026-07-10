@@ -10,6 +10,7 @@ from typing import List, Optional
 from app.database import get_db
 from app.models import (
     OwnedShoe, OwnedShoeCreate, OwnedShoeUpdate, OwnedShoeResponse, MileageAdjust,
+    ShoeReviewUpdate,
     ShoeRun, ShoeRunCreate, ShoeRunResponse, LogRunResponse,
     ShoeNote, ShoeNoteCreate, ShoeNoteResponse,
 )
@@ -133,6 +134,23 @@ def adjust_owned_shoe_mileage(
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
 
+    return rotation.attach_computed_fields(db, db_shoe)
+
+
+@router.patch("/{owned_shoe_id}/review", response_model=OwnedShoeResponse)
+def update_shoe_review(
+    owned_shoe_id: int, body: ShoeReviewUpdate, db: Session = Depends(get_db)
+):
+    """
+    Store or overwrite the review draft for an owned shoe (R3.3).
+
+    Called after the runner edits the LLM-generated draft from draft_shoe_review.
+    Returns the full shoe including the saved review_draft field.
+    """
+    try:
+        db_shoe = rotation.store_shoe_review(db, owned_shoe_id, body.review_text)
+    except LookupError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
     return rotation.attach_computed_fields(db, db_shoe)
 
 

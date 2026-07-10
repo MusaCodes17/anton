@@ -817,18 +817,55 @@ Keep it honest, specific, and useful. Use the notes as the primary source — do
             if isinstance(result.content, mcp_types.TextContent)
             else str(result.content)
         )
+        # Auto-save the draft to the shoe so the runner can retrieve it later
+        # without re-running the workflow. save_shoe_review overwrites this if
+        # the runner edits the text and calls save_shoe_review explicitly.
+        with get_session() as save_db:
+            rotation.store_shoe_review(save_db, owned_shoe_id, review_text)
         return {
             "success": True,
             "shoe": f"{shoe.brand} {shoe.model}",
             "mileage": round(shoe.current_mileage, 1),
             "review_draft": review_text,
-            "note": "This is a draft — edit before posting.",
+            "saved": True,
+            "note": "Draft saved to the shoe. Edit it and call save_shoe_review to update the stored version.",
         }
     except Exception as e:
         return {
             "success": False,
             "error": f"Connected client does not support sampling. Try this tool from Claude Desktop. ({e})",
         }
+
+
+@mcp.tool()
+def save_shoe_review(owned_shoe_id: int, review_text: str) -> dict:
+    """
+    Persist a runner-edited shoe review draft on an owned shoe (R3.3).
+
+    Call this after the runner has edited the text produced by draft_shoe_review.
+    Overwrites the previously stored draft — only one review per shoe is kept.
+    The stored text is returned by the shoes://review/{id} resource and exposed
+    on the shoe via GET /api/owned-shoes/{id}.
+
+    Args:
+        owned_shoe_id: ID of the owned shoe (from get_owned_shoes).
+        review_text: The final (or further-edited) review text to store.
+    """
+    if not review_text or not review_text.strip():
+        return {"success": False, "error": "review_text must not be empty"}
+    try:
+        with get_session() as db:
+            try:
+                shoe = rotation.store_shoe_review(db, owned_shoe_id, review_text)
+            except LookupError as exc:
+                return {"success": False, "error": str(exc)}
+            return {
+                "success": True,
+                "shoe": f"{shoe.brand} {shoe.model}",
+                "review_stored": True,
+            }
+    except Exception as e:
+        return {"success": False, "error": str(e)}
 
 
 @mcp.tool()
@@ -994,11 +1031,22 @@ def retire_shoe(owned_shoe_id: int) -> dict:
             shoe.status = "retired"
             db.commit()
             db.refresh(shoe)
-            return {
+
+            note_count = db.query(ShoeNote).filter(ShoeNote.owned_shoe_id == owned_shoe_id).count()
+            result: dict = {
                 "success": True,
                 "shoe": f"{shoe.brand} {shoe.model}",
                 "final_mileage": round(shoe.current_mileage, 2),
             }
+            # Nudge the review workflow when the shoe has logged notes — now is
+            # when the runner's experience is freshest (R3.3).
+            if note_count > 0:
+                result["review_prompt"] = (
+                    f"This shoe has {note_count} journal note(s). "
+                    f"Run draft_shoe_review({owned_shoe_id}) to write a review "
+                    "while the experience is fresh."
+                )
+            return result
     except Exception as e:
         return {"success": False, "error": str(e)}
 
@@ -1630,6 +1678,44 @@ def shoe_notes_resource(shoe_id: int) -> str:
         markdown = "\n".join(md_lines).rstrip()
         payload = json.dumps({"shoe_id": shoe_id, "notes": [_shoe_note_to_dict(n) for n in notes]}, default=str)
         return f"{markdown}\n\n```json\n{payload}\n```"
+
+
+@mcp.resource(
+    "shoes://review/{shoe_id}",
+    name="Shoe Review",
+    description="Stored review draft for a specific owned shoe (R3.3)",
+    mime_type="text/plain",
+)
+def shoe_review_resource(shoe_id: int) -> str:
+    """
+    Return the stored review draft for an owned shoe, or a prompt to start
+    the review workflow if none exists yet.
+
+    Readable from Claude Desktop to retrieve the draft without re-running the
+    LLM call. The draft is written by draft_shoe_review (auto-save) and
+    overwritten by save_shoe_review (runner-edited).
+    """
+    with get_session() as db:
+        shoe = db.query(OwnedShoe).filter(OwnedShoe.id == shoe_id).first()
+        if not shoe:
+            return f"No shoe found with id {shoe_id}"
+
+        label = shoe.nickname or ""
+        name = f"{shoe.brand} {shoe.model}" + (f" ({label})" if label else "")
+
+        if not shoe.review_draft:
+            note_count = db.query(ShoeNote).filter(ShoeNote.owned_shoe_id == shoe_id).count()
+            note_hint = (
+                f" It has {note_count} journal note(s) to draw from."
+                if note_count > 0 else " Add some notes first via add_shoe_note."
+            )
+            return (
+                f"# Review — {name}\n\n"
+                f"_No review stored yet._{note_hint}\n\n"
+                f"Run `draft_shoe_review({shoe_id})` to generate a draft from the notes journal."
+            )
+
+        return f"# Review — {name}\n\n{shoe.review_draft}"
 
 
 @mcp.resource(

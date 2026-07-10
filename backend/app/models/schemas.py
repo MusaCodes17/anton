@@ -308,6 +308,11 @@ class MileageAdjust(BaseModel):
     new_mileage: float = Field(..., ge=0, description="The corrected current mileage, km")
 
 
+class ShoeReviewUpdate(BaseModel):
+    """Body for PATCH /owned-shoes/{id}/review (R3.3 — shoe review pipeline)."""
+    review_text: str = Field(..., min_length=1, description="Review draft text to store on the shoe")
+
+
 class OwnedShoeResponse(OwnedShoeBase):
     """Schema for owned shoe response"""
     id: int
@@ -324,6 +329,9 @@ class OwnedShoeResponse(OwnedShoeBase):
     total_runs: int = Field(0, description="Count of runs logged against this shoe")
     cost_per_km: Optional[float] = Field(
         None, description="purchase_price / current_mileage, rounded to 2 decimals — only when both are set"
+    )
+    review_draft: Optional[str] = Field(
+        None, description="Runner-authored or LLM-drafted review stored on the shoe (R3.3)"
     )
     created_at: datetime
     updated_at: Optional[datetime] = None

@@ -419,6 +419,26 @@ def adjust_mileage(db: Session, owned_shoe_id: int, new_mileage: float) -> Owned
     return shoe
 
 
+def store_shoe_review(db: Session, owned_shoe_id: int, review_text: str) -> OwnedShoe:
+    """
+    Persist a review draft on an owned shoe (R3.3 review pipeline).
+
+    Called by the MCP draft_shoe_review tool after sampling (auto-save) and
+    by save_shoe_review (runner-initiated save after editing). Overwrites any
+    previous draft — only one review per shoe is stored.
+
+    Raises LookupError if the shoe doesn't exist.
+    """
+    shoe = db.query(OwnedShoe).filter(OwnedShoe.id == owned_shoe_id).first()
+    if not shoe:
+        raise LookupError(f"Owned shoe with id {owned_shoe_id} not found")
+
+    shoe.review_draft = review_text
+    db.commit()
+    db.refresh(shoe)
+    return shoe
+
+
 def add_note(
     db: Session,
     owned_shoe_id: int,
