@@ -25,7 +25,7 @@ from app.database import SessionLocal
 from app.models.models import Activity, Deal, OwnedShoe, PriceRecord, Retailer, Shoe, ShoeNote, ShoeRun
 from app.scrapers.orchestrator import ScrapeOrchestrator
 from app.scrapers.lock import ScrapeInProgressError, scrape_guard
-from app.services import rotation, coros as coros_svc, settings as settings_svc, strava_stats, races as races_svc, fitness as fitness_svc, scrape_history as scrape_history_svc, deals as deals_svc, weekly_summary as weekly_summary_svc, watchlist as watchlist_svc, deal_alerts as deal_alerts_svc, race_advisor as race_advisor_svc
+from app.services import rotation, coros as coros_svc, settings as settings_svc, strava_stats, races as races_svc, fitness as fitness_svc, scrape_history as scrape_history_svc, deals as deals_svc, weekly_summary as weekly_summary_svc, watchlist as watchlist_svc, deal_alerts as deal_alerts_svc, race_advisor as race_advisor_svc, coupon_hunter as coupon_hunter_svc
 from app.utils.activity_tags import ACTIVITY_TAGS, is_valid_tag
 
 # streamable_http_path="/" because the app this is mounted under (see
@@ -2510,4 +2510,94 @@ VO2 Max: [vo2max if set, else "—"] · Threshold pace: [threshold_pace if set, 
   flag concerns; the runner decides what to do with them
 - If weeks_to_race ≤ 0, the race is today or in the past — note that and pivot
   to "next goal race" framing if another race exists
+"""
+
+
+# ---------------------------------------------------------------------------
+# R4.4 — Coupon Hunting Agent
+# ---------------------------------------------------------------------------
+
+@mcp.tool()
+def get_coupon_opportunities() -> dict:
+    """
+    Return active promo codes per retailer, annotated with active deals.
+
+    "Stackable" means the retailer has BOTH an active promo code AND at
+    least one active deal (price below MSRP) right now — applying the code
+    on top of the deal compounds the saving.
+
+    Returns:
+        all_retailers      every active retailer with ≥1 active promo code
+        stackable          subset that also has active deals (the opportunities)
+        total_active_codes count of active promo codes across all retailers
+        stackable_count    len(stackable)
+
+    Read-only — no scraping triggered. Call hunt_coupons first if the codes
+    feel stale (check last_seen_at in each promo code entry).
+    """
+    with get_session() as db:
+        return coupon_hunter_svc.get_stacking_opportunities(db)
+
+
+@mcp.tool()
+def hunt_coupons() -> dict:
+    """
+    Scan every active retailer's homepage (and any additional promo pages
+    they advertise) for discount codes, persisting any found in the
+    promo_codes table. Scraped codes never overwrite manually-added ones.
+
+    This is a synchronous network operation — expects 10–60 s depending on
+    retailer count and whether any retailers use a headless browser. It does
+    NOT hold the scrape lock (promo hunting only reads pages and writes to
+    promo_codes; it never touches deals or prices).
+
+    Returns retailers_scanned, codes_found, new_codes, errors.
+    Call get_coupon_opportunities after to see the updated stacking picture.
+    """
+    with get_session() as db:
+        result = ScrapeOrchestrator(db).detect_all_promo_codes()
+        return {
+            "success": True,
+            "retailers_scanned": result["retailers_scanned"],
+            "codes_found": result["codes_found"],
+            "new_codes": result["new_codes"],
+            "errors": result["errors"],
+        }
+
+
+@mcp.prompt()
+def coupon_digest() -> str:
+    """Guided workflow to surface coupon stacking opportunities."""
+    return """\
+You are helping Anton find opportunities to stack retailer promo codes on top
+of existing shoe deals.  Stacking = a retailer that currently has BOTH an
+active deal (price below MSRP) AND an active promo code, so the runner can
+apply the code at checkout for a compound saving.
+
+## Steps
+
+1. Call `get_coupon_opportunities` to read the current DB state.
+
+2. Check freshness: if `total_active_codes` is 0, or any code's `last_seen_at`
+   is more than 3 days ago, offer to call `hunt_coupons` to refresh. After
+   hunting, call `get_coupon_opportunities` again.
+
+3. Report the `stackable` retailers — for each one show:
+   - **Retailer name**
+   - Active promo codes: code, description, estimated % off
+   - Active deals: shoe name, current price, % below MSRP, product URL
+   - Estimated combined saving (deal % + promo %, noting they may not simply
+     add — present the math honestly, e.g. "20% off already-sale price")
+
+4. If no `stackable` entries exist, list the `all_retailers` entries
+   (retailers with codes but no current deals) as "codes to keep in mind."
+
+5. Highlight the **single best opportunity**: the stackable entry with the
+   largest combined saving potential.
+
+## Rules
+- Do not purchase or apply codes — present the opportunity for the runner.
+- If `errors` came back from `hunt_coupons`, report them briefly.
+- Keep savings estimates honest: note when a promo applies to the already-
+  discounted price vs the original MSRP (compounding, not additive).
 """
