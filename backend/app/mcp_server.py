@@ -25,7 +25,7 @@ from app.database import SessionLocal
 from app.models.models import Activity, Deal, OwnedShoe, PriceRecord, Retailer, Shoe, ShoeNote, ShoeRun
 from app.scrapers.orchestrator import ScrapeOrchestrator
 from app.scrapers.lock import ScrapeInProgressError, scrape_guard
-from app.services import rotation, coros as coros_svc, settings as settings_svc, strava_stats, races as races_svc, fitness as fitness_svc, scrape_history as scrape_history_svc, deals as deals_svc, weekly_summary as weekly_summary_svc, watchlist as watchlist_svc, deal_alerts as deal_alerts_svc
+from app.services import rotation, coros as coros_svc, settings as settings_svc, strava_stats, races as races_svc, fitness as fitness_svc, scrape_history as scrape_history_svc, deals as deals_svc, weekly_summary as weekly_summary_svc, watchlist as watchlist_svc, deal_alerts as deal_alerts_svc, race_advisor as race_advisor_svc
 from app.utils.activity_tags import ACTIVITY_TAGS, is_valid_tag
 
 # streamable_http_path="/" because the app this is mounted under (see
@@ -2336,4 +2336,178 @@ No new deal events since [since if set, else "the last 7 days"]. All quiet.
   the runner still needs to decide whether to buy; do not recommend
 - Keep the tone direct and concise; include the product_url for every deal
   so the runner can click through immediately
+"""
+
+
+@mcp.tool()
+def get_race_block_context(weeks_back: int = 12) -> dict:
+    """
+    Compile the race-block training context for the advisor prompt (R3.6).
+
+    Returns a structured snapshot covering:
+    - Next upcoming race: name, date, distance, days/weeks to race, target pace.
+    - Recent weekly volumes: last `weeks_back` weeks of km, run count, avg pace,
+      avg HR — newest first. Used to assess whether current volume is on track
+      for the goal race.
+    - Retirement pipeline: active shoes at ≥ 75% of their mileage limit.
+      Includes shoe_type so you can flag race-shoe wear concerns specifically.
+    - Latest fitness snapshot: VO2 max, lactate-threshold pace (as "M:SS/km"),
+      race predictions, and running level from COROS (if ever synced).
+
+    This is read-only — no writes, no confirmation gate needed.
+    Call this before running the race_block_advisor prompt.
+
+    Args:
+        weeks_back: Number of recent weekly buckets to include (default 12, max 52).
+    """
+    weeks_back = max(1, min(weeks_back, 52))
+    with get_session() as db:
+        ctx = race_advisor_svc.race_block_context(db, weeks_back=weeks_back)
+
+    result: dict = {
+        "has_next_race": ctx.has_next_race,
+        "next_race": None,
+        "recent_weeks": [
+            {
+                "period": w.period,
+                "total_km": w.total_km,
+                "run_count": w.run_count,
+                "avg_pace": w.avg_pace,
+                "avg_hr": w.avg_hr,
+            }
+            for w in ctx.recent_weeks
+        ],
+        "avg_weekly_km": ctx.avg_weekly_km,
+        "pipeline": [
+            {
+                "shoe_id": p.shoe_id,
+                "brand": p.brand,
+                "model": p.model,
+                "nickname": p.nickname,
+                "shoe_type": p.shoe_type,
+                "pct": p.pct,
+                "current_mileage": p.current_mileage,
+                "mileage_limit": p.mileage_limit,
+                "replacement_deals": p.replacement_deals,
+            }
+            for p in ctx.pipeline
+        ],
+        "has_fitness": ctx.has_fitness,
+        "fitness": None,
+    }
+
+    if ctx.next_race:
+        r = ctx.next_race
+        result["next_race"] = {
+            "name": r.name,
+            "race_date": r.race_date,
+            "distance_km": r.distance_km,
+            "days_to_race": r.days_to_race,
+            "weeks_to_race": r.weeks_to_race,
+            "target_pace": r.target_pace,
+            "target_time_s": r.target_time_s,
+        }
+
+    if ctx.fitness:
+        f = ctx.fitness
+        result["fitness"] = {
+            "vo2max": f.vo2max,
+            "threshold_pace": f.threshold_pace,
+            "race_predictions": f.race_predictions,
+            "running_level": f.running_level,
+            "captured_at": f.captured_at,
+        }
+
+    return result
+
+
+@mcp.prompt()
+def race_block_advisor() -> str:
+    """
+    Generate race-block training observations for the runner's current goal race.
+
+    Reads the race countdown, recent weekly volumes, rotation state, and fitness
+    metrics to produce block-level observations — where the runner stands now,
+    what the volume trend implies, and any rotation concerns for race day.
+    Advisory observations only; no detailed training plan generation.
+    Read-only — no writes, no confirmation gate.
+    """
+    return """# Race-Block Training Advisor
+
+You are producing training-block observations for a competitive runner.
+This is READ-ONLY — no writes, no confirmation gates. Advisory only.
+
+## Step 1 — Fetch the context
+Call `get_race_block_context()`. It returns the next race, recent weekly
+volumes, rotation pipeline state, and latest fitness metrics.
+
+## Step 2 — Produce the advisory
+
+Use the structure below. Omit any section whose data is absent.
+
+---
+**Race-Block Summary**
+
+### Goal Race
+[If has_next_race:]
+**[next_race.name]** — [next_race.race_date]
+[days_to_race] days / [weeks_to_race] weeks out[", [next_race.distance_km] km" if distance_km set]
+[If target_pace: "Target pace: [target_pace]"]
+[Else if no race: "No upcoming races scheduled — observations are general."]
+
+### Volume (last [count of recent_weeks] weeks)
+Average: [avg_weekly_km] km/week
+
+[List recent_weeks newest-first, one line each:]
+[period] — [total_km] km · [run_count] run(s)[" · " + avg_pace if avg_pace]
+
+**Trend observation:**
+[Compare the most recent 2–3 weeks against the 12-week average. Examples:]
+- If recent weeks are well above average: "Volume is above the block average — monitor fatigue
+  and ensure adequate recovery before [race name]."
+- If recent weeks are declining: "Volume has dropped vs the block average. If intentional
+  (taper), this is appropriate at [weeks_to_race] weeks out; otherwise worth checking."
+- If stable: "Volume is consistent with the block average."
+[If has_next_race and weeks_to_race ≤ 3: "At [weeks_to_race] week(s) out, taper should be underway."]
+[If has_next_race and weeks_to_race is between 4 and 8: "In the race-specific phase — quality over
+ quantity; key workouts at target pace matter more than peak volume."]
+[If has_next_race and weeks_to_race > 8: "Still in the base-building window — volume consistency
+ is the priority."]
+
+### Rotation
+[If pipeline is non-empty:]
+[For each shoe in pipeline:]
+- **[brand] [model]**[" ([nickname])" if nickname] — [pct×100 rounded to 0dp]%
+  of limit ([current_mileage]/[mileage_limit] km)[", type: " + shoe_type if shoe_type]
+  [If shoe_type and "Race" in shoe_type and has_next_race:
+   "Race shoe at this mileage — consider the replacement timeline vs race day."]
+  [If replacement_deals > 0: "[replacement_deals] replacement deal(s) available."]
+[Else: "No shoes in the retirement pipeline."]
+
+### Fitness
+[If has_fitness:]
+VO2 Max: [vo2max if set, else "—"] · Threshold pace: [threshold_pace if set, else "—"]
+[If running_level: "Running level: [running_level]"]
+[If race_predictions and has_next_race and next_race.distance_km set:]
+  [Find the closest distance key in race_predictions to next_race.distance_km:]
+  Predicted time at [distance_km] km: [format total_s as H:MM:SS or M:SS depending on length]
+[If threshold_pace and has_next_race and next_race.target_pace:
+  Compare threshold_pace and target_pace: note if target pace is faster or slower than threshold.
+  E.g.: "Target pace ([target_pace]) is [X sec/km] faster than threshold ([threshold_pace]) —
+  a demanding goal requiring sustained anaerobic contribution."]
+[Else if has_next_race and not has_fitness: "No fitness snapshot on record — sync COROS via
+ the sync_fitness prompt for VO2 max and race predictions."]
+
+---
+
+## Rules
+- Never invent data not present in get_race_block_context's response
+- Volume trend: compare the two most recent non-zero weeks to avg_weekly_km
+  (a single anomalous week isn't a trend)
+- pct display: multiply by 100 and round to the nearest whole number
+- Keep observations concrete and grounded in the numbers; no cheerleading
+- Do not generate a full training plan — point out where the runner stands and
+  flag concerns; the runner decides what to do with them
+- If weeks_to_race ≤ 0, the race is today or in the past — note that and pivot
+  to "next goal race" framing if another race exists
 """
