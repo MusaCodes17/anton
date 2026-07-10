@@ -5,6 +5,22 @@
 
 ---
 
+## R3.6 — Race-block training advisor — 2026-07-10
+
+**[ADDED] `services/race_advisor.py` + `get_race_block_context` MCP tool + `race_block_advisor` MCP prompt. No schema changes. Suite 282 → 298 (+14). One `r3:` commit.**
+
+- **[ADDED] `backend/app/services/race_advisor.py`:** `race_block_context(db, *, today, weeks_back=12)` assembles the structured context the advisor prompt needs in one DB session — soonest upcoming non-completed race (delegates to `races_svc.list_races`, skips `days_remaining < 0` and `status="completed"`), last `weeks_back` weekly volume buckets (delegates to `strava_stats.training_summary(period="weekly")`; `avg_weekly_km` averaged over the window), retirement pipeline (delegates to `rotation_svc.retirement_pipeline` so all three surfaces sharing the pipeline agree), and the latest fitness snapshot (`fitness_svc.latest`) with threshold pace formatted as `"M:SS/km"` via `seconds_to_pace`. Returns `RaceBlockContext` dataclass with child dataclasses `RaceInfo`, `WeekVolume`, `PipelineShoe`, `FitnessSnapshot`. All reads — no writes, no invariants touched. Uses `from app.utils.pace import seconds_to_pace` directly per the R1.5c preference.
+
+- **[ADDED] `get_race_block_context` MCP tool:** Thin adapter over `race_block_context`. Accepts optional `weeks_back` (clamped 1–52, default 12). Returns `has_next_race`, `next_race` (name/date/distance/days\_to\_race/weeks\_to\_race/target\_pace/target\_time\_s), `recent_weeks` (period/total\_km/run\_count/avg\_pace/avg\_hr newest-first), `avg_weekly_km`, `pipeline` (with `shoe_type` included for race-shoe-specific flagging), `has_fitness`, `fitness` (vo2max/threshold\_pace/race\_predictions/running\_level/captured\_at). Docstring tells the model: read-only, no confirmation needed, call before `race_block_advisor`.
+
+- **[ADDED] `race_block_advisor` MCP prompt:** Advisory-only advisor prompt (read-only sibling of `weekly_rotation_summary`). Step 1 calls `get_race_block_context()`; Step 2 formats a four-section advisory — Goal Race (countdown, distance, target pace), Volume (12-week table + trend observation keyed to weeks-to-race phase: base/race-specific/taper), Rotation (pipeline with race-shoe wear callout), Fitness (VO2 max, threshold vs. target pace comparison, race prediction for the goal distance). Explicit rules: no invented data, trend from the two most recent non-zero weeks vs `avg_weekly_km` (not a single-week spike), no full training plan, pivot framing if race is today or past.
+
+- **[ADDED] `backend/tests/test_race_advisor.py`:** 14 tests: `test_no_upcoming_race`, `test_soonest_race_selected`, `test_completed_race_excluded`, `test_past_race_excluded`, `test_target_pace_present`, `test_avg_weekly_km_empty`, `test_avg_weekly_km_computed` (two runs across two different ISO weeks → avg = 15.0), `test_weeks_back_truncation` (20 weeks of data, request 5, get ≤ 5 buckets), `test_pipeline_empty_no_shoes`, `test_pipeline_includes_over_threshold`, `test_pipeline_excludes_below_threshold`, `test_no_fitness_when_no_snapshot`, `test_fitness_snapshot_included`, `test_fitness_race_predictions_preserved`. Fixed `TODAY = date(2026, 7, 10)` throughout.
+
+**[VERIFIED]** Suite **298 passing** (`backend/venv/bin/pytest -q`). 14 new tests — all green on first run. No schema changes; no migration (purely additive read-only service). No UI changes; `vite build` not required. Follows the R3.1/R3.2 service→tool→prompt pattern exactly.
+
+---
+
 ## R3.3 — Shoe review pipeline maturation — 2026-07-10
 
 **[ADDED] `review_draft` column on `owned_shoes` + `rotation.store_shoe_review()` + `PATCH /api/owned-shoes/{id}/review` + `save_shoe_review` MCP tool + `shoes://review/{id}` MCP resource + retirement nudge. Migration `a2b3c4d5e6f7`. Suite 275 → 282 (+7). One `r3:` commit.**
