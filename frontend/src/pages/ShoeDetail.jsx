@@ -41,7 +41,7 @@ import {
   useReplacementDeals,
 } from '@/hooks/useApi'
 import { cn, formatDate, formatCurrency } from '@/lib/utils'
-import { SHOE_TYPE_LABELS } from '@/lib/shoeTypes'
+import { formatShoeType } from '@/lib/shoeTypes'
 
 const statusVariant = { active: 'success', retired: 'secondary', for_sale: 'warning' }
 const statusLabel = { active: 'Active', retired: 'Retired', for_sale: 'For sale' }
@@ -213,7 +213,7 @@ function ReplacementDeals({ ownedShoeId, currentMileage, shoeType, onEditShoe })
 
   // Prefer server-confirmed type once loaded; fall back to the prop until then.
   const effectiveType = data !== undefined ? data.shoe_type : shoeType
-  const typeLabel = effectiveType ? (SHOE_TYPE_LABELS[effectiveType] || effectiveType) : null
+  const typeLabel = effectiveType ? formatShoeType(effectiveType) : null
   const plural = typeLabel ? typeLabel.toLowerCase() + 's' : ''
 
   // Hint text shown in header when collapsed (only after data resolves).

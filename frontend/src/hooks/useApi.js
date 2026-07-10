@@ -14,6 +14,9 @@ import {
   activitiesApi,
   racesApi,
   homeApi,
+  shoeTypesApi,
+  chatHistoryApi,
+  checkpointsApi,
   SCRAPE_STREAM_URL,
   authHeaders,
 } from '@/services/api'
@@ -27,6 +30,7 @@ export const queryKeys = {
   retailers: (params) => ['retailers', params ?? {}],
   deals: (params) => ['deals', params ?? {}],
   dashboardStats: () => ['dashboard', 'stats'],
+  scrapeHistory: () => ['scrape', 'history'],
   ownedShoes: (params) => ['owned-shoes', params ?? {}],
   ownedShoe: (id) => ['owned-shoes', 'detail', id],
   shoeRuns: (id) => ['owned-shoes', id, 'runs'],
@@ -42,6 +46,9 @@ export const queryKeys = {
   activities: (params) => ['activities', params ?? {}],
   races: () => ['races'],
   home: () => ['home'],
+  conversations: () => ['conversations'],
+  conversation: (id) => ['conversations', 'detail', id],
+  checkpointPrompts: () => ['checkpoint-prompts'],
 }
 
 // ============== SHOES ==============
@@ -200,6 +207,16 @@ export function useDashboardStats() {
   })
 }
 
+// Per-retailer scrape health + recent-runs log (R2.5). Read-only; the scrape
+// stream (useScrapeStream) invalidates this key on "completed" so a fresh scan
+// refreshes the health surface.
+export function useScrapeHistory() {
+  return useQuery({
+    queryKey: queryKeys.scrapeHistory(),
+    queryFn: () => scrapeApi.history(),
+  })
+}
+
 // ============== HOME ==============
 export function useHome() {
   return useQuery({
@@ -244,6 +261,56 @@ export function useActivityTags() {
     queryKey: ['activities', 'tags'],
     queryFn: () => activitiesApi.tags(),
     staleTime: Infinity, // the vocabulary is effectively constant
+  })
+}
+
+export function useShoeTypes() {
+  return useQuery({
+    queryKey: ['shoe-types'],
+    queryFn: () => shoeTypesApi.list(),
+    staleTime: Infinity, // the vocabulary is effectively constant (R2.4)
+  })
+}
+
+// ============== CHAT HISTORY (R2.6) ==============
+// Server-side conversation persistence — replaces the old localStorage store.
+export function useConversations() {
+  return useQuery({
+    queryKey: queryKeys.conversations(),
+    queryFn: () => chatHistoryApi.list(),
+  })
+}
+
+export function useUpsertConversation() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ id, ...payload }) => chatHistoryApi.upsert(id, payload),
+    onSuccess: () => qc.invalidateQueries({ queryKey: queryKeys.conversations() }),
+  })
+}
+
+export function useDeleteConversation() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (id) => chatHistoryApi.remove(id),
+    onSuccess: () => qc.invalidateQueries({ queryKey: queryKeys.conversations() }),
+  })
+}
+
+// ============== CHECKPOINT PROMPTS (R2.6) ==============
+export function useCheckpointPrompts() {
+  return useQuery({
+    queryKey: queryKeys.checkpointPrompts(),
+    queryFn: () => checkpointsApi.list(),
+  })
+}
+
+export function useMarkCheckpointPrompted() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ ownedShoeId, checkpointKm }) =>
+      checkpointsApi.mark(ownedShoeId, checkpointKm),
+    onSuccess: () => qc.invalidateQueries({ queryKey: queryKeys.checkpointPrompts() }),
   })
 }
 

@@ -1,12 +1,20 @@
 """
-Bearer-token auth middleware (R2.1 — the security pass).
+Bearer-token auth middleware (RA1.1b — named tokens + OAuth 2.1).
 
-Anton's trust model changes here from a *network* property ("only things that can
-reach port 8000 can mutate") to an *application* property ("only requests carrying
-the shared secret can mutate"). Every request to `/api/*` and the mounted `/mcp`
-sub-app must present `Authorization: Bearer <ANTON_SECRET>`; a mismatch or absence
-returns **401 with an empty body** (don't leak whether the path exists or why auth
-failed). See `SECURITY_PASS_PLAN.md` and `docs/design_decisions.md` E1.
+Anton's auth model:
+
+1. **Named bearer tokens** (`ANTON_TOKENS="name:token,name:token,..."`) — every
+   REST API and MCP bearer client (desktop, spa, loopback) gets its own token.
+   Revoking one client means removing its entry and restarting; the others keep
+   working. The presented `Authorization: Bearer <token>` is compared against the
+   full token set using constant-time comparison without short-circuiting.
+
+2. **OAuth 2.1 access tokens** — the claude.ai mobile connector authenticates
+   via the standard OAuth 2.1 authorization-code + PKCE flow (RA1.1b). After the
+   user completes the browser login, the connector holds a short-lived access
+   token. This middleware verifies those tokens by DB lookup via
+   `services.oauth.verify_access_token_sync` — only when named-token check fails
+   and `ANTON_HOST_URL` is set (OAuth is active).
 
 Why a *pure ASGI* middleware and not `BaseHTTPMiddleware` or a dependency:
 - The app streams SSE (chat + scrape progress) and serves the `/mcp` Streamable
@@ -14,53 +22,142 @@ Why a *pure ASGI* middleware and not `BaseHTTPMiddleware` or a dependency:
   known breaker of streaming responses — this middleware only inspects the request
   headers and forwards `receive`/`send` untouched, so streams pass through intact.
 - A middleware (not a per-router dependency) covers *every* route, including the
-  mounted `/mcp` sub-app, without per-router decoration. A top-level middleware
-  wraps the whole ASGI app, so it sits outside the router that dispatches to the
-  mount — one check guards both surfaces (asserted in `tests/test_auth.py`).
+  mounted `/mcp` sub-app, without per-router decoration.
+
+RA1.3 additions:
+- Every 401 is logged at WARNING with source IP + method + path.
+- Repeated 401s from the same IP are throttled via `auth_failure_limiter`
+  (services/rate_limit.py): after the burst is exhausted, the response becomes
+  429 rather than 401 and the Retry-After header says how long to wait.
+- On successful auth the matched client name is stored in `scope["anton_client"]`
+  so the AccessLogMiddleware can include it in the structured access log.
 
 Registered *inside* CORS in `main.py` (added before `CORSMiddleware`, so CORS is
 the outer wrapper) so that a 401 response still carries CORS headers and the
 browser surfaces a clean 401 instead of an opaque CORS error.
+
+Supersedes R2.1's single-secret `BearerAuthMiddleware` (design_decisions E7 → E9).
+Capability-URL connector auth (RA1.1 interim) removed in RA1.1b (design_decisions E9).
 """
 from __future__ import annotations
 
+import logging
 import os
 import secrets
 
-# Paths reachable without a token: the root banner and the liveness probes. These
-# leak nothing sensitive and must stay open (a monitor/health check has no token).
-# Everything else under /api/* and all of /mcp requires the bearer token.
-PUBLIC_PATHS: frozenset[str] = frozenset({"/", "/health", "/api/health"})
+logger = logging.getLogger(__name__)
+
+# Paths reachable without a token: liveness probes, OAuth protocol endpoints, and
+# the login page.  These must be public so the OAuth flow can complete without a
+# pre-existing token.
+PUBLIC_PATHS: frozenset[str] = frozenset({
+    "/",
+    "/health",
+    "/api/health",
+    # OAuth 2.1 protocol endpoints (created by mcp.server.auth.routes).
+    "/.well-known/oauth-authorization-server",
+    "/authorize",
+    "/token",
+    "/revoke",
+    # Human-facing login page (app/routers/oauth.py).
+    "/oauth/login",
+})
 
 _BEARER_PREFIX = "bearer "  # case-insensitive scheme match
 
 
+def _parse_token_map(env_val: str) -> dict[str, str]:
+    """
+    Parse 'name:token,name:token,...' into {name: token}.
+
+    Uses partition(':') so tokens can't contain ',' but may contain ':'. Skips
+    malformed entries (missing name or empty token) silently.
+    """
+    tokens: dict[str, str] = {}
+    for pair in env_val.split(","):
+        pair = pair.strip()
+        if not pair:
+            continue
+        name, sep, token = pair.partition(":")
+        name = name.strip()
+        token = token.strip()
+        if sep and name and token:
+            tokens[name] = token
+    return tokens
+
+
+def get_named_token(name: str) -> str:
+    """
+    Return the token for a named client from `ANTON_TOKENS`.
+
+    Read from the environment on each call (not cached) so internal callers —
+    e.g. chat_service's loopback — always see the live value, even if the env
+    was populated after module import. Returns '' if the name is not in the map.
+    """
+    return _parse_token_map(os.getenv("ANTON_TOKENS", "")).get(name, "")
+
+
+def _client_ip(scope) -> str:
+    """Extract the real client IP.
+
+    Checks X-Forwarded-For first (set by Caddy in the production deployment via
+    `header_up X-Forwarded-For {remote_host}`) — takes only the first IP in the
+    list, which is the original client when Caddy sets exactly one value. Falls
+    back to the ASGI-layer client tuple for direct connections (dev, tests).
+    """
+    for key, value in scope.get("headers", []):
+        if key == b"x-forwarded-for":
+            forwarded = value.decode("latin-1").split(",")[0].strip()
+            if forwarded:
+                return forwarded
+    client = scope.get("client")
+    return client[0] if client else "unknown"
+
+
 class BearerAuthMiddleware:
     """
-    Pure ASGI middleware enforcing `Authorization: Bearer <ANTON_SECRET>`.
+    Pure ASGI middleware enforcing per-client named bearer tokens (RA1.1) with
+    an OAuth 2.1 access token fallback (RA1.1b) and auth-failure logging +
+    rate limiting (RA1.3).
 
-    The secret is read once from the environment at construction (Starlette builds
-    the middleware stack once at startup, so this is "read once at startup, not
-    per-request"). An empty configured secret denies *everything* — belt-and-braces
-    behind `main.require_anton_secret()`'s fail-fast, so a misconfigured server can
-    never accidentally authorize with an empty token.
+    Reads `ANTON_TOKENS` once at construction (Starlette builds the middleware
+    stack once at startup). An empty token set denies *everything* — belt-and-
+    braces behind `main.require_auth_config()`'s fail-fast, so a misconfigured
+    server can never accidentally authorize.
+
+    OAuth fallback: when named-token check fails and ANTON_HOST_URL is set, the
+    presented Bearer token is verified against the oauth_tokens DB table via
+    `services.oauth.verify_access_token_sync`.  This is a synchronous DB call
+    in an async context — acceptable for single-user SQLite (sub-millisecond,
+    no concurrency hazard under INV-9).
+
+    RA1.3: successful auth stores the client name in scope["anton_client"] for
+    the access log.  Failed auth logs WARNING + optionally returns 429 when the
+    per-IP failure bucket is exhausted.
     """
 
     def __init__(self, app):
         self.app = app
-        self.secret = os.getenv("ANTON_SECRET", "").strip()
+        self.tokens: dict[str, str] = _parse_token_map(
+            os.getenv("ANTON_TOKENS", "")
+        )
+        # OAuth is active when ANTON_HOST_URL is set — same condition as main.py
+        # wires create_auth_routes().
+        self._oauth_active: bool = bool(os.getenv("ANTON_HOST_URL", "").strip())
+        # Imported lazily so tests can swap the singleton before this module is
+        # loaded; also avoids a circular-import risk at module level.
+        from app.services.rate_limit import auth_failure_limiter
+        self._failure_limiter = auth_failure_limiter
 
     async def __call__(self, scope, receive, send):
-        # Non-HTTP scopes (lifespan, and websockets if ever added) pass through.
-        # There are no WebSocket endpoints today; add an explicit gate here before
-        # introducing one (SECURITY_PASS_PLAN §4 task 2).
+        # Non-HTTP scopes (lifespan, websockets if ever added) pass through.
         if scope["type"] != "http":
             await self.app(scope, receive, send)
             return
 
         # CORS preflight must never require the token, or the browser preflight
-        # breaks. (Starlette's CORSMiddleware already answers real preflights before
-        # us; this is defence for any OPTIONS that slips through.)
+        # breaks. (Starlette's CORSMiddleware already answers real preflights
+        # before us; this is defence for any OPTIONS that slips through.)
         if scope.get("method") == "OPTIONS":
             await self.app(scope, receive, send)
             return
@@ -73,17 +170,50 @@ class BearerAuthMiddleware:
             await self.app(scope, receive, send)
             return
 
-        await self._reject(send)
+        # Auth failed — log and apply per-IP throttle.
+        ip = _client_ip(scope)
+        method = scope.get("method", "?")
+        path = scope.get("path", "?")
+        result = self._failure_limiter.take(ip)
+        if not result.allowed:
+            logger.warning("auth rate-limited: %s %s from %s", method, path, ip)
+            await self._reject_rate_limited(send, result.retry_after_s)
+        else:
+            logger.warning("auth 401: %s %s from %s", method, path, ip)
+            await self._reject(send)
 
     def _authorized(self, scope) -> bool:
-        if not self.secret:
-            return False  # no secret configured → authorize nothing
+        """Check the presented bearer token; on success set scope['anton_client'].
+
+        Named-token comparison loops over ALL tokens unconditionally (no early
+        exit from the loop body) so the wall-clock time of a failed check does
+        not reveal how many tokens are registered or whether any matched.
+        """
         header = self._get_header(scope, b"authorization")
         if not header or not header.lower().startswith(_BEARER_PREFIX):
             return False
         presented = header[len(_BEARER_PREFIX):].strip()
-        # Constant-time compare so a timing side channel can't leak the secret.
-        return secrets.compare_digest(presented, self.secret)
+
+        # Named bearer tokens — constant-time multi-token compare (no short-circuit).
+        if self.tokens:
+            matched_name: str | None = None
+            for name, token in self.tokens.items():
+                # compare_digest is constant-time; we loop all tokens and record
+                # the last match so we never exit early.
+                if secrets.compare_digest(presented, token):
+                    matched_name = name
+            if matched_name is not None:
+                scope["anton_client"] = matched_name
+                return True
+
+        # OAuth 2.1 access token fallback (RA1.1b).
+        if self._oauth_active:
+            from app.services.oauth import verify_access_token_sync
+            if verify_access_token_sync(presented):
+                scope["anton_client"] = "oauth"
+                return True
+
+        return False
 
     @staticmethod
     def _get_header(scope, name: bytes) -> str | None:
@@ -94,12 +224,32 @@ class BearerAuthMiddleware:
 
     @staticmethod
     async def _reject(send) -> None:
-        # 401 with an empty body — no `WWW-Authenticate`, no reason string.
+        # 401 with WWW-Authenticate per RFC 6750 §3.1 — tells clients they
+        # need a Bearer token.  The realm hint matches the issuer for OAuth
+        # clients that use it for discovery.
         await send(
             {
                 "type": "http.response.start",
                 "status": 401,
-                "headers": [(b"content-length", b"0")],
+                "headers": [
+                    (b"content-length", b"0"),
+                    (b"www-authenticate", b'Bearer realm="Anton"'),
+                ],
+            }
+        )
+        await send({"type": "http.response.body", "body": b""})
+
+    @staticmethod
+    async def _reject_rate_limited(send, retry_after_s: float) -> None:
+        retry = str(max(1, int(retry_after_s))).encode()
+        await send(
+            {
+                "type": "http.response.start",
+                "status": 429,
+                "headers": [
+                    (b"content-length", b"0"),
+                    (b"retry-after", retry),
+                ],
             }
         )
         await send({"type": "http.response.body", "body": b""})

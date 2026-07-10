@@ -1,10 +1,11 @@
 import { useMemo, useState } from 'react'
-import { Activity, Trophy, ListOrdered, TrendingUp } from 'lucide-react'
+import { Activity, ListOrdered, TrendingUp } from 'lucide-react'
 import PageHeader from '@/components/PageHeader'
 import PlannedRacesCard from '@/components/training/PlannedRacesCard'
 import VolumeChart from '@/components/training/VolumeChart'
 import FitnessCard from '@/components/training/FitnessCard'
-import PBCard from '@/components/training/PBCard'
+import PredictionsCard from '@/components/training/PredictionsCard'
+import RecordsCard from '@/components/training/RecordsCard'
 import ActivityRow from '@/components/training/ActivityRow'
 import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
@@ -120,8 +121,13 @@ export default function Training() {
     ...(dateTo ? { date_to: dateTo } : {}),
   }), [dateFrom, dateTo])
 
-  const monthly = useTrainingSummary('monthly')          // unranged — the stat tiles' fixed windows
+  // Fixed trailing-365-day window for the "Last 12 mo" stat tile — computed
+  // once at mount so the tile matches the Volume header total when 1y is selected.
+  const trailing365Range = useMemo(() => ({ date_from: isoDaysAgo(365), date_to: isoToday() }), [])
+
+  const monthly = useTrainingSummary('monthly')          // unranged — thisMonth tile only
   const weekly = useTrainingSummary('weekly')            // unranged — this-week tile
+  const trailing365 = useTrainingSummary('monthly', trailing365Range) // fixed 365-day window for 12-mo tile
   const ranged = useTrainingSummary(period, range)       // the volume chart honours the range
   const records = useTrainingRecords()
   const fitness = useTrainingFitness()
@@ -148,17 +154,18 @@ export default function Training() {
 
   const resetPages = () => setPages(1)
 
-  // Stat strip
+  // Stat strip — "Last 12 mo" sums the fixed trailing-365-day window so it
+  // equals the Volume header total when the 1y preset is selected.
   const stats = useMemo(() => {
     const m = monthly.data || []
     const w = weekly.data || []
-    const last12 = m.slice(0, 12)
-    const total12 = last12.reduce((s, b) => s + b.total_km, 0)
-    const runs12 = last12.reduce((s, b) => s + b.run_count, 0)
+    const t = trailing365.data || []
+    const total12 = t.reduce((s, b) => s + b.total_km, 0)
+    const runs12 = t.reduce((s, b) => s + b.run_count, 0)
     const thisMonth = m.find((b) => b.period === currentMonthKey())?.total_km ?? 0
     const thisWeek = w.find((b) => b.period === currentWeekKey())?.total_km ?? 0
     return { thisWeek, thisMonth, total12, runs12 }
-  }, [monthly.data, weekly.data])
+  }, [monthly.data, trailing365.data, weekly.data])
 
   // Chart data (chronological). Shows every period inside the selected range —
   // no fixed 12-bar cap, so widening the range visibly extends the weekly chart
@@ -196,7 +203,7 @@ export default function Training() {
     return { xTicks: ticks, xTickFormatter: (lab) => map[lab] ?? lab }
   }, [period, chartData])
 
-  const summaryLoading = monthly.isLoading || weekly.isLoading
+  const summaryLoading = monthly.isLoading || weekly.isLoading || trailing365.isLoading
 
   // A range edit invalidates the current "load more" depth.
   const setRange = (from, to) => { setDateFrom(from); setDateTo(to); resetPages() }
@@ -256,7 +263,7 @@ export default function Training() {
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
               <Stat label="This week" value={stats.thisWeek.toFixed(1)} unit="km" />
               <Stat label="This month" value={stats.thisMonth.toFixed(1)} unit="km" />
-              <Stat label="Last 12 mo" value={Math.round(stats.total12)} unit="km" />
+              <Stat label="Last 12 mo" value={stats.total12.toFixed(1)} unit="km" />
               <Stat label="Runs · 12 mo" value={stats.runs12} />
             </div>
 
@@ -306,51 +313,16 @@ export default function Training() {
         )}
       </section>
 
-      {/* ── Fitness (COROS snapshot, T5) — only when recorded ──── */}
-      {fitness.data?.has_data && (
-        <section id="fitness" className="scroll-mt-20">
-          <FitnessCard data={fitness.data} />
-        </section>
-      )}
-
-      {/* ── Races (after volume) ───────────────────────────────── */}
-      <div id="races" className="scroll-mt-20">
-        <PlannedRacesCard />
-      </div>
-
-      {/* ── Records ────────────────────────────────────────────── */}
-      <section className="space-y-4">
-        <SectionHeading
-          id="records"
-          icon={Trophy}
-          title="Records"
-          hint="fastest whole-activity time · not segment PBs"
-        />
-        {records.isLoading ? (
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            {Array.from({ length: 4 }).map((_, i) => (
-              <Skeleton key={i} className="h-[140px] rounded-[14px]" />
-            ))}
-          </div>
-        ) : records.isError ? (
-          <ErrorState error={records.error} onRetry={records.refetch} />
-        ) : records.data?.records?.length ? (
-          <div className="space-y-3">
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-              {records.data.records.map((r) => (
-                <PBCard key={r.band} record={r} />
-              ))}
-            </div>
-            {records.data.excluded_count > 0 && (
-              <p className="text-xs text-muted-foreground">
-                {records.data.excluded_count} {records.data.excluded_count === 1 ? 'activity' : 'activities'} excluded
-                {' '}({records.data.excluded_reason}) — tag interval/track sessions to reconsider.
-              </p>
-            )}
-          </div>
-        ) : (
-          <EmptyState icon={Trophy} title="No records yet" description="Log some runs to see your bests." />
-        )}
+      {/* ── 2×2 card grid: Races · Records · Fitness · Predictions ── */}
+      <section className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+        <div id="races" className="scroll-mt-20">
+          <PlannedRacesCard />
+        </div>
+        <div id="records" className="scroll-mt-20">
+          <RecordsCard records={records} />
+        </div>
+        <FitnessCard data={fitness.data} />
+        <PredictionsCard data={fitness.data} />
       </section>
 
       {/* ── Activities ─────────────────────────────────────────── */}

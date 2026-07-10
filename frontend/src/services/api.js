@@ -10,17 +10,17 @@ const client = axios.create({
   timeout: 120000, // scraping can be slow
 })
 
-// R2.1 bearer token. Baked into the build via VITE_ANTON_SECRET (must equal the
-// backend's ANTON_SECRET) — see SECURITY_PASS_PLAN §8 Q1. Undefined in dev if no
-// frontend/.env: warn once and continue so dev isn't hard-blocked (requests will
+// RA1.1 bearer token for the SPA client. Baked into the build via
+// VITE_ANTON_SECRET — must equal the `spa` entry in the backend's ANTON_TOKENS.
+// Undefined in dev if no frontend/.env: warn once and continue (requests will
 // 401 until the token is set, rather than failing to compile).
 export const ANTON_SECRET = import.meta.env.VITE_ANTON_SECRET
 if (!ANTON_SECRET) {
   // eslint-disable-next-line no-console
   console.warn(
     'VITE_ANTON_SECRET is not set — API requests are unauthenticated and will ' +
-      '401 once R2.1 auth is active. Set it in frontend/.env (same value as the ' +
-      "backend's ANTON_SECRET)."
+      '401 once auth is active. Set it in frontend/.env (the `spa` token from ' +
+      "the backend's ANTON_TOKENS)."
   )
 }
 
@@ -156,6 +156,8 @@ export const scrapeApi = {
     client.post(`/api/scrape/promos/${retailerId}`).then((r) => r.data),
   detectAllPromos: () =>
     client.post('/api/scrape/promos').then((r) => r.data),
+  // Per-retailer scrape health + recent-runs log (R2.5 observability).
+  history: () => client.get('/api/scrape/history').then((r) => r.data),
 }
 
 // ============== OWNED SHOES ==============
@@ -220,9 +222,38 @@ export const stravaApi = {
   status: () => client.get('/api/strava/status').then((r) => r.data),
 }
 
+// ============== SHOE-TYPE VOCABULARY ==============
+// The backend-owned controlled vocabulary (R2.4). The frontend fetches this
+// instead of hard-coding the list; display labels are derived by title-casing
+// in lib/shoeTypes.js (presentation only).
+export const shoeTypesApi = {
+  list: () => client.get('/api/shoe-types').then((r) => r.data),
+}
+
 // ============== WATCHLIST ==============
 export const watchlistApi = {
   list: () => client.get('/api/watchlist').then((r) => r.data),
+}
+
+// ============== CHAT HISTORY (R2.6) ==============
+export const chatHistoryApi = {
+  list: () => client.get('/api/chat/conversations').then((r) => r.data),
+  get: (id) => client.get(`/api/chat/conversations/${id}`).then((r) => r.data),
+  upsert: (id, payload) =>
+    client.put(`/api/chat/conversations/${id}`, payload).then((r) => r.data),
+  remove: (id) => client.delete(`/api/chat/conversations/${id}`).then((r) => r.data),
+}
+
+// ============== CHECKPOINT PROMPTS (R2.6) ==============
+export const checkpointsApi = {
+  list: () => client.get('/api/checkpoint-prompts').then((r) => r.data),
+  mark: (ownedShoeId, checkpointKm) =>
+    client
+      .post('/api/checkpoint-prompts', {
+        owned_shoe_id: ownedShoeId,
+        checkpoint_km: checkpointKm,
+      })
+      .then((r) => r.data),
 }
 
 // ============== COROS SYNC ==============

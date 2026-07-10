@@ -15,7 +15,7 @@
 **Why:** Anton is a personal platform for exactly one person; operational simplicity maximizes iteration speed and the data (running history, purchases) stays on-device.
 **Advantages:** Zero infra cost/ops; full-fidelity local data; refactors like `canonical_activities` can be verified against *the* production DB directly; backups are file copies.
 **Trade-offs:** Concurrency and scale ceilings (see A2, F3); no access away from the machine except via LAN; "production" and "dev" are the same database.
-**Verdict:** ✅ Keep. Every future exposure step (mobile, remote MCP) should be an *interface* onto this core, gated on the security pass — not a rehosting.
+**Verdict:** ✅ Keep the *dev posture*. **Amended 2026-07-09 (RA1.0 — D0):** serving is moving to an always-on cloud VM (Hetzner CX22 / Fly.io Shared-CPU-1x, ~$5–8 CAD/mo) so the MCP endpoint is publicly reachable over HTTPS — required because claude.ai connectors are called from Anthropic's cloud, making a Tailscale/LAN overlay insufficient for the mobile-sync goal. Local-first remains the *dev* posture; the live DB now lives on the hosted VM. The one-worker pin (D4/E8) continues to hold; the single-process assumption is not relaxed. Rejected: laptop (sleeps), always-on home box (datacenter-IP scrape risk — documented escape hatch if RA1.5 detects material degradation). See `REMOTE_ACCESS_PLAN.md` §4 for the full D0 record.
 
 ### A2. SQLite with `check_same_thread=False`, default pooling, no WAL config
 **Chosen:** SQLite as the only store, accessed from request threads and scraper worker threads.
@@ -240,7 +240,19 @@
 **Why (inferred):** Simplest possible persistence during the assistant's build-out; avoided premature schema for conversations.
 **Advantages:** Zero backend surface; privacy-by-locality.
 **Trade-offs:** Device-bound memory at odds with the multi-client trajectory (A4); quota-trimming silently discards history; invisible to future server-side agents.
-**Verdict:** ⚠️ Scheduled to change (architecture.md §16.7): move platform memory server-side when agents need shared context.
+**Verdict:** 🔁 **Superseded by C10 (R2.6, 2026-07-08).** Conversations and checkpoint-prompt state now live in the backend (`chat_conversations`, `checkpoint_prompts`); localStorage is no longer read (existing local data was abandoned, not migrated — start-fresh, confirmed with the runner). This was the last ⚠️ scheduled-to-change decision.
+
+### C10. Server-side chat & memory persistence (JSON columns, start-fresh)
+**Chosen (R2.6, 2026-07-08):** Son of Anton conversations and the 100 km checkpoint-prompt state persist in two backend tables (`chat_conversations`, `checkpoint_prompts`, migration `e1f2a3b4c5d6`). The streaming endpoint (`POST /chat/message`) stays stateless per request; a separate CRUD surface (`GET/PUT/DELETE /chat/conversations[/{id}]`, `GET/POST /checkpoint-prompts`) does persistence. The client PUTs the full conversation on stream-end (whole-conversation replace, mirroring the old localStorage save); the server caps the store at 50, trimming oldest-updated.
+**Why:** Device-bound memory contradicted the API-first multi-client principle (A4); server-side agents (R3) need shared context; R2.1 auth (E7) made the chat endpoints no longer anonymous, which was the precondition.
+**Key sub-decisions:**
+- **Message arrays as JSON columns, not a normalized messages table** — `display_messages` carries pure UI concerns (tool-call events, pill previews, dividers) that don't relationally model well; at single-user scale (cap 50) normalizing is speculative infra (CLAUDE.md §2.5). Labelled in the model docstring.
+- **`chat_conversations.id` is the client-generated UUID** — preserves the frontend's in-memory-first / persist-on-first-message flow (an unsaved conversation isn't written until its first message) and avoids remounting the keyed chat area mid-stream.
+- **Start-fresh** — existing localStorage conversations are *not* migrated up; the server starts empty (runner's call). Old local data is simply no longer read.
+- **MCP exposure deferred to R3** — R2.6's only consumer is the SPA; the agent-facing read surface for chat history is R3 work.
+**Advantages:** Memory is device-independent; history survives a browser clear; server-side agents can read it later.
+**Trade-offs:** No per-user scoping (single-user, no auth identity — deliberate); the whole-conversation PUT on stream-end re-sends the full arrays (fine at personal scale). In-process still (single-process assumption, D4).
+**Verdict:** ✅ Keep.
 
 ### C9. Human confirmation gates all AI/synced writes
 **Chosen:** No externally-sourced run is auto-logged; assistants present suggestions (pace-primary, distance-secondary, active shoes, low-mileage tiebreak) and wait. Retirement is advised, never enacted.
@@ -286,7 +298,7 @@
 **Why (recorded):** Wall-clock relief without touching per-retailer politeness; replay so a refreshed browser doesn't lose the picture.
 **Advantages:** ~8× wall-clock; progress UX survives reconnects; one scraping primitive.
 **Trade-offs:** In-memory state shares D4's single-process assumption; no persisted scrape history (observability gap flagged in architecture.md §15.8).
-**Verdict:** ✅ Keep the shape; the persistence gap is the roadmap item.
+**Verdict:** ✅ Keep the shape. The persistence gap is **closed by R2.5** (D8) — durable per-retailer runs now live in `scrape_runs`, alongside the transient SSE state, not replacing it.
 
 ### D6. Kids filtering and promo heuristics centralized in `BaseScraper`
 **Chosen:** Junior/kids exclusion applied once in `search_products_filtered`; promo codes found by regex pairing codes with nearby "% off" text; **manual promo codes never overwritten by scraped ones**.
@@ -301,6 +313,14 @@
 **Advantages:** The refactor landed safely in one session.
 **Trade-offs:** Real module boundaries invisible at call sites; the "temporary" is aging.
 **Verdict:** 🔁 **Superseded — shim deleted r1: 2026-07-07** (R1.5b, debt sweep #1). All five consumers (`routers/scraping`, `routers/shoes`, `mcp_server`, `scrape_runner`, `scrapers/__init__`) now import `ScrapeOrchestrator` / `lock` / `registry` directly; the misleading `ScraperManager` alias is gone. See changelog 2026-07-07.
+
+### D8. Durable scrape observability in `scrape_runs`, written by one orchestrator path (R2.5)
+**Chosen:** One `scrape_runs` row per retailer per full-catalog scrape attempt (status/counts/error), written **only** by `ScrapeOrchestrator.scrape_retailer` — stamped `running` and committed up front, finalized to `success`/`error`. Health (`ok`/`warning`/`error`/`unknown`) is derived at read time by `services/scrape_history`, never stored. The `warning` verdict (finished clean, zero products) is the "quietly broken" signal that no error status carries.
+**Why (recorded):** "Is Altitude quietly broken?" was log archaeology; D5's SSE state is transient (current job only). R4.1 (scheduling) / R4.5 (watchdog) need a durable place to record per-retailer outcomes, and this is it.
+**On the single-process lock (the decision R2.5 was said to "force"):** R2.5 records history but deliberately **does not** change D4's in-memory lock. Observability is orthogonal to coordination: a durable `scrape_runs` table does not require durable *locking*. The single-process lock stays as-is (🕐); the forcing function for replacing it is R4.1's *scheduled/unattended* execution, not R2.5's *record-keeping*. Naming it here so a future session doesn't re-open D4 prematurely.
+**Advantages:** Health is a query; up-front `running` commit makes in-flight/crashed scrapes visible (verified live); one write path keeps the invariant (CLAUDE.md §2.2); cascade-deleted with its retailer (disposable deals-domain telemetry, §2.6).
+**Trade-offs:** Only the two full-catalog flows (background `/scrape/all`, synchronous `/scrape/retailer/{id}`) emit runs so far; the shoe-major `scrape_all_shoes` / single-shoe path (MCP `trigger_scrape` sans shoe_id) doesn't yet — deliberate, its grain is wrong for a per-retailer run.
+**Verdict:** ✅ Keep. Revisit when R4.1 adds `trigger="scheduled"` and a watchdog reads the trend.
 
 ---
 
@@ -353,7 +373,35 @@
 **Why:** Zero UX friction for one user, uniform across all three consumers, symmetric-secret verification with no cert/JWT lifecycle. The threat model is an untrusted process/person on the same LAN — not the internet, not local root. Full rationale and rejected alternatives (per-client keys, cookies+login, mTLS, OAuth, reverse-proxy-only): `SECURITY_PASS_PLAN.md` §3 + §8.
 **Advantages:** No anonymous mutations, no anonymous LLM spend; the precondition for every exposure-increasing R3–R5 feature. Middleware is pure-ASGI so SSE and the `/mcp` stream pass through untouched.
 **Trade-offs:** One static secret in cleartext on the trusted LAN (accepted — §1); rotation is a deliberate `.env`-edit + restart, not hot-rotation (§8 Q3); no rate limiting yet (separate R2 item, §6); `/docs`/`/openapi.json` now require the token too.
-**Verdict:** ✅ Keep. Revisit per-client keys / revocation only when remote or third-party clients appear (R5.2).
+**Verdict:** 🔁 **Superseded by E9 (RA1.1 — 2026-07-09).** The shared-secret model was sound for the trusted LAN but incompatible with the internet threat model (no per-client revocation; `ANTON_SECRET` was baked into every SPA bundle ever built). The ASGI middleware shape (`BearerAuthMiddleware`, pure-ASGI, constant-time compare, empty 401) is **kept** — E9 changes what is compared, not how. Historical rationale: `SECURITY_PASS_PLAN.md` §3 + §8.
+
+### E8. In-process token-bucket rate limit on `POST /api/chat/message` (R2 — completes the R2.1 spend story)
+**Chosen:** A token-bucket limiter (`services/rate_limit.py`) capping the request rate on the chat endpoint, keyed by client IP, enforced by a FastAPI dependency that returns **429 + `Retry-After`** before the SSE stream starts. State is in-memory; default 20 req/min with a burst of 20, tunable via `CHAT_RATE_LIMIT_PER_MINUTE` / `CHAT_RATE_LIMIT_BURST`.
+**Why:** E7/R2.1 stopped *anonymous* LLM spend but left an authenticated client free to loop and burn paid credits (SECURITY_PASS_PLAN §6, the explicitly-deferred item). Under the single-user LAN threat model the realistic adversary is a *bug* (retry storm, runaway agent), not a hostile flood — so the goal is bounding accidental spend, not hardening against DoS. A token bucket allows normal bursty human use while hard-capping sustained rate.
+**Advantages:** Closes the last R2.1-adjacent gap; no new dependency; deterministic to test (injectable clock); pure request-time dependency so the SSE stream is untouched.
+**Trade-offs:** In-process only — like the scrape lock (D4/E5), it assumes one worker; a second process would each keep its own bucket (labelled, not silent; DB-level coordination deferred to whenever a scheduler/worker arrives, R4.1). Per-IP keying means all requests behind one NAT share a bucket, and the bucket dict is unevicted (bounded by the owner's device count at single-user scale). Not a security boundary — auth (E9) is; this is a spend guardrail.
+**Verdict:** 🕐 Keep for now. Revisit (shared store, per-token quotas, or eviction) only if a second worker or remote/multi-client access appears (R5.2).
+
+### E9. Named per-client bearer tokens + OAuth 2.1 connector auth (RA1.1 + RA1.1b — supersedes E7)
+
+**RA1.1 (2026-07-09):** `ANTON_TOKENS="name:token,..."` replaces the single `ANTON_SECRET`. The ASGI middleware (`app/middleware/auth.py`) reads the map at `__init__` time, constant-time OR-compares (`result |= secrets.compare_digest(presented, token)`) every entry without short-circuiting, and forwards unchanged — pure ASGI so SSE + MCP streaming pass through untouched. `get_named_token(name)` re-reads `ANTON_TOKENS` on each call (not cached) for `chat_service`. The capability-URL bypass (`ANTON_CONNECTOR_TOKEN`) shipped simultaneously as a fallback path but was explicitly held dark pending the RA1.1b decision.
+
+**RA1.1b (2026-07-09) — Path 1 chosen; capability-URL deleted:**  
+The half-day timebox confirmed that `mcp[cli]` 1.28 provides complete OAuth 2.1 authorization-server plumbing (`OAuthAuthorizationServerProvider` Protocol, `create_auth_routes()` returning 4 Starlette routes including `/.well-known/oauth-authorization-server`, `/authorize`, `/token`, `/revoke`). Building the provider was a contained 5-file task, not hand-rolling OAuth from scratch — so Path 1 executed.
+
+What shipped (RA1.1b):
+- `backend/alembic/versions/0b1c2d3e4f5a_oauth_tables.py` — `oauth_auth_codes` + `oauth_tokens` tables; purely additive; reversible `downgrade`.
+- `backend/app/models/models.py` — `OAuthAuthCode` + `OAuthToken` ORM classes.
+- `backend/app/services/oauth.py` — `AntonOAuthProvider` (9 async methods); `verify_access_token_sync` (sync DB check for ASGI middleware); `create_auth_code` (called by login page). Token security: 256-bit random (`token_hex(32)`); stored as SHA-256 hex; access tokens 1 h TTL; refresh tokens 30 days; rotated on use. Revocation by `pair_id` (random hex linking access + refresh pair).
+- `backend/app/routers/oauth.py` — `GET/POST /oauth/login`; password form (stateless — all OAuth params in hidden inputs / query string); `secrets.compare_digest` on `ANTON_LOGIN_PASSWORD`; on success writes auth code and redirects to `redirect_uri?code=...&state=...`.
+- `backend/app/main.py` — `require_auth_config()` now requires only `ANTON_TOKENS`; `create_auth_routes()` wired conditionally on `ANTON_HOST_URL` (the OAuth issuer URL); `ANTON_CONNECTOR_TOKEN` removed from all config paths.
+- `backend/app/middleware/auth.py` — capability-URL block deleted; `PUBLIC_PATHS` expanded to cover all OAuth protocol paths; OAuth access token fallback: when named-bearer check fails and `ANTON_HOST_URL` is set, calls `verify_access_token_sync` (sync SQLite lookup, sub-ms, acceptable under INV-9).
+- `backend/tests/test_oauth.py` — 18 new tests: login form, wrong password → 401, correct password → redirect with code, code replay rejected, expired code rejected, expired/unknown token rejected, public OAuth paths, `get_client` registry.
+- `ANTON_CONNECTOR_TOKEN` removed from env examples + `test_auth.py` capability-URL tests removed.
+
+**Why:** The connector UI requires OAuth (GitHub issues #112/#411 — no bearer-header support). Capability-URL leaked into every log line (path segment = credential → RA1.3 log redaction would have been mandatory AND the gap between shipping the path and hardening logs was a window of exposure). Deleting dark code over keeping it was the right call.  
+**Trade-offs:** `ANTON_TOKENS` change still requires a restart (same as E7/RA1.1). The test suite sets `ANTON_HOST_URL` in `test_oauth.py` module-level setup, so OAuth routes are wired for those tests; `test_auth.py` does not set it (keeps middleware tests focused on named-bearer behavior). SQLite sync calls in the async middleware path are acceptable under INV-9 (single-process, single-user).  
+**Verdict:** ✅ Keep. Named bearer tokens (desktop/loopback/spa) + OAuth (claude.ai connector) are now the complete auth surface for RA1.
 
 ---
 
@@ -370,8 +418,11 @@
 | APScheduler dependency (declared, unused) | Anticipatory install for scheduled scraping | E5 — dropped from `requirements.txt`; reinstate with an R4.1 design | 2026-07-07 (R1.6) |
 | Per-size shoe tracking | Original watchlist shape | B2 — size-less tracking | recorded in code comment |
 | No authentication anywhere (`0.0.0.0` default bind) | Trust = network posture, single trusted machine | E7 — shared bearer token on `/api`+`/mcp`, `127.0.0.1` default bind | 2026-07-07 (R2.1) |
+| Single shared `ANTON_SECRET` for all clients (E7) | One baked-in secret; acceptable for trusted LAN; no per-client revocation | E9 — named per-client tokens + OAuth 2.1; `ANTON_SECRET` rotated | 2026-07-09 (RA1.1) |
+| Capability-URL connector auth (`ANTON_CONNECTOR_TOKEN`) — RA1.1 Path 2 | URL as credential (`/mcp/<token>/...`); shipped as dark fallback | E9 RA1.1b Path 1 — OAuth 2.1 chosen; capability-URL code deleted from middleware, tests, env examples; never went public | 2026-07-09 (RA1.1b) |
 | Dual schema authority (`create_all` + Alembic + `legacy_migrations/`) | `create_all` boot path kept for zero-step fresh setups | A6 — Alembic sole authority; baseline recreates the schema; legacy scripts deleted; DB moved to `~/anton-data/` | 2026-07-07 (R2.2) |
+| Chat history + checkpoint state in browser localStorage | Simplest persistence during assistant build-out | C10 — server-side `chat_conversations` + `checkpoint_prompts`; start-fresh, no migration | 2026-07-08 (R2.6) |
 
 ---
 
-*Maintenance note: add an entry when a decision is made that a future session might reasonably reverse; move reversed decisions to the Superseded table with the succeeding entry named. The verdicts above marked ⚠️ are this document's standing to-do list — now just C8 (chat memory), since A6 was executed 2026-07-07 (R2.2 → Superseded) and E1 by R2.1 (→ E7) — and should flip to Superseded entries as they're executed. (D7 shim and E5 APScheduler were executed 2026-07-07, R1.5b/R1.6.)*
+*Maintenance note: add an entry when a decision is made that a future session might reasonably reverse; move reversed decisions to the Superseded table with the succeeding entry named. The ⚠️ scheduled-to-change to-do list is now **empty** — C8 (chat memory) was executed 2026-07-08 (R2.6 → C10), the last one; A6 was executed 2026-07-07 (R2.2 → Superseded) and E1 by R2.1 (→ E7). (D7 shim and E5 APScheduler were executed 2026-07-07, R1.5b/R1.6.)*

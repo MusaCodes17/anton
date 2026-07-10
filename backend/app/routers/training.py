@@ -89,6 +89,7 @@ class FitnessResponse(BaseModel):
     threshold_pace_s_per_km: Optional[int] = None
     threshold_pace: Optional[str] = None            # "M:SS/km" presentation
     race_predictions: Optional[dict] = None          # {"5.0": 1234, ...}
+    running_level: Optional[float] = None            # COROS running level score (F3)
 
 
 @router.get("/fitness", response_model=FitnessResponse)
@@ -106,6 +107,7 @@ def get_fitness(db: Session = Depends(get_db)):
         threshold_pace_s_per_km=snap.threshold_pace_s_per_km,
         threshold_pace=seconds_to_pace(snap.threshold_pace_s_per_km) if snap.threshold_pace_s_per_km else None,
         race_predictions=snap.race_predictions,
+        running_level=snap.running_level,
     )
 
 

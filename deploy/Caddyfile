@@ -1,0 +1,55 @@
+# Anton reverse-proxy — TLS termination + unbuffered streaming.
+#
+# Replace YOUR_DOMAIN with the actual hostname (must point to this server's IP).
+# Caddy auto-provisions a Let's Encrypt certificate on first request.
+#
+# Streaming requirement (RA1.2): Anton serves three unbuffered transports that
+# break behind a buffering reverse proxy:
+#   - Chat SSE:          POST /api/chat/message → text/event-stream
+#   - Scrape-progress:   GET  /api/scrape/stream → text/event-stream
+#   - MCP Streamable HTTP: all /mcp/* requests
+# The flush_interval -1 directive below keeps all three working.
+#
+# Credential-redaction requirement (RA1.3): no usable credential may appear in
+# any log line. The capability-URL path was removed in RA1.1b (OAuth 2.1 is the
+# connector auth), but deleting the URI field remains correct hygiene — OAuth
+# flows include code_challenge, state, and redirect_uri in query strings. The
+# app-layer AccessLogMiddleware applies per-param redaction; the proxy log takes
+# the conservative approach of omitting the URI entirely.
+
+{
+    email admin@example.com
+}
+
+YOUR_DOMAIN {
+    log {
+        output file /var/log/caddy/access.log {
+            roll_size 50mb
+            roll_keep 7
+        }
+        # Filter: delete fields that may contain credentials before writing.
+        # `uri` / `request>uri`: OAuth query params, future path-based routes.
+        # `Authorization` and `Cookie` headers are never logged.
+        format filter {
+            wrap json
+            fields {
+                uri delete
+                request>uri delete
+                request>headers>Authorization delete
+                request>headers>Cookie delete
+            }
+        }
+    }
+
+    # Reverse proxy — unbuffered (flush_interval -1 = flush immediately).
+    reverse_proxy localhost:8000 {
+        flush_interval -1
+        header_up X-Forwarded-For {remote_host}
+        header_up X-Forwarded-Proto {scheme}
+    }
+
+    # HSTS — enforce HTTPS for one year.
+    # Activate this only after confirming TLS is working correctly; removing it
+    # later requires waiting out the max-age on every browser that visited.
+    header Strict-Transport-Security "max-age=31536000; includeSubDomains"
+}

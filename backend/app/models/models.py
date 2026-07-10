@@ -1,7 +1,7 @@
 """
 Database models using SQLAlchemy ORM
 """
-from sqlalchemy import BigInteger, Column, Integer, String, Float, Boolean, DateTime, Date, ForeignKey, Text, JSON
+from sqlalchemy import BigInteger, Column, Index, Integer, String, Float, Boolean, DateTime, Date, ForeignKey, Text, JSON, UniqueConstraint
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from app.database import Base
@@ -70,6 +70,7 @@ class Retailer(Base):
     price_records = relationship("PriceRecord", back_populates="retailer", cascade="all, delete-orphan")
     deals = relationship("Deal", back_populates="retailer", cascade="all, delete-orphan")
     promo_codes = relationship("PromoCode", back_populates="retailer", cascade="all, delete-orphan")
+    scrape_runs = relationship("ScrapeRun", back_populates="retailer", cascade="all, delete-orphan")
 
     @property
     def active_promo_codes(self):
@@ -173,6 +174,50 @@ class PromoCode(Base):
         return f"<PromoCode {self.code} @ {self.retailer_id}>"
 
 
+class ScrapeRun(Base):
+    """
+    Observability record for a single retailer's scrape attempt (R2.5).
+
+    Grain is **one row per retailer per full-catalog scrape attempt** — the
+    unit that answers "is Altitude quietly broken?": a run that finishes
+    `success` with `products_found == 0` is the tell-tale, distinct from one
+    that finishes `error`. Written only by the orchestrator's
+    `scrape_retailer()` (the single sanctioned write path); read by
+    `services/scrape_history.py`.
+
+    This is deals-domain telemetry — **disposable**, cascade-deleted with its
+    retailer (CLAUDE.md §2.6: history is sacred in training, disposable in
+    deals). It is *not* the SSE `scrape_state`, which is in-memory and dies on
+    restart; this table is the durable trend R4.1/R4.5 will build on.
+    """
+    __tablename__ = "scrape_runs"
+
+    id = Column(Integer, primary_key=True, index=True)
+    retailer_id = Column(Integer, ForeignKey("retailers.id"), nullable=False, index=True)
+    # A run is stamped "running" on creation and committed immediately so an
+    # in-flight (or crashed-mid-scrape) attempt is visible, then finalized to
+    # "success" | "error" when the retailer's shoe list is exhausted.
+    status = Column(String(20), nullable=False, default="running", server_default="running")
+    # How the scrape was triggered — "background" (POST /scrape/all),
+    # "manual" (POST /scrape/retailer/{id}); "scheduled" arrives with R4.1.
+    trigger = Column(String(20), nullable=True)
+    started_at = Column(DateTime(timezone=True), server_default=func.now(), index=True)
+    finished_at = Column(DateTime(timezone=True), nullable=True)
+    shoes_scraped = Column(Integer, nullable=False, default=0)
+    products_found = Column(Integer, nullable=False, default=0)
+    prices_recorded = Column(Integer, nullable=False, default=0)
+    deals_found = Column(Integer, nullable=False, default=0)
+    # Joined per-item error strings (truncated) when status == "error"; NULL on
+    # a clean run. Not a stack trace — a human-readable "what went wrong".
+    error = Column(Text, nullable=True)
+
+    # Relationships
+    retailer = relationship("Retailer", back_populates="scrape_runs")
+
+    def __repr__(self):
+        return f"<ScrapeRun {self.retailer_id} {self.status} products={self.products_found}>"
+
+
 class OwnedShoe(Base):
     """
     A shoe in the user's personal rotation — separate from `Shoe` (which is
@@ -221,6 +266,11 @@ class Activity(Base):
     seconds-per-km (int); formatting to "M:SS/km" happens at the boundary.
     """
     __tablename__ = "activities"
+    # R2.3: composite index serving the unified_activities read path — every
+    # feed query filters activity_type == "Run" and orders/ranges on run_date.
+    __table_args__ = (
+        Index("ix_activities_type_run_date", "activity_type", "run_date"),
+    )
 
     id = Column(Integer, primary_key=True, index=True)
     source = Column(String(20), nullable=False, index=True)  # strava | coros | manual
@@ -435,7 +485,112 @@ class AthleteMetric(Base):
     vo2max = Column(Float, nullable=True)                        # ml/kg/min
     threshold_pace_s_per_km = Column(Integer, nullable=True)     # lactate threshold pace
     race_predictions = Column(JSON, nullable=True)               # {"5.0": 1234, "10.0": 2468, ...} distance_km → predicted_s
+    running_level = Column(Float, nullable=True)                 # COROS running level score (F3)
     captured_at = Column(DateTime(timezone=True), server_default=func.now(), index=True)
 
     def __repr__(self):
         return f"<AthleteMetric vo2max={self.vo2max} @ {self.captured_at}>"
+
+
+class ChatConversation(Base):
+    """
+    A persisted Son of Anton conversation (R2.6) — memory moved off browser
+    localStorage so it's device-independent and (later, R3) readable by
+    server-side agents. The streaming endpoint stays stateless per request;
+    this table is written by a separate CRUD surface on stream-end.
+
+    The two message arrays are stored as JSON, not a normalized messages
+    table: `display_messages` carries pure UI concerns (tool-call events, pill
+    previews, dividers) that don't relationally model well, and at single-user
+    scale (cap 50 conversations) normalizing would be speculative infra
+    (CLAUDE.md §2.5). `id` is the client-generated UUID — keeping it preserves
+    the frontend's in-memory-first / persist-on-first-message flow.
+    """
+    __tablename__ = "chat_conversations"
+
+    id = Column(String(36), primary_key=True, index=True)  # client crypto.randomUUID()
+    title = Column(String(200), nullable=True)
+    model = Column(String(60), nullable=True)
+    display_messages = Column(JSON, nullable=False, default=list)  # rich UI message array
+    api_messages = Column(JSON, nullable=False, default=list)      # LLM-facing message array
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+    def __repr__(self):
+        return f"<ChatConversation {self.id} {self.title!r}>"
+
+
+class CheckpointPrompt(Base):
+    """
+    Records that the 100 km-checkpoint note prompt was already shown for a shoe
+    (R2.6) — UI-state persistence moved off localStorage so it doesn't
+    re-prompt on a second device. Not a mileage-ledger fact: the checkpoint
+    itself is derived from `current_mileage`; this row only remembers that we
+    asked. The (shoe, km) pair is unique — "mark prompted" is idempotent.
+    """
+    __tablename__ = "checkpoint_prompts"
+    __table_args__ = (
+        UniqueConstraint("owned_shoe_id", "checkpoint_km", name="uq_checkpoint_prompt_shoe_km"),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    owned_shoe_id = Column(Integer, ForeignKey("owned_shoes.id"), nullable=False, index=True)
+    checkpoint_km = Column(Integer, nullable=False)
+    prompted_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    def __repr__(self):
+        return f"<CheckpointPrompt shoe={self.owned_shoe_id} @ {self.checkpoint_km}km>"
+
+
+class OAuthAuthCode(Base):
+    """
+    Short-lived PKCE authorization code issued by the OAuth 2.1 login flow (RA1.1b).
+
+    The raw code is shown to the client once and never stored — only the
+    SHA-256 hex digest is persisted here. `used` is set to True when
+    `exchange_authorization_code` consumes it, preventing replay.
+    """
+    __tablename__ = "oauth_auth_codes"
+
+    id = Column(Integer, primary_key=True)
+    code_hash = Column(String(64), unique=True, nullable=False, index=True)
+    client_id = Column(String(255), nullable=False)
+    code_challenge = Column(String(255), nullable=False)  # PKCE S256 challenge
+    redirect_uri = Column(String(2048), nullable=False)
+    redirect_uri_provided_explicitly = Column(Boolean, nullable=False)
+    scopes = Column(String(500), nullable=True)   # space-separated
+    resource = Column(String(2048), nullable=True)
+    expires_at = Column(Float, nullable=False)
+    used = Column(Boolean, nullable=False, default=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    def __repr__(self):
+        return f"<OAuthAuthCode client={self.client_id} used={self.used}>"
+
+
+class OAuthToken(Base):
+    """
+    OAuth 2.1 access and refresh tokens (RA1.1b).
+
+    Only the SHA-256 hex digest of each token is stored; the raw value is
+    returned to the client once. `pair_id` links an access+refresh pair so
+    revoking either token deletes both.
+
+    token_type: 'access' | 'refresh'
+    expires_at: Unix timestamp (float); NULL for non-expiring refresh tokens.
+    """
+    __tablename__ = "oauth_tokens"
+
+    id = Column(Integer, primary_key=True)
+    token_hash = Column(String(64), unique=True, nullable=False, index=True)
+    token_type = Column(String(20), nullable=False)   # 'access' | 'refresh'
+    client_id = Column(String(255), nullable=False)
+    scopes = Column(String(500), nullable=True)
+    expires_at = Column(Float, nullable=True)
+    resource = Column(String(2048), nullable=True)
+    subject = Column(String(255), nullable=True)
+    pair_id = Column(String(32), nullable=True, index=True)  # random hex shared by access+refresh pair
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    def __repr__(self):
+        return f"<OAuthToken type={self.token_type} client={self.client_id}>"

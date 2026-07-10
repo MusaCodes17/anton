@@ -17,6 +17,7 @@ from dataclasses import dataclass
 from datetime import date
 from typing import Optional
 
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.models.models import Activity, OwnedShoe, ShoeRun
@@ -66,51 +67,28 @@ def _effective_moving_s(a: UnifiedActivity) -> Optional[float]:
     return None
 
 
-def _build(db: Session) -> list[UnifiedActivity]:
-    """The raw run feed, unsorted/unfiltered. Split out so stats helpers can
-    reuse it without re-implementing the join.
-
-    One pass over `activities` (runs only), each LEFT-joined to its optional
-    `shoe_runs` attribution for shoe info. No dedup — a physical run is a single
-    Activity row by construction."""
-    shoes = {s.id: s for s in db.query(OwnedShoe).all()}
-    attr_by_activity: dict[int, ShoeRun] = {
-        sr.activity_id: sr for sr in db.query(ShoeRun).all()
-    }
-
-    def _shoe_of(attr: Optional[ShoeRun]) -> Optional[UnifiedShoe]:
-        if attr is None:
-            return None
-        s = shoes.get(attr.owned_shoe_id)
-        if s is None:
-            return None
-        return UnifiedShoe(id=s.id, brand=s.brand, model=s.model, nickname=s.nickname)
-
-    out: list[UnifiedActivity] = []
-    for a in db.query(Activity).filter(Activity.activity_type == "Run").all():
-        if a.run_date is None:
-            continue
-        attr = attr_by_activity.get(a.id)
-        pace_s = a.avg_pace_s_per_km
-        out.append(UnifiedActivity(
-            date=a.run_date,
-            distance_km=a.distance_km or 0.0,
-            source=a.source,
-            moving_time_s=a.moving_time_s,
-            avg_pace=rotation.seconds_to_pace(pace_s) if pace_s else None,
-            avg_pace_s_per_km=pace_s,
-            avg_hr=a.avg_hr,
-            elevation_m=a.elevation_gain_m,
-            name=a.name,
-            elapsed_time_s=a.elapsed_time_s,
-            activity_tag=a.activity_tag,
-            activity_id=a.id,
-            shoe=_shoe_of(attr),
-            strava_activity_id=a.strava_activity_id,
-            shoe_run_id=attr.id if attr else None,
-        ))
-
-    return out
+def _row_to_unified(a: Activity, attr: Optional[ShoeRun], shoe: Optional[OwnedShoe]) -> UnifiedActivity:
+    """Map one (Activity, its optional ShoeRun attribution, that attribution's
+    optional OwnedShoe) result row to the `UnifiedActivity` projection."""
+    pace_s = a.avg_pace_s_per_km
+    return UnifiedActivity(
+        date=a.run_date,
+        distance_km=a.distance_km or 0.0,
+        source=a.source,
+        moving_time_s=a.moving_time_s,
+        avg_pace=rotation.seconds_to_pace(pace_s) if pace_s else None,
+        avg_pace_s_per_km=pace_s,
+        avg_hr=a.avg_hr,
+        elevation_m=a.elevation_gain_m,
+        name=a.name,
+        elapsed_time_s=a.elapsed_time_s,
+        activity_tag=a.activity_tag,
+        activity_id=a.id,
+        shoe=(UnifiedShoe(id=shoe.id, brand=shoe.brand, model=shoe.model, nickname=shoe.nickname)
+              if shoe is not None else None),
+        strava_activity_id=a.strava_activity_id,
+        shoe_run_id=attr.id if attr is not None else None,
+    )
 
 
 def unified_activities(
@@ -129,34 +107,55 @@ def unified_activities(
     The unioned run feed, newest first, with optional filters and stable
     limit/offset pagination.
 
-    `min_distance_km` is an extension over the §3 signature so the Training
-    activities list can filter short runs server-side (keeping it consistent
-    with server-side pagination rather than filtering a single page in React).
+    R2.3: the filters, ordering, and limit/offset are pushed into a single
+    indexed SQL query (LEFT JOIN through `shoe_runs` → `owned_shoes` for the
+    optional attribution) instead of loading every activity and reducing in
+    Python — the seam's shape (`UnifiedActivity`, this signature) is unchanged,
+    so every caller is untouched. Index: `ix_activities_type_run_date`
+    (activity_type, run_date) serves the base filter + newest-first order.
+    year/month use `strftime` (SQLite; the app is SQLite-only) so `month=6`
+    still matches June across all years; the ORDER BY tiebreak coalesces the
+    two nullable id columns to 0 to reproduce the old `_sort_key` exactly.
+
+    `min_distance_km` filters short runs server-side (keeping it consistent with
+    server-side pagination rather than filtering a single React page).
     `date_from`/`date_to` (inclusive, R2.7 T4b) are the range the Training-tab
     date picker uses; they compose with, and are a superset of, `year`/`month`.
     """
-    items = _build(db)
+    q = (
+        db.query(Activity, ShoeRun, OwnedShoe)
+        .outerjoin(ShoeRun, ShoeRun.activity_id == Activity.id)
+        .outerjoin(OwnedShoe, OwnedShoe.id == ShoeRun.owned_shoe_id)
+        .filter(Activity.activity_type == "Run", Activity.run_date.isnot(None))
+    )
 
     if year is not None:
-        items = [a for a in items if a.date.year == year]
+        q = q.filter(func.strftime("%Y", Activity.run_date) == f"{year:04d}")
     if month is not None:
-        items = [a for a in items if a.date.month == month]
+        q = q.filter(func.strftime("%m", Activity.run_date) == f"{month:02d}")
     if date_from is not None:
-        items = [a for a in items if a.date >= date_from]
+        q = q.filter(Activity.run_date >= date_from)
     if date_to is not None:
-        items = [a for a in items if a.date <= date_to]
+        q = q.filter(Activity.run_date <= date_to)
     if shoe_id is not None:
-        items = [a for a in items if a.shoe is not None and a.shoe.id == shoe_id]
+        q = q.filter(ShoeRun.owned_shoe_id == shoe_id)
     if min_distance_km is not None:
-        items = [a for a in items if a.distance_km >= min_distance_km]
+        q = q.filter(Activity.distance_km >= min_distance_km)
 
-    items.sort(key=lambda a: a._sort_key, reverse=True)
+    # Newest first, with the same deterministic tiebreak as the old _sort_key
+    # (date, strava_activity_id or 0, shoe_run_id or 0) so pagination is stable.
+    q = q.order_by(
+        Activity.run_date.desc(),
+        func.coalesce(Activity.strava_activity_id, 0).desc(),
+        func.coalesce(ShoeRun.id, 0).desc(),
+    )
 
     if offset:
-        items = items[offset:]
+        q = q.offset(offset)
     if limit is not None:
-        items = items[:limit]
-    return items
+        q = q.limit(limit)
+
+    return [_row_to_unified(a, attr, shoe) for a, attr, shoe in q.all()]
 
 
 _UNSET = object()  # "field not supplied" sentinel for the partial update below

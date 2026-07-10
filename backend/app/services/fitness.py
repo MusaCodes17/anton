@@ -21,6 +21,7 @@ def record_snapshot(
     vo2max: Optional[float] = None,
     threshold_pace_s_per_km: Optional[int] = None,
     race_predictions: Optional[dict] = None,
+    running_level: Optional[float] = None,
 ) -> AthleteMetric:
     """Append a new fitness snapshot (server-stamps `captured_at`). At least one
     metric should be present; the caller (the confirmation-gated sync agent)
@@ -29,6 +30,7 @@ def record_snapshot(
         vo2max=vo2max,
         threshold_pace_s_per_km=threshold_pace_s_per_km,
         race_predictions=race_predictions,
+        running_level=running_level,
     )
     db.add(snap)
     db.commit()

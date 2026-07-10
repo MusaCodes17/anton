@@ -20,6 +20,7 @@ from app.scrapers.le_coureur import LeCoureurScraper
 from app.scrapers.blacktoe_running import BlackToeRunningScraper
 from app.scrapers.forerunners import ForeRunnersScraper
 from app.scrapers.enroute_run import EnRouteRunScraper
+from app.scrapers.sail import SailScraper
 from app.scrapers.shopify_scraper import ShopifyScraper
 from app.scrapers.algolia_scraper import AlgoliaScraper
 
@@ -36,6 +37,7 @@ BESPOKE_SCRAPERS: dict[str, type[BaseScraper]] = {
     'BlackToe Running': BlackToeRunningScraper,
     'ForeRunners': ForeRunnersScraper,
     'En Route Run': EnRouteRunScraper,
+    'SAIL': SailScraper,
 }
 
 

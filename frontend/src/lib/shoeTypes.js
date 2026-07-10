@@ -1,23 +1,20 @@
-export const SHOE_TYPES = [
-  { value: 'long_distance_racer', label: 'Long Distance Racer' },
-  { value: 'short_distance_racer', label: 'Short Distance Racer' },
-  { value: 'long_run', label: 'Long Run' },
-  { value: 'tempo', label: 'Tempo' },
-  { value: 'intervals', label: 'Intervals' },
-  { value: 'daily_trainer', label: 'Daily Trainer' },
-  { value: 'trail', label: 'Trail' },
-  { value: 'recovery', label: 'Recovery' },
-]
+// Shoe-type PRESENTATION only (R2.4). The controlled vocabulary itself (which
+// types exist) is backend-owned and fetched via useShoeTypes() — this file no
+// longer keeps an independent copy of the list or labels. It holds two pure
+// presentation concerns keyed by the canonical snake_case value:
+//   - formatShoeType(): the human label, derived by title-casing the value
+//     (e.g. 'long_distance_racer' → 'Long Distance Racer').
+//   - SHOE_TYPE_BADGE_CLASSES: Tailwind badge colours (design tokens live here,
+//     not in the backend vocabulary).
 
-export const SHOE_TYPE_LABELS = {
-  long_distance_racer: 'Long Distance Racer',
-  short_distance_racer: 'Short Distance Racer',
-  long_run: 'Long Run',
-  tempo: 'Tempo',
-  intervals: 'Intervals',
-  daily_trainer: 'Daily Trainer',
-  trail: 'Trail',
-  recovery: 'Recovery',
+/** Title-case a canonical snake_case shoe_type for display. Falls back to the
+ * raw value for anything unexpected (e.g. legacy data), never throwing. */
+export function formatShoeType(value) {
+  if (!value) return ''
+  return value
+    .split('_')
+    .map((w) => (w ? w[0].toUpperCase() + w.slice(1) : w))
+    .join(' ')
 }
 
 // Opacity-based colours that work in both light and dark mode.

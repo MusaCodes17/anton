@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { Flag, Plus, Pencil, Trash2, Check, ChevronDown, Footprints, MapPin } from 'lucide-react'
+import { Flag, Plus, Pencil, Trash2, Check, Footprints, MapPin } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -24,6 +24,7 @@ import {
 import { formatDate, formatDuration, parseDuration, cn } from '@/lib/utils'
 
 const URGENT_DAYS = 14
+const VISIBLE_LIMIT = 2
 
 function Countdown({ race }) {
   const { days_remaining, weeks_remaining } = race
@@ -57,7 +58,6 @@ function ShoeChip({ shoe }) {
   )
 }
 
-// One upcoming race row.
 function UpcomingRow({ race, onEdit, onDone, onDelete }) {
   return (
     <div className="flex flex-col gap-3 rounded-[12px] border border-border bg-surface p-3.5 sm:flex-row sm:items-center">
@@ -110,7 +110,6 @@ function UpcomingRow({ race, onEdit, onDone, onDelete }) {
   )
 }
 
-// Delta of result vs target for a completed race.
 function ResultDelta({ race }) {
   if (race.result_time_s == null || race.target_time_s == null) return null
   const delta = race.result_time_s - race.target_time_s
@@ -125,7 +124,6 @@ function ResultDelta({ race }) {
 
 function PastRow({ race }) {
   const label = race.status === 'skipped' ? 'Skipped' : null
-  // T7: a completed race linked to its Activity deep-links to the run's full stats.
   const Wrapper = race.activity_id
     ? ({ children }) => (
         <Link
@@ -160,10 +158,23 @@ function PastRow({ race }) {
   )
 }
 
+function ViewAllButton({ count, onClick }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="focus-ring rounded text-2xs font-bold uppercase tracking-[0.08em] text-faint hover:text-muted-foreground"
+    >
+      View all · {count}
+    </button>
+  )
+}
+
 /**
- * Planned races card — sits above Trends on /training because the next race is
- * the most time-sensitive thing on the page. Upcoming races soonest-first,
- * past races collapsed below.
+ * Planned races card — Races · Upcoming (max 2 inline, overflow in dialog) +
+ * Past (max 2 inline, overflow in dialog). Fixed card height like RecordsCard.
+ * Past races include both PlannedRace completed/skipped rows and Activity rows
+ * tagged 'Race'/'Parkrun' (from_activity=true — deep-link only, no CRUD).
  */
 export default function PlannedRacesCard() {
   const races = useRaces()
@@ -178,14 +189,15 @@ export default function PlannedRacesCard() {
   const [doneRace, setDoneRace] = useState(null)
   const [resultTime, setResultTime] = useState('')
   const [deleting, setDeleting] = useState(null)
-  const [pastOpen, setPastOpen] = useState(false)
+  const [upcomingAllOpen, setUpcomingAllOpen] = useState(false)
+  const [pastAllOpen, setPastAllOpen] = useState(false)
 
   const { upcoming, past } = useMemo(() => {
     const list = races.data || []
     const up = list.filter((r) => r.status === 'planned' && r.days_remaining >= 0)
     const pa = list
       .filter((r) => !(r.status === 'planned' && r.days_remaining >= 0))
-      .sort((a, b) => new Date(b.race_date) - new Date(a.race_date)) // most recent past first
+      .sort((a, b) => new Date(b.race_date) - new Date(a.race_date))
     return { upcoming: up, past: pa }
   }, [races.data])
 
@@ -225,8 +237,11 @@ export default function PlannedRacesCard() {
     })
   }
 
+  const visibleUpcoming = upcoming.slice(0, VISIBLE_LIMIT)
+  const visiblePast = past.slice(0, VISIBLE_LIMIT)
+
   return (
-    <section className="overflow-hidden rounded-2xl border border-border bg-card">
+    <div className="rounded-2xl border border-border bg-card">
       <div className="flex items-center justify-between border-b border-border px-5 py-3">
         <div className="flex items-center gap-2.5">
           <Flag className="h-4 w-4 text-primary" />
@@ -239,7 +254,10 @@ export default function PlannedRacesCard() {
 
       <div className="p-4">
         {races.isLoading ? (
-          <div className="h-16 animate-pulse rounded-[12px] bg-muted" />
+          <div className="space-y-2">
+            <div className="h-16 animate-pulse rounded-[12px] bg-muted" />
+            <div className="h-8 animate-pulse rounded-[10px] bg-muted" />
+          </div>
         ) : upcoming.length === 0 && past.length === 0 ? (
           <p className="py-2 text-center text-sm text-muted-foreground">
             No races planned —{' '}
@@ -248,42 +266,76 @@ export default function PlannedRacesCard() {
             </button>
           </p>
         ) : (
-          <div className="space-y-2.5">
-            {upcoming.map((race) => (
-              <UpcomingRow
-                key={race.id}
-                race={race}
-                onEdit={openEdit}
-                onDone={(r) => { setDoneRace(r); setResultTime('') }}
-                onDelete={setDeleting}
-              />
-            ))}
+          <div className="space-y-3">
+            {/* Upcoming */}
+            <div className="space-y-2">
+              {visibleUpcoming.length > 0 ? (
+                visibleUpcoming.map((race) => (
+                  <UpcomingRow
+                    key={race.id}
+                    race={race}
+                    onEdit={openEdit}
+                    onDone={(r) => { setDoneRace(r); setResultTime('') }}
+                    onDelete={setDeleting}
+                  />
+                ))
+              ) : (
+                <p className="py-1 text-sm text-muted-foreground">No upcoming races.</p>
+              )}
+              {upcoming.length > VISIBLE_LIMIT && (
+                <ViewAllButton count={upcoming.length} onClick={() => setUpcomingAllOpen(true)} />
+              )}
+            </div>
 
-            {upcoming.length === 0 && (
-              <p className="py-1 text-sm text-muted-foreground">No upcoming races.</p>
-            )}
-
+            {/* Past */}
             {past.length > 0 && (
-              <div className="pt-1">
-                <button
-                  type="button"
-                  onClick={() => setPastOpen((o) => !o)}
-                  className="focus-ring flex items-center gap-1.5 rounded text-2xs font-bold uppercase tracking-[0.08em] text-faint hover:text-muted-foreground"
-                  aria-expanded={pastOpen}
-                >
-                  <ChevronDown className={cn('h-3.5 w-3.5 transition-transform', !pastOpen && '-rotate-90')} />
-                  Past races · {past.length}
-                </button>
-                {pastOpen && (
-                  <div className="mt-2 space-y-1.5">
-                    {past.map((race) => <PastRow key={race.id} race={race} />)}
-                  </div>
-                )}
+              <div className="space-y-1.5 border-t border-border/50 pt-3">
+                <div className="flex items-center justify-between pb-1">
+                  <span className="text-2xs font-bold uppercase tracking-[0.08em] text-faint">
+                    Past races · {past.length}
+                  </span>
+                  {past.length > VISIBLE_LIMIT && (
+                    <ViewAllButton count={past.length} onClick={() => setPastAllOpen(true)} />
+                  )}
+                </div>
+                {visiblePast.map((race) => <PastRow key={race.id} race={race} />)}
               </div>
             )}
           </div>
         )}
       </div>
+
+      {/* All upcoming dialog */}
+      <Dialog open={upcomingAllOpen} onOpenChange={setUpcomingAllOpen}>
+        <DialogContent className="max-h-[80vh] overflow-y-auto sm:max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>All upcoming races</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-2">
+            {upcoming.map((race) => (
+              <UpcomingRow
+                key={race.id}
+                race={race}
+                onEdit={(r) => { setUpcomingAllOpen(false); openEdit(r) }}
+                onDone={(r) => { setUpcomingAllOpen(false); setDoneRace(r); setResultTime('') }}
+                onDelete={(r) => { setUpcomingAllOpen(false); setDeleting(r) }}
+              />
+            ))}
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* All past dialog */}
+      <Dialog open={pastAllOpen} onOpenChange={setPastAllOpen}>
+        <DialogContent className="max-h-[80vh] overflow-y-auto sm:max-w-xl">
+          <DialogHeader>
+            <DialogTitle>All past races</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-1.5">
+            {past.map((race) => <PastRow key={race.id} race={race} />)}
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* Add / edit dialog */}
       <Dialog open={formOpen} onOpenChange={setFormOpen}>
@@ -338,7 +390,7 @@ export default function PlannedRacesCard() {
           <DialogHeader>
             <DialogTitle>Remove race?</DialogTitle>
             <DialogDescription>
-              “{deleting?.name}” will be permanently removed. This can’t be undone.
+              "{deleting?.name}" will be permanently removed. This can't be undone.
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
@@ -349,6 +401,6 @@ export default function PlannedRacesCard() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </section>
+    </div>
   )
 }

@@ -42,8 +42,9 @@ import {
   useUpdateOwnedShoe,
   useDeleteOwnedShoe,
   useCorosSyncStatus,
+  useShoeTypes,
 } from '@/hooks/useApi'
-import { SHOE_TYPES, SHOE_TYPE_LABELS } from '@/lib/shoeTypes'
+import { formatShoeType } from '@/lib/shoeTypes'
 
 const ALL = '__all__'
 
@@ -61,9 +62,8 @@ const SORTS = {
   newest: { label: 'Newest added', fn: (a, b) => new Date(b.created_at) - new Date(a.created_at) },
 }
 
-// Order the by-type groups the same way the type filter lists them; untyped
-// shoes fall into a trailing "Uncategorized" group.
-const TYPE_ORDER = SHOE_TYPES.map((t) => t.value)
+// Untyped shoes fall into a trailing "Uncategorized" group. The by-type group
+// order follows the fetched vocabulary (see `typeOrder` in the component).
 const UNTYPED = '__untyped__'
 
 const statusVariant = {
@@ -91,6 +91,7 @@ export default function MyShoes() {
   const [retiredCollapsed, setRetiredCollapsed] = useState(true)
 
   const shoes = useOwnedShoes()
+  const { data: shoeTypes = [] } = useShoeTypes()
   const overview = useRotationOverview()
   const create = useCreateOwnedShoe()
   const update = useUpdateOwnedShoe()
@@ -136,16 +137,16 @@ export default function MyShoes() {
       if (!byType.has(key)) byType.set(key, [])
       byType.get(key).push(shoe)
     }
-    const order = [...TYPE_ORDER, UNTYPED]
+    const order = [...shoeTypes, UNTYPED]
     return [...byType.entries()]
       .sort(([a], [b]) => order.indexOf(a) - order.indexOf(b))
       .map(([type, list]) => ({
         type,
-        label: type === UNTYPED ? 'Uncategorized' : SHOE_TYPE_LABELS[type] || type,
+        label: type === UNTYPED ? 'Uncategorized' : formatShoeType(type),
         shoes: list,
         totalKm: list.reduce((sum, s) => sum + (s.current_mileage || 0), 0),
       }))
-  }, [activeShoes])
+  }, [activeShoes, shoeTypes])
 
   // Server-computed retirement pipeline (shoes ≥75% of limit + replacement-deal
   // counts), intersected with the current filters and joined to full shoe rows.
@@ -229,8 +230,8 @@ export default function MyShoes() {
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value={ALL}>All types</SelectItem>
-                {SHOE_TYPES.map((t) => (
-                  <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>
+                {shoeTypes.map((t) => (
+                  <SelectItem key={t} value={t}>{formatShoeType(t)}</SelectItem>
                 ))}
               </SelectContent>
             </Select>

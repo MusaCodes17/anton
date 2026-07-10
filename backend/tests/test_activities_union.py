@@ -116,6 +116,27 @@ def test_filters_year_month_shoe_min_distance_and_pagination(db):
     assert not ({id(x) for x in page1} & {id(x) for x in page2})
 
 
+def test_filter_composes_with_pagination_newest_first(db):
+    # R2.3: filters + ORDER BY + LIMIT/OFFSET all run in one SQL query. A
+    # date_from filter composed with paging must page a *filtered, sorted*
+    # result — newest first, no page overlap, the pre-window run never appears.
+    _activity(db, said=1, run_date=date(2026, 1, 1), dist=5.0)   # before window
+    for i, d in enumerate([date(2026, 6, 1), date(2026, 6, 2),
+                           date(2026, 6, 3), date(2026, 6, 4)], start=10):
+        _activity(db, said=i, run_date=d, dist=5.0)
+    db.commit()
+
+    page1 = activities_svc.unified_activities(
+        db, date_from=date(2026, 5, 1), limit=2, offset=0)
+    page2 = activities_svc.unified_activities(
+        db, date_from=date(2026, 5, 1), limit=2, offset=2)
+    assert [a.date for a in page1] == [date(2026, 6, 4), date(2026, 6, 3)]
+    assert [a.date for a in page2] == [date(2026, 6, 2), date(2026, 6, 1)]
+    # the January run is filtered out entirely, not merely off the last page
+    assert all(a.date.year == 2026 and a.date.month == 6
+               for a in page1 + page2)
+
+
 def test_summary_includes_all_sources(db):
     shoe = _owned(db)
     _activity(db, said=1, run_date=date(2026, 6, 1), dist=10.0)

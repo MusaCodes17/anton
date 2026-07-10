@@ -65,6 +65,13 @@ RETAILERS = [
         "scraping_enabled": True,  # Shopify scraper
         "scraper_config": {"notes": "Shopify (Vancouver running specialty)."},
     },
+    {
+        "name": "SAIL",
+        "base_url": "https://www.sail.ca/en/",
+        "is_active": True,
+        "scraping_enabled": True,  # SearchSpring scraper (site ID s8zq1c)
+        "scraper_config": {"notes": "Magento 2 + SearchSpring (site s8zq1c). Public API, no auth. Good for clearance outdoor/running gear."},
+    },
 ]
 
 

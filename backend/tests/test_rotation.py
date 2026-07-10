@@ -74,3 +74,33 @@ def test_shoe_run_create_still_rejects_zero_distance():
 
     with pytest.raises(Exception):
         ShoeRunCreate(distance_km=0.0, run_date=date(2026, 6, 18))
+
+
+def test_log_run_persists_rich_fields(db):
+    """F1: rich COROS fields written through log_run land on the Activity row."""
+    shoe = _make_shoe(db, 0.0)
+    result = rotation.log_run(
+        db,
+        shoe.id,
+        distance_km=12.3,
+        run_date=date(2026, 7, 8),
+        name="Tempo 10k",
+        elevation_gain_m=45.5,
+        moving_time_s=2940,
+        elapsed_time_s=3060,
+        avg_cadence=178.0,
+        calories=610.0,
+        training_load=87.5,
+        training_focus="Aerobic base",
+        activity_tag="Tempo",
+    )
+    act = result.activity
+    assert act.name == "Tempo 10k"
+    assert act.elevation_gain_m == pytest.approx(45.5)
+    assert act.moving_time_s == 2940
+    assert act.elapsed_time_s == 3060
+    assert act.avg_cadence == pytest.approx(178.0)
+    assert act.calories == pytest.approx(610.0)
+    assert act.training_load == pytest.approx(87.5)
+    assert act.training_focus == "Aerobic base"
+    assert act.activity_tag == "Tempo"

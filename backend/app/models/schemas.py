@@ -1,9 +1,26 @@
 """
 Pydantic schemas for API request/response validation
 """
-from pydantic import BaseModel, Field, HttpUrl
+from pydantic import BaseModel, Field, HttpUrl, field_validator
 from typing import List, Optional
 from datetime import date, datetime
+
+from app.utils.shoe_types import SHOE_TYPES, is_valid_shoe_type
+
+
+def validate_optional_shoe_type(v: Optional[str]) -> Optional[str]:
+    """Shared `shoe_type` validator for the write schemas (R2.4): `None`/`""`
+    clears the type; any other value must be a member of the backend-owned
+    vocabulary (`app.utils.shoe_types.SHOE_TYPES`). Rejects typos that used to
+    fail silently at the cross-domain join. Read schemas deliberately do NOT
+    validate — legacy data must never break a GET."""
+    if v is None or v == "":
+        return None
+    if not is_valid_shoe_type(v):
+        raise ValueError(
+            f"Invalid shoe_type '{v}'. Use one of: {', '.join(SHOE_TYPES)} (or omit)."
+        )
+    return v
 
 
 # ============== SHOE SCHEMAS ==============
@@ -21,7 +38,7 @@ class ShoeBase(BaseModel):
 
 class ShoeCreate(ShoeBase):
     """Schema for creating a new shoe"""
-    pass
+    _check_shoe_type = field_validator("shoe_type")(validate_optional_shoe_type)
 
 
 class ShoeUpdate(BaseModel):
@@ -33,6 +50,8 @@ class ShoeUpdate(BaseModel):
     msrp: Optional[float] = Field(None, gt=0)
     notes: Optional[str] = None
     is_active: Optional[bool] = None
+
+    _check_shoe_type = field_validator("shoe_type")(validate_optional_shoe_type)
 
 
 class ShoeResponse(ShoeBase):
@@ -252,7 +271,7 @@ class OwnedShoeBase(BaseModel):
 
 class OwnedShoeCreate(OwnedShoeBase):
     """Schema for adding a shoe to the rotation"""
-    pass
+    _check_shoe_type = field_validator("shoe_type")(validate_optional_shoe_type)
 
 
 class OwnedShoeUpdate(BaseModel):
@@ -276,6 +295,8 @@ class OwnedShoeUpdate(BaseModel):
     purchase_price: Optional[float] = Field(None, gt=0)
     mileage_limit: Optional[float] = Field(None, gt=0)
     image_url: Optional[str] = None
+
+    _check_shoe_type = field_validator("shoe_type")(validate_optional_shoe_type)
 
 
 class MileageAdjust(BaseModel):
@@ -481,6 +502,59 @@ class PlannedRaceResponse(PlannedRaceBase):
     days_remaining: int
     weeks_remaining: int
     target_pace: Optional[str] = None      # "M:SS/km" from target_time_s / distance_km
+    # True when synthesized from an Activity tag, not a PlannedRace row — frontend
+    # uses this to suppress edit/done/delete actions on activity-sourced entries.
+    from_activity: bool = False
+
+    class Config:
+        from_attributes = True
+
+
+# ── Chat persistence (R2.6) ─────────────────────────────────────────────────
+
+class ConversationUpsert(BaseModel):
+    """Create-or-replace payload for a Son of Anton conversation. Mirrors the
+    old whole-conversation localStorage save — the client PUTs the full state
+    on stream-end. Message arrays are opaque JSON (UI + LLM shapes)."""
+    title: Optional[str] = None
+    model: Optional[str] = None
+    display_messages: List = Field(default_factory=list)
+    api_messages: List = Field(default_factory=list)
+
+
+class ConversationSummary(BaseModel):
+    """List-panel projection — no message bodies, just what the sidebar needs."""
+    id: str
+    title: Optional[str] = None
+    model: Optional[str] = None
+    message_count: int
+    created_at: datetime
+    updated_at: datetime
+
+
+class ConversationResponse(BaseModel):
+    """A full conversation, including both message arrays, for load-on-select."""
+    id: str
+    title: Optional[str] = None
+    model: Optional[str] = None
+    display_messages: List = Field(default_factory=list)
+    api_messages: List = Field(default_factory=list)
+    created_at: datetime
+    updated_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+class CheckpointPromptCreate(BaseModel):
+    """Mark the 100 km-checkpoint prompt as shown for a shoe (idempotent)."""
+    owned_shoe_id: int
+    checkpoint_km: int
+
+
+class CheckpointPromptResponse(BaseModel):
+    owned_shoe_id: int
+    checkpoint_km: int
 
     class Config:
         from_attributes = True

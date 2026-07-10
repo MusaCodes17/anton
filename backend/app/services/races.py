@@ -7,7 +7,8 @@ boundary and never stored: race_date - today is only meaningful "now".
 """
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, datetime
+from types import SimpleNamespace
 from typing import Optional
 
 from sqlalchemy.orm import Session
@@ -67,6 +68,7 @@ def attach_derived(race: PlannedRace, today: Optional[date] = None) -> PlannedRa
     race.days_remaining = days
     race.weeks_remaining = days // 7
     race.target_pace = _target_pace(race)
+    race.from_activity = False  # PlannedRace rows are never activity-synthesized
     return race
 
 
@@ -95,9 +97,54 @@ def race_to_dict(race: PlannedRace, today: Optional[date] = None) -> dict:
     }
 
 
-def list_races(db: Session, today: Optional[date] = None) -> list[PlannedRace]:
-    """All races, soonest first, with derived fields attached."""
+def list_races(db: Session, today: Optional[date] = None) -> list:
+    """All races, soonest first, with derived fields attached.
+
+    Includes synthetic entries for activities tagged 'Race' or 'Parkrun' whose
+    run_date is in the past and that aren't already back-linked to a PlannedRace
+    row (to avoid duplicates). Synthetic items carry from_activity=True so the
+    frontend knows they cannot be edited/deleted/marked-done via the races API.
+    """
+    today = today or date.today()
+
     races = db.query(PlannedRace).order_by(PlannedRace.race_date.asc()).all()
     for r in races:
         attach_derived(r, today)
-    return races
+
+    # Activity-tagged past races not already referenced by any PlannedRace row.
+    linked_ids = {r.activity_id for r in races if r.activity_id is not None}
+    q = (
+        db.query(Activity)
+        .filter(
+            Activity.activity_tag.in_(("Race", "Parkrun")),
+            Activity.run_date < today,
+        )
+    )
+    if linked_ids:
+        q = q.filter(Activity.id.notin_(linked_ids))
+    tagged = q.order_by(Activity.run_date.desc()).all()
+
+    synthetic = []
+    for a in tagged:
+        days = (a.run_date - today).days
+        synthetic.append(SimpleNamespace(
+            id=-(a.id),   # negative: never collides with a real PlannedRace.id
+            name=a.name or f"Race {a.run_date.isoformat()}",
+            race_date=a.run_date,
+            distance_km=a.distance_km,
+            target_time_s=None,
+            location=None,
+            planned_shoe_id=None,
+            notes=None,
+            status="completed",
+            result_time_s=a.moving_time_s,
+            activity_id=a.id,
+            created_at=datetime.combine(a.run_date, datetime.min.time()),
+            planned_shoe=None,
+            days_remaining=days,
+            weeks_remaining=days // 7,
+            target_pace=None,
+            from_activity=True,
+        ))
+
+    return races + synthetic

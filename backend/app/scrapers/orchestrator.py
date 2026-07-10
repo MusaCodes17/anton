@@ -9,11 +9,15 @@ from typing import Dict, List, Optional
 
 from sqlalchemy.orm import Session
 
-from app.models.models import Retailer, Shoe
+from app.models.models import Retailer, ScrapeRun, Shoe
 from app.scrapers.deal_store import DealStore
 from app.scrapers.registry import build_registry
 
 logger = logging.getLogger(__name__)
+
+# Joined per-item error strings are truncated before they land in
+# ScrapeRun.error — the column is a human-readable summary, not a log sink.
+_SCRAPE_ERROR_MAX = 2000
 
 
 class ScrapeOrchestrator:
@@ -71,14 +75,27 @@ class ScrapeOrchestrator:
             # we can retire deals whose product_url no longer comes back at all
             # (e.g. the shoe's model name was edited and the retailer search now
             # resolves to a different product page) — see cleanup below.
-            seen_urls = set()
+            #
+            # We track TWO sets: `fetched_urls` (products whose detail fetch
+            # succeeded) and `searched_urls` (every URL the search returned,
+            # whether or not its detail fetch succeeded). Orphan retirement runs
+            # against the *union* — a product that appeared in search must never
+            # be orphaned merely because its detail fetch failed this scrape
+            # (H2/B10: a transient per-product detail timeout is routine and must
+            # not extinguish a live deal). Search and detail URLs share the
+            # `/products/<handle>` shape across the Shopify and En Route scrapers,
+            # so the union matches correctly.
+            fetched_urls = set()
+            searched_urls = {
+                p['product_url'] for p in products if p.get('product_url')
+            }
             for product in products:
                 try:
                     details = scraper.get_product_details(product['product_url'])
                     if not details:
                         continue
 
-                    seen_urls.add(details['product_url'])
+                    fetched_urls.add(details['product_url'])
 
                     # We no longer track one exact size — "available" now means at
                     # least one size of this model is in stock.
@@ -146,8 +163,12 @@ class ScrapeOrchestrator:
             # that WERE re-scraped but rose above target). Without this,
             # renaming a shoe (e.g. "Magic Speed 4" -> "Magic Speed 5") leaves
             # the old model's deal active forever, since the new search never
-            # revisits the old URL to notice it should be retired.
-            self.store.deactivate_orphaned_deals(shoe, retailer, seen_urls)
+            # revisits the old URL to notice it should be retired. Retire against
+            # the union of fetched + searched URLs so a failed detail fetch on a
+            # still-listed product can't orphan its live deal (H2/B10).
+            self.store.deactivate_orphaned_deals(
+                shoe, retailer, fetched_urls | searched_urls
+            )
 
             retailer.last_scraped_at = datetime.now(timezone.utc)
             self.db.commit()
@@ -158,6 +179,73 @@ class ScrapeOrchestrator:
             results['errors'].append(error_msg)
 
         return results
+
+    def scrape_retailer(
+        self, retailer: Retailer, shoes: List[Shoe], *, trigger: Optional[str] = None
+    ) -> Dict:
+        """
+        Scrape one retailer across a list of shoes, recording a ScrapeRun
+        observability row (R2.5) — the **single sanctioned write path** for
+        `scrape_runs`. This is the per-retailer, full-catalog unit that answers
+        "is this retailer quietly broken?"; the SSE-driven background flow and
+        the synchronous POST /scrape/retailer/{id} endpoint both go through it.
+
+        The run is stamped "running" and committed immediately so an in-flight
+        (or crashed-mid-scrape) attempt is visible, then finalized to
+        "success"/"error" once the shoe list is exhausted. Per-shoe failures are
+        isolated (one shoe's error never aborts the retailer) and summarized
+        into ScrapeRun.error — matching the skip-and-continue rule for batch
+        loops (CLAUDE.md §7).
+
+        Args:
+            retailer: the retailer to scrape (caller has confirmed it's active
+                and scraping-enabled).
+            shoes: the shoes to search for at this retailer.
+            trigger: how the scrape was kicked off ("background" | "manual");
+                stamped on the run for later attribution.
+
+        Returns the aggregate counts for this retailer (products_found,
+        prices_recorded, deals_found, shoes_scraped, errors).
+        """
+        run = ScrapeRun(retailer_id=retailer.id, status="running", trigger=trigger)
+        self.db.add(run)
+        self.db.commit()  # persist "running" up front — visible while in flight
+
+        agg = {
+            'shoes_scraped': 0,
+            'products_found': 0,
+            'prices_recorded': 0,
+            'deals_found': 0,
+            'errors': [],
+        }
+
+        for shoe in shoes:
+            try:
+                r = self.scrape_retailer_for_shoe(shoe, retailer)
+                agg['shoes_scraped'] += 1
+                agg['products_found'] += r.get('products_found', 0)
+                agg['prices_recorded'] += r.get('prices_recorded', 0)
+                agg['deals_found'] += r.get('deals_found', 0)
+                if r.get('errors'):
+                    agg['errors'].extend(r['errors'])
+            except Exception as e:
+                # scrape_retailer_for_shoe catches its own errors, so this is a
+                # belt-and-suspenders guard — one shoe never wedges the run.
+                msg = f"{shoe.brand} {shoe.model}: {e}"
+                logger.error(f"[{retailer.name}] {msg}")
+                agg['errors'].append(msg)
+
+        run.finished_at = datetime.now(timezone.utc)
+        run.status = "error" if agg['errors'] else "success"
+        run.shoes_scraped = agg['shoes_scraped']
+        run.products_found = agg['products_found']
+        run.prices_recorded = agg['prices_recorded']
+        run.deals_found = agg['deals_found']
+        run.error = ("; ".join(agg['errors'])[:_SCRAPE_ERROR_MAX]) or None
+        retailer.last_scraped_at = run.finished_at
+        self.db.commit()
+
+        return agg
 
     def scrape_shoe(self, shoe_id: int, retailer_ids: Optional[List[int]] = None) -> Dict:
         """

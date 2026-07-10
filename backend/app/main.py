@@ -10,29 +10,34 @@ from dotenv import load_dotenv
 
 from app.database import run_migrations
 from app.mcp_server import mcp
+from app.middleware.access_log import AccessLogMiddleware
 from app.middleware.auth import BearerAuthMiddleware
-from app.routers import shoes, retailers, deals, dashboard, scraping, export, owned_shoes, coros_sync, chat, admin, training, strava, watchlist, activities, races, home
+from app.routers import shoes, retailers, deals, dashboard, scraping, export, owned_shoes, coros_sync, chat, admin, training, strava, watchlist, activities, races, home, shoe_types, checkpoints, oauth as oauth_router
 
 # Load environment variables
 load_dotenv()
 
 
-def require_anton_secret() -> None:
+def require_auth_config() -> None:
     """
-    Fail fast if the R2.1 auth secret is missing.
+    Fail fast if no auth credentials are configured (RA1.1).
 
-    Auth is *not* an optional feature (contrast the graceful-degradation pattern
-    for optional creds in CLAUDE.md §4.6): absence is fatal, never a silently
-    unauthenticated server. Called at startup, before the app serves any request.
-    The `.env.example` placeholder is an empty string, so empty/whitespace counts
-    as unset. Raises RuntimeError so uvicorn aborts the boot with a clear message.
+    Auth is *not* an optional feature: absence is fatal, never a silently
+    unauthenticated server. `ANTON_TOKENS` must be non-empty. An empty-but-present
+    env var is treated as unset. Raises RuntimeError so uvicorn aborts with a
+    clear message.
+
+    Note: `ANTON_CONNECTOR_TOKEN` (capability-URL) was removed in RA1.1b when
+    OAuth 2.1 replaced it (design_decisions E9). Do not re-add that fallback.
     """
-    if not os.getenv("ANTON_SECRET", "").strip():
+    tokens = os.getenv("ANTON_TOKENS", "").strip()
+    if not tokens:
         raise RuntimeError(
-            "ANTON_SECRET is not set. The API refuses to start without it "
-            "(R2.1 security pass — SECURITY_PASS_PLAN.md). Generate one with: "
-            'python -c "import secrets; print(secrets.token_hex(32))" '
-            "and set ANTON_SECRET (and VITE_ANTON_SECRET) in backend/.env."
+            "No auth credentials configured. Set ANTON_TOKENS (RA1.1) in backend/.env. "
+            "Example: ANTON_TOKENS=\"desktop:$(python3 -c 'import secrets; print(secrets.token_hex(32))')\""
+            ",loopback:$(python3 -c 'import secrets; print(secrets.token_hex(32))')"
+            ",spa:$(python3 -c 'import secrets; print(secrets.token_hex(32))')\""
+            " — see REMOTE_ACCESS_PLAN.md §6 RA1.1."
         )
 
 
@@ -45,7 +50,7 @@ async def lifespan(app: FastAPI):
     active — mounting mcp.streamable_http_app() alone doesn't run a sub-app's
     lifespan, so it's merged in here instead.
     """
-    require_anton_secret()
+    require_auth_config()
     run_migrations()
     print("✅ Database migrated to head")
     async with mcp.session_manager.run():
@@ -60,15 +65,18 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-# Bearer-token auth (R2.1). Added BEFORE CORS so that CORS is the *outer* wrapper
-# (Starlette's add_middleware makes the last-added middleware outermost): a 401
-# from auth then still gets CORS headers, so the browser surfaces a clean 401
-# rather than an opaque CORS error. See app/middleware/auth.py.
+# Middleware stack (Starlette: last-added = outermost):
+#
+#  AccessLogMiddleware   ← outermost — measures total latency, logs final status
+#  CORSMiddleware        ← adds CORS headers so 401s are browser-visible
+#  BearerAuthMiddleware  ← innermost — enforces auth; sets scope["anton_client"]
+#
+# Auth is innermost so 401s still get CORS headers (browser can read them).
+# AccessLog is outermost so it sees the complete status + total duration.
+
 app.add_middleware(BearerAuthMiddleware)
 
-# Configure CORS
 allowed_origins = os.getenv("ALLOWED_ORIGINS", "http://localhost:3000,http://localhost:5173").split(",")
-
 app.add_middleware(
     CORSMiddleware,
     allow_origins=allowed_origins,
@@ -76,6 +84,9 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# RA1.3: structured access log — one line per request. Added last = outermost.
+app.add_middleware(AccessLogMiddleware)
 
 # Include routers
 app.include_router(shoes.router, prefix="/api")
@@ -94,6 +105,30 @@ app.include_router(watchlist.router, prefix="/api")
 app.include_router(activities.router, prefix="/api")
 app.include_router(races.router, prefix="/api")
 app.include_router(home.router, prefix="/api")
+app.include_router(shoe_types.router, prefix="/api")
+app.include_router(checkpoints.router, prefix="/api")
+
+# OAuth 2.1 login page — always registered (needed even when OAuth is not
+# fully configured so the route exists for graceful "not configured" handling).
+app.include_router(oauth_router.router)
+
+# OAuth 2.1 protocol routes (/.well-known, /authorize, /token, /revoke).
+# Registered only when ANTON_HOST_URL is set — that var is the issuer URL and
+# its presence signals that the OAuth server should be active.
+_host_url = os.getenv("ANTON_HOST_URL", "").strip()
+if _host_url:
+    from mcp.server.auth.routes import create_auth_routes
+    from mcp.server.auth.settings import ClientRegistrationOptions, RevocationOptions
+    from pydantic import AnyHttpUrl
+    from app.services.oauth import get_provider as _get_oauth_provider
+
+    _oauth_routes = create_auth_routes(
+        _get_oauth_provider(),
+        issuer_url=AnyHttpUrl(_host_url),
+        client_registration_options=ClientRegistrationOptions(enabled=False),
+        revocation_options=RevocationOptions(enabled=True),
+    )
+    app.router.routes.extend(_oauth_routes)
 
 # Mount the MCP server (Streamable HTTP transport) at /mcp
 app.mount("/mcp", mcp.streamable_http_app())

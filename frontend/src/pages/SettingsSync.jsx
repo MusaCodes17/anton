@@ -1,7 +1,12 @@
-import { RefreshCw, Watch, Import } from 'lucide-react'
+import { RefreshCw, Watch, Import, Activity } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import ScrapeButton from '@/components/ScrapeButton'
-import { useDashboardStats, useCorosSyncStatus, useStravaStatus } from '@/hooks/useApi'
+import {
+  useDashboardStats,
+  useCorosSyncStatus,
+  useStravaStatus,
+  useScrapeHistory,
+} from '@/hooks/useApi'
 import { formatDate, formatRelativeTime } from '@/lib/utils'
 
 // One read-only status line: label on the left, value on the right, muted
@@ -11,6 +16,46 @@ function StatRow({ label, value }) {
     <div className="flex items-baseline justify-between gap-4 py-1.5 text-sm">
       <span className="text-muted-foreground">{label}</span>
       <span className="font-medium text-foreground tabular-nums">{value ?? '—'}</span>
+    </div>
+  )
+}
+
+// R2.5 scrape-health verdict → dot color + human label. "warning" is the
+// quietly-broken case (finished clean, found nothing); "unknown" = never
+// scraped or a scrape is running now.
+const HEALTH = {
+  ok: { dot: 'bg-success', label: 'Healthy' },
+  warning: { dot: 'bg-warning', label: 'No products' },
+  error: { dot: 'bg-destructive', label: 'Error' },
+  unknown: { dot: 'bg-muted-foreground/40', label: 'Not scraped yet' },
+}
+
+// One retailer's scrape health: status dot + name on the left, last-run
+// summary on the right. Whole row stays legible at ~380 px (wraps, no h-scroll).
+function RetailerHealthRow({ retailer }) {
+  const health = HEALTH[retailer.health] ?? HEALTH.unknown
+  const last = retailer.latest_run
+  return (
+    <div className="flex items-start justify-between gap-3 py-2 text-sm">
+      <div className="flex min-w-0 items-center gap-2">
+        <span
+          className={`mt-0.5 h-2 w-2 shrink-0 rounded-full ${health.dot}`}
+          aria-hidden="true"
+        />
+        <span className="min-w-0 truncate font-medium text-foreground">{retailer.name}</span>
+      </div>
+      <div className="shrink-0 text-right">
+        <div className="font-medium text-foreground tabular-nums">
+          {last ? `${last.products_found} products` : health.label}
+        </div>
+        <div className="text-xs text-faint">
+          {last?.finished_at
+            ? formatRelativeTime(last.finished_at)
+            : retailer.health === 'unknown'
+              ? health.label
+              : '—'}
+        </div>
+      </div>
     </div>
   )
 }
@@ -25,8 +70,14 @@ export default function SettingsSync() {
   const stats = useDashboardStats()
   const coros = useCorosSyncStatus()
   const strava = useStravaStatus()
+  const history = useScrapeHistory()
+  const retailers = history.data?.retailers ?? []
+  const needsAttention = retailers.filter(
+    (r) => r.health === 'warning' || r.health === 'error'
+  ).length
 
   return (
+    <div className="space-y-5">
     <div className="grid grid-cols-1 gap-5 lg:grid-cols-3">
       {/* Deal scraping */}
       <Card>
@@ -93,6 +144,36 @@ export default function SettingsSync() {
           <p className="mt-3 text-xs text-faint">
             Imported via the Strava export CLI. New runs come from COROS, not re-import.
           </p>
+        </CardContent>
+      </Card>
+    </div>
+
+      {/* Retailer scrape health (R2.5) — surfaces the "quietly broken"
+          retailer a green "Last scan" timestamp would otherwise hide. */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-base">
+            <Activity className="h-4 w-4 text-accent-foreground" />
+            Retailer health
+          </CardTitle>
+          <CardDescription>
+            {needsAttention > 0
+              ? `${needsAttention} retailer${needsAttention > 1 ? 's' : ''} need${needsAttention > 1 ? '' : 's'} a look — check its scraper.`
+              : 'Per-retailer results from the most recent scrape of each.'}
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          {retailers.length === 0 ? (
+            <p className="py-2 text-sm text-faint">
+              {history.isLoading ? 'Loading…' : 'No retailers configured.'}
+            </p>
+          ) : (
+            <div className="divide-y divide-border">
+              {retailers.map((r) => (
+                <RetailerHealthRow key={r.retailer_id} retailer={r} />
+              ))}
+            </div>
+          )}
         </CardContent>
       </Card>
     </div>

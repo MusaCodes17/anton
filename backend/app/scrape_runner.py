@@ -39,23 +39,12 @@ def _scrape_one_retailer(retailer_id: int, shoe_ids: List[int]) -> dict:
 
         shoes = db.query(Shoe).filter(Shoe.id.in_(shoe_ids)).all()
 
-        deals_found = 0
-        errors: List[str] = []
-        for shoe in shoes:
-            try:
-                result = manager.scrape_retailer_for_shoe(shoe, retailer)
-                deals_found += result.get("deals_found", 0)
-                errors.extend(result.get("errors", []))
-            except Exception as e:
-                errors.append(f"{shoe.brand} {shoe.model}: {e}")
-
-        # _scrape_retailer_for_shoe already stamps last_scraped_at once per
-        # shoe it processes; set it once more here so it reflects this
-        # retailer's actual completion time exactly, matching the
-        # retailer_done event's timestamp below precisely.
-        retailer.last_scraped_at = datetime.now(timezone.utc)
-        db.commit()
-        return {"deals_found": deals_found, "errors": errors}
+        # scrape_retailer records the ScrapeRun observability row (R2.5),
+        # stamps last_scraped_at to the run's finish time (matching the
+        # retailer_done event's timestamp below), and commits — this thread
+        # owns its own session, so all that persistence happens here.
+        result = manager.scrape_retailer(retailer, shoes, trigger="background")
+        return {"deals_found": result["deals_found"], "errors": result["errors"]}
     finally:
         db.close()
 

@@ -4,7 +4,8 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/components/ui/select'
 import { DialogFooter } from '@/components/ui/dialog'
-import { SHOE_TYPES } from '@/lib/shoeTypes'
+import { useShoeTypes } from '@/hooks/useApi'
+import { formatShoeType } from '@/lib/shoeTypes'
 
 const empty = {
   brand: '',
@@ -36,6 +37,7 @@ export default function OwnedShoeForm({ initial, onSubmit, onCancel, submitting 
       : {}),
   }))
   const [errors, setErrors] = useState({})
+  const { data: shoeTypes = [] } = useShoeTypes()
 
   const set = (key) => (e) => setValues((v) => ({ ...v, [key]: e.target.value }))
 
@@ -97,8 +99,8 @@ export default function OwnedShoeForm({ initial, onSubmit, onCancel, submitting 
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="__none__">Untagged</SelectItem>
-              {SHOE_TYPES.map((t) => (
-                <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>
+              {shoeTypes.map((t) => (
+                <SelectItem key={t} value={t}>{formatShoeType(t)}</SelectItem>
               ))}
             </SelectContent>
           </Select>

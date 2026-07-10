@@ -1,8 +1,11 @@
 """
-Pytest fixtures for the Strava-import test suite.
+Shared pytest fixtures for the backend test suite.
 
-Each test gets a fresh in-memory SQLite database with all app tables created
-from the ORM metadata — no migrations, no touching the real shoe_deals.db.
+The `db` fixture gives each test a fresh in-memory SQLite database with all app
+tables created from the ORM metadata — no migrations, no touching the live
+shoe_deals.db. Used by the service-level and model-level tests; the HTTP-layer
+tests (test_auth, test_http_smoke) build their own StaticPool engine and
+override `get_db` instead, since they drive the app through the ASGI stack.
 """
 import pytest
 from sqlalchemy import create_engine

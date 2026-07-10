@@ -90,6 +90,21 @@ async def scrape_all_shoes(
     return {"started": True}
 
 
+@router.get("/history", response_model=dict)
+def scrape_history(recent_limit: int = 20, db: Session = Depends(get_db)):
+    """
+    Scrape observability (R2.5): per-retailer health + a recent-runs log, in one
+    round trip for Settings → Sync & Scraping. Health is `ok` | `warning`
+    (finished clean but found nothing — "quietly broken") | `error` | `unknown`.
+
+    Unlike GET /scrape/stream (in-memory, current job only), this reads the
+    durable `scrape_runs` table, so trends survive a server restart.
+    """
+    from app.services import scrape_history as history
+
+    return history.scrape_health(db, recent_limit=recent_limit)
+
+
 @router.get("/status", response_model=dict)
 def scrape_status():
     """
@@ -144,44 +159,44 @@ def scrape_retailer(
     - **retailer_id**: ID of the retailer to scrape
     - **shoe_ids**: Optional list of shoe IDs (if None, scrape all active shoes)
     """
-    from app.models.models import Shoe
-    
+    from app.models.models import Retailer, Shoe
+
     manager = ScrapeOrchestrator(db)
-    
+
+    retailer = db.query(Retailer).filter(Retailer.id == retailer_id).first()
+    if not retailer:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Retailer with id {retailer_id} not found"
+        )
+
     # Get shoes to scrape
     query = db.query(Shoe).filter(Shoe.is_active == True)
     if shoe_ids:
         query = query.filter(Shoe.id.in_(shoe_ids))
-    
+
     shoes = query.all()
-    
+
     if not shoes:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="No active shoes found"
         )
-    
-    aggregated_results = {
-        'total_shoes': len(shoes),
-        'total_products_found': 0,
-        'total_prices_recorded': 0,
-        'total_deals_found': 0,
-        'errors': []
-    }
 
     try:
         with scrape_guard():
-            for shoe in shoes:
-                results = manager.scrape_shoe(shoe.id, [retailer_id])
-
-                aggregated_results['total_products_found'] += results.get('products_found', 0)
-                aggregated_results['total_prices_recorded'] += results.get('prices_recorded', 0)
-                aggregated_results['total_deals_found'] += results.get('deals_found', 0)
-
-                if results.get('errors'):
-                    aggregated_results['errors'].extend(results['errors'])
+            # scrape_retailer records a ScrapeRun observability row (R2.5).
+            results = manager.scrape_retailer(retailer, shoes, trigger="manual")
     except ScrapeInProgressError as e:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e))
+
+    aggregated_results = {
+        'total_shoes': len(shoes),
+        'total_products_found': results['products_found'],
+        'total_prices_recorded': results['prices_recorded'],
+        'total_deals_found': results['deals_found'],
+        'errors': results['errors'],
+    }
 
     return {
         "success": True,
