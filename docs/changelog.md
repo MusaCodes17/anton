@@ -5,6 +5,21 @@
 
 ---
 
+## Provider agentic-loop consolidation (tech_debt P1-8) — 2026-07-10
+
+**[CHANGED] Collapsed the 3× near-identical agentic loop in `chat_service.py` into a shared `BaseLLMProvider.run()` implementation. Each provider now implements five focused abstract methods instead of duplicating ~80 lines of outer-loop logic.**
+
+- `_ToolCall` dataclass normalises tool calls across providers (Anthropic/OpenAI populate `id`; Gemini uses `""` — no per-call IDs in that API).
+- `BaseLLMProvider.run()` owns: turn counting, `call_mcp_tool` invocation, `tool_result` events, done/error signals, `MAX_AGENTIC_TURNS` exhaustion.
+- Each provider implements: `_tool_schema`, `_check_configured` (API key guard), `_prepare_messages` (initialises provider-specific mutable state), `_stream_turn` (one LLM turn, pushes text/tool_call events, returns tool calls or None on error), `_append_tool_results` (appends results to state).
+- Gemini's stateful `ChatSession` is encapsulated in a `{"chat": ..., "current": ...}` dict passed as opaque state — no structural change to Gemini's behaviour.
+- `from __future__ import annotations` added; `Any` imported from typing.
+- **Verified:** suite 231 stable. Module imports cleanly. No schema changes. No UI changes.
+- **Human step:** backend restart needed to pick up the change (backend is user-managed).
+- Closes tech_debt P1-8, roadmap §11 item 3. One `r2:` commit.
+
+---
+
 ## 💾 RA1.4 — Backups off-laptop (Litestream + restore scripts) — 2026-07-09
 
 **[ADDED] Continuous SQLite replication via Litestream; restore drill procedure; laptop snapshot-pull script. No schema changes. No UI changes. Suite stable at 231 passing. One `ra1:` commit.**

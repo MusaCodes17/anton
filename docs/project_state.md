@@ -1,6 +1,6 @@
 # Anton — Project State
 
-**Snapshot date:** 2026-07-09 (after RA1.4 session — **Backups off-laptop**: Litestream continuous replication config + `entrypoint.sh` (restore-on-start + replicate-while-running) + Dockerfile Litestream install + `deploy/restore.sh` (restore drill) + `deploy/pull-snapshot.sh`. Suite stable at **231**. Prior: RA1.3 — auth hardening; RA1.1b — OAuth 2.1; RA1.2 — deployment substrate; RA1.0/RA1.1 — research + named-token auth. **All of R2 + RA1.0–RA1.4 (code) are now shipped; RA is the active milestone; R3/R4 are ⏸ parked.**)
+**Snapshot date:** 2026-07-10 (after loop-consolidation session — provider agentic-loop consolidated (tech_debt P1-8); suite stable at **231**. Prior: RA1.4 session — **Backups off-laptop**: Litestream continuous replication config + `entrypoint.sh` (restore-on-start + replicate-while-running) + Dockerfile Litestream install + `deploy/restore.sh` (restore drill) + `deploy/pull-snapshot.sh`. Suite stable at **231**. Prior: RA1.3 — auth hardening; RA1.1b — OAuth 2.1; RA1.2 — deployment substrate; RA1.0/RA1.1 — research + named-token auth. **All of R2 + RA1.0–RA1.4 (code) are now shipped; RA is the active milestone; R3/R4 are ⏸ parked.**)
 **Read this first, then:** `docs/ai_context.md` → `docs/architecture.md` → `docs/domain_model.md`. This file is the *perishable* one — it describes a moment, and staleness here is expected and fixable; update it at the end of every working session.
 
 ---
@@ -191,7 +191,7 @@ Ordered; "immediate" means *next few sessions*, not emergencies — nothing is o
 0. ~~**RA1.4**~~ ✅ **Code done (2026-07-09)** — Litestream config + `entrypoint.sh` + Dockerfile install + restore drill script + pull-snapshot script. Suite stable at 231. **Three human steps before RA1.4 is fully done:** (1) provision B2 bucket + set `LITESTREAM_*` vars; (2) run `deploy/restore.sh` to scratch path + verify 933+ activities; (3) set up uptime pinger on `/health`. All three execute at/before RA1.5 cutover.
 1. **RA1.5 — Cutover & validation** — provision host, deploy container, E4 count reconciliation, re-point Claude Desktop, add claude.ai connector; two exit criteria: mobile sync E2E on cellular + DC-IP scrape comparison via R2.5 `scrape_runs`. **Also during RA1.5:** restore drill + uptime pinger (RA1.3/RA1.4 remaining human steps). `REMOTE_ACCESS_PLAN.md` §6/§7 is the runbook.
 2. *(after RA1)* **R3.1 Weekly Rotation Summary Agent** — first proactive agent (roadmap R3, order 3.1 → 3.4 → 3.3 → 3.2 → 3.5 → 3.6).
-3. **Provider agentic-loop consolidation** (tech_debt 5.2) — the model-catalog half is done (R1.5d); collapse the 3× loop **before** the R3 agents extend it.
+3. ~~**Provider agentic-loop consolidation** (tech_debt 5.2)~~ ✅ **Done 2026-07-10** — `BaseLLMProvider.run()` owns the shared loop; 5 abstract methods per provider; `_ToolCall` dataclass; suite stable at 231. Backend restart needed to pick up the change.
 4. **Optional follow-ons:** the shoe-major synchronous scrape doesn't yet emit R2.5 `scrape_runs` (deliberate deferral, D8); watchlist reduction still O(N) Python in `services/watchlist.py` (labelled, fine); `deals`/`dashboard` fat routers remain; surface chat 429 as client-side toast.
 
 ---
