@@ -203,3 +203,94 @@ def test_recent_runs_span_all_retailers_newest_first(db):
     assert len(runs) == 2
     assert {run["retailer_name"] for run in runs} == {"A", "B"}
     assert runs[0]["id"] > runs[1]["id"]             # newest first
+
+
+# --------------------------------------------------------------------------
+# R4.2 — watchdog alert for consecutive scrape failures
+# --------------------------------------------------------------------------
+
+def test_watchdog_fires_after_n_consecutive_errors(db):
+    r = _retailer(db)
+    shoe = _shoe(db)
+    db.commit()
+    orch = _orchestrator(db, r, _ErrorScraper())
+
+    for _ in range(3):
+        orch.scrape_retailer(r, [shoe])
+
+    entry = next(e for e in scrape_history.retailer_health(db) if e["name"] == r.name)
+    assert entry["watchdog_alert"] is True
+    assert entry["watchdog_reason"] is not None
+
+
+def test_watchdog_fires_on_mixed_error_and_warning(db):
+    r = _retailer(db)
+    shoe = _shoe(db)
+    db.commit()
+
+    # Two error runs then a warning (0 products, no exception).
+    _orchestrator(db, r, _ErrorScraper()).scrape_retailer(r, [shoe])
+    _orchestrator(db, r, _ErrorScraper()).scrape_retailer(r, [shoe])
+    _orchestrator(db, r, _EmptyScraper()).scrape_retailer(r, [shoe])
+
+    entry = next(e for e in scrape_history.retailer_health(db) if e["name"] == r.name)
+    assert entry["watchdog_alert"] is True
+
+
+def test_watchdog_no_fire_when_success_in_streak(db):
+    r = _retailer(db)
+    shoe = _shoe(db)
+    db.commit()
+
+    # Two errors then a success — streak is broken.
+    _orchestrator(db, r, _ErrorScraper()).scrape_retailer(r, [shoe])
+    _orchestrator(db, r, _ErrorScraper()).scrape_retailer(r, [shoe])
+    _orchestrator(db, r, _SuccessScraper()).scrape_retailer(r, [shoe])
+
+    entry = next(e for e in scrape_history.retailer_health(db) if e["name"] == r.name)
+    assert entry["watchdog_alert"] is False
+
+
+def test_watchdog_no_fire_below_threshold(db):
+    r = _retailer(db)
+    shoe = _shoe(db)
+    db.commit()
+
+    # Only two bad runs — below the threshold of 3.
+    for _ in range(2):
+        _orchestrator(db, r, _ErrorScraper()).scrape_retailer(r, [shoe])
+
+    entry = next(e for e in scrape_history.retailer_health(db) if e["name"] == r.name)
+    assert entry["watchdog_alert"] is False
+
+
+def test_watchdog_skips_running_run(db):
+    r = _retailer(db)
+    shoe = _shoe(db)
+    db.commit()
+
+    # Three error runs, then an in-flight "running" run added directly.
+    for _ in range(3):
+        _orchestrator(db, r, _ErrorScraper()).scrape_retailer(r, [shoe])
+    db.add(ScrapeRun(retailer_id=r.id, status="running"))
+    db.commit()
+
+    entry = next(e for e in scrape_history.retailer_health(db) if e["name"] == r.name)
+    # The running run is excluded from the streak — the 3 errors still fire.
+    assert entry["watchdog_alert"] is True
+
+
+def test_retailers_needing_attention_in_summary(db):
+    ok = _retailer(db, "OK")
+    bad = _retailer(db, "Bad")
+    shoe = _shoe(db)
+    db.commit()
+
+    _orchestrator(db, ok, _SuccessScraper()).scrape_retailer(ok, [shoe])
+    for _ in range(3):
+        _orchestrator(db, bad, _ErrorScraper()).scrape_retailer(bad, [shoe])
+
+    payload = scrape_history.scrape_health(db)
+    names = [r["name"] for r in payload["retailers_needing_attention"]]
+    assert "Bad" in names
+    assert "OK" not in names

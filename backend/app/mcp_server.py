@@ -280,6 +280,12 @@ def scrape_health() -> dict:
       - "error"   — last scrape hit an exception (see the run's `error`).
       - "unknown" — never scraped, or a scrape is currently running.
 
+    Each retailer entry also carries `watchdog_alert` (bool) and
+    `watchdog_reason` (str | null) — set when the last 3 completed runs were
+    all failures (error or 0-product warning). The top-level
+    `retailers_needing_attention` list summarises retailers where the watchdog
+    fired so you can spot trouble at a glance without scanning every entry.
+
     Also returns `recent_runs`, a newest-first log across all retailers. This
     reads the durable scrape_runs history, so it reflects trends across past
     scrapes, not just the current job. Use it before trigger_scrape to decide
