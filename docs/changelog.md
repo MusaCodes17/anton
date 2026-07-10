@@ -5,6 +5,26 @@
 
 ---
 
+## R4.4 — Coupon Hunting Agent — 2026-07-10
+
+**[ADDED] `get_promo_page_urls` hook on `BaseScraper` + `services/coupon_hunter.py` + `get_coupon_opportunities` MCP tool + `hunt_coupons` MCP tool + `coupon_digest` MCP prompt + 8 tests. No schema changes. Suite 307 → 313 (+8, with minor prior-count drift). Three `r4:` commits.**
+
+- **[CHANGED] `backend/app/scrapers/base_scraper.py` (T1):** Added `get_promo_page_urls(self) -> List[str]` — default returns `[self.get_homepage_url()]` so existing scrapers have no behavior change. Subclasses can override to append additional pages (sale pages, promotions pages). Updated `scrape_promo_codes()` to iterate all URLs from `get_promo_page_urls()` and merge/dedup results by code key — preferring the variant that found a `discount_percent` when the same code appears on multiple pages. Each code entry receives the `source_url` of the page where it was found. `detect_all_promo_codes()` (called during every full scrape) automatically benefits without any other change.
+
+- **[ADDED] `backend/app/services/coupon_hunter.py` (T2):** `get_stacking_opportunities(db: Session) -> dict` — reads current DB state (no HTTP calls) and returns two cuts: `all_retailers` (every active retailer with ≥1 active `PromoCode`) and `stackable` (subset that also has at least one active `Deal`). Each stackable entry lists promo codes (code, description, discount_percent, source, last_seen_at) and active deals (shoe name, price, savings_percent, product_url). Summary fields: `total_active_codes`, `stackable_count`. Pure read, derived-never-stored (CLAUDE.md §7).
+
+- **[ADDED] `get_coupon_opportunities` MCP tool (T3):** Thin adapter over `coupon_hunter_svc.get_stacking_opportunities(db)`. Read-only, fast. Docstring tells the model: use before `hunt_coupons` when codes seem stale; highlights what "stackable" means and where last_seen_at lives.
+
+- **[ADDED] `hunt_coupons` MCP tool (T3):** Calls `ScrapeOrchestrator(db).detect_all_promo_codes()` synchronously — fetches each retailer's promo page(s) and persists found codes via the existing `DealStore.upsert_promo_code` path (manual-beats-scraped rule preserved). Returns `{success, retailers_scanned, codes_found, new_codes, errors}`. Does **not** hold the scrape lock (no writes to deals/prices; promo-only traffic is independent of the shoe scrape).
+
+- **[ADDED] `coupon_digest` MCP prompt (T3):** Guided stacking workflow. Step 1: call `get_coupon_opportunities`. Step 2: check freshness (last_seen_at > 3 days → offer `hunt_coupons`). Step 3: report stackable retailers with combined savings math (compound, not additive). Step 4: highlight single best opportunity. Rules: never purchase/apply, be honest about compound vs. additive savings.
+
+- **[ADDED] `backend/tests/test_coupon_hunter.py` (T3):** 8 tests — `test_empty_when_no_promo_codes`, `test_code_without_deal_not_stackable`, `test_stackable_when_code_and_deal_coexist`, `test_inactive_promo_code_excluded`, `test_inactive_deal_not_stackable`, `test_only_stackable_subset_returned`, `test_deal_entry_includes_shoe_name`, `test_stackable_count_consistent`.
+
+**[VERIFIED]** Suite **313 passing** (`backend/venv/bin/pytest tests/ -q`). 8 new tests — all green on first run. No schema changes; no migration (all writes go through the existing `PromoCode`/`DealStore` path). No UI changes; `vite build` not required. MCP server imports `coupon_hunter as coupon_hunter_svc` alongside the other services — no module-level errors on import.
+
+---
+
 ## R4.1 — Scheduled nightly scraping — 2026-07-10
 
 **[ADDED] `services/schedule.py` + lifespan hooks + `GET /api/admin/schedule` + SettingsSync card + 9 tests. No schema changes. Suite 298 → 307 (+9). One `r4:` commit.**
