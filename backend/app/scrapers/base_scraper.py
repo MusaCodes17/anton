@@ -97,19 +97,39 @@ class BaseScraper(ABC):
             logger.error(f"Error fetching {url}: {e}")
             return None
     
+    # Retry budget for transient HTTP failures (R4.2).
+    # _RETRY_ATTEMPTS is the number of *additional* attempts after the first.
+    # _RETRY_DELAY_S is the wait between attempts — also serves as politeness.
+    _RETRY_ATTEMPTS = 2
+    _RETRY_DELAY_S = 2
+
     def _fetch_with_requests(self, url: str) -> Optional[str]:
-        """Fetch page using requests library"""
-        try:
-            response = self.session.get(url, timeout=10)
-            response.raise_for_status()
-            
-            # Rate limiting - be respectful
-            time.sleep(2)
-            
-            return response.text
-        except requests.RequestException as e:
-            logger.error(f"Request error for {url}: {e}")
-            return None
+        """
+        Fetch page using requests library, with up to _RETRY_ATTEMPTS retries
+        on transient RequestException (timeout, connection reset, 5xx).
+
+        Rate-limit sleep (2 s) is placed after a successful response; retries
+        wait _RETRY_DELAY_S before the next attempt so we don't hammer a site
+        that is momentarily overloaded.
+        """
+        last_exc = None
+        for attempt in range(self._RETRY_ATTEMPTS + 1):
+            try:
+                response = self.session.get(url, timeout=10)
+                response.raise_for_status()
+                time.sleep(2)  # be polite after every successful fetch
+                return response.text
+            except requests.RequestException as e:
+                last_exc = e
+                if attempt < self._RETRY_ATTEMPTS:
+                    logger.warning(
+                        f"[{self.retailer_name}] Fetch attempt {attempt + 1} failed "
+                        f"for {url}: {e}; retrying in {self._RETRY_DELAY_S}s"
+                    )
+                    time.sleep(self._RETRY_DELAY_S)
+        logger.error(f"[{self.retailer_name}] Request error for {url} after "
+                     f"{self._RETRY_ATTEMPTS + 1} attempts: {last_exc}")
+        return None
     
     def _fetch_with_browser(self, url: str) -> Optional[str]:
         """Fetch page using Playwright (for JavaScript-heavy sites)"""
