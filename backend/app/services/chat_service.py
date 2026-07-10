@@ -8,13 +8,21 @@ Provider routing is by explicit catalog lookup (MODELS below), not name
 prefix: every model id names its provider. Both /chat/providers and
 _get_provider read that one list, so the catalog lives in exactly one place
 (R1.5d).
+
+Each provider implements five abstract methods; BaseLLMProvider.run() owns the
+common agentic loop: turn counting, tool execution, and the event-protocol
+(text / tool_call / tool_result / done / error). See _ToolCall and
+BaseLLMProvider for the contract.
 """
+from __future__ import annotations
+
 import asyncio
 import json
 import os
 from abc import ABC, abstractmethod
+from dataclasses import dataclass
 from datetime import timedelta
-from typing import AsyncGenerator, Callable
+from typing import Any, AsyncGenerator, Callable
 
 from mcp import types as mcp_types
 from mcp.client.session_group import ClientSessionGroup, StreamableHttpParameters
@@ -113,10 +121,10 @@ def get_models() -> list[dict]:
     source consumed by the /chat/providers endpoint and _get_provider."""
     return MODELS
 
-# Defensive cap on the agentic loop in each provider's run() below. Without
-# this, a model that keeps emitting tool calls indefinitely (a confusing
-# tool result, or one that just won't accept "done") loops forever — there
-# was no termination guarantee other than the model's own behavior.
+# Defensive cap on the agentic loop. Without this, a model that keeps emitting
+# tool calls indefinitely (a confusing tool result, or one that just won't
+# accept "done") loops forever — there was no termination guarantee other than
+# the model's own behavior.
 MAX_AGENTIC_TURNS = 25
 
 
@@ -128,8 +136,72 @@ def _extract_result_text(call_result: mcp_types.CallToolResult) -> str:
     ) or "{}"
 
 
+@dataclass
+class _ToolCall:
+    """Normalized tool call exchanged between the shared loop and provider methods.
+
+    Anthropic and OpenAI populate `id` from their API. Gemini has no per-call id
+    so `id` is an empty string — _append_tool_results for Gemini ignores it."""
+    id: str
+    name: str
+    input: dict
+
+
 class BaseLLMProvider(ABC):
+    """Common agentic loop shared by all providers.
+
+    Subclasses implement five provider-specific I/O methods; this class owns:
+    - turn counting (MAX_AGENTIC_TURNS)
+    - tool execution (call_mcp_tool + tool_result events)
+    - done / error events and the for/else exhaustion path
+
+    Loop state is provider-specific (a list for Anthropic/OpenAI, a dict for
+    Gemini) and is opaque to this class — it is only passed through to the
+    abstract methods that know its structure."""
+
     @abstractmethod
+    def _tool_schema(self, tool: mcp_types.Tool) -> Any:
+        """Convert an MCP Tool to the provider's native tool/function schema."""
+
+    @abstractmethod
+    async def _check_configured(self, queue: asyncio.Queue) -> bool:
+        """Return True if the provider's API key is present.
+        Put an {"type":"error"} event and return False if not."""
+
+    @abstractmethod
+    def _prepare_messages(
+        self, initial_messages: list[dict], model: str, tool_schemas: list
+    ) -> Any:
+        """Initialize and return the provider-specific mutable loop state.
+
+        May set instance attributes (e.g. self._client) for use by
+        _stream_turn. Called after self._system_prompt is set."""
+
+    @abstractmethod
+    async def _stream_turn(
+        self,
+        state: Any,
+        model: str,
+        tool_schemas: list,
+        queue: asyncio.Queue,
+    ) -> list[_ToolCall] | None:
+        """Stream one LLM turn.
+
+        Pushes {"type":"text"} and {"type":"tool_call"} events to queue.
+        If the model called tools: appends the assistant message to state
+        (in place) and returns the tool calls as _ToolCall list.
+        If the model is done (no tool calls): returns [].
+        On a provider error: puts {"type":"error"} event and returns None."""
+
+    @abstractmethod
+    def _append_tool_results(
+        self,
+        state: Any,
+        tool_calls: list[_ToolCall],
+        results: list[str],
+    ) -> None:
+        """Append tool results to state so the next _stream_turn sees them."""
+
     async def run(
         self,
         initial_messages: list[dict],
@@ -141,6 +213,32 @@ class BaseLLMProvider(ABC):
     ) -> None:
         """Agentic loop: stream LLM response, call tools, repeat until done.
         Push SSE event dicts to queue; end with {"type":"done"} or {"type":"error"}."""
+        if not await self._check_configured(queue):
+            return
+        self._system_prompt = system_prompt
+        tool_schemas = [self._tool_schema(t) for t in tools]
+        state = self._prepare_messages(initial_messages, model, tool_schemas)
+
+        for _turn in range(MAX_AGENTIC_TURNS):
+            tool_calls = await self._stream_turn(state, model, tool_schemas, queue)
+            if tool_calls is None:          # provider error — already reported
+                return
+            if not tool_calls:              # model is done
+                await queue.put({"type": "done"})
+                return
+            results: list[str] = []
+            for tc in tool_calls:
+                result_text, success = await call_mcp_tool(tc.name, tc.input)
+                await queue.put({"type": "tool_result", "tool": tc.name, "success": success})
+                results.append(result_text)
+            self._append_tool_results(state, tool_calls, results)
+        else:
+            # Loop exhausted MAX_AGENTIC_TURNS without the model ever stopping on
+            # its own — every other exit path above returns directly, skipping this.
+            await queue.put({
+                "type": "error",
+                "message": f"Stopped after {MAX_AGENTIC_TURNS} tool-call turns without finishing — this looks like a loop.",
+            })
 
 
 class AnthropicProvider(BaseLLMProvider):
@@ -151,58 +249,56 @@ class AnthropicProvider(BaseLLMProvider):
             "input_schema": tool.inputSchema,
         }
 
-    async def run(self, initial_messages, model, tools, queue, call_mcp_tool, system_prompt=SYSTEM_PROMPT):
-        from anthropic import AsyncAnthropic
-
-        api_key = os.getenv("ANTHROPIC_API_KEY")
-        if not api_key:
+    async def _check_configured(self, queue: asyncio.Queue) -> bool:
+        if not os.getenv("ANTHROPIC_API_KEY"):
             await queue.put({"type": "error", "message": "ANTHROPIC_API_KEY is not configured."})
-            return
+            return False
+        return True
 
-        client = AsyncAnthropic(api_key=api_key)
-        running = [{"role": m["role"], "content": m["content"]} for m in initial_messages]
-        tool_schemas = [self._tool_schema(t) for t in tools]
+    def _prepare_messages(self, initial_messages: list[dict], model: str, tool_schemas: list) -> dict:
+        from anthropic import AsyncAnthropic
+        return {
+            "client": AsyncAnthropic(api_key=os.getenv("ANTHROPIC_API_KEY")),
+            "messages": [{"role": m["role"], "content": m["content"]} for m in initial_messages],
+        }
 
-        for _turn in range(MAX_AGENTIC_TURNS):
-            streaming_tools: dict[int, dict] = {}
+    async def _stream_turn(self, state: dict, model: str, tool_schemas: list, queue: asyncio.Queue) -> list[_ToolCall] | None:
+        streaming_tools: dict[int, dict] = {}
 
-            async with client.messages.stream(
-                model=model,
-                max_tokens=4096,
-                system=system_prompt,
-                tools=tool_schemas,
-                messages=running,
-            ) as stream:
-                async for event in stream:
-                    if event.type == "content_block_start":
-                        if event.content_block.type == "tool_use":
-                            streaming_tools[event.index] = {
-                                "id": event.content_block.id,
-                                "name": event.content_block.name,
-                                "input_str": "",
-                            }
-                            await queue.put({"type": "tool_call", "tool": event.content_block.name})
+        async with state["client"].messages.stream(
+            model=model,
+            max_tokens=4096,
+            system=self._system_prompt,
+            tools=tool_schemas,
+            messages=state["messages"],
+        ) as stream:
+            async for event in stream:
+                if event.type == "content_block_start":
+                    if event.content_block.type == "tool_use":
+                        streaming_tools[event.index] = {
+                            "id": event.content_block.id,
+                            "name": event.content_block.name,
+                            "input_str": "",
+                        }
+                        await queue.put({"type": "tool_call", "tool": event.content_block.name})
 
-                    elif event.type == "content_block_delta":
-                        if event.delta.type == "text_delta":
-                            await queue.put({"type": "text", "content": event.delta.text})
-                        elif event.delta.type == "input_json_delta" and event.index in streaming_tools:
-                            streaming_tools[event.index]["input_str"] += event.delta.partial_json
+                elif event.type == "content_block_delta":
+                    if event.delta.type == "text_delta":
+                        await queue.put({"type": "text", "content": event.delta.text})
+                    elif event.delta.type == "input_json_delta" and event.index in streaming_tools:
+                        streaming_tools[event.index]["input_str"] += event.delta.partial_json
 
-                    elif event.type == "content_block_stop" and event.index in streaming_tools:
-                        tu = streaming_tools[event.index]
-                        try:
-                            tu["input"] = json.loads(tu["input_str"]) if tu["input_str"] else {}
-                        except json.JSONDecodeError:
-                            tu["input"] = {}
+                elif event.type == "content_block_stop" and event.index in streaming_tools:
+                    tu = streaming_tools[event.index]
+                    try:
+                        tu["input"] = json.loads(tu["input_str"]) if tu["input_str"] else {}
+                    except json.JSONDecodeError:
+                        tu["input"] = {}
 
-                final_msg = await stream.get_final_message()
+            final_msg = await stream.get_final_message()
 
-            tool_blocks = [b for b in (final_msg.content or []) if b.type == "tool_use"]
-            if not tool_blocks:
-                await queue.put({"type": "done"})
-                return
-
+        tool_blocks = [b for b in (final_msg.content or []) if b.type == "tool_use"]
+        if tool_blocks:
             assistant_content = []
             for b in final_msg.content:
                 if b.type == "text":
@@ -211,24 +307,18 @@ class AnthropicProvider(BaseLLMProvider):
                     assistant_content.append(
                         {"type": "tool_use", "id": b.id, "name": b.name, "input": b.input}
                     )
-            running.append({"role": "assistant", "content": assistant_content})
+            state["messages"].append({"role": "assistant", "content": assistant_content})
 
-            tool_results = []
-            for block in tool_blocks:
-                result_text, success = await call_mcp_tool(block.name, block.input or {})
-                await queue.put({"type": "tool_result", "tool": block.name, "success": success})
-                tool_results.append(
-                    {"type": "tool_result", "tool_use_id": block.id, "content": result_text}
-                )
-            running.append({"role": "user", "content": tool_results})
-        else:
-            # Loop exhausted MAX_AGENTIC_TURNS without the model ever
-            # stopping on its own (every other exit path above returns
-            # directly, which skips this for/else clause).
-            await queue.put({
-                "type": "error",
-                "message": f"Stopped after {MAX_AGENTIC_TURNS} tool-call turns without finishing — this looks like a loop.",
-            })
+        return [_ToolCall(id=b.id, name=b.name, input=b.input) for b in tool_blocks]
+
+    def _append_tool_results(self, state: dict, tool_calls: list[_ToolCall], results: list[str]) -> None:
+        state["messages"].append({
+            "role": "user",
+            "content": [
+                {"type": "tool_result", "tool_use_id": tc.id, "content": result}
+                for tc, result in zip(tool_calls, results)
+            ],
+        })
 
 
 class OpenAIProvider(BaseLLMProvider):
@@ -242,87 +332,89 @@ class OpenAIProvider(BaseLLMProvider):
             },
         }
 
-    async def run(self, initial_messages, model, tools, queue, call_mcp_tool, system_prompt=SYSTEM_PROMPT):
-        from openai import AsyncOpenAI
-
-        api_key = os.getenv("OPENAI_API_KEY")
-        if not api_key:
+    async def _check_configured(self, queue: asyncio.Queue) -> bool:
+        if not os.getenv("OPENAI_API_KEY"):
             await queue.put({"type": "error", "message": "OPENAI_API_KEY is not configured."})
-            return
+            return False
+        return True
 
-        client = AsyncOpenAI(api_key=api_key)
-        # OpenAI takes system as a message, not a separate parameter
-        running = [{"role": "system", "content": system_prompt}]
-        running += [{"role": m["role"], "content": m["content"]} for m in initial_messages]
-        tool_schemas = [self._tool_schema(t) for t in tools]
+    def _prepare_messages(self, initial_messages: list[dict], model: str, tool_schemas: list) -> dict:
+        from openai import AsyncOpenAI
+        # OpenAI takes system as the first message, not a separate parameter.
+        messages = [{"role": "system", "content": self._system_prompt}]
+        messages += [{"role": m["role"], "content": m["content"]} for m in initial_messages]
+        return {
+            "client": AsyncOpenAI(api_key=os.getenv("OPENAI_API_KEY")),
+            "messages": messages,
+        }
 
-        for _turn in range(MAX_AGENTIC_TURNS):
-            tc_acc: dict[int, dict] = {}
-            full_text = ""
-            finish_reason = None
+    async def _stream_turn(self, state: dict, model: str, tool_schemas: list, queue: asyncio.Queue) -> list[_ToolCall] | None:
+        tc_acc: dict[int, dict] = {}
+        full_text = ""
+        finish_reason = None
 
-            stream = await client.chat.completions.create(
-                model=model,
-                messages=running,
-                tools=tool_schemas,
-                stream=True,
+        stream = await state["client"].chat.completions.create(
+            model=model,
+            messages=state["messages"],
+            tools=tool_schemas,
+            stream=True,
+        )
+
+        async for chunk in stream:
+            if not chunk.choices:
+                continue
+            choice = chunk.choices[0]
+            delta = choice.delta
+
+            if delta.content:
+                full_text += delta.content
+                await queue.put({"type": "text", "content": delta.content})
+
+            if delta.tool_calls:
+                for tc in delta.tool_calls:
+                    idx = tc.index
+                    if idx not in tc_acc:
+                        tc_acc[idx] = {"id": "", "name": "", "arguments": ""}
+                    if tc.id:
+                        tc_acc[idx]["id"] = tc.id
+                    if tc.function:
+                        if tc.function.name and not tc_acc[idx]["name"]:
+                            tc_acc[idx]["name"] = tc.function.name
+                            await queue.put({"type": "tool_call", "tool": tc.function.name})
+                        if tc.function.arguments:
+                            tc_acc[idx]["arguments"] += tc.function.arguments
+
+            if choice.finish_reason:
+                finish_reason = choice.finish_reason
+
+        if not tc_acc or finish_reason == "stop":
+            return []
+
+        assistant_msg: dict = {"role": "assistant", "content": full_text or None}
+        assistant_msg["tool_calls"] = [
+            {
+                "id": tc["id"],
+                "type": "function",
+                "function": {"name": tc["name"], "arguments": tc["arguments"]},
+            }
+            for tc in tc_acc.values()
+        ]
+        state["messages"].append(assistant_msg)
+
+        tool_calls = []
+        for tc in tc_acc.values():
+            try:
+                parsed = json.loads(tc["arguments"] or "{}")
+            except json.JSONDecodeError:
+                parsed = {}
+            tool_calls.append(_ToolCall(id=tc["id"], name=tc["name"], input=parsed))
+        return tool_calls
+
+    def _append_tool_results(self, state: dict, tool_calls: list[_ToolCall], results: list[str]) -> None:
+        for tc, result_text in zip(tool_calls, results):
+            state["messages"].append(
+                {"role": "tool", "tool_call_id": tc.id, "content": result_text}
             )
-
-            async for chunk in stream:
-                if not chunk.choices:
-                    continue
-                choice = chunk.choices[0]
-                delta = choice.delta
-
-                if delta.content:
-                    full_text += delta.content
-                    await queue.put({"type": "text", "content": delta.content})
-
-                if delta.tool_calls:
-                    for tc in delta.tool_calls:
-                        idx = tc.index
-                        if idx not in tc_acc:
-                            tc_acc[idx] = {"id": "", "name": "", "arguments": ""}
-                        if tc.id:
-                            tc_acc[idx]["id"] = tc.id
-                        if tc.function:
-                            if tc.function.name and not tc_acc[idx]["name"]:
-                                tc_acc[idx]["name"] = tc.function.name
-                                await queue.put({"type": "tool_call", "tool": tc.function.name})
-                            if tc.function.arguments:
-                                tc_acc[idx]["arguments"] += tc.function.arguments
-
-                if choice.finish_reason:
-                    finish_reason = choice.finish_reason
-
-            if not tc_acc or finish_reason == "stop":
-                await queue.put({"type": "done"})
-                return
-
-            assistant_msg: dict = {"role": "assistant", "content": full_text or None}
-            assistant_msg["tool_calls"] = [
-                {
-                    "id": tc["id"],
-                    "type": "function",
-                    "function": {"name": tc["name"], "arguments": tc["arguments"]},
-                }
-                for tc in tc_acc.values()
-            ]
-            running.append(assistant_msg)
-
-            for tc in tc_acc.values():
-                try:
-                    parsed = json.loads(tc["arguments"] or "{}")
-                except json.JSONDecodeError:
-                    parsed = {}
-                result_text, success = await call_mcp_tool(tc["name"], parsed)
-                await queue.put({"type": "tool_result", "tool": tc["name"], "success": success})
-                running.append({"role": "tool", "tool_call_id": tc["id"], "content": result_text})
-        else:
-            await queue.put({
-                "type": "error",
-                "message": f"Stopped after {MAX_AGENTIC_TURNS} tool-call turns without finishing — this looks like a loop.",
-            })
 
 
 class GeminiProvider(BaseLLMProvider):
@@ -362,84 +454,79 @@ class GeminiProvider(BaseLLMProvider):
             parameters=self._to_gemini_schema(schema) if schema.get("properties") else None,
         )
 
-    async def run(self, initial_messages, model, tools, queue, call_mcp_tool, system_prompt=SYSTEM_PROMPT):
+    async def _check_configured(self, queue: asyncio.Queue) -> bool:
+        if not os.getenv("GOOGLE_API_KEY"):
+            await queue.put({"type": "error", "message": "GOOGLE_API_KEY is not configured."})
+            return False
+        return True
+
+    def _prepare_messages(self, initial_messages: list[dict], model: str, tool_schemas: list) -> dict:
         import google.generativeai as genai
 
-        api_key = os.getenv("GOOGLE_API_KEY")
-        if not api_key:
-            await queue.put({"type": "error", "message": "GOOGLE_API_KEY is not configured."})
-            return
-
-        genai.configure(api_key=api_key)
-
-        gemini_tools = [genai.protos.Tool(function_declarations=[self._tool_schema(t) for t in tools])]
+        genai.configure(api_key=os.getenv("GOOGLE_API_KEY"))
+        gemini_tool = genai.protos.Tool(function_declarations=tool_schemas)
         model_client = genai.GenerativeModel(
             model_name=model,
-            tools=gemini_tools,
-            system_instruction=system_prompt,
+            tools=[gemini_tool],
+            system_instruction=self._system_prompt,
         )
+        # Build history from all prior turns; last message is sent as current_message.
+        history = [
+            {"role": "user" if m["role"] == "user" else "model", "parts": [m["content"]]}
+            for m in initial_messages[:-1]
+        ]
+        return {
+            "chat": model_client.start_chat(history=history),
+            "current": initial_messages[-1]["content"] if initial_messages else "",
+        }
 
-        # Build history from prior turns (all but the last message)
-        history = []
-        for msg in initial_messages[:-1]:
-            history.append({"role": "user" if msg["role"] == "user" else "model", "parts": [msg["content"]]})
-
-        chat = model_client.start_chat(history=history)
-        current_message = initial_messages[-1]["content"] if initial_messages else ""
-
-        for _turn in range(MAX_AGENTIC_TURNS):
-            function_calls: list[dict] = []
-
-            try:
-                response = await chat.send_message_async(current_message, stream=True)
-                async for chunk in response:
-                    try:
-                        if chunk.text:
-                            await queue.put({"type": "text", "content": chunk.text})
-                    except (ValueError, AttributeError):
-                        pass
-
-                    try:
-                        for candidate in chunk.candidates or []:
-                            for part in candidate.content.parts or []:
-                                if hasattr(part, "function_call") and part.function_call.name:
-                                    fc = part.function_call
-                                    function_calls.append({"name": fc.name, "args": dict(fc.args) if fc.args else {}})
-                                    await queue.put({"type": "tool_call", "tool": fc.name})
-                    except (AttributeError, ValueError):
-                        pass
-
-            except Exception as exc:
-                await queue.put({"type": "error", "message": f"Gemini error: {exc}"})
-                return
-
-            if not function_calls:
-                await queue.put({"type": "done"})
-                return
-
-            tool_response_parts = []
-            for fc in function_calls:
-                result_text, success = await call_mcp_tool(fc["name"], fc["args"])
-                await queue.put({"type": "tool_result", "tool": fc["name"], "success": success})
+    async def _stream_turn(self, state: dict, model: str, tool_schemas: list, queue: asyncio.Queue) -> list[_ToolCall] | None:
+        function_calls: list[dict] = []
+        try:
+            response = await state["chat"].send_message_async(state["current"], stream=True)
+            async for chunk in response:
                 try:
-                    result_json = json.loads(result_text)
-                except json.JSONDecodeError:
-                    result_json = {"result": result_text}
-                tool_response_parts.append(
-                    genai.protos.Part(
-                        function_response=genai.protos.FunctionResponse(
-                            name=fc["name"],
-                            response=result_json,
-                        )
+                    if chunk.text:
+                        await queue.put({"type": "text", "content": chunk.text})
+                except (ValueError, AttributeError):
+                    pass
+                try:
+                    for candidate in chunk.candidates or []:
+                        for part in candidate.content.parts or []:
+                            if hasattr(part, "function_call") and part.function_call.name:
+                                fc = part.function_call
+                                function_calls.append(
+                                    {"name": fc.name, "args": dict(fc.args) if fc.args else {}}
+                                )
+                                await queue.put({"type": "tool_call", "tool": fc.name})
+                except (AttributeError, ValueError):
+                    pass
+        except Exception as exc:
+            await queue.put({"type": "error", "message": f"Gemini error: {exc}"})
+            return None
+        # Gemini's ChatSession maintains history internally; no assistant message append needed.
+        # id is "" because Gemini's FunctionCall has no call id.
+        return [_ToolCall(id="", name=fc["name"], input=fc["args"]) for fc in function_calls]
+
+    def _append_tool_results(self, state: dict, tool_calls: list[_ToolCall], results: list[str]) -> None:
+        import google.generativeai as genai
+
+        tool_response_parts = []
+        for tc, result_text in zip(tool_calls, results):
+            try:
+                result_json = json.loads(result_text)
+            except json.JSONDecodeError:
+                result_json = {"result": result_text}
+            tool_response_parts.append(
+                genai.protos.Part(
+                    function_response=genai.protos.FunctionResponse(
+                        name=tc.name,
+                        response=result_json,
                     )
                 )
-
-            current_message = tool_response_parts
-        else:
-            await queue.put({
-                "type": "error",
-                "message": f"Stopped after {MAX_AGENTIC_TURNS} tool-call turns without finishing — this looks like a loop.",
-            })
+            )
+        # Next _stream_turn sends these parts as the tool-result message.
+        state["current"] = tool_response_parts
 
 
 # provider key (from MODELS/PROVIDERS) → implementation. Defined here, after
