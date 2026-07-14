@@ -1,3 +1,5 @@
 .DS_Store
 .playwright-mcp/
 *.db.bak*
+training-default.png
+.claude/settings.local.json
