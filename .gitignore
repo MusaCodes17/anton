@@ -3,3 +3,7 @@
 *.db.bak*
 training-default.png
 .claude/settings.local.json
+
+# Python tooling caches / virtualenvs (root-level — backend/ has its own too)
+.pytest_cache/
+.venv/
