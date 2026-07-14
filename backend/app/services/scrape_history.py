@@ -170,10 +170,19 @@ def recent_runs(db: Session, *, limit: int = _RECENT_DEFAULT) -> list[dict]:
 def scrape_health(db: Session, *, recent_limit: int = _RECENT_DEFAULT) -> dict:
     """
     The aggregate scrape-observability payload for one round trip: per-retailer
-    health plus a flat recent-runs log, and the watchdog summary (R4.2).
-    Backs both GET /api/scrape/history and the MCP `scrape_health` tool
-    (REST/MCP parity, CLAUDE.md §4.2).
+    health plus a flat recent-runs log, the watchdog summary (R4.2), and the
+    onboarding queue (R4.6). Backs both GET /api/scrape/history and the MCP
+    `scrape_health` tool (REST/MCP parity, CLAUDE.md §4.2).
+
+    `needs_onboarding` lists active retailers with no working scraper (and not
+    marked unscrapable) so the watchdog and the onboarding agent share one
+    health view — a retailer that has never had a scraper is a known gap, not a
+    "quietly broken" one the watchdog should flag.
     """
+    # Imported locally to avoid a module-load cycle (onboarding → registry →
+    # scrapers) at import time; this call is cheap at personal scale.
+    from app.services import onboarding as onboarding_svc
+
     retailers = retailer_health(db)
     needing_attention = [
         {"name": r["name"], "reason": r["watchdog_reason"]}
@@ -184,4 +193,5 @@ def scrape_health(db: Session, *, recent_limit: int = _RECENT_DEFAULT) -> dict:
         "retailers": retailers,
         "recent_runs": recent_runs(db, limit=recent_limit),
         "retailers_needing_attention": needing_attention,
+        "needs_onboarding": onboarding_svc.retailers_needing_onboarding(db),
     }

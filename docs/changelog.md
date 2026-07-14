@@ -5,6 +5,24 @@
 
 ---
 
+## R4.6 — New-Retailer Onboarding Agent (MAINTENANCE_PLAN I1) — 2026-07-14
+
+**[ADDED] Promoted MAINTENANCE_PLAN I1 to roadmap R4.6 and shipped it: a confirmation-gated workflow that takes a retailer with no working scraper from "row in the DB" to either scraping or an honest unscrapable verdict, reusing `platform_detection` + the scrapability dry-run + the `scrape_health` view. Suite 374 → 395 (+21). Backend + MCP + REST; no schema change, no migration, no UI.**
+
+- **[ADDED] `backend/app/services/onboarding.py` — the whole feature, write paths narrow and read-only detection separate:**
+  - `retailers_needing_onboarding(db)` — the onboarding queue: active retailers with no *working* scraper (checked inspectively via `_has_working_scraper` — bespoke-by-name / shopify / algolia-with-creds — without instantiating a scraper) that aren't flagged unscrapable. SAIL (bespoke, platform=custom) is correctly excluded.
+  - `probe_retailer(db, id, *, sample_brand, sample_model)` — **read-only**: `determine_platform` sniff, then a real `search_products_filtered` dry-run against a candidate scraper built by `build_dynamic_scraper` from the *proposed* platform/config on a **transient (non-session-added) Retailer**, so probing never persists a platform change (covered by `test_probe_does_not_persist_platform`). Sample shoe = caller-supplied → first active watchlist `Shoe` → `("Nike","Pegasus")` fallback. Returns detected_platform, proposed_scraper_config, dry_run, recommendation, note.
+  - `apply_onboarding(db, id, *, platform, scraper_config)` — the **single write path** for wiring a generic scraper: sets platform + config, enables scraping. Guards: platform must be shopify/algolia (custom → `ValueError`, routes to mark_unscrapable), algolia requires complete creds. `LookupError` on missing.
+  - `mark_unscrapable(db, id, *, reason)` — records `{unscrapable: True, unscrapable_reason}` on `scraper_config`, disables scraping (the Sporting Life precedent), so the row leaves the queue and the R4.5 watchdog stops nagging. Blank reason → `ValueError`.
+- **[CHANGED] `backend/app/services/scrape_history.py` — `scrape_health` now returns `needs_onboarding`** (calls `onboarding.retailers_needing_onboarding`, imported *locally* inside the function to avoid an onboarding→registry→scrapers module-load cycle). The watchdog and the onboarding agent share one health view: a retailer that never had a scraper is a known gap, not a "quietly broken" one.
+- **[ADDED] `backend/app/mcp_server.py` — 4 tools + 1 prompt (R4.6 section):** `get_onboarding_queue` (read), `probe_retailer` (read), `onboard_retailer` (**confirm-gated** write — `confirm=False` previews, INV-8), `mark_retailer_unscrapable` (**confirm-gated** write), and the `retailer_onboarding` guided prompt. `scrape_health` tool docstring updated to describe `needs_onboarding`.
+- **[ADDED] `backend/app/routers/retailers.py` — REST parity (CLAUDE.md §4.2):** `GET /retailers/onboarding/queue`, `POST /retailers/{id}/probe`, `POST /retailers/{id}/onboard`, `POST /retailers/{id}/mark-unscrapable` — thin adapters over the same service (`LookupError→404`, `ValueError→400`). Route order verified: the `/onboarding/queue` + `/{id}/…` suffixes don't collide with the existing `GET /retailers/{id}`.
+- **[ADDED] `backend/tests/test_onboarding.py` — 21 tests:** queue inclusion/exclusion across all six cases (custom/shopify/algolia±creds/bespoke/unscrapable/inactive); probe custom-vs-shopify-vs-empty + no-persist + missing→LookupError (scraper stubbed, no network); apply shopify/algolia/bad-creds/custom/missing; mark-unscrapable record/blank/missing; `scrape_health.needs_onboarding` integration.
+
+**[VERIFIED]** Full suite **395 passing** (`backend/venv/bin/pytest tests/`, was 374). `import app.main` + `import app.mcp_server` clean (no import cycle). Route table inspected — 4 new `/api/retailers/*` paths register without conflict. No schema change (unscrapable flag rides the existing nullable `scraper_config` JSON), no migration, no frontend change (no `vite build` needed).
+
+---
+
 ## Rename R2/R3/R4 — GitHub + folder rename to `anton`, downstream sweep — 2026-07-14
 
 **[CHANGED] Completed the rename R1 deferred: the user renamed the GitHub repo (`running-shoe-deals` → `MusaCodes17/anton`) and the local folder (→ `anton`); this pass repointed the git remote and swept every stale downstream reference. Docs/config only — no app code, no schema. One `mx:` commit.**

@@ -2,8 +2,9 @@
 API routes for managing retailers
 """
 from fastapi import APIRouter, Depends, HTTPException, status
+from pydantic import BaseModel
 from sqlalchemy.orm import Session
-from typing import List
+from typing import List, Optional
 
 from app.database import get_db
 from app.models import (
@@ -11,6 +12,7 @@ from app.models import (
     PromoCode, PromoCodeCreate, PromoCodeResponse
 )
 from app.scrapers.platform_detection import determine_platform, PlatformDetectionError
+from app.services import onboarding as onboarding_svc
 
 router = APIRouter(prefix="/retailers", tags=["retailers"])
 
@@ -137,6 +139,92 @@ def delete_retailer(retailer_id: int, db: Session = Depends(get_db)):
     db.delete(db_retailer)
     db.commit()
     return None
+
+
+# ============== ONBOARDING (R4.6) ==============
+
+
+class RetailerProbeRequest(BaseModel):
+    sample_brand: Optional[str] = None
+    sample_model: Optional[str] = None
+
+
+class RetailerOnboardRequest(BaseModel):
+    platform: str
+    scraper_config: Optional[dict] = None
+
+
+class RetailerUnscrapableRequest(BaseModel):
+    reason: str
+
+
+@router.get("/onboarding/queue", response_model=List[dict])
+def get_onboarding_queue(db: Session = Depends(get_db)):
+    """
+    Active retailers with no working scraper (and not marked unscrapable) —
+    the onboarding queue. Mirrors scrape_health's `needs_onboarding`.
+    """
+    return onboarding_svc.retailers_needing_onboarding(db)
+
+
+@router.post("/{retailer_id}/probe", response_model=dict)
+def probe_retailer(
+    retailer_id: int,
+    payload: RetailerProbeRequest = RetailerProbeRequest(),
+    db: Session = Depends(get_db),
+):
+    """
+    Read-only scrapability probe: sniff the platform and dry-run a product
+    search. Never writes. Returns the findings for the onboarding decision.
+    """
+    try:
+        return onboarding_svc.probe_retailer(
+            db, retailer_id,
+            sample_brand=payload.sample_brand,
+            sample_model=payload.sample_model,
+        )
+    except LookupError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+
+
+@router.post("/{retailer_id}/onboard", response_model=RetailerResponse)
+def onboard_retailer(
+    retailer_id: int,
+    payload: RetailerOnboardRequest,
+    db: Session = Depends(get_db),
+):
+    """
+    Wire a detected platform onto a retailer and enable scraping (the write
+    step of onboarding). platform must be "shopify" or "algolia".
+    """
+    try:
+        return onboarding_svc.apply_onboarding(
+            db, retailer_id,
+            platform=payload.platform,
+            scraper_config=payload.scraper_config,
+        )
+    except LookupError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+
+
+@router.post("/{retailer_id}/mark-unscrapable", response_model=RetailerResponse)
+def mark_retailer_unscrapable(
+    retailer_id: int,
+    payload: RetailerUnscrapableRequest,
+    db: Session = Depends(get_db),
+):
+    """
+    Record the honest "no scraper worth building" verdict on a retailer, so it
+    leaves the onboarding queue and the watchdog stops nagging.
+    """
+    try:
+        return onboarding_svc.mark_unscrapable(db, retailer_id, reason=payload.reason)
+    except LookupError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
 
 
 # ============== PROMO CODES ==============

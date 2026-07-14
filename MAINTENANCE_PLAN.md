@@ -56,7 +56,7 @@ Ordered by risk to live data / feed honesty.
 
 | # | Item | Detail | Effort |
 |---|---|---|---|
-| I1 | **New-Retailer Onboarding Agent** (roadmap candidate **R4.6**). When a retailer is added (via Settings → Retailers or MCP) without a working scraper, an agent workflow takes it from "row in the DB" to "scraping or honestly declared unscrapable": (1) detect retailers with no successful `scrape_runs` entry and no/empty `scraper_config`; (2) run the existing `platform_detection` (Shopify/Algolia sniff) against the base URL; (3) run the scrapability dry-run (`POST /shoes/test` path) with a known shoe; (4) report findings + proposed `scraper_config` via a new `onboard_retailer` MCP tool + `retailer_onboarding` prompt — **C9 confirmation gate before any config write**; unscrapable outcomes get recorded on the retailer row (the Sporting Life precedent) so the watchdog doesn't nag. Builds entirely on existing pieces (`platform_detection.py`, dry-run endpoint, `scrape_health`); the agent is mostly orchestration + one write path. Surfaces in `scrape_health` as a `needs_onboarding` list so the R4.2 Scrape-Reliability watchdog and this share one health view. | Medium |
+| I1 | ✅ **Done 2026-07-14 (shipped as roadmap R4.6)** — `services/onboarding.py` (queue detection via "no working scraper", read-only `probe_retailer`, `apply_onboarding` single write path, `mark_unscrapable`); `onboard_retailer` + `probe_retailer` + `get_onboarding_queue` + `mark_retailer_unscrapable` MCP tools (confirm-gated writes) + `retailer_onboarding` prompt; REST parity on `/retailers/{id}/probe|onboard|mark-unscrapable` + `/retailers/onboarding/queue`; `scrape_health.needs_onboarding` shared with the R4.5 watchdog. 21 tests; suite 374 → 395. ~~**New-Retailer Onboarding Agent** (roadmap candidate **R4.6**). When a retailer is added (via Settings → Retailers or MCP) without a working scraper, an agent workflow takes it from "row in the DB" to "scraping or honestly declared unscrapable": (1) detect retailers with no successful `scrape_runs` entry and no/empty `scraper_config`; (2) run the existing `platform_detection` (Shopify/Algolia sniff) against the base URL; (3) run the scrapability dry-run (`POST /shoes/test` path) with a known shoe; (4) report findings + proposed `scraper_config` via a new `onboard_retailer` MCP tool + `retailer_onboarding` prompt — **C9 confirmation gate before any config write**; unscrapable outcomes get recorded on the retailer row (the Sporting Life precedent) so the watchdog doesn't nag. Builds entirely on existing pieces (`platform_detection.py`, dry-run endpoint, `scrape_health`); the agent is mostly orchestration + one write path. Surfaces in `scrape_health` as a `needs_onboarding` list so the R4.2 Scrape-Reliability watchdog and this share one health view.~~ | Medium |
 
 ---
 
@@ -87,7 +87,7 @@ E6 deliberately deferred this; the RA milestone makes now the right moment — d
 **R3 — Local folder rename ✅ Done 2026-07-14** (folder is now `~/workspace/claude-code/anton`; the `.claude/commands/migrate.md` + `backend/README.md` hardcoded paths were swept to match). **(you, ~10 min — this is the breaking one):**
 1. Quit Claude Desktop and any Claude Code sessions rooted in the repo.
 2. `mv ~/Workspace/claude-code/running-shoe-deals ~/Workspace/claude-code/anton`
-3. **Recreate the venv** (venvs embed absolute paths): `cd anton && rm -rf .venv && python3 -m venv .venv && .venv/bin/pip install -r backend/requirements.txt`.
+3. **Recreate the venv** (venvs embed absolute paths): `cd anton/backend && rm -rf venv && python3 -m venv venv && venv/bin/pip install -r requirements.txt`. (Canonical venv is `backend/venv`, per `backend/README.md` — not a root-level `.venv`.)
 4. Update every absolute path that references the old folder: Claude Desktop MCP config (`claude_desktop_config.json` — the Anton server entry and Filesystem allowed dirs if repo-scoped), any launchd/cron entries, editor workspaces, `frontend` `.env` if it hardcodes paths.
 5. Sanity pass: backend boots (`alembic upgrade head` runs), suite green, SPA builds, Claude Desktop lists Anton tools.
 
@@ -99,7 +99,7 @@ E6 deliberately deferred this; the RA milestone makes now the right moment — d
 
 1. ~~**Defect block A (scraper honesty):**~~ ✅ **Done 2026-07-14** — D8 (OOS qualification guard + Shopify pessimistic default, 3 tests) + D2 (confirmed already fixed, comment cleaned up) + D7 (composite kids filter + youth-size exclusion, 26 tests). Suite 323 → 352.
 2. ~~**Defect block B (data integrity):**~~ ✅ **Done 2026-07-14** — D1 (FK pragma + `rotation.delete_owned_shoe()` + 10 tests) + D3/D4 batch (verified COROS dedup, fixed 3 code hazards) + D5 (sparkline confirmed not built) + D6 (env-leak fix). Suite 352 → 362. Two `mx:` commits.
-3. **I1 New-Retailer Onboarding Agent** — natural follow-on to block A since it reuses the same dry-run/health plumbing just touched.
+3. ~~**I1 New-Retailer Onboarding Agent**~~ ✅ **Done 2026-07-14 (roadmap R4.6)** — reused the block-A dry-run/health plumbing as predicted. Suite 374 → 395.
 4. **RA1.5 + §0 queue** — resumes once the hosting decision (Fly.io vs Hetzner CX22, D0) is made. Note D1, D7, D8 all improve what gets deployed, so the deferral has a silver lining.
 5. **RA1.6** docs reconciliation (U4) after cutover.
 6. **Rename** (§4) around cutover.
