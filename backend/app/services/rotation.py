@@ -356,15 +356,19 @@ def delete_owned_shoe(db: Session, owned_shoe_id: int) -> None:
     if not shoe:
         raise LookupError(f"Owned shoe with id {owned_shoe_id} not found")
 
-    # Delete ShoeRun attributions first, then their non-strava Activities.
-    # Order matters: Activity.attribution has cascade="all, delete-orphan" so
-    # deleting the Activity would cascade the ShoeRun — deleting the ShoeRun
-    # first avoids the double-delete SAWarning on the subsequent shoe cascade.
+    # Delete ShoeRun attributions explicitly, then their non-strava Activities.
+    # The ShoeRun must go first: Activity.attribution has cascade="all,
+    # delete-orphan" — deleting the Activity first would cascade the ShoeRun
+    # and then the shoe's ORM cascade would try to delete it again (warning).
+    # After flushing the run/activity deletes, expire the shoe so the
+    # subsequent shoe cascade loads a fresh (empty) runs collection.
     for run in list(shoe.runs):
         activity = db.query(Activity).filter(Activity.id == run.activity_id).first()
         db.delete(run)
         if activity is not None and activity.source != "strava":
             db.delete(activity)
+    db.flush()
+    db.expire(shoe)
 
     # Nullable FK refs: NULL out rather than cascade-delete the referencing rows
     (db.query(PlannedRace)
