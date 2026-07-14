@@ -179,3 +179,40 @@ def test_stock_return_requalifies_retired_deal(db):
     active = db.query(Deal).filter(Deal.is_active == True).all()
     assert len(active) == 1
     assert active[0].current_price == 160.0
+
+
+# ── INV-6 / B9-v2: qualification is against MSRP; target_price is never consulted ──
+
+
+def test_price_below_target_but_above_msrp_is_not_a_deal(db):
+    """INV-6: qualification compares the scraped price to MSRP, never to
+    target_price. A price under a *generous* target_price but at/above MSRP must
+    not create a deal — guards against reintroducing target into deal math
+    (CLAUDE.md §6 trap / design_decisions B9-v2)."""
+    retailer, shoe = _setup(db, msrp=200.0)
+    shoe.target_price = 250.0  # optional personal 'ping me' threshold, above MSRP
+    db.commit()
+
+    res = _run(db, retailer, shoe, [{"product_url": "u1"}], {"u1": _detail("u1", 220.0)})
+
+    assert res["deals_found"] == 0          # 220 ≥ 200 MSRP → no deal; 220 < 250 target is irrelevant
+    assert db.query(Deal).count() == 0
+
+
+def test_price_requalifies_after_rising_above_msrp(db):
+    """The price analogue of test_stock_return_requalifies_retired_deal: a deal
+    retired because its price rose to/above MSRP must requalify as a fresh active
+    deal when the price falls back below MSRP, leaving the retired row retired
+    (its detected_at honesty preserved)."""
+    retailer, shoe = _setup(db, msrp=200.0)
+    _run(db, retailer, shoe, [{"product_url": "u1"}], {"u1": _detail("u1", 160.0)})
+    _run(db, retailer, shoe, [{"product_url": "u1"}], {"u1": _detail("u1", 210.0)})  # retire
+    assert db.query(Deal).filter(Deal.is_active == True).count() == 0
+
+    # Price drops below MSRP again → a brand-new active deal.
+    _run(db, retailer, shoe, [{"product_url": "u1"}], {"u1": _detail("u1", 150.0)})
+    active = db.query(Deal).filter(Deal.is_active == True).all()
+    assert len(active) == 1
+    assert active[0].current_price == 150.0
+    assert active[0].savings_amount == 50.0   # 200 - 150, measured vs MSRP
+    assert db.query(Deal).count() == 2         # one retired, one fresh

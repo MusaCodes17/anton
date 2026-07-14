@@ -5,6 +5,18 @@
 
 ---
 
+## T5 — deal-domain tests (already covered; +2 gap tests) + ledger fix — 2026-07-14
+
+**[CHANGED] MAINTENANCE_PLAN T5 was stale: its listed gaps shipped 2026-07-08 (`5cb5c56`). Added 2 genuinely-missing orchestrator tests and corrected the ledger. Suite 372 → 374 (+2). One `mx:` commit.**
+
+- **[VERIFIED] T5's listed gaps were already covered** by `test_deal_store.py` (commit `5cb5c56`, *"r2: close deal-domain test gaps"*, **2026-07-08** — 5 days before MAINTENANCE_PLAN was written; the plan author missed it): deal retirement (`deactivate_deal`), requalification round-trip, all three orphan-retirement non-empty-guard cases (B10), and promo manual-beats-scraped (D6). `test_orchestrator.py` covers the MSRP truth table + the D2 partial-detail orphan guard + the D8 OOS retire/requalify cases.
+- **[ADDED] `test_orchestrator.py` — 2 new tests filling real gaps (INV-6 / B9-v2):** `test_price_below_target_but_above_msrp_is_not_a_deal` (qualification compares to MSRP, never `target_price` — a price under a generous target but at/above MSRP is no deal; guards the "don't reintroduce target into deal math" trap) and `test_price_requalifies_after_rising_above_msrp` (the price analogue of the D8 stock-return requalify: retire on price-rise, fresh active deal on price-drop-back, retired row preserved).
+- **[CHANGED] Ledger reconciliation:** `tech_debt.md` P1-4 and §8.1 struck to **Resolved** (I had wrongly re-narrowed P1-4 as "still uncovered" during T8 — I'd missed `test_deal_store.py`; corrected here). Header re-stamp added. The only residual is HTTP-layer tests for the deal *endpoints* (tech_debt §8.2 — a separate P2 item, not T5). MAINTENANCE_PLAN T5 row struck with the explanation.
+
+**[VERIFIED]** Full suite **374 passing** (`backend/venv/bin/pytest tests/`). No code changed — tests + docs only.
+
+---
+
 ## Rename R1 — in-repo product strings → Anton (+ H3) — 2026-07-14
 
 **[CHANGED] Flipped the in-code product strings from "Running Shoe Deal Finder" / "running-shoe-deals" to "Anton" (MAINTENANCE_PLAN §4 R1; H3). Repo name, folder path, and DB filename deliberately retained (R2/R3, at cutover). Suite 372; `vite build` clean. One `mx:` commit.**
