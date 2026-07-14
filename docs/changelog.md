@@ -5,6 +5,23 @@
 
 ---
 
+## Maintenance batch — unblocked MAINTENANCE_PLAN items (T3/T4/T6/T7/T8/T9) — 2026-07-14
+
+**[CHANGED] Six low-risk, RA1.5-unblocked maintenance tasks pulled from `MAINTENANCE_PLAN.md §2`. Suite 367 → 372 (+5: T3 ×4, T4 ×1). Six `mx:` commits, one per task.**
+
+- **[CHANGED] T3 — `OwnedShoe.status` write-time validation (`schemas.py`).** Added `OWNED_SHOE_STATUSES = ("active","retired","for_sale")` + `validate_owned_shoe_status`, attached to `OwnedShoeCreate`/`OwnedShoeUpdate` (`field_validator`). Off-vocab status now 422s at the write boundary instead of silently persisting; `None` on update still means "unchanged"; read schemas deliberately unvalidated (legacy data must never break a GET). Mirrors the R2.4 `shoe_type` pattern. Live values (active/retired only) already in-vocab — no data sweep. Closes the surviving half of tech_debt P1-5 / refactor M2. 4 tests in `test_owned_shoes.py`.
+- **[ADDED] T4 — Alembic migration smoke test (`tests/test_migrations.py`).** Production boots on `alembic upgrade head` (R2.2), but the `db` fixture builds schema via `create_all`, so the migration chain had no automated check. New test runs the real invocation as a subprocess against a fresh tmp SQLite DB (`DATABASE_URL` pointed at tmp; `load_dotenv(override=False)` → live DB untouched) and asserts the load-bearing tables across the chain exist. Closes tech_debt §8.3. 1 test.
+- **[CHANGED] T6 — models façade (`models/__init__.py`).** Added `PlannedRace`, `StravaGearMapping`, `AthleteMetric`, `OAuthAuthCode`, `OAuthToken` to the import + `__all__` (they'd drifted behind the Phase-5/RA-era model additions). Unused-schema removal deferred (low value, risks façade consumers). Closes the export-gap half of tech_debt §9.1 / §2.1.
+- **[CHANGED] T7 — `Retailer.scraper_config` comment (`models.py`).** Rewrote the comment that still described the retired CSS-selector era; it now states the current reality (Algolia credential payload only; shopify/custom are NULL). TypedDict shaping of the JSON blob deferred (low value). Comment-only.
+- **[CHANGED] T8 — `refactoring/tech_debt.md` ledger reconciliation.** Struck every row resolved since the file was generated but still shown Active/Scheduled: P1-3 (D1), P1-5 `status` (T3), P1-9 (R2.2), P1-10 + §6.1 (fat-router extractions), §8.3 (T4), §9.1 (T6), §9.2 (CLAUDE.md §14 INVARIANTS); narrowed P1-4 and §2.1; refreshed the stale suite count (64 → 371) and added a dated re-stamp. A ledger is only useful if trustworthy.
+- **[CHANGED] T9 — root `.gitignore`.** Added `.pytest_cache/` and `.venv/` (previously only convention kept them out; neither was tracked).
+
+**Not touched (correctly out of scope for "right now"):** §0 U1–U4 (RA1.5/human-gated); rename R1 + H3 (plan couples them to cutover timing — "do not do mid-cutover"); H2 plan relocation (needs a careful cross-reference sweep — citation-breakage risk); T1/T2 (High, own session), T5 (Medium — real deal-domain test suite), I1 (feature). MAINTENANCE_PLAN §2 rows struck with dates.
+
+**[VERIFIED]** Full suite **372 passing** (`backend/venv/bin/pytest tests/`). No migration (T3 is schema-validation only; T4 adds a test). No UI changes.
+
+---
+
 ## RA1.5 cutover prep — reconciliation tooling + artifact audit — 2026-07-14
 
 **[ADDED] `deploy/reconcile.sh` + runbook wiring so the human cutover is a one-command, unambiguous E4 check. No app code touched; suite unaffected (still 362).**
