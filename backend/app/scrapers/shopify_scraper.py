@@ -95,7 +95,7 @@ class ShopifyScraper(BaseScraper):
                 'name': title,
                 'price': self.parse_price(str(p.get('price'))),
                 'original_price': self.parse_price(str(p.get('compare_at_price_max'))),
-                'in_stock': bool(p.get('available', True)),
+                'in_stock': bool(p.get('available', False)),  # pessimistic until detail fetch
                 'sizes_available': [],  # filled in by get_product_details
                 'image_url': self._norm_url(p.get('image') or featured_url),
                 'colorway': self._colorway_from_title(title, brand, model),

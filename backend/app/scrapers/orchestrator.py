@@ -120,23 +120,24 @@ class ScrapeOrchestrator:
                     if price_recorded:
                         results['prices_recorded'] += 1
 
-                        # A "deal" is any price strictly below the shoe's
-                        # CURRENT MSRP (read fresh this scrape, so MSRP edits
-                        # take effect immediately). The retailer's own
-                        # compare-at/original price no longer matters. A shoe
-                        # with no MSRP can't qualify — nothing to measure against.
+                        # A "deal" requires BOTH: price strictly below the shoe's
+                        # CURRENT MSRP AND at least one size in stock. Out-of-stock
+                        # products are never deals — they retire any existing deal
+                        # so the UI reflects reality, and requalify automatically
+                        # when stock returns (D8 fix).
+                        is_stocked = details['in_stock'] and size_available
                         below_msrp = (
                             shoe.msrp is not None
                             and details['price']
                             and details['price'] < shoe.msrp
                         )
-                        if below_msrp:
+                        if below_msrp and is_stocked:
                             deal_created = self.store.upsert_deal(
                                 shoe=shoe,
                                 retailer=retailer,
                                 price=details['price'],
                                 product_url=details['product_url'],
-                                in_stock=details['in_stock'] and size_available,
+                                in_stock=True,
                                 sizes_available=sizes_available,
                                 image_url=image_url,
                                 colorway=colorway,
@@ -148,9 +149,9 @@ class ScrapeOrchestrator:
                                     f"${details['price']} (msrp: ${shoe.msrp})"
                                 )
                         else:
-                            # Price is at/above MSRP (or MSRP was just raised, or
-                            # is unset) — retire any stale deal so the UI reflects
-                            # reality.
+                            # Price at/above MSRP, or product is out of stock:
+                            # retire any stale deal. An OOS deal requalifies on
+                            # the next scrape once stock returns.
                             self.store.deactivate_deal(shoe, retailer, details['product_url'])
 
                 except Exception as e:

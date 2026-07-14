@@ -3,13 +3,13 @@ Tests for ScrapeOrchestrator.scrape_retailer_for_shoe — the deal-qualification
 truth table and orphan retirement, exercised through an injected stub scraper
 (the orchestrator takes a registry injection, so no network or DOM fixtures).
 
-Qualification rule under test (B9-v2): a deal is any price strictly below the
-shoe's CURRENT MSRP; at/above MSRP retires any stale deal; a shoe without MSRP
-can never produce a deal.
+Qualification rule under test (B9-v2 + D8): a deal is any price strictly below
+the shoe's CURRENT MSRP AND with at least one size in stock; at/above MSRP or
+out-of-stock retires any stale deal; a shoe without MSRP can never produce a deal.
 
-The last test documents the known B10/H2 gap (refactor.md H2): a partial
-detail-fetch failure currently orphan-retires a live deal. It is marked xfail
-so it flips to a pass the day H2 is fixed, without locking in the bug.
+H2/B10 (D2) was fixed in commit bcdddc2: orphan retirement now runs against the
+union of searched + fetched URLs, so a failed detail fetch on a still-listed
+product no longer orphans its live deal.
 """
 from app.models.models import Deal, Retailer, Shoe
 from app.scrapers.orchestrator import ScrapeOrchestrator
@@ -128,3 +128,54 @@ def test_partial_detail_failure_does_not_orphan_a_live_deal(db):
     )
     assert db.query(Deal).filter(Deal.product_url == "u1", Deal.is_active == True).count() == 1
     assert db.query(Deal).filter(Deal.is_active == True).count() == 2
+
+
+# ── D8: out-of-stock qualification guard ─────────────────────────────────────
+
+
+def test_out_of_stock_below_msrp_does_not_create_deal(db):
+    """D8: a below-MSRP product with no sizes available must not become a deal."""
+    retailer, shoe = _setup(db, msrp=200.0)
+    res = _run(
+        db, retailer, shoe,
+        [{"product_url": "u1"}],
+        {"u1": _detail("u1", 160.0, in_stock=False)},
+    )
+
+    assert res["deals_found"] == 0
+    assert db.query(Deal).count() == 0
+
+
+def test_out_of_stock_retires_existing_deal(db):
+    """D8: when a previously-qualifying deal goes out of stock it must be retired."""
+    retailer, shoe = _setup(db, msrp=200.0)
+    # First scrape: in stock → deal created.
+    _run(db, retailer, shoe, [{"product_url": "u1"}], {"u1": _detail("u1", 160.0)})
+    assert db.query(Deal).one().is_active is True
+
+    # Second scrape: same price, now out of stock → deal retired.
+    _run(
+        db, retailer, shoe,
+        [{"product_url": "u1"}],
+        {"u1": _detail("u1", 160.0, in_stock=False)},
+    )
+    assert db.query(Deal).one().is_active is False
+
+
+def test_stock_return_requalifies_retired_deal(db):
+    """D8: a deal retired for OOS must requalify when stock returns."""
+    retailer, shoe = _setup(db, msrp=200.0)
+    # Create → retire on OOS.
+    _run(db, retailer, shoe, [{"product_url": "u1"}], {"u1": _detail("u1", 160.0)})
+    _run(
+        db, retailer, shoe,
+        [{"product_url": "u1"}],
+        {"u1": _detail("u1", 160.0, in_stock=False)},
+    )
+    assert db.query(Deal).filter(Deal.is_active == True).count() == 0
+
+    # Stock returns → new active deal.
+    _run(db, retailer, shoe, [{"product_url": "u1"}], {"u1": _detail("u1", 160.0)})
+    active = db.query(Deal).filter(Deal.is_active == True).all()
+    assert len(active) == 1
+    assert active[0].current_price == 160.0
