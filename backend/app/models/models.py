@@ -179,17 +179,19 @@ class ScrapeRun(Base):
     """
     Observability record for a single retailer's scrape attempt (R2.5).
 
-    Grain is **one row per retailer per full-catalog scrape attempt** — the
-    unit that answers "is Altitude quietly broken?": a run that finishes
-    `success` with `products_found == 0` is the tell-tale, distinct from one
-    that finishes `error`. Written only by the orchestrator's
-    `scrape_retailer()` (the single sanctioned write path); read by
-    `services/scrape_history.py`.
+    Grain is **one row per retailer per scrape attempt**. Two writers:
+    - `ScrapeOrchestrator.scrape_retailer()` (trigger="background"|"manual"|
+      "scheduled") — full-catalog runs; the signal that answers "is Altitude
+      quietly broken?" A `success` run with `products_found == 0` is the
+      tell-tale. These drive the health/watchdog computation.
+    - `ScrapeOrchestrator.scrape_shoe()` (trigger="shoe-sync") — per-shoe
+      targeted sync; one row per retailer per call. Excluded from health and
+      watchdog so a shoe not stocked at a retailer (0 products) doesn't look
+      like a broken retailer. Visible in the flat recent-runs log.
 
-    This is deals-domain telemetry — **disposable**, cascade-deleted with its
-    retailer (CLAUDE.md §2.6: history is sacred in training, disposable in
-    deals). It is *not* the SSE `scrape_state`, which is in-memory and dies on
-    restart; this table is the durable trend R4.1/R4.5 will build on.
+    Read by `services/scrape_history.py`. Disposable deals-domain telemetry —
+    cascade-deleted with its retailer (history is sacred in training,
+    disposable in deals, CLAUDE.md §2.6).
     """
     __tablename__ = "scrape_runs"
 
@@ -200,7 +202,8 @@ class ScrapeRun(Base):
     # "success" | "error" when the retailer's shoe list is exhausted.
     status = Column(String(20), nullable=False, default="running", server_default="running")
     # How the scrape was triggered — "background" (POST /scrape/all),
-    # "manual" (POST /scrape/retailer/{id}); "scheduled" arrives with R4.1.
+    # "manual" (POST /scrape/retailer/{id}), "scheduled" (APScheduler nightly),
+    # or "shoe-sync" (POST /scrape/shoe/{id} and MCP trigger_scrape per shoe).
     trigger = Column(String(20), nullable=True)
     started_at = Column(DateTime(timezone=True), server_default=func.now(), index=True)
     finished_at = Column(DateTime(timezone=True), nullable=True)

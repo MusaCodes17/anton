@@ -252,6 +252,11 @@ class ScrapeOrchestrator:
         """
         Scrape prices for a specific shoe across retailers.
 
+        Records one ScrapeRun (trigger="shoe-sync") per retailer for
+        observability, separate from the full-catalog health signal — see
+        `services/scrape_history.retailer_health` for why shoe-sync runs are
+        excluded from the health/watchdog computation.
+
         Args:
             shoe_id: ID of shoe to scrape.
             retailer_ids: Optional list of retailer IDs to scrape (if None, scrape all active).
@@ -281,18 +286,34 @@ class ScrapeOrchestrator:
         }
 
         for retailer in retailers:
+            run = ScrapeRun(retailer_id=retailer.id, status="running", trigger="shoe-sync", shoes_scraped=1)
+            self.db.add(run)
+            self.db.commit()  # persist "running" up front — visible while in flight
+
+            errors_this = []
+            r = {}
             try:
                 r = self.scrape_retailer_for_shoe(shoe, retailer)
                 results['retailers_scraped'] += 1
                 results['products_found'] += r.get('products_found', 0)
                 results['prices_recorded'] += r.get('prices_recorded', 0)
                 results['deals_found'] += r.get('deals_found', 0)
-                if r.get('errors'):
-                    results['errors'].extend(r['errors'])
+                errors_this = r.get('errors', [])
+                if errors_this:
+                    results['errors'].extend(errors_this)
             except Exception as e:
                 error_msg = f"Error scraping {retailer.name}: {str(e)}"
                 logger.error(error_msg)
                 results['errors'].append(error_msg)
+                errors_this = [error_msg]
+
+            run.finished_at = datetime.now(timezone.utc)
+            run.status = "error" if errors_this else "success"
+            run.products_found = r.get('products_found', 0)
+            run.prices_recorded = r.get('prices_recorded', 0)
+            run.deals_found = r.get('deals_found', 0)
+            run.error = ("; ".join(errors_this)[:_SCRAPE_ERROR_MAX]) or None
+            self.db.commit()
 
         return results
 

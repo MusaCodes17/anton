@@ -294,3 +294,74 @@ def test_retailers_needing_attention_in_summary(db):
     names = [r["name"] for r in payload["retailers_needing_attention"]]
     assert "Bad" in names
     assert "OK" not in names
+
+
+# --------------------------------------------------------------------------
+# shoe-sync scope — ScrapeRun per retailer, excluded from health/watchdog
+# --------------------------------------------------------------------------
+
+def test_scrape_shoe_emits_one_run_per_retailer(db):
+    r1 = _retailer(db, "R1")
+    r2 = _retailer(db, "R2")
+    shoe = _shoe(db)
+    db.commit()
+
+    ScrapeOrchestrator(db, registry={"R1": _SuccessScraper(), "R2": _SuccessScraper()}).scrape_shoe(shoe.id)
+
+    runs = db.query(ScrapeRun).order_by(ScrapeRun.id).all()
+    assert len(runs) == 2
+    assert all(r.trigger == "shoe-sync" for r in runs)
+    assert all(r.shoes_scraped == 1 for r in runs)
+    assert all(r.status == "success" for r in runs)
+    assert all(r.products_found == 1 for r in runs)
+
+
+def test_shoe_sync_zero_products_does_not_cause_warning(db):
+    """A shoe not stocked at a retailer yields 0 products — must not pollute health."""
+    r = _retailer(db)
+    shoe = _shoe(db)
+    db.commit()
+
+    ScrapeOrchestrator(db, registry={r.name: _EmptyScraper()}).scrape_shoe(shoe.id)
+
+    entry = next(e for e in scrape_history.retailer_health(db) if e["name"] == r.name)
+    # No catalog runs → unknown, not warning from the shoe-sync zero-products row.
+    assert entry["health"] == "unknown"
+
+
+def test_shoe_sync_does_not_mask_catalog_health(db):
+    """A catalog 'ok' run stays ok even if a later shoe-sync returns 0 products."""
+    r = _retailer(db)
+    shoe = _shoe(db)
+    db.commit()
+
+    ScrapeOrchestrator(db, registry={r.name: _SuccessScraper()}).scrape_retailer(r, [shoe], trigger="manual")
+    ScrapeOrchestrator(db, registry={r.name: _EmptyScraper()}).scrape_shoe(shoe.id)
+
+    entry = next(e for e in scrape_history.retailer_health(db) if e["name"] == r.name)
+    assert entry["health"] == "ok"
+
+
+def test_shoe_sync_runs_appear_in_recent_runs(db):
+    r = _retailer(db)
+    shoe = _shoe(db)
+    db.commit()
+
+    ScrapeOrchestrator(db, registry={r.name: _SuccessScraper()}).scrape_shoe(shoe.id)
+
+    payload = scrape_history.scrape_health(db)
+    assert len(payload["recent_runs"]) == 1
+    assert payload["recent_runs"][0]["trigger"] == "shoe-sync"
+
+
+def test_shoe_sync_does_not_contribute_to_watchdog(db):
+    """Three consecutive shoe-sync errors must not fire the catalog-health watchdog."""
+    r = _retailer(db)
+    shoe = _shoe(db)
+    db.commit()
+
+    for _ in range(3):
+        ScrapeOrchestrator(db, registry={r.name: _ErrorScraper()}).scrape_shoe(shoe.id)
+
+    entry = next(e for e in scrape_history.retailer_health(db) if e["name"] == r.name)
+    assert entry["watchdog_alert"] is False

@@ -3,7 +3,8 @@ Scrape-health read model — the data behind Settings → Sync & Scraping's
 per-retailer observability surface (R2.5).
 
 Turns the durable `scrape_runs` telemetry (written by
-`ScrapeOrchestrator.scrape_retailer`) into two answers:
+`ScrapeOrchestrator.scrape_retailer` for full-catalog runs and
+`ScrapeOrchestrator.scrape_shoe` for per-shoe syncs) into two answers:
 
 - **health per retailer**: its latest run's outcome, distilled to one of
   `ok` / `warning` / `error` / `unknown`, plus a short recent-run trend.
@@ -21,6 +22,7 @@ from __future__ import annotations
 
 from typing import Optional
 
+from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
 from app.models.models import Retailer, ScrapeRun
@@ -104,6 +106,10 @@ def retailer_health(db: Session) -> list[dict]:
     Each entry carries the derived `health` verdict, the latest run's summary
     (or None if never scraped), and a `trend` of the last `_TREND_LEN` runs
     (newest first) for a compact product-count sparkline.
+
+    Shoe-sync runs (trigger="shoe-sync") are excluded from the health/trend
+    query: a shoe not stocked at a retailer produces products_found==0, which
+    must not register as a health "warning" for that retailer.
     """
     retailers = (
         db.query(Retailer)
@@ -112,11 +118,16 @@ def retailer_health(db: Session) -> list[dict]:
         .all()
     )
 
+    # Catalog-only filter: include runs with NULL trigger (legacy rows) or any
+    # trigger that is not "shoe-sync". NULL != 'shoe-sync' evaluates to NULL in
+    # SQL, so the OR IS NULL is required to keep legacy rows.
+    _catalog_filter = or_(ScrapeRun.trigger.is_(None), ScrapeRun.trigger != "shoe-sync")
+
     out: list[dict] = []
     for r in retailers:
         recent = (
             db.query(ScrapeRun)
-            .filter(ScrapeRun.retailer_id == r.id)
+            .filter(ScrapeRun.retailer_id == r.id, _catalog_filter)
             .order_by(ScrapeRun.started_at.desc(), ScrapeRun.id.desc())
             .limit(_TREND_LEN)
             .all()
