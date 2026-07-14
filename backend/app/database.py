@@ -4,7 +4,7 @@ Database configuration and session management
 import os
 from pathlib import Path
 
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, event
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 from dotenv import load_dotenv
@@ -18,6 +18,13 @@ DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./shoe_deals.db")
 # For SQLite, we need to enable check_same_thread=False
 connect_args = {"check_same_thread": False} if DATABASE_URL.startswith("sqlite") else {}
 engine = create_engine(DATABASE_URL, connect_args=connect_args)
+
+# SQLite disables FK enforcement by default (PRAGMA foreign_keys=OFF per connection).
+# Flip it on so advisory constraints actually catch bad deletes.
+if DATABASE_URL.startswith("sqlite"):
+    @event.listens_for(engine, "connect")
+    def _set_sqlite_fk_pragma(dbapi_conn, _):
+        dbapi_conn.execute("PRAGMA foreign_keys=ON")
 
 # Create session factory
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)

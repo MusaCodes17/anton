@@ -156,17 +156,15 @@ def update_shoe_review(
 
 @router.delete("/{owned_shoe_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_owned_shoe(owned_shoe_id: int, db: Session = Depends(get_db)):
-    """Delete an owned shoe and its run history"""
-    db_shoe = db.query(OwnedShoe).filter(OwnedShoe.id == owned_shoe_id).first()
-
-    if not db_shoe:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Owned shoe with id {owned_shoe_id} not found"
-        )
-
-    db.delete(db_shoe)
-    db.commit()
+    """
+    Delete an owned shoe through the sanctioned rotation path, which NULLs
+    nullable FK refs (PlannedRace, StravaGearMapping), removes CheckpointPrompts,
+    and preserves the strava activity archive (INV-4).
+    """
+    try:
+        rotation.delete_owned_shoe(db, owned_shoe_id)
+    except LookupError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
     return None
 
 

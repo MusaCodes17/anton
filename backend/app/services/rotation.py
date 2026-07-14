@@ -12,7 +12,10 @@ from typing import Optional
 from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
 
-from app.models.models import Activity, Deal, OwnedShoe, PriceRecord, Shoe, ShoeNote, ShoeRun
+from app.models.models import (
+    Activity, CheckpointPrompt, Deal, OwnedShoe, PlannedRace, PriceRecord,
+    Shoe, ShoeNote, ShoeRun, StravaGearMapping,
+)
 # Pace formatting lives in the pure app.utils.pace module (R1.5c). Re-exported
 # so existing callers (rotation.pace_to_seconds / rotation.seconds_to_pace) keep
 # working; prefer importing from app.utils.pace directly in new code.
@@ -334,6 +337,50 @@ def delete_run(db: Session, run_id: int) -> OwnedShoe:
     db.commit()
     db.refresh(shoe)
     return shoe
+
+
+def delete_owned_shoe(db: Session, owned_shoe_id: int) -> None:
+    """
+    Delete an owned shoe, preserving data integrity across all FK references.
+
+    - Non-strava Activities attributed to this shoe are deleted (INV-4: strava
+      archive rows survive — only the ShoeRun attribution is removed).
+    - PlannedRace.planned_shoe_id and StravaGearMapping.owned_shoe_id are
+      nullable FKs: they are NULLed out rather than deleting the parent rows.
+    - CheckpointPrompt records have a NOT NULL FK — they are deleted.
+    - ShoeRun and ShoeNote rows are cascade-deleted by the ORM relationship.
+
+    Raises LookupError if the shoe is not found.
+    """
+    shoe = db.query(OwnedShoe).filter(OwnedShoe.id == owned_shoe_id).first()
+    if not shoe:
+        raise LookupError(f"Owned shoe with id {owned_shoe_id} not found")
+
+    # Delete ShoeRun attributions first, then their non-strava Activities.
+    # Order matters: Activity.attribution has cascade="all, delete-orphan" so
+    # deleting the Activity would cascade the ShoeRun — deleting the ShoeRun
+    # first avoids the double-delete SAWarning on the subsequent shoe cascade.
+    for run in list(shoe.runs):
+        activity = db.query(Activity).filter(Activity.id == run.activity_id).first()
+        db.delete(run)
+        if activity is not None and activity.source != "strava":
+            db.delete(activity)
+
+    # Nullable FK refs: NULL out rather than cascade-delete the referencing rows
+    (db.query(PlannedRace)
+       .filter(PlannedRace.planned_shoe_id == owned_shoe_id)
+       .update({PlannedRace.planned_shoe_id: None}, synchronize_session="fetch"))
+    (db.query(StravaGearMapping)
+       .filter(StravaGearMapping.owned_shoe_id == owned_shoe_id)
+       .update({StravaGearMapping.owned_shoe_id: None}, synchronize_session="fetch"))
+
+    # NOT NULL FK with no cascade — delete before the shoe row disappears
+    (db.query(CheckpointPrompt)
+       .filter(CheckpointPrompt.owned_shoe_id == owned_shoe_id)
+       .delete(synchronize_session="fetch"))
+
+    db.delete(shoe)   # ORM cascade: ShoeRun, ShoeNote
+    db.commit()
 
 
 def reassign_attribution(db: Session, activity_id: int, new_shoe_id: int) -> RunLogResult:
