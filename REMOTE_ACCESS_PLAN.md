@@ -158,11 +158,11 @@ Execute §7. Two validations are the exit criteria:
 
 ## 7. Cutover Runbook (draft — finalize during RA1.5)
 
-1. Freeze writes: last home sync done; note reconciliation counts from the live DB (activities, runs, total km, attributions — the E4 pattern; as of 2026-07-08: 933 activities · 698 runs · 8,028 km · 667 attributed — re-read fresh at cutover).
+1. Freeze writes: last home sync done; snapshot the baseline counts with `deploy/reconcile.sh ~/anton-data/shoe_deals.db | tee /tmp/anton-baseline.txt` (pins the four canonical metric definitions + alembic head + integrity/FK checks — the E4 pattern). Baseline drifts with daily use; **as of 2026-07-14: 942 activities · 707 runs · 8,159.3 run-km · 676 attributed · head `a2b3c4d5e6f7` · integrity ok · FK clean** — re-read fresh at cutover, the script is the source of truth.
 2. Named backup on the laptop (`shoe_deals.db.<date>-pre-remote.bak`) — the permanent "life before hosting" restore point.
 3. Provision host; deploy container with **new** per-client tokens (RA1.1); volume mounted; replication (RA1.4) armed.
 4. Copy the DB file up (single file — A2's payoff). `alembic upgrade head` on boot is a no-op if heads match; verify head = current.
-5. **Reconcile:** re-run the counts remotely; must match step 1 exactly.
+5. **Reconcile:** re-run the counts on the host and diff against the baseline — `deploy/reconcile.sh <copied-db-path> /data/shoe_deals.db` (or against `/tmp/anton-baseline.txt` figures). A clean `RECONCILE: MATCH` (exit 0) — all four metrics *and* the alembic head identical — is the pass condition; any mismatch exits 1 with a diff.
 6. Re-point Claude Desktop (`mcp-remote --header` → remote URL + its token); add the claude.ai custom connector (mobile); update SPA `VITE_API_URL` + its token for local dev use.
 7. Run RA1.5 validation #1 (mobile sync E2E, on cellular) and #2 (scrape comparison).
 8. Demote the laptop backend to dev: local dev DB = latest pulled snapshot; laptop never writes to production data again except via the API like any other client.

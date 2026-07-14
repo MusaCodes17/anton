@@ -5,6 +5,23 @@
 
 ---
 
+## RA1.5 cutover prep — reconciliation tooling + artifact audit — 2026-07-14
+
+**[ADDED] `deploy/reconcile.sh` + runbook wiring so the human cutover is a one-command, unambiguous E4 check. No app code touched; suite unaffected (still 362).**
+
+- **[ADDED] `deploy/reconcile.sh`:** pins the four canonical cutover metrics whose definitions were previously implicit in `REMOTE_ACCESS_PLAN.md §7` — `activities` = `COUNT(*) FROM activities`; `runs` = `activity_type='Run'`; `attributed` = `COUNT(*) FROM shoe_runs`; `run_km` = `ROUND(SUM(distance_km),1)` over `Run`. Single-DB mode prints those + `alembic_head` + `PRAGMA integrity_check` + `PRAGMA foreign_key_check`; two-DB mode diffs the five canonical lines and exits 1 on any mismatch (integrity is advisory, not part of the match). Verified: self-compare → `MATCH` exit 0; live vs. `.bak-running-level` → `MISMATCH` exit 1 (correctly caught the backup's older head `e1f2a3b4c5d6`).
+- **[CHANGED] `REMOTE_ACCESS_PLAN.md §7` (draft runbook, finalize-during-RA1.5):** steps 1 & 5 now invoke `reconcile.sh` instead of four hand-typed SQL queries run twice; refreshed the stale baseline (docs said 933/698/8,028/667 as of 2026-07-08) to the fresh live figures.
+
+- **[VERIFIED] Deploy-artifact audit (RA1.1–RA1.4 outputs, for RA1.5 readiness):**
+  - Live DB (`~/anton-data/shoe_deals.db`): `integrity_check ok`, `foreign_key_check` clean, single linear Alembic chain, head `a2b3c4d5e6f7` = live `alembic_version` (runbook step 4 "head = current" would pass). **Fresh baseline: 942 activities · 707 runs · 8,159.3 run-km · 676 attributed.**
+  - Loopback auth contract consistent end-to-end: `chat_service._server_headers` → `get_named_token("loopback")` ← `ANTON_TOKENS`, and `deploy/.env.production.example` provides the `loopback:` entry. Dropping it would silently 401 Son of Anton (CLAUDE.md §6 trap) — confirmed wired.
+  - `Dockerfile` / `entrypoint.sh` / `litestream.yml` / `docker-compose.yml` / `Caddyfile` / `restore.sh` / `pull-snapshot.sh` internally consistent; `--workers 1` (INV-9) pinned in both Dockerfile CMD and entrypoint's `UVICORN_CMD`.
+  - **Minor notes surfaced for the human step (not blockers):** (1) `docker-compose.yml` reads `env_file: ./backend/.env`, while the production template lives at `deploy/.env.production.example` — the intended flow is copy-template → `backend/.env`. (2) `entrypoint.sh` hardcodes `--host 0.0.0.0 --port 8000`, so `API_HOST`/`API_PORT` from the env template are inert in container mode (correct behaviour — Caddy fronts it and the host binds `127.0.0.1:8000` — just noting the dead vars). (3) `ANTON_OAUTH_REDIRECT_URI` / `ANTON_OAUTH_CLIENT_SECRET` remain genuine human-fill items (claude.ai's fixed callback URL, read during the OAuth build).
+
+**[VERIFIED]** No Python/JS changed — suite remains **362 passing** (unrun this session by design; nothing in the test path was touched). RA1.5 itself stays the blocking human task (provision host, deploy, mobile E2E, DC-IP scrape check).
+
+---
+
 ## Defect Block B (D1 + D3/D4 + D5 + D6) — 2026-07-14
 
 **[CHANGED] Data integrity: SQLite FK enforcement on, sanctioned shoe-delete path, small hazard batch. Suite 352 → 362 (+10). Two `mx:` commits.**
