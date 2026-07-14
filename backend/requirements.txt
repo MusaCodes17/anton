@@ -7,7 +7,7 @@ google-generativeai>=0.7.0
 fastapi==0.109.0
 # uvicorn bumped from 0.27.0: mcp[cli] requires uvicorn>=0.31.1
 uvicorn[standard]==0.34.0
-python-multipart==0.0.6
+python-multipart==0.0.32  # bumped from 0.0.6: mcp[cli] requires >=0.0.9
 
 # MCP server (exposes app functionality as tools, mounted at /mcp).
 # starlette/sse-starlette pinned explicitly: mcp[cli] pulls sse-starlette
@@ -36,8 +36,11 @@ requests==2.31.0
 apscheduler>=3.10,<4
 
 # Data Validation
-pydantic==2.5.3
-pydantic-settings==2.1.0
+# pydantic/pydantic-settings bumped: mcp[cli]==1.28.0 requires
+# pydantic-settings>=2.5.2, which in turn needs pydantic>=2.7.0. These are the
+# versions already installed and proven working with the mcp pin above.
+pydantic==2.13.4
+pydantic-settings==2.14.2
 
 # Environment Variables
 python-dotenv==1.0.0
