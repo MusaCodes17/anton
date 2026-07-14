@@ -5,6 +5,17 @@
 
 ---
 
+## D7 follow-up — plural "juniors" slipped the kids filter — 2026-07-14
+
+**[FIXED] Kids shoes still on the deals UI after D7. Root cause: `is_kids_shoe`'s `\b(?:junior|…)\b` matched the singular keyword but not its plural — `\bjunior\b` never matches "juniors" because the trailing "s" blocks the word boundary. JD Sports slugs read `adidas-juniors-adizero-…` / `nike-juniors-pegasus-42-…`, so those listings passed both the scrape-time filter AND `/admin/cleanup-kids-shoes`. Fix + live-DB cleanup. Suite 399 passing.**
+
+- **[CHANGED] `backend/app/scrapers/base_scraper.py`:** `_KIDS_SHOE_RE` now closes with `)s?\b` instead of `)\b`, so every keyword catches its plural/possessive form. Optional `s` is harmless on tokens that are never pluralised, and `\b` still prevents over-matching into unrelated words (`juniorx` stays a non-match). One-line regex change; commented with the why.
+- **[ADDED] `backend/tests/test_kids_filter.py` — 4 cases:** plural `juniors` in adidas + nike JD Sports URL slugs (caught), a second nike-juniors slug, and the `juniorx` over-match guard (not caught). Filter tests 26 → 30.
+- **[CHANGED] Live DB cleanup (`/Users/musasouled/anton-data/shoe_deals.db`):** backed up to `shoe_deals.db.bak-juniors-cleanup`, then removed **4 active deals** (2× adidas Adizero Evo SL juniors, 2× Nike Pegasus 42 juniors) + **159 stale price_records** matching the fixed filter — the pre-fix rows the D7 scrape-time filter can't reach retroactively. Post-cleanup verification: 0 kids deals, 0 kids price_records remain; 588 → 584 deals.
+- **[VERIFIED]** Full suite **399 passing** (`venv/bin/pytest tests/ -q`). No schema change, no migration. No server was running during the DB edit. No UI change (the deals list reads the now-clean `deals` table).
+
+---
+
 ## R4.6 — New-Retailer Onboarding Agent (MAINTENANCE_PLAN I1) — 2026-07-14
 
 **[ADDED] Promoted MAINTENANCE_PLAN I1 to roadmap R4.6 and shipped it: a confirmation-gated workflow that takes a retailer with no working scraper from "row in the DB" to either scraping or an honest unscrapable verdict, reusing `platform_detection` + the scrapability dry-run + the `scrape_health` view. Suite 374 → 395 (+21). Backend + MCP + REST; no schema change, no migration, no UI.**

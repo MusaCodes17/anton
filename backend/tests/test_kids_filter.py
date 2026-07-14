@@ -37,6 +37,13 @@ from app.scrapers.shopify_scraper import ShopifyScraper
     ([None, "https://example.com/products/new-balance-fresh-foam-youth"], True),
     # "Junior" in name — caught.
     (["Asics GT-2000 Junior", None], True),
+    # Plural "juniors" in a JD Sports URL slug — caught (D7 plural gap, 2026-07-14).
+    ([None, "https://jdsports.ca/products/adidas-juniors-adizero-evo-sl-dash-grey"], True),
+    ([None, "https://jdsports.ca/products/nike-juniors-pegasus-42-white-black"], True),
+    # Plural "kids" possessive-ish slug still caught.
+    ([None, "https://jdsports.ca/products/nike-juniors-pegasus"], True),
+    # "juniorx" (no boundary, s? must not over-match into an unrelated token) — passes.
+    (["Adizero Juniorx Edition", None], False),
     # Adult name + adult URL — passes.
     (["adidas Adizero Boston 13", "https://jdsports.ca/products/adidas-adizero-boston-13"], False),
     # Empty strings treated as absent.
