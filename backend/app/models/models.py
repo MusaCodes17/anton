@@ -61,8 +61,11 @@ class Retailer(Base):
     # which are looked up by name first regardless of this column.
     platform = Column(String(20), nullable=False, default="custom", server_default="custom")
     last_scraped_at = Column(DateTime(timezone=True), nullable=True)
-    # Store CSS selectors, patterns, AND (for platform="algolia") the credentials
+    # Platform-specific scraper settings. In practice only platform="algolia"
+    # rows populate it, holding the credential payload the dynamic scraper needs:
     # algolia_app_id / algolia_api_key / algolia_index / algolia_product_path.
+    # (Shopify rows need nothing here; the retired CSS-selector scrapers that once
+    # stored selectors/patterns are long gone.) NULL for shopify/custom.
     scraper_config = Column(JSON, nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
