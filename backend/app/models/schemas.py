@@ -23,6 +23,27 @@ def validate_optional_shoe_type(v: Optional[str]) -> Optional[str]:
     return v
 
 
+# Owned-shoe status vocabulary (T3) — the closed set for OwnedShoe.status.
+# Kept here (its only consumer today) rather than a pure util, unlike SHOE_TYPES
+# which several layers import; extract if a second consumer appears (A5).
+OWNED_SHOE_STATUSES: tuple[str, ...] = ("active", "retired", "for_sale")
+
+
+def validate_owned_shoe_status(v: Optional[str]) -> Optional[str]:
+    """Shared `status` validator for the owned-shoe write schemas (T3): `None`
+    means 'unchanged' on update; any provided value must be a member of
+    OWNED_SHOE_STATUSES. Rejects off-vocab typos with a 422 instead of silently
+    persisting an unknown status. Read schemas do NOT validate — legacy data
+    must never break a GET (mirrors `validate_optional_shoe_type`)."""
+    if v is None:
+        return v
+    if v not in OWNED_SHOE_STATUSES:
+        raise ValueError(
+            f"Invalid status '{v}'. Use one of: {', '.join(OWNED_SHOE_STATUSES)}."
+        )
+    return v
+
+
 # ============== SHOE SCHEMAS ==============
 
 class ShoeBase(BaseModel):
@@ -272,6 +293,7 @@ class OwnedShoeBase(BaseModel):
 class OwnedShoeCreate(OwnedShoeBase):
     """Schema for adding a shoe to the rotation"""
     _check_shoe_type = field_validator("shoe_type")(validate_optional_shoe_type)
+    _check_status = field_validator("status")(validate_owned_shoe_status)
 
 
 class OwnedShoeUpdate(BaseModel):
@@ -297,6 +319,7 @@ class OwnedShoeUpdate(BaseModel):
     image_url: Optional[str] = None
 
     _check_shoe_type = field_validator("shoe_type")(validate_optional_shoe_type)
+    _check_status = field_validator("status")(validate_owned_shoe_status)
 
 
 class MileageAdjust(BaseModel):
