@@ -29,12 +29,11 @@ services:
       - DATABASE_URL=sqlite:////data/shoe_deals.db
       - MCP_SERVER_URL=http://localhost:8000/mcp
       - TZ=America/Toronto
-      # Litestream replication (RA1.4) — leave unset in dev to skip replication.
-      # Set all four to enable; see deploy/.env.production.example for format.
-      - LITESTREAM_BUCKET=${LITESTREAM_BUCKET:-}
-      - LITESTREAM_ENDPOINT=${LITESTREAM_ENDPOINT:-}
-      - LITESTREAM_ACCESS_KEY_ID=${LITESTREAM_ACCESS_KEY_ID:-}
-      - LITESTREAM_SECRET_ACCESS_KEY=${LITESTREAM_SECRET_ACCESS_KEY:-}
+      # LITESTREAM_* are deliberately NOT listed here. Compose's `environment:`
+      # overrides `env_file:`, and `${LITESTREAM_BUCKET:-}` would interpolate to
+      # an empty string from the shell, silently disabling replication even when
+      # the values are set in backend/.env. Let env_file supply them: set them in
+      # backend/.env for production, omit them in dev to skip replication.
     env_file:
       - ./backend/.env
     restart: unless-stopped
