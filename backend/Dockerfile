@@ -6,7 +6,12 @@
 #
 # RA1.4: Litestream is installed in the image. entrypoint.sh enables it only
 # when LITESTREAM_BUCKET is set at runtime — safe to run without it in dev.
-FROM python:3.11-slim
+# Base image pinned to bookworm (Debian 12) deliberately: `python:3.11-slim`
+# now resolves to Debian 13 (trixie), which playwright==1.41.0 (A7 pin) has no
+# dependency mapping for — trixie's t64 library renames (libasound2 →
+# libasound2t64) make `playwright install --with-deps` fail with apt exit 100.
+# Bump this tag only together with the playwright pin, re-verifying A7.
+FROM python:3.11-slim-bookworm
 
 # Playwright needs wget + ca-certificates before it can self-install OS deps.
 # sqlite3 CLI is used by pull-snapshot.sh to verify restored DB counts.
