@@ -1,21 +1,28 @@
-# Anton reverse-proxy — TLS termination + unbuffered streaming.
+# Anton reverse-proxy — TLS termination + unbuffered streaming + SPA hosting.
 #
 # Replace YOUR_DOMAIN with the actual hostname (must point to this server's IP).
 # Caddy auto-provisions a Let's Encrypt certificate on first request.
+# Replace /srv/anton/dist with the path to the built frontend (frontend/dist).
+#
+# Routing split (RA2.1): Caddy serves the built SPA directly and reverse-proxies
+# only the app's own endpoints to the backend. The static handler has NO
+# basic_auth — the SPA bundle carries no secret, and the login page + httpOnly
+# `anton_session` cookie is the gate (design_decisions supersedes the interim
+# basic_auth split). Backend-authenticated paths (their own bearer/OAuth/session
+# auth) are matched explicitly and proxied; everything else falls through to the
+# file_server with an SPA history fallback.
 #
 # Streaming requirement (RA1.2): Anton serves three unbuffered transports that
 # break behind a buffering reverse proxy:
 #   - Chat SSE:          POST /api/chat/message → text/event-stream
 #   - Scrape-progress:   GET  /api/scrape/stream → text/event-stream
 #   - MCP Streamable HTTP: all /mcp/* requests
-# The flush_interval -1 directive below keeps all three working.
+# The flush_interval -1 directive on the backend handler keeps all three working.
 #
 # Credential-redaction requirement (RA1.3): no usable credential may appear in
-# any log line. The capability-URL path was removed in RA1.1b (OAuth 2.1 is the
-# connector auth), but deleting the URI field remains correct hygiene — OAuth
-# flows include code_challenge, state, and redirect_uri in query strings. The
-# app-layer AccessLogMiddleware applies per-param redaction; the proxy log takes
-# the conservative approach of omitting the URI entirely.
+# any log line. The app-layer AccessLogMiddleware applies per-param redaction;
+# the proxy log takes the conservative approach of omitting the URI entirely and
+# never logging Authorization / Cookie headers (the session cookie lives there).
 
 {
     email admin@example.com
@@ -41,11 +48,26 @@ YOUR_DOMAIN {
         }
     }
 
-    # Reverse proxy — unbuffered (flush_interval -1 = flush immediately).
-    reverse_proxy localhost:8000 {
-        flush_interval -1
-        header_up X-Forwarded-For {remote_host}
-        header_up X-Forwarded-Proto {scheme}
+    # Backend-authenticated paths — the app owns its own auth (named bearer,
+    # OAuth 2.1, and the RA2.1 session cookie). Everything the backend must see
+    # is enumerated here; anything else is the SPA.
+    @backend path /api /api/* /mcp /mcp/* /authorize /token /revoke /oauth/login /.well-known/oauth-authorization-server /health
+    handle @backend {
+        # Reverse proxy — unbuffered (flush_interval -1 = flush immediately).
+        reverse_proxy localhost:8000 {
+            flush_interval -1
+            header_up X-Forwarded-For {remote_host}
+            header_up X-Forwarded-Proto {scheme}
+        }
+    }
+
+    # Everything else → the built SPA. No basic_auth: the login page + session
+    # cookie is the gate (RA2.1). try_files gives client-side routing an
+    # index.html fallback for deep links.
+    handle {
+        root * /srv/anton/dist
+        try_files {path} /index.html
+        file_server
     }
 
     # HSTS — enforce HTTPS for one year.

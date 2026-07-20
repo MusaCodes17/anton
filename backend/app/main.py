@@ -12,7 +12,7 @@ from app.database import run_migrations
 from app.mcp_server import mcp
 from app.middleware.access_log import AccessLogMiddleware
 from app.middleware.auth import BearerAuthMiddleware
-from app.routers import shoes, retailers, deals, dashboard, scraping, export, owned_shoes, coros_sync, chat, admin, training, strava, watchlist, activities, races, home, shoe_types, checkpoints, oauth as oauth_router
+from app.routers import shoes, retailers, deals, dashboard, scraping, export, owned_shoes, coros_sync, chat, admin, training, strava, watchlist, activities, races, home, shoe_types, checkpoints, oauth as oauth_router, session as session_router
 from app.services import schedule as schedule_svc
 
 # Load environment variables
@@ -36,9 +36,9 @@ def require_auth_config() -> None:
         raise RuntimeError(
             "No auth credentials configured. Set ANTON_TOKENS (RA1.1) in backend/.env. "
             "Example: ANTON_TOKENS=\"desktop:$(python3 -c 'import secrets; print(secrets.token_hex(32))')\""
-            ",loopback:$(python3 -c 'import secrets; print(secrets.token_hex(32))')"
-            ",spa:$(python3 -c 'import secrets; print(secrets.token_hex(32))')\""
-            " — see REMOTE_ACCESS_PLAN.md §6 RA1.1."
+            ",loopback:$(python3 -c 'import secrets; print(secrets.token_hex(32))')\""
+            " — see REMOTE_ACCESS_PLAN.md §6 RA1.1. (The `spa` token was retired in "
+            "RA2.1; the SPA uses the ANTON_LOGIN_PASSWORD session cookie.)"
         )
 
 
@@ -117,6 +117,11 @@ app.include_router(checkpoints.router, prefix="/api")
 # OAuth 2.1 login page — always registered (needed even when OAuth is not
 # fully configured so the route exists for graceful "not configured" handling).
 app.include_router(oauth_router.router)
+
+# SPA session-cookie auth (RA2.1). Router owns its own /api/auth prefix. The
+# login (POST) and probe (GET) paths are public in the auth middleware; the
+# cookie gates every other /api call.
+app.include_router(session_router.router)
 
 # OAuth 2.1 protocol routes (/.well-known, /authorize, /token, /revoke).
 # Registered only when ANTON_HOST_URL is set — that var is the issuer URL and

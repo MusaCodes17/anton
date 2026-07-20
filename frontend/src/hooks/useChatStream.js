@@ -67,6 +67,8 @@ export function useChatStream({
         const res = await fetch('/api/chat/message', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', ...authHeaders() },
+          // RA2.1: send the httpOnly session cookie with the SSE POST.
+          credentials: 'include',
           body: JSON.stringify({ messages: updatedApiMessages, model }),
         })
 

@@ -1,7 +1,25 @@
 # Anton — Session Changelog
 
-**Last Updated:** 2026-07-14
+**Last Updated:** 2026-07-20
 **Status / current focus:** see `docs/project_state.md` (the perishable snapshot). This file is the append-only session log — the authoritative record of *what happened*; the `docs/` suite is the reference material.
+
+---
+
+## RA2.1 — SPA served behind a session-cookie login (retires the baked `spa` bearer) — 2026-07-20
+
+**[ADDED] The SPA now authenticates with an httpOnly `anton_session` cookie issued after a password login, so the built bundle carries no secret (closes the RA1 non-goal: "baked VITE_ANTON_SECRET not acceptable in a public bundle"). Session auth is a THIRD credential type alongside named bearer tokens (desktop/loopback) and OAuth 2.1 — the /mcp mount, the claude.ai connector, and the named-bearer paths are untouched. Suite 400 → 415 passing (+15; the pre-existing `test_oauth::test_token_path_is_public` failure is unrelated — it fails identically on clean main). `vite build` clean; dist grepped free of any bearer token.**
+
+- **[ADDED] `backend/app/models/models.py` — `AuthSession` ORM + `alembic/versions/1a2b3c4d5e6f_sessions_table.py`:** `sessions` table (hashed ≥256-bit id, `expires_at`, `created_at`); purely additive, reversible `downgrade`, E4-light (no data moved). **down_revision is `a2b3c4d5e6f7`** (owned_shoe_review_draft — the true single head; `0b1c2d3e4f5a` oauth_tables is *not* the head). `test_migrations.py` EXPECTED_TABLES += `sessions`.
+- **[ADDED] `backend/app/services/sessions.py`:** `create_session` / `verify_session_sync` / `delete_session` + `session_ttl_seconds` — mirrors `services/oauth.py` (256-bit `token_hex(32)`, stored as SHA-256 hex, sync DB calls acceptable under INV-9). TTL via `SESSION_TTL_DAYS` (default 14).
+- **[ADDED] `backend/app/routers/session.py` (`/api/auth`):** `POST /session` (validate `ANTON_LOGIN_PASSWORD` via `secrets.compare_digest`, reuse `login_failure_limiter`, set httpOnly+Secure+SameSite=Lax cookie) · `DELETE /session` (logout: delete row + clear cookie) · `GET /session` (public probe → `{authenticated}`). Registered in `main.py`; the path is in `PUBLIC_PATHS`.
+- **[CHANGED] `backend/app/middleware/auth.py` — third auth branch + CSRF:** after named-bearer and OAuth fail, read the `anton_session` cookie and `verify_session_sync` → `scope["anton_client"]="session"`. `_authorized` now returns the client type (str|None). **CSRF (cookie-auth only):** mutating `/api/*` requests authenticated by the cookie require `Origin == ANTON_HOST_URL` (exact) → else 403; GET/HEAD and SSE (EventSource is GET) exempt; bearer/OAuth exempt (no cookie); enforcement skipped when `ANTON_HOST_URL` unset (dev — SameSite=Lax is the guard). Pure-ASGI/streaming-safe preserved.
+- **[CHANGED] `frontend/src/services/api.js`:** removed `VITE_ANTON_SECRET`/`ANTON_SECRET` entirely; axios `withCredentials: true`; `authHeaders()` now returns `{}`; response interceptor fires an `anton:unauthenticated` window event on 401 (except the probe). New `authApi` (probe/login/logout). Chat fetch(), scrape-SSE fetch(), and the chat resource/provider fetches now send `credentials: 'include'`.
+- **[ADDED] `frontend/src/components/auth/{AuthGate,LoginView}.jsx` + Layout logout:** AuthGate probes `GET /api/auth/session` on load (and listens for the 401 event) to switch login-vs-app; LoginView is a password gate (design-token styled, mobile-ok); Layout gained a "Sign out" control (desktop + mobile) that calls `DELETE /api/auth/session` then drops to login.
+- **[CHANGED] `deploy/Caddyfile`:** routing split — an explicit `@backend` matcher (`/api`, `/api/*`, `/mcp`, `/mcp/*`, `/authorize`, `/token`, `/revoke`, `/oauth/login`, `/.well-known/oauth-authorization-server`, `/health`) reverse-proxies to the backend with `flush_interval -1` + `X-Forwarded-*`; everything else is `file_server` over the built `dist` with an `index.html` try_files fallback and **no basic_auth** (the login page + cookie is the gate).
+- **[REMOVED] Cleanup:** the `spa:` entry retired from `ANTON_TOKENS` (backend `.env.example` + `main.py` fail-fast example); `frontend/.env.example` `VITE_ANTON_SECRET` removed; `SESSION_TTL_DAYS` documented; `ANTON_LOGIN_PASSWORD` note now covers both the OAuth login and the SPA session login.
+- **[ADDED] `backend/tests/test_auth.py` (+15):** valid/invalid/absent/expired session cookie; CSRF wrong-origin/missing-origin → 403, matching-origin → 200, GET exempt, dev-skip, bearer-write exempt; session login wrong-password → 401, correct → Set-Cookie (httpOnly/Secure/SameSite=lax), public probe, login rate-limited → 429. Login tests inject their own limiter so they never deplete the `login_failure_limiter` singleton shared with `test_oauth.py`.
+
+**[VERIFIED]** `backend/venv/bin/pytest -q` → **415 passing** (1 pre-existing unrelated failure, confirmed identical on clean main: 400→415, +15). `npm run build` clean; `grep -riE 'bearer [a-f0-9]{16}|VITE_ANTON_SECRET' dist/` → nothing. Middleware CSRF/cookie branches tested directly (streaming-safe, no body buffering). /mcp routing + OAuth 2.1 connector paths untouched (E9 intact); A7 pins untouched.
 
 ---
 

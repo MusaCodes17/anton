@@ -239,7 +239,7 @@ export default function ChatPage() {
 
   // Fetch provider/model list
   useEffect(() => {
-    fetch('/api/chat/providers', { headers: authHeaders() })
+    fetch('/api/chat/providers', { headers: authHeaders(), credentials: 'include' })
       .then((r) => r.json())
       .then(setProviders)
       .catch(() => {})

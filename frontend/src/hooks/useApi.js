@@ -624,9 +624,10 @@ export function useScrapeStream() {
   // of just reporting "already in progress" with no way to see it finish).
   //
   // This reads the SSE over fetch() rather than a native EventSource because
-  // EventSource cannot send an Authorization header, and R2.1 requires the
-  // bearer token on /api/scrape/stream like every other endpoint. The frame
-  // parsing mirrors useChatStream (split on blank lines, take `data:` lines).
+  // fetch lets us abort the stream via AbortController. Auth is the RA2.1
+  // session cookie, sent via credentials:'include' (a native EventSource would
+  // send same-origin cookies too, but couldn't be aborted the same way). The
+  // frame parsing mirrors useChatStream (split on blank lines, take `data:`).
   const attachStream = useCallback(
     (onEvent) => {
       setIsRunning(true)
@@ -664,6 +665,7 @@ export function useScrapeStream() {
         try {
           const res = await fetch(SCRAPE_STREAM_URL, {
             headers: authHeaders(),
+            credentials: 'include',
             signal: controller.signal,
           })
           if (!res.ok || !res.body) throw new Error(`stream failed (${res.status})`)

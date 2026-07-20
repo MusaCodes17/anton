@@ -16,6 +16,20 @@ Anton's auth model:
    `services.oauth.verify_access_token_sync` — only when named-token check fails
    and `ANTON_HOST_URL` is set (OAuth is active).
 
+3. **Session cookie** (`anton_session`, RA2.1) — the SPA authenticates by
+   password once (`POST /api/auth/session`) and receives an httpOnly cookie. This
+   middleware verifies the cookie via `services.sessions.verify_session_sync`
+   after the named-bearer and OAuth checks fail. This retires the baked-in `spa`
+   bearer token — the built bundle now carries no secret. Session auth is an
+   *additional* credential type, not a replacement for (1) or (2).
+
+CSRF (RA2.1) — cookies are sent automatically by the browser, so cookie-
+authenticated *mutating* requests (POST/PUT/PATCH/DELETE on `/api/*`) get an
+extra guard: the `Origin` header must equal `ANTON_HOST_URL` (exact compare).
+SameSite=Lax on the cookie is the first line of defence; the Origin check is
+defence-in-depth. Requests authenticated by (1) or (2) carry no cookie and are
+exempt. GET/HEAD and SSE (EventSource is GET) are exempt.
+
 Why a *pure ASGI* middleware and not `BaseHTTPMiddleware` or a dependency:
 - The app streams SSE (chat + scrape progress) and serves the `/mcp` Streamable
   HTTP transport. `BaseHTTPMiddleware` wraps/buffers the response body and is a
@@ -61,6 +75,16 @@ PUBLIC_PATHS: frozenset[str] = frozenset({
     "/revoke",
     # Human-facing login page (app/routers/oauth.py).
     "/oauth/login",
+    # SPA session-cookie auth (RA2.1): password login, logout, and the load-time
+    # probe. POST issues the cookie (can't require the cookie it's about to set);
+    # GET reports {authenticated}; DELETE is a self-scoped logout — all three
+    # validate internally, so the path is safe to make public.
+    #
+    # The SPA's static assets (index.html, JS/CSS bundle) are NOT listed here
+    # because they are served by Caddy's file_server, never by this backend — the
+    # backend only handles /api, /mcp, and the OAuth routes. The bundle holds no
+    # secret now, so serving it publicly is correct regardless.
+    "/api/auth/session",
 })
 
 _BEARER_PREFIX = "bearer "  # case-insensitive scheme match
@@ -143,7 +167,13 @@ class BearerAuthMiddleware:
         )
         # OAuth is active when ANTON_HOST_URL is set — same condition as main.py
         # wires create_auth_routes().
-        self._oauth_active: bool = bool(os.getenv("ANTON_HOST_URL", "").strip())
+        host = os.getenv("ANTON_HOST_URL", "").strip()
+        self._oauth_active: bool = bool(host)
+        # CSRF origin target for cookie-authenticated writes (RA2.1). Stored
+        # without a trailing slash so the exact-compare matches the browser's
+        # Origin header (which never has a trailing slash). Empty in dev (no
+        # host URL) → CSRF enforcement is skipped and SameSite=Lax is the guard.
+        self._csrf_origin: str = host.rstrip("/")
         # Imported lazily so tests can swap the singleton before this module is
         # loaded; also avoids a circular-import risk at module level.
         from app.services.rate_limit import auth_failure_limiter
@@ -166,7 +196,17 @@ class BearerAuthMiddleware:
             await self.app(scope, receive, send)
             return
 
-        if self._authorized(scope):
+        client = self._authorized(scope)
+        if client is not None:
+            # CSRF applies ONLY to cookie-authenticated writes (RA2.1). Bearer
+            # and OAuth clients carry no cookie and are exempt.
+            if client == "session" and not self._csrf_ok(scope):
+                method = scope.get("method", "?")
+                path = scope.get("path", "?")
+                logger.warning("csrf reject: %s %s from %s",
+                               method, path, _client_ip(scope))
+                await self._reject_csrf(send)
+                return
             await self.app(scope, receive, send)
             return
 
@@ -182,44 +222,92 @@ class BearerAuthMiddleware:
             logger.warning("auth 401: %s %s from %s", method, path, ip)
             await self._reject(send)
 
-    def _authorized(self, scope) -> bool:
-        """Check the presented bearer token; on success set scope['anton_client'].
+    def _authorized(self, scope) -> str | None:
+        """Check the presented credentials; on success set scope['anton_client']
+        and return the client type ('<named>' | 'oauth' | 'session'). Returns
+        None when no credential authorizes the request.
 
         Named-token comparison loops over ALL tokens unconditionally (no early
         exit from the loop body) so the wall-clock time of a failed check does
         not reveal how many tokens are registered or whether any matched.
         """
         header = self._get_header(scope, b"authorization")
-        if not header or not header.lower().startswith(_BEARER_PREFIX):
+        presented = ""
+        if header and header.lower().startswith(_BEARER_PREFIX):
+            presented = header[len(_BEARER_PREFIX):].strip()
+
+        if presented:
+            # Named bearer tokens — constant-time multi-token compare (no short-circuit).
+            if self.tokens:
+                matched_name: str | None = None
+                for name, token in self.tokens.items():
+                    # compare_digest is constant-time; we loop all tokens and
+                    # record the last match so we never exit early.
+                    if secrets.compare_digest(presented, token):
+                        matched_name = name
+                if matched_name is not None:
+                    scope["anton_client"] = matched_name
+                    return matched_name
+
+            # OAuth 2.1 access token fallback (RA1.1b).
+            if self._oauth_active:
+                from app.services.oauth import verify_access_token_sync
+                if verify_access_token_sync(presented):
+                    scope["anton_client"] = "oauth"
+                    return "oauth"
+
+        # Session cookie (RA2.1) — the SPA's credential. Checked last so the
+        # bearer/OAuth paths are unchanged for their clients.
+        cookie_val = self._get_cookie(scope, "anton_session")
+        if cookie_val:
+            from app.services.sessions import verify_session_sync
+            if verify_session_sync(cookie_val):
+                scope["anton_client"] = "session"
+                return "session"
+
+        return None
+
+    def _csrf_ok(self, scope) -> bool:
+        """Origin-based CSRF guard for cookie-authenticated writes (RA2.1).
+
+        Safe methods (GET/HEAD/OPTIONS) and non-/api paths are always allowed —
+        SSE (EventSource) is a GET and rides through here untouched. For a
+        mutating /api request the Origin header must exactly match ANTON_HOST_URL.
+        When ANTON_HOST_URL is unset (dev) enforcement is skipped and SameSite=Lax
+        on the cookie is the guard.
+        """
+        method = scope.get("method", "")
+        if method in ("GET", "HEAD", "OPTIONS"):
+            return True
+        path = scope.get("path", "")
+        if not path.startswith("/api/"):
+            return True
+        if not self._csrf_origin:
+            return True  # dev / not configured — rely on SameSite=Lax
+        origin = self._get_header(scope, b"origin")
+        if not origin:
+            # A same-origin fetch/XHR always sends Origin on unsafe methods; a
+            # missing Origin on a cookie write is treated as a mismatch.
             return False
-        presented = header[len(_BEARER_PREFIX):].strip()
-
-        # Named bearer tokens — constant-time multi-token compare (no short-circuit).
-        if self.tokens:
-            matched_name: str | None = None
-            for name, token in self.tokens.items():
-                # compare_digest is constant-time; we loop all tokens and record
-                # the last match so we never exit early.
-                if secrets.compare_digest(presented, token):
-                    matched_name = name
-            if matched_name is not None:
-                scope["anton_client"] = matched_name
-                return True
-
-        # OAuth 2.1 access token fallback (RA1.1b).
-        if self._oauth_active:
-            from app.services.oauth import verify_access_token_sync
-            if verify_access_token_sync(presented):
-                scope["anton_client"] = "oauth"
-                return True
-
-        return False
+        return origin.rstrip("/") == self._csrf_origin
 
     @staticmethod
     def _get_header(scope, name: bytes) -> str | None:
         for key, value in scope.get("headers", []):
             if key == name:
                 return value.decode("latin-1")
+        return None
+
+    @staticmethod
+    def _get_cookie(scope, name: str) -> str | None:
+        """Read one cookie value from the Cookie header, or None if absent."""
+        header = BearerAuthMiddleware._get_header(scope, b"cookie")
+        if not header:
+            return None
+        for pair in header.split(";"):
+            key, sep, value = pair.strip().partition("=")
+            if sep and key == name:
+                return value.strip()
         return None
 
     @staticmethod
@@ -235,6 +323,20 @@ class BearerAuthMiddleware:
                     (b"content-length", b"0"),
                     (b"www-authenticate", b'Bearer realm="Anton"'),
                 ],
+            }
+        )
+        await send({"type": "http.response.body", "body": b""})
+
+    @staticmethod
+    async def _reject_csrf(send) -> None:
+        # 403 for a cookie-authenticated write whose Origin doesn't match the
+        # configured host (RA2.1 CSRF guard). Distinct from 401 (unauthenticated)
+        # so the SPA knows the session is valid but the request was refused.
+        await send(
+            {
+                "type": "http.response.start",
+                "status": 403,
+                "headers": [(b"content-length", b"0")],
             }
         )
         await send({"type": "http.response.body", "body": b""})

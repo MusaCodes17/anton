@@ -30,6 +30,7 @@ EXPECTED_TABLES = (
     "athlete_metrics", "scrape_runs",
     "chat_conversations", "checkpoint_prompts",
     "oauth_auth_codes", "oauth_tokens",
+    "sessions",
     "alembic_version",
 )
 

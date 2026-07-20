@@ -1,8 +1,9 @@
 import { useState } from 'react'
 import { NavLink, Outlet, useLocation } from 'react-router-dom'
-import { Home, Activity, Tag, PersonStanding, Sparkles, Settings as SettingsIcon, Menu, X } from 'lucide-react'
+import { Home, Activity, Tag, PersonStanding, Sparkles, Settings as SettingsIcon, Menu, X, LogOut } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
+import { authApi, UNAUTHENTICATED_EVENT } from '@/services/api'
 import { useDashboardStats } from '@/hooks/useApi'
 import { formatRelativeTime } from '@/lib/utils'
 import BrandMark from '@/components/layout/BrandMark'
@@ -75,6 +76,32 @@ function SettingsLink({ onNavigate }) {
   )
 }
 
+// RA2.1 logout — clears the session cookie server-side, then fires the app-wide
+// unauthenticated event so AuthGate drops back to the login view. Dispatches the
+// event even if the request fails, so a click always returns the user to login.
+function LogoutButton({ onNavigate }) {
+  const handleLogout = async () => {
+    try {
+      await authApi.logout()
+    } catch {
+      // ignore — we're logging out regardless
+    } finally {
+      onNavigate?.()
+      window.dispatchEvent(new Event(UNAUTHENTICATED_EVENT))
+    }
+  }
+  return (
+    <button
+      type="button"
+      onClick={handleLogout}
+      className="focus-ring flex w-full items-center gap-3 rounded-[9px] px-3 py-[11px] text-sm font-medium text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
+    >
+      <LogOut className="h-[15px] w-[15px] shrink-0" />
+      Sign out
+    </button>
+  )
+}
+
 function Brand() {
   return (
     <div className="flex items-center gap-[11px] px-2">
@@ -107,6 +134,7 @@ export default function Layout() {
         <NavLinks />
         <div className="mt-auto border-t border-border pt-3">
           <SettingsLink />
+          <LogoutButton />
         </div>
         <div className="mt-3 flex items-center gap-[9px] border-t border-border px-2.5 pt-3">
           <span className="relative flex h-2 w-2 shrink-0 rounded-full bg-primary shadow-[0_0_0_3px_oklch(0.74_0.17_153_/_0.18)]" />
@@ -137,6 +165,7 @@ export default function Layout() {
           <NavLinks onNavigate={() => setMobileOpen(false)} />
           <div className="mt-1 border-t border-border pt-1">
             <SettingsLink onNavigate={() => setMobileOpen(false)} />
+            <LogoutButton onNavigate={() => setMobileOpen(false)} />
           </div>
         </div>
       )}

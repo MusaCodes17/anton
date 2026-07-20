@@ -415,6 +415,23 @@ What shipped (RA1.1b):
 
 ---
 
+### E10. SPA session-cookie auth as a third credential type (RA2.1 — extends E9)
+
+**Chosen (2026-07-20):** the SPA authenticates with an httpOnly `anton_session` cookie issued after a password login (`POST /api/auth/session`), retiring the baked-in `spa` bearer token. This is an *addition* to E9, not a replacement — named bearer tokens (desktop/loopback) and OAuth 2.1 (the claude.ai connector) are unchanged; the auth middleware now has three branches (named-bearer → OAuth → session-cookie), checked in that order.
+
+What shipped:
+- `sessions` table (migration `1a2b3c4d5e6f`, down_revision `a2b3c4d5e6f7`); `services/sessions.py` mirrors `services/oauth.py`'s hashing discipline (256-bit id, stored SHA-256 hex, `verify_session_sync` sync DB call under INV-9). TTL `SESSION_TTL_DAYS` (14).
+- `routers/session.py` (`/api/auth/session`): login (password via `secrets.compare_digest`, `login_failure_limiter` reused), logout, and a public `{authenticated}` probe. Cookie is httpOnly + Secure + SameSite=Lax + Path=/.
+- `middleware/auth.py`: cookie branch + a CSRF guard that applies **only** to cookie-authenticated mutating `/api/*` requests — `Origin` must equal `ANTON_HOST_URL` (SameSite=Lax is the first line, the Origin check is defence-in-depth). Bearer/OAuth requests carry no cookie and are exempt; GET/HEAD/SSE exempt; skipped in dev when `ANTON_HOST_URL` is unset.
+- Frontend drops `VITE_ANTON_SECRET` (axios `withCredentials`, `credentials:'include'` on the fetch/SSE paths), adds an AuthGate + LoginView + logout.
+- `deploy/Caddyfile` serves the built SPA via `file_server` with **no basic_auth** and reverse-proxies only the enumerated backend paths.
+
+**Why:** a public bundle must not ship a bearer secret (the RA1 non-goal). A password-login cookie keeps the secret server-side; hashing the session id keeps a DB leak from being replayable; SameSite=Lax + an Origin check covers the CSRF surface that cookies (unlike bearer headers) introduce.
+**Trade-offs:** cookie auth introduces CSRF risk that bearer auth doesn't — handled with SameSite=Lax + the Origin check, and confined to cookie clients so the MCP/connector paths keep their header-only model. The CSRF Origin check is skipped in dev (no `ANTON_HOST_URL`); acceptable because dev is loopback and SameSite=Lax still applies. Single shared `ANTON_LOGIN_PASSWORD` now gates both the OAuth login page and the SPA login — one owner, one password.
+**Verdict:** ✅ Keep. Completes the RA1 goal of a publicly-servable SPA with no baked credential; E9's bearer/OAuth model is preserved beneath it.
+
+---
+
 ## Superseded Decisions (kept as history)
 
 | Decision | Was | Superseded by | When |

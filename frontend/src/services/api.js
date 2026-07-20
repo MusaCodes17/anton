@@ -8,41 +8,41 @@ const client = axios.create({
   baseURL,
   headers: { 'Content-Type': 'application/json' },
   timeout: 120000, // scraping can be slow
+  // RA2.1: auth is an httpOnly `anton_session` cookie set after a password
+  // login — the built bundle carries no secret. `withCredentials` makes axios
+  // send that cookie on every request (same-origin in prod behind Caddy;
+  // cross-origin in dev via the Vite proxy, which is same-origin to the browser).
+  withCredentials: true,
 })
 
-// RA1.1 bearer token for the SPA client. Baked into the build via
-// VITE_ANTON_SECRET — must equal the `spa` entry in the backend's ANTON_TOKENS.
-// Undefined in dev if no frontend/.env: warn once and continue (requests will
-// 401 until the token is set, rather than failing to compile).
-export const ANTON_SECRET = import.meta.env.VITE_ANTON_SECRET
-if (!ANTON_SECRET) {
-  // eslint-disable-next-line no-console
-  console.warn(
-    'VITE_ANTON_SECRET is not set — API requests are unauthenticated and will ' +
-      '401 once auth is active. Set it in frontend/.env (the `spa` token from ' +
-      "the backend's ANTON_TOKENS)."
-  )
-}
-
-// Single source of the auth header for the non-axios request paths (the chat
-// fetch() calls and the scrape SSE fetch stream, which can't ride the axios
-// interceptor). Returns {} when no token so callers can spread unconditionally.
+// Non-axios request paths (the chat fetch() calls and the scrape-SSE fetch
+// stream) can't ride the axios config. The session cookie rides automatically
+// once those fetches use credentials:'include', so there is no auth header to
+// add — this returns {} and exists only so those call sites keep a single,
+// documented spread point if a header is ever needed again.
 export function authHeaders() {
-  return ANTON_SECRET ? { Authorization: `Bearer ${ANTON_SECRET}` } : {}
+  return {}
 }
 
-// Inject the bearer token on every axios request.
-client.interceptors.request.use((config) => {
-  if (ANTON_SECRET) {
-    config.headers.Authorization = `Bearer ${ANTON_SECRET}`
+// RA2.1: broadcast a 401 so the app can drop to the login view. api.js is not a
+// React component, so it can't navigate; the AuthGate listens for this event.
+export const UNAUTHENTICATED_EVENT = 'anton:unauthenticated'
+function signalUnauthenticated() {
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new Event(UNAUTHENTICATED_EVENT))
   }
-  return config
-})
+}
 
 // Normalize errors so the UI gets a readable message regardless of shape.
 client.interceptors.response.use(
   (response) => response,
   (error) => {
+    // A 401 means the session cookie is missing/expired — fall back to login.
+    // The probe endpoint itself is exempt (it's how the login view checks state).
+    if (error.response?.status === 401) {
+      const url = error.config?.url || ''
+      if (!url.endsWith('/api/auth/session')) signalUnauthenticated()
+    }
     const detail = error.response?.data?.detail
     let message
     if (Array.isArray(detail)) {
@@ -56,6 +56,17 @@ client.interceptors.response.use(
     return Promise.reject(new Error(message))
   }
 )
+
+// ============== AUTH (RA2.1 session cookie) ==============
+export const authApi = {
+  // Load-time probe: is there a valid session cookie? Public endpoint.
+  probe: () => client.get('/api/auth/session').then((r) => r.data),
+  // Password login → sets the httpOnly cookie. Throws on 401 (wrong password).
+  login: (password) =>
+    client.post('/api/auth/session', { password }).then((r) => r.data),
+  // Logout → clears the cookie and deletes the session row.
+  logout: () => client.delete('/api/auth/session').then((r) => r.data),
+}
 
 // ============== SHOES ==============
 export const shoesApi = {

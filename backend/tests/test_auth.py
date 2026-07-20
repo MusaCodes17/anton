@@ -23,6 +23,11 @@ TEST_SECRET = "test-anton-secret-0123456789abcdef"
 TEST_OTHER  = "test-other-secret-0123456789abcd00"
 os.environ["ANTON_TOKENS"] = f"desktop:{TEST_SECRET},spa:{TEST_OTHER}"
 
+# RA2.1 session-cookie login password. Set per-test via monkeypatch (not at
+# module import) so it never clobbers test_oauth.py's ANTON_LOGIN_PASSWORD —
+# both modules are imported once at collection and share the process env.
+TEST_LOGIN_PASSWORD = "test-login-password-abc123"
+
 import asyncio  # noqa: E402
 
 import httpx  # noqa: E402
@@ -53,6 +58,12 @@ def _override_get_db():
 
 
 app.dependency_overrides[get_db] = _override_get_db
+
+# RA2.1: the sessions service uses SessionLocal() directly (bypassing get_db),
+# so point it at the in-memory test DB (mirrors test_oauth.py's oauth patch).
+import app.services.sessions as sessions_svc  # noqa: E402
+
+sessions_svc.SessionLocal = _Session  # type: ignore[assignment]
 
 
 def call(method: str, path: str, *, token: str | None = None, follow: bool = False, **kw):
@@ -236,3 +247,244 @@ def test_repeated_auth_failures_trigger_429():
     assert s1 == 401  # bucket has tokens
     assert s2 == 401  # bucket still has a token
     assert s3 == 429  # bucket exhausted → rate limited
+
+
+# --- RA2.1: session-cookie auth (the SPA's third credential type) --------------
+#
+# These drive BearerAuthMiddleware directly (as the rate-limit test above does)
+# so we can set ANTON_HOST_URL per-test and stub verify_session_sync — the
+# app-level middleware was built once at import without ANTON_HOST_URL, so its
+# CSRF origin is empty. Direct construction avoids that import-ordering coupling.
+
+def _drive_cookie(
+    *,
+    cookie=None,
+    auth_token=None,
+    method="GET",
+    path="/api/owned-shoes",
+    origin=None,
+    host_url="",
+    verify_ok=True,
+):
+    """Run one request through a freshly-built middleware and return (status, reached)."""
+    from app.middleware.auth import BearerAuthMiddleware
+    import app.services.sessions as svc
+
+    prev_host = os.environ.get("ANTON_HOST_URL")
+    prev_verify = svc.verify_session_sync
+    if host_url:
+        os.environ["ANTON_HOST_URL"] = host_url
+    else:
+        os.environ.pop("ANTON_HOST_URL", None)
+    svc.verify_session_sync = lambda raw: verify_ok
+    try:
+        reached = {"v": False}
+
+        async def fake_app(scope, receive, send):
+            reached["v"] = True
+            await send({"type": "http.response.start", "status": 200,
+                        "headers": [(b"content-length", b"0")]})
+            await send({"type": "http.response.body", "body": b""})
+
+        mw = BearerAuthMiddleware(fake_app)
+
+        headers = []
+        if cookie is not None:
+            headers.append((b"cookie", f"anton_session={cookie}".encode()))
+        if auth_token is not None:
+            headers.append((b"authorization", f"Bearer {auth_token}".encode()))
+        if origin is not None:
+            headers.append((b"origin", origin.encode()))
+
+        scope = {
+            "type": "http", "method": method, "path": path,
+            "headers": headers, "client": ("10.0.0.5", 5000), "query_string": b"",
+        }
+        status = {"v": 0}
+
+        async def capture(msg):
+            if msg["type"] == "http.response.start":
+                status["v"] = msg["status"]
+
+        async def recv():
+            return {}
+
+        asyncio.run(mw(scope, recv, capture))
+        return status["v"], reached["v"]
+    finally:
+        svc.verify_session_sync = prev_verify
+        if prev_host is None:
+            os.environ.pop("ANTON_HOST_URL", None)
+        else:
+            os.environ["ANTON_HOST_URL"] = prev_host
+
+
+def test_valid_session_cookie_accepted():
+    status, reached = _drive_cookie(cookie="valid-session-id", verify_ok=True)
+    assert status == 200
+    assert reached is True
+
+
+def test_invalid_session_cookie_rejected():
+    status, reached = _drive_cookie(cookie="bogus", verify_ok=False)
+    assert status == 401
+    assert reached is False
+
+
+def test_no_cookie_rejected():
+    status, reached = _drive_cookie(cookie=None, verify_ok=True)
+    assert status == 401
+    assert reached is False
+
+
+def test_expired_session_rejected_by_verify():
+    """verify_session_sync returns False for an expired row (unit-level)."""
+    import time
+    from app.models.models import AuthSession
+    from app.services.sessions import _hash, verify_session_sync
+
+    db = _Session()
+    try:
+        db.add(AuthSession(session_hash=_hash("expired-raw"),
+                           expires_at=time.time() - 60))
+        db.commit()
+    finally:
+        db.close()
+    assert verify_session_sync("expired-raw") is False
+
+
+def test_live_session_accepted_by_verify():
+    import time
+    from app.models.models import AuthSession
+    from app.services.sessions import _hash, verify_session_sync
+
+    db = _Session()
+    try:
+        db.add(AuthSession(session_hash=_hash("live-raw"),
+                           expires_at=time.time() + 3600))
+        db.commit()
+    finally:
+        db.close()
+    assert verify_session_sync("live-raw") is True
+
+
+# --- RA2.1: CSRF — Origin check on cookie-authenticated writes -----------------
+
+HOST = "https://anton.example.com"
+
+
+def test_csrf_post_wrong_origin_rejected():
+    status, reached = _drive_cookie(
+        cookie="valid", method="POST", path="/api/owned-shoes",
+        origin="https://evil.example.com", host_url=HOST,
+    )
+    assert status == 403
+    assert reached is False
+
+
+def test_csrf_post_missing_origin_rejected():
+    status, reached = _drive_cookie(
+        cookie="valid", method="POST", path="/api/owned-shoes",
+        origin=None, host_url=HOST,
+    )
+    assert status == 403
+    assert reached is False
+
+
+def test_csrf_post_matching_origin_allowed():
+    status, reached = _drive_cookie(
+        cookie="valid", method="POST", path="/api/owned-shoes",
+        origin=HOST, host_url=HOST,
+    )
+    assert status == 200
+    assert reached is True
+
+
+def test_csrf_get_exempt_even_without_origin():
+    """SSE (EventSource) is a GET — it must ride through with no Origin header."""
+    status, reached = _drive_cookie(
+        cookie="valid", method="GET", path="/api/scrape/stream",
+        origin=None, host_url=HOST,
+    )
+    assert status == 200
+    assert reached is True
+
+
+def test_csrf_skipped_when_host_url_unset():
+    """Dev (no ANTON_HOST_URL): SameSite=Lax is the guard; Origin check skipped."""
+    status, reached = _drive_cookie(
+        cookie="valid", method="POST", path="/api/owned-shoes",
+        origin=None, host_url="",
+    )
+    assert status == 200
+    assert reached is True
+
+
+def test_bearer_write_exempt_from_csrf():
+    """A named-bearer POST is CSRF-exempt (no cookie) even with a bad Origin."""
+    status, reached = _drive_cookie(
+        auth_token=TEST_SECRET, method="POST", path="/api/owned-shoes",
+        origin="https://evil.example.com", host_url=HOST,
+    )
+    assert status == 200
+    assert reached is True
+
+
+# --- RA2.1: session-endpoint HTTP surface -------------------------------------
+
+def _fresh_login_limiter(monkeypatch):
+    """Give the session router its own generous limiter so these tests never
+    deplete the shared `login_failure_limiter` singleton (which is also used by
+    test_oauth.py — cross-file depletion under random ordering is otherwise flaky)."""
+    import app.routers.session as sr
+    from app.services.rate_limit import KeyedRateLimiter
+    monkeypatch.setattr(sr, "_login_failure_limiter",
+                        KeyedRateLimiter(capacity=1000, refill_per_s=1000))
+
+
+def test_session_login_wrong_password_401(monkeypatch):
+    monkeypatch.setenv("ANTON_LOGIN_PASSWORD", TEST_LOGIN_PASSWORD)
+    _fresh_login_limiter(monkeypatch)
+    r = call("POST", "/api/auth/session", json={"password": "nope"})
+    assert r.status_code == 401
+
+
+def test_session_login_correct_password_sets_cookie(monkeypatch):
+    monkeypatch.setenv("ANTON_LOGIN_PASSWORD", TEST_LOGIN_PASSWORD)
+    _fresh_login_limiter(monkeypatch)
+    r = call("POST", "/api/auth/session", json={"password": TEST_LOGIN_PASSWORD})
+    assert r.status_code == 200
+    set_cookie = r.headers.get("set-cookie", "")
+    lowered = set_cookie.lower()
+    assert "anton_session=" in set_cookie
+    assert "httponly" in lowered
+    assert "secure" in lowered
+    assert "samesite=lax" in lowered
+
+
+def test_session_probe_public_and_unauthenticated_without_cookie():
+    r = call("GET", "/api/auth/session")
+    assert r.status_code == 200
+    assert r.json() == {"authenticated": False}
+
+
+def test_session_login_rate_limited(monkeypatch):
+    """After the burst is exhausted, POST /api/auth/session returns 429."""
+    import app.routers.session as sr
+    from app.services.rate_limit import KeyedRateLimiter
+
+    monkeypatch.setenv("ANTON_LOGIN_PASSWORD", TEST_LOGIN_PASSWORD)
+    tight = KeyedRateLimiter(capacity=2, refill_per_s=0.001)
+    prev = sr._login_failure_limiter
+    sr._login_failure_limiter = tight
+    try:
+        # Wrong password so we never actually create sessions; the limiter is
+        # checked before the password compare, so the status is what we assert.
+        s1 = call("POST", "/api/auth/session", json={"password": "x"}).status_code
+        s2 = call("POST", "/api/auth/session", json={"password": "x"}).status_code
+        s3 = call("POST", "/api/auth/session", json={"password": "x"}).status_code
+    finally:
+        sr._login_failure_limiter = prev
+    assert s1 == 401  # bucket has tokens → password checked → wrong → 401
+    assert s2 == 401
+    assert s3 == 429  # bucket exhausted → rate limited before password check

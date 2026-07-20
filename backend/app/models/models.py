@@ -604,3 +604,30 @@ class OAuthToken(Base):
 
     def __repr__(self):
         return f"<OAuthToken type={self.token_type} client={self.client_id}>"
+
+
+class AuthSession(Base):
+    """
+    SPA session issued after a password login (RA2.1).
+
+    The SPA authenticates by password once and receives an httpOnly session
+    cookie; this row is the server side of that cookie. Mirrors the OAuth-token
+    hashing discipline: only the SHA-256 hex digest of the ≥256-bit random
+    session id is stored — the raw value lives only in the browser cookie, so a
+    DB leak can't be replayed as a live session.
+
+    This is the SPA's transport auth (a *third* credential type alongside named
+    bearer tokens and OAuth 2.1 access tokens); it does not touch the MCP or
+    OAuth-connector paths.
+
+    expires_at: Unix timestamp (float); the session is dead once it passes.
+    """
+    __tablename__ = "sessions"
+
+    id = Column(Integer, primary_key=True)
+    session_hash = Column(String(64), unique=True, nullable=False, index=True)
+    expires_at = Column(Float, nullable=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    def __repr__(self):
+        return f"<AuthSession id={self.id} expires_at={self.expires_at}>"

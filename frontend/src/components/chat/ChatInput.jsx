@@ -129,7 +129,10 @@ export default function ChatInput({
     if (resources || resourcesLoading) return
     setResourcesLoading(true)
     try {
-      const res = await fetch('/api/chat/resources', { headers: authHeaders() })
+      const res = await fetch('/api/chat/resources', {
+        headers: authHeaders(),
+        credentials: 'include',
+      })
       const data = await res.json()
       setResources(data)
     } catch {
@@ -173,6 +176,7 @@ export default function ChatInput({
       const res = await fetch('/api/chat/resource/read', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...authHeaders() },
+        credentials: 'include',
         body: JSON.stringify({ uri }),
       })
       if (!res.ok) throw new Error('fetch failed')
