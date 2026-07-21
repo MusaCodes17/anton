@@ -70,6 +70,10 @@ PUBLIC_PATHS: frozenset[str] = frozenset({
     "/api/health",
     # OAuth 2.1 protocol endpoints (created by mcp.server.auth.routes).
     "/.well-known/oauth-authorization-server",
+    # OAuth 2.0 Protected Resource Metadata (RFC 9728, app/routers/oauth.py) —
+    # the MCP connector fetches this before it holds any token, so it must be
+    # public like the AS metadata above.
+    "/.well-known/oauth-protected-resource",
     "/authorize",
     "/token",
     "/revoke",

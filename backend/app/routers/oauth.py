@@ -251,3 +251,35 @@ async def login_post(
         url=redirect_uri + "?" + urlencode(params),
         status_code=302,
     )
+
+
+@router.get("/.well-known/oauth-protected-resource")
+async def oauth_protected_resource() -> JSONResponse:
+    """
+    OAuth 2.0 Protected Resource Metadata (RFC 9728).
+
+    The MCP connector authorization flow (2025-06-18 spec) fetches this document
+    FIRST to learn which authorization server(s) protect the MCP resource, then
+    loads the AS metadata from /.well-known/oauth-authorization-server. Without
+    this endpoint the connector's discovery step fails: in the production Caddy
+    split the path falls through to the SPA's file_server and returns index.html
+    (HTML, not JSON), which the client surfaces as a generic connect error.
+
+    Public (listed in middleware PUBLIC_PATHS) — metadata must be readable before
+    the client holds any token. Returns 404 when OAuth is not configured
+    (ANTON_HOST_URL unset), matching the condition under which main.py wires the
+    rest of the OAuth protocol routes.
+
+    `resource` is the canonical MCP endpoint URI; `authorization_servers` lists
+    the issuer, which must line up with the issuer advertised at
+    /.well-known/oauth-authorization-server.
+    """
+    host = os.getenv("ANTON_HOST_URL", "").strip().rstrip("/")
+    if not host:
+        return JSONResponse({"error": "oauth_not_configured"}, status_code=404)
+    return JSONResponse(
+        {
+            "resource": f"{host}/mcp",
+            "authorization_servers": [host],
+        }
+    )
