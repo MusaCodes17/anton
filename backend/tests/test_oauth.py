@@ -427,9 +427,18 @@ def test_authorize_path_is_public():
 
 
 def test_token_path_is_public():
-    """/token should return an OAuth error about missing params, not 401."""
+    """/token must reach the OAuth handler, not the bearer-auth wall.
+
+    An empty POST yields an OAuth protocol error (a JSON body with an "error"
+    field) — proving the request passed the auth middleware. The installed SDK
+    answers a missing client_id with 401 unauthorized_client (an OAuth-layer
+    response), whereas our BearerAuthMiddleware rejects with an empty-body 401
+    carrying `WWW-Authenticate: Bearer realm="Anton"`. We assert on those
+    distinguishing signals rather than a bare status code.
+    """
     r = call("POST", "/token", follow=False, data={})
-    assert r.status_code != 401
+    assert "bearer realm" not in r.headers.get("www-authenticate", "").lower()
+    assert "error" in r.json()  # OAuth-layer error body, not the auth wall
 
 
 # --------------------------------------------------------------------------- #

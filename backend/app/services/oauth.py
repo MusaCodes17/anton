@@ -77,12 +77,21 @@ def get_static_client() -> OAuthClientInformationFull | None:
     if not client_id or not redirect_uri:
         return None
 
+    # RA1.1c: the claude.ai connector authenticates at /token as a PUBLIC client
+    # (PKCE only, no secret). Advertise "none" when no secret is configured so the
+    # SDK's ClientAuthenticator takes its `== "none"` branch and skips secret
+    # validation; fall back to "client_secret_post" (the confidential-client path)
+    # whenever a secret IS set. Leaving auth_method as None makes ClientAuthenticator
+    # raise "Unsupported auth method: None" and blocks the token exchange.
+    auth_method = "client_secret_post" if client_secret else "none"
+
     return OAuthClientInformationFull(
         client_id=client_id,
         client_secret=client_secret or None,
         redirect_uris=[AnyUrl(redirect_uri)],
         grant_types=["authorization_code", "refresh_token"],
         response_types=["code"],
+        token_endpoint_auth_method=auth_method,
         # No scope restriction — the connector can request any scope.
         scope=None,
     )
