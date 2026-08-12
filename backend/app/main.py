@@ -139,7 +139,39 @@ if _host_url:
         client_registration_options=ClientRegistrationOptions(enabled=False),
         revocation_options=RevocationOptions(enabled=True),
     )
-    app.router.routes.extend(_oauth_routes)
+
+    # RA1.1c: the SDK's build_metadata hard-codes token_endpoint_auth_methods_supported
+    # to the two confidential-client methods only. The claude.ai connector is a PUBLIC
+    # PKCE client (auth method "none"), so we rebuild the metadata via the SDK's own
+    # build_metadata (no forking its logic), append "none", and swap ONLY the
+    # /.well-known/oauth-authorization-server route — /authorize, /token, /revoke stay
+    # exactly as the SDK produced them.
+    from mcp.server.auth.routes import build_metadata, cors_middleware
+    from mcp.server.auth.handlers.metadata import MetadataHandler
+    from starlette.routing import Route
+
+    _meta = build_metadata(
+        AnyHttpUrl(_host_url),
+        None,
+        ClientRegistrationOptions(enabled=False),
+        RevocationOptions(enabled=True),
+    )
+    _methods = ["client_secret_post", "client_secret_basic", "none"]
+    _meta.token_endpoint_auth_methods_supported = _methods
+    if _meta.revocation_endpoint_auth_methods_supported is not None:
+        _meta.revocation_endpoint_auth_methods_supported = _methods
+
+    _patched = []
+    for _r in _oauth_routes:
+        if getattr(_r, "path", None) == "/.well-known/oauth-authorization-server":
+            _patched.append(Route(
+                "/.well-known/oauth-authorization-server",
+                endpoint=cors_middleware(MetadataHandler(_meta).handle, ["GET", "OPTIONS"]),
+                methods=["GET", "OPTIONS"],
+            ))
+        else:
+            _patched.append(_r)
+    app.router.routes.extend(_patched)
 
 # Mount the MCP server (Streamable HTTP transport) at /mcp
 app.mount("/mcp", mcp.streamable_http_app())
