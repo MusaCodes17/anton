@@ -5,6 +5,17 @@
 
 ---
 
+## RA1.6 — Fix HTTPS→HTTP downgrade on the /mcp trailing-slash redirect — 2026-08-29
+
+**[FIXED] Every `/mcp` POST from the claude.ai connector got a 307 redirect to `http://anton.musasouled.com/mcp/` — http, not https. Uvicorn wasn't told to trust Caddy's `X-Forwarded-Proto: https`, so Starlette built the mounted MCP app's trailing-slash redirect from Uvicorn's own (http) view of the request and downgraded it. OAuth-aware clients refuse to follow an HTTPS→HTTP redirect, so the connector showed "Authorization with anton failed" even though OAuth token issuance was already working end-to-end (RA1.1c) — a purely post-auth transport bug. Deploy-config only: no code, no schema, no migration, no frontend, no test delta (suite unchanged at 420). Transport-auth and INV-9 single-worker untouched.**
+
+- **[CHANGED] `backend/entrypoint.sh` — `UVICORN_CMD` gains `--proxy-headers --forwarded-allow-ips="*"`:** makes Uvicorn honor Caddy's `X-Forwarded-Proto: https` (already sent by the `@backend` reverse_proxy block, `deploy/Caddyfile:31`), so trailing-slash and any other Starlette-emitted redirects say `https://`. `"*"` is safe — Uvicorn only ever receives traffic from Caddy over the container's internal network; nothing external reaches it directly. The `"*"` stays quoted so the token survives both invocation paths as literal `*` without glob-expanding against `/app`: the Litestream path runs the command via `sh -c "$UVICORN_CMD"`, and the dev fallback was changed from `exec $UVICORN_CMD` to `exec bash -c "$UVICORN_CMD"` so the same shell-quoting applies (verified both paths tokenize to `--forwarded-allow-ips=*` with no glob).
+- **[UNCHANGED] `deploy/Caddyfile`** — already sends `header_up X-Forwarded-Proto {scheme}` (from RA2.1); no duplicate added.
+
+**[VERIFIED]** `bash -n backend/entrypoint.sh` clean; both exec paths confirmed (in a sandbox with dummy files present) to pass `--forwarded-allow-ips=*` literally with no glob expansion. No pytest impact (deploy-config change). **Acceptance runs post-deploy on the server** (endpoint unreachable from the dev sandbox): after `git pull && docker compose up -d --build`, `curl -sI -X POST https://anton.musasouled.com/mcp -H 'Content-Type: application/json' -H 'Accept: application/json, text/event-stream' -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}' | grep -i location` must show `Location: https://…/mcp/` (not http://); a named bearer `/mcp/` call still returns 200; the claude.ai connector completes connect + tool listing; desktop `mcp-remote` still connects.
+
+---
+
 ## RA1.1c — Support public (PKCE-only) OAuth clients for the MCP connector — 2026-08-12
 
 **[FIXED] The claude.ai connector could not complete the OAuth token exchange: it authenticates at `/token` as a PUBLIC client (PKCE only, no secret), but `get_static_client()` never set `token_endpoint_auth_method`, so the SDK's `ClientAuthenticator` read it as Python `None`, fell through every branch, and raised `unauthorized_client — Unsupported auth method: None` — blocking the exchange even with the secret blanked. Anton is now a proper public PKCE client (the OAuth 2.1 / MCP-preferred posture for a single personal connector) while still supporting a confidential client when a secret IS configured. Suite 419 → 420 passing (+5 new OAuth tests, −1 pre-existing failure fixed). One commit; feature (`mx:`-free). Transport-auth only — `/mcp` routing, the RA2.1 session-cookie path, named bearer tokens, and the confirmation gates (INV-8/C9) are untouched; INV-9 single-worker unaffected.**

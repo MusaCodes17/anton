@@ -10,10 +10,20 @@
 # Without LITESTREAM_BUCKET: runs uvicorn directly (dev / no-backup mode).
 # INV-9: --workers 1 is an invariant (D4 scrape lock + E8 rate limiter are
 # in-process; multiple workers silently break both). See CLAUDE.md §14.
+#
+# RA1.6: --proxy-headers + --forwarded-allow-ips="*" make uvicorn trust Caddy's
+# X-Forwarded-Proto: https (deploy/Caddyfile already sends it). Without this,
+# Starlette builds the /mcp trailing-slash 307 from uvicorn's own (http) view of
+# the request and downgrades the redirect to http://, which OAuth-aware clients
+# (the claude.ai connector) refuse to follow — "Authorization with anton failed"
+# despite tokens minting fine. "*" is safe: uvicorn only ever receives traffic
+# from Caddy over the container's internal network, never external clients direct.
+# The "*" stays quoted so it survives both the litestream `sh -c` exec and the
+# dev `bash -c` exec below without glob-expanding against /app.
 set -euo pipefail
 
 LITESTREAM_CONFIG=/app/litestream.yml
-UVICORN_CMD="uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 1"
+UVICORN_CMD="uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 1 --proxy-headers --forwarded-allow-ips=\"*\""
 
 if [ -n "${LITESTREAM_BUCKET:-}" ]; then
     if [ ! -f /data/shoe_deals.db ]; then
@@ -30,5 +40,7 @@ if [ -n "${LITESTREAM_BUCKET:-}" ]; then
     exec litestream replicate -config "$LITESTREAM_CONFIG" -exec "$UVICORN_CMD"
 else
     echo "LITESTREAM_BUCKET not set — starting without replication."
-    exec $UVICORN_CMD
+    # bash -c so the quoted --forwarded-allow-ips="*" is shell-interpreted the
+    # same way litestream's `sh -c` handles it above (no glob against /app).
+    exec bash -c "$UVICORN_CMD"
 fi
