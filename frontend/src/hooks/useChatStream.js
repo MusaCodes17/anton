@@ -35,6 +35,18 @@ export function useChatStream({
       const content = (typeof displayContent === 'string' ? displayContent : '').trim()
       if (!content || isStreaming) return
 
+      // RA2.2 §4 — chat send is a write over fetch() (not axios), so it bypasses
+      // the api.js write-guard; block it here when offline rather than posting
+      // into the void. Mirrors the "writes require connectivity" boundary.
+      if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+        toast({
+          variant: 'destructive',
+          title: "You're offline",
+          description: 'Sending a message needs a connection.',
+        })
+        return
+      }
+
       const apiBody = typeof apiContent === 'string' && apiContent.trim()
         ? apiContent.trim()
         : content

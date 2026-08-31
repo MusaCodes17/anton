@@ -33,6 +33,23 @@ function signalUnauthenticated() {
   }
 }
 
+// RA2.2 §4 — writes require connectivity. When the browser is definitively
+// offline, reject any mutating request (POST/PUT/PATCH/DELETE) BEFORE it fires
+// so nothing is ever silently queued and no confirmed action commits later
+// against stale state (protects INV-1/INV-9/C9). GETs are allowed through so
+// the SW/RQ offline-read caches can serve last-loaded data. `navigator.onLine`
+// only false-negatives here (it reports true on a dead network), so a write on
+// a flaky-but-"online" connection still fails naturally and surfaces a toast.
+const WRITE_METHODS = new Set(['post', 'put', 'patch', 'delete'])
+client.interceptors.request.use((config) => {
+  const method = (config.method || 'get').toLowerCase()
+  const isOffline = typeof navigator !== 'undefined' && navigator.onLine === false
+  if (isOffline && WRITE_METHODS.has(method)) {
+    return Promise.reject(new Error("You're offline — this needs a connection."))
+  }
+  return config
+})
+
 // Normalize errors so the UI gets a readable message regardless of shape.
 client.interceptors.response.use(
   (response) => response,

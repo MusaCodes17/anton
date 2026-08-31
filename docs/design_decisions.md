@@ -15,7 +15,7 @@
 **Why:** Anton is a personal platform for exactly one person; operational simplicity maximizes iteration speed and the data (running history, purchases) stays on-device.
 **Advantages:** Zero infra cost/ops; full-fidelity local data; refactors like `canonical_activities` can be verified against *the* production DB directly; backups are file copies.
 **Trade-offs:** Concurrency and scale ceilings (see A2, F3); no access away from the machine except via LAN; "production" and "dev" are the same database.
-**Verdict:** ✅ Keep the *dev posture*. **Amended 2026-07-09 (RA1.0 — D0):** serving is moving to an always-on cloud VM (Hetzner CX22 / Fly.io Shared-CPU-1x, ~$5–8 CAD/mo) so the MCP endpoint is publicly reachable over HTTPS — required because claude.ai connectors are called from Anthropic's cloud, making a Tailscale/LAN overlay insufficient for the mobile-sync goal. Local-first remains the *dev* posture; the live DB now lives on the hosted VM. The one-worker pin (D4/E8) continues to hold; the single-process assumption is not relaxed. Rejected: laptop (sleeps), always-on home box (datacenter-IP scrape risk — documented escape hatch if RA1.5 detects material degradation). See `REMOTE_ACCESS_PLAN.md` §4 for the full D0 record.
+**Verdict:** ✅ Keep the *dev posture*. **Amended 2026-07-09 (RA1.0 — D0):** serving is moving to an always-on cloud VM (Hetzner CX22 / Fly.io Shared-CPU-1x, ~$5–8 CAD/mo) so the MCP endpoint is publicly reachable over HTTPS — required because claude.ai connectors are called from Anthropic's cloud, making a Tailscale/LAN overlay insufficient for the mobile-sync goal. Local-first remains the *dev* posture; the live DB now lives on the hosted VM. The one-worker pin (D4/E8) continues to hold; the single-process assumption is not relaxed. Rejected: laptop (sleeps), always-on home box (datacenter-IP scrape risk — documented escape hatch if RA1.5 detects material degradation). See `REMOTE_ACCESS_PLAN.md` §4 for the full D0 record. **Executed and validated 2026-08-29 (RA1.5):** the VM is live at `anton.musasouled.com`, DC-IP scrape comparison showed no degradation (the home-box escape hatch was never invoked), and mobile sync was confirmed end-to-end off WiFi. This amendment is no longer a plan — it describes the deployed reality.
 
 ### A2. SQLite with `check_same_thread=False`, default pooling, no WAL config
 **Chosen:** SQLite as the only store, accessed from request threads and scraper worker threads.
@@ -411,7 +411,7 @@ What shipped (RA1.1b):
 **Advantages:** avoids building infrastructure for a need that might not materialize in the assumed shape; the eventual channel gets designed against a felt problem instead of a hypothetical one.
 **Trade-offs:** R4.2, R4.3, and R4.5 stay blocked until this is revisited — a known, accepted cost, not an oversight.
 **Precedent:** the same judgment as C10 (declined to normalize the chat schema — "speculative infra" at single-user scale) and A5 (typed API contract waits for "a second consumer exists," not built ahead of need).
-**Verdict:** 🕐 Keep for now. Revisit trigger: reaching R4.2, R4.3, or R4.5 and finding the lack of a channel is a felt problem ("this fired and I never saw it"). See `docs/roadmap.md` R3.5 deferral note and R4 reordering (2026-07-10).
+**Verdict:** 🔁 **Retired, not merely deferred (2026-08-29).** The revisit trigger (R4.2/R4.3/R4.5 surfacing a felt "this fired and I never saw it") was reached *and answered in the negative*: RA1 shipped a working claude.ai mobile connector, which makes "unattended delivery to my phone" equivalent to "ask Claude on my phone from anywhere" — the pull tools (`get_deal_alerts`, `get_weekly_summary`, `get_race_block_context`) already deliver on that surface. The runner confirmed pull-on-mobile is sufficient and explicitly declined a push channel (email/SMS). So R3.5 is **retired**: the original push-channel design is not built, because the need it was meant to serve is met by the connector. **Revisit trigger (narrowed):** only if Anton gains other users, or a genuinely *unprompted* alert (something the runner would want to know without ever thinking to ask) becomes a felt gap — neither is true at single-user scale with a working mobile connector. Consequently R4.2 and R4.3 are re-scoped to their pull-only forms (see roadmap R4.2/R4.3, 2026-08-29) rather than waiting on a channel that won't be built.
 
 ---
 
@@ -432,6 +432,25 @@ What shipped:
 
 ---
 
+### E11. PWA offline READ, but writes require connectivity (RA2.2)
+
+**Chosen (2026-08-31):** Anton ships as an installable PWA (`vite-plugin-pwa`: manifest + Workbox service worker) whose offline behaviour is deliberately *asymmetric* — **reads work offline, writes do not.** The service worker precaches the app shell and runtime-caches same-origin GET `/api/*` responses (`NetworkFirst`, excluding `/api/auth/session`); React Query is persisted to IndexedDB so a cold offline launch shows last-loaded data. Every mutating request is **rejected before it fires when offline** (an axios request-interceptor, plus an inline guard on the chat `fetch()` which bypasses axios) — no offline queue, no deferred replay.
+
+What shipped:
+- `frontend/vite.config.js` VitePWA (`registerType: 'autoUpdate'`); manifest with tokens `#0e0f11`; `navigateFallback` mirroring Caddy's `try_files` with a backend-path denylist; one `NetworkFirst` runtime-cache rule for GET `/api/*` (auth endpoint excluded).
+- Icons generated by `@vite-pwa/assets-generator` (`frontend/pwa-assets.config.js`) from `public/icon.svg`; iOS meta/link tags in `index.html`.
+- `frontend/src/lib/queryClient.js`: IndexedDB-persisted React Query (`idb-keyval`), 7-day `gcTime`, successful-GET-only dehydration, and `clearOfflineData()` (wipes memory + IndexedDB + the `anton-api-reads` SW cache) fired on logout / any 401.
+- `frontend/src/hooks/useOnline.js` (HEAD `/health` real-connectivity probe) + `components/pwa/OfflineIndicator.jsx` banner.
+- `services/api.js` write-guard + `hooks/useChatStream.js` inline guard; `AuthGate.jsx` enters the app optimistically on an *offline* probe failure (session cookie still on device) rather than bouncing to login.
+- `deploy/Caddyfile`: `no-cache` on `sw.js`/`registerSW.js`/`workbox-*.js`, `application/manifest+json` on the manifest.
+
+**Why:** an offline write-queue would have to replay confirmation-gated mutations (C9) that were confirmed against state which may since have changed — the exact thing that breaks the mileage ledger (INV-1) and the single-writer assumption (INV-9). Doing it correctly needs idempotency keys + replay conflict-detection + re-confirmation of stale actions; the need is also thin (the primary run-logging path is connector-mediated COROS sync, which can't be queued offline anyway). So the honest boundary is: cache reads, refuse writes, and say so in the UI.
+**Trade-offs:** the runner cannot log a run with no signal — accepted, and made explicit in the UI so it reads as intentional, not broken. `autoUpdate` can in principle refresh the SW mid-session; acceptable for a single-user app (revisit if it causes a mid-session reload). Auth caching risk (cached personal data surviving a logout on a shared/lost device) is handled by `clearOfflineData()` + never caching the session probe.
+**Reversal candidate:** the offline WRITE-QUEUE (`RA2_2_PWA_PLAN.md` §6) is a separate, gated R5.x item — build only on a felt "I needed to log off-grid and couldn't" need, and only with idempotency + conflict detection + C9 re-confirmation.
+**Verdict:** ✅ Keep. Makes the SPA feel like an app and useful with no signal without touching any invariant; it's also the honest test of whether R5.1 (native) is ever needed.
+
+---
+
 ## Superseded Decisions (kept as history)
 
 | Decision | Was | Superseded by | When |
@@ -449,6 +468,7 @@ What shipped:
 | Capability-URL connector auth (`ANTON_CONNECTOR_TOKEN`) — RA1.1 Path 2 | URL as credential (`/mcp/<token>/...`); shipped as dark fallback | E9 RA1.1b Path 1 — OAuth 2.1 chosen; capability-URL code deleted from middleware, tests, env examples; never went public | 2026-07-09 (RA1.1b) |
 | Dual schema authority (`create_all` + Alembic + `legacy_migrations/`) | `create_all` boot path kept for zero-step fresh setups | A6 — Alembic sole authority; baseline recreates the schema; legacy scripts deleted; DB moved to `~/anton-data/` | 2026-07-07 (R2.2) |
 | Chat history + checkpoint state in browser localStorage | Simplest persistence during assistant build-out | C10 — server-side `chat_conversations` + `checkpoint_prompts`; start-fresh, no migration | 2026-07-08 (R2.6) |
+| R5.2 — "Remote access story" as an open long-term-roadmap question | The original framing: private overlay (Tailscale/LAN) vs. hosted, undecided, gated behind R2.1/R2.2 | **Pulled forward and executed as RA1** (2026-07-09 – 2026-08-29). The deciding fact, found at RA1.0 (D0): claude.ai connectors call from Anthropic's cloud infrastructure, not the user's device, so a private overlay cannot satisfy the mobile-sync goal — a public HTTPS endpoint is required. RA1.0–RA1.6 (hosting, auth v2, OAuth 2.1, deployment substrate, hardening, backups, cutover, docs) collectively answer what R5.2 asked; RA1.5's two exit criteria (mobile sync E2E on cellular, DC-IP scrape comparison) both closed 2026-08-29 with no degradation and a fully working connector. R5.2 as a distinct open roadmap item is retired — its content now lives in the RA milestone and `REMOTE_ACCESS_PLAN.md`, not as a future decision to make. | 2026-07-09 (opened) → 2026-08-29 (closed via RA1.5) |
 
 ---
 

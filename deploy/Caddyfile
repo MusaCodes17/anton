@@ -40,5 +40,15 @@ anton.musasouled.com {
         file_server
     }
 
+    # RA2.2 PWA: the service worker script must always be revalidated so new
+    # deploys propagate — Workbox/Vite revision the *precache*, but the SW
+    # script (sw.js) and its registrar must never be served HTTP-cached stale.
+    @sw path /sw.js /registerSW.js /workbox-*.js
+    header @sw Cache-Control "no-cache"
+
+    # Ensure the web manifest carries the correct content-type for install.
+    @manifest path /manifest.webmanifest
+    header @manifest Content-Type "application/manifest+json"
+
     header Strict-Transport-Security "max-age=31536000; includeSubDomains"
 }

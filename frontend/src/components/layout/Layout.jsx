@@ -7,6 +7,7 @@ import { authApi, UNAUTHENTICATED_EVENT } from '@/services/api'
 import { useDashboardStats } from '@/hooks/useApi'
 import { formatRelativeTime } from '@/lib/utils'
 import BrandMark from '@/components/layout/BrandMark'
+import OfflineIndicator from '@/components/pwa/OfflineIndicator'
 
 const navItems = [
   { to: '/', label: 'Home', icon: Home, end: true },
@@ -126,6 +127,11 @@ export default function Layout() {
 
   return (
     <div className="min-h-screen bg-background">
+      {/* RA2.2 §3 — offline banner sits above all sticky chrome. */}
+      <div className="sticky top-0 z-40">
+        <OfflineIndicator />
+      </div>
+
       {/* Desktop sidebar */}
       <aside className="fixed inset-y-0 left-0 z-30 hidden w-[236px] flex-none flex-col bg-sidebar p-4 pt-6 md:flex">
         <div className="pb-[30px]">
