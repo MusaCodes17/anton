@@ -2,13 +2,54 @@
 # Anton DB restore from Litestream replica — RA1.4.
 #
 # Use for the restore drill (required before RA1.5 cutover) or disaster
-# recovery. Run this on the host machine (not inside the container).
+# recovery.
 #
-# Prerequisites:
+# PRIMARY METHOD — routine drill, run via `docker compose exec` (2026-08-29):
+# `litestream` and `sqlite3` are only installed INSIDE the app image (see
+# backend/Dockerfile) — the Hetzner host itself has neither, so this script
+# fails on the host with "litestream: command not found" unless you install
+# the binary there separately. There's no need to: the container already has
+# everything, and the production litestream.yml config is already mounted at
+# /app/litestream.yml inside it. Run the drill straight through the container:
+#
+#   cd ~/anton
+#   docker compose exec anton litestream restore \
+#     -config /app/litestream.yml \
+#     -o /tmp/drill-restore.db \
+#     /data/shoe_deals.db
+#
+# NOTE the two different paths: `/data/shoe_deals.db` (the LAST positional
+# arg) must be the database path exactly as DECLARED in litestream.yml's
+# `dbs:` list — litestream uses it to look up which replica to restore FROM,
+# it is not where output goes. `-o /tmp/drill-restore.db` is the actual
+# output destination (a scratch path — never point -o at the live DB path).
+# Passing an undeclared path as the positional arg fails with
+# "database not found in config: <path>".
+#
+# Then verify counts the same way (sqlite3 is also container-only):
+#   docker compose exec anton sqlite3 /tmp/drill-restore.db "SELECT COUNT(*) FROM activities;"
+#   docker compose exec anton sqlite3 /tmp/drill-restore.db "SELECT COUNT(*) FROM shoe_runs;"
+#   docker compose exec anton sqlite3 /tmp/drill-restore.db "PRAGMA integrity_check;"
+# Compare against the live DB the same way (swap in /data/shoe_deals.db) —
+# counts should match or be within a few seconds/minutes of lag (sync-interval
+# is 1s + continuous replication; a large gap means something is actually wrong).
+# Clean up after: docker compose exec anton rm /tmp/drill-restore.db
+#
+# ---
+#
+# THIS SCRIPT (below) — an alternative for running restore from a machine
+# that has `litestream` installed natively (https://litestream.io/install/)
+# and can reach B2 directly — e.g. a genuinely fresh recovery machine that
+# never had the Anton container, which is the real disaster-recovery scenario
+# this script exists for. Not the routine-drill path above; that path is the
+# containerized one-liner, since a routine drill runs against the same host
+# that's already running the container.
+#
+# Prerequisites for using this script directly:
 #   - litestream installed locally (https://litestream.io/install/)
 #   - LITESTREAM_* env vars exported (same values as the production .env)
 #
-# RESTORE DRILL PROCEDURE (perform once before RA1.5 cutover):
+# RESTORE DRILL PROCEDURE (perform once before RA1.5 cutover) — via this script:
 #
 #   1. Export credentials:
 #        export LITESTREAM_BUCKET=your-bucket
