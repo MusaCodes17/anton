@@ -1,7 +1,19 @@
 # Anton — Session Changelog
 
-**Last Updated:** 2026-08-31
+**Last Updated:** 2026-09-04
 **Status / current focus:** see `docs/project_state.md` (the perishable snapshot). This file is the append-only session log — the authoritative record of *what happened*; the `docs/` suite is the reference material.
+
+---
+
+## Bug batch (v3, scoped) — deals display cap, rotation-alert defaults, offline probe — 2026-09-04
+
+**[FIXED] Three small correctness/UX bugs, one commit each; suite 420 → 426 passing. No invariant changes (INV-6 untouched — investigation confirmed the "$189.99 not on sale" report was a real single-size clearance the scraper correctly picked, so the deals-qualification concern was withdrawn; INV-1/INV-9, C9, A4 intact). No serialization-shape change.**
+
+- **[CHANGED] #5 — `/api/deals` display cap raised 100 → 500** (`services/deals.py` `list_deals` default + `routers/deals.py` `get_deals` default). The Deals "On sale now" section relied on the default `limit=100`, so with ~45 shoes genuinely on sale the runner saw only the top ~18 by savings. At single-user scale the active-deal count sits in the low hundreds; `skip`/`limit` stay functional for any paginated caller. No data change. Test: with 150 active deals across 30 shoes, `list_deals` returns all 150 and DISTINCT `shoe_id` = 30 (`test_deals.py`).
+- **[FIXED] #3 — false "offline" ribbon.** `useOnline.js` probed `HEAD /health`, but `/health` only declared `GET` → the probe got **405**, `res.ok` was false, and the SPA flipped to a false offline state on a perfectly reachable server. Fix both sides: (a) frontend now probes with **GET** and treats **any resolved HTTP response** (even non-2xx) as online — only a network-level throw means offline; (b) `/health` now accepts **HEAD as well as GET** (`@app.api_route(..., methods=["GET","HEAD"])`; both already public via `PUBLIC_PATHS`) as belt-and-suspenders for future HEAD probes/monitors. Test: `HEAD /health` → 200 (`test_auth.py`). This supersedes the RA2.2 entry's "HEAD /health probe" detail below.
+- **[ADDED] #8 — owned-shoe `mileage_limit` defaults by `shoe_type`.** All 24 owned shoes had `mileage_limit = NULL`; `rotation.retirement_pipeline` excludes NULL-limit shoes (no denominator), so the Home shoe-health alert had never had anything to show. New product-rule map `DEFAULT_MILEAGE_LIMITS` + `default_mileage_limit()` in the pure `app/utils/shoe_types.py` (racers 450, tempo/intervals 500, trail 600, daily_trainer/long_run/recovery 700; fallback 600 for NULL/off-vocabulary), documented in `docs/domain_model.md` §4.5b. Applied on owned-shoe **CREATE** when `mileage_limit` is omitted (still editable via `PUT /owned-shoes/{id}`; an explicit value is never overridden). One-time backfill migration `2b3c4d5e6f7a`: reads DISTINCT `shoe_type` over the NULL-limit rows and applies a **frozen copy** of the map; **reversible** downgrade (guarded on value == default so user-set limits survive) — verified up+down on a temp DB with a user-set limit preserved. **E4 discipline on the server run:** take `shoe_deals.db.bak-mileage-defaults` before applying and reconcile NULL-vs-non-NULL `mileage_limit` counts pre/post. Tests: default map + fallback, create-defaults-by-type, explicit-limit-kept, and a shoe created past 75% of its defaulted limit surfacing in `retirement_pipeline` (`test_owned_shoes.py`).
+
+**[VERIFIED]** Backend suite **426 passing** (`backend/venv/bin/pytest -q`; was 420, +6). `npm run build` clean (SW + manifest still emitted; offline-hook change only). **Deploy:** `git pull && docker compose up -d --build`; run the #8 migration once on the server (`alembic upgrade head` with the backup + reconciliation above); frontend rebuild + push for #3/#5. On-device offline-ribbon verification is the one remaining human step.
 
 ---
 

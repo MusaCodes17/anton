@@ -8,6 +8,7 @@ target_price, and an MSRP edit re-computes savings on an existing deal.
 """
 from app.models.models import Deal, Retailer, Shoe
 from app.scrapers.deal_store import DealStore
+from app.services import deals as deals_svc
 
 
 def _retailer(db, name="TLH"):
@@ -72,3 +73,28 @@ def test_no_msrp_means_no_deal(db):
     )
     assert created is False
     assert db.query(Deal).count() == 0
+
+
+def test_list_deals_returns_more_than_legacy_100_cap(db):
+    """The default limit was raised from 100 to 500 (#5): the Deals page renders
+    the full active set in one round trip. With >100 active deals the endpoint
+    must return them all (up to the cap), and the on-sale shoe count must equal
+    DISTINCT shoe_id over active deals — not silently truncate to 100."""
+    r = _retailer(db)
+    # 150 active deals spread across 30 distinct shoes (5 retailers-worth of
+    # variants per shoe, all on the same retailer for test simplicity).
+    n_shoes, per_shoe = 30, 5
+    for si in range(n_shoes):
+        shoe = _shoe(db, msrp=200.0)
+        for vi in range(per_shoe):
+            db.add(Deal(
+                shoe_id=shoe.id, retailer_id=r.id, current_price=150.0,
+                savings_amount=50.0, savings_percent=25.0 + vi,  # vary ordering
+                is_active=True, product_url=f"u{si}-{vi}",
+            ))
+    db.commit()
+    total = n_shoes * per_shoe  # 150
+
+    deals = deals_svc.list_deals(db, is_active=True)
+    assert len(deals) == total                      # nothing truncated at 100
+    assert len({d.shoe_id for d in deals}) == n_shoes  # on-sale shoe count intact

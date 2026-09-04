@@ -125,6 +125,13 @@ def test_api_health_open_without_token():
     assert call("GET", "/api/health").status_code == 200
 
 
+def test_health_accepts_head():
+    # #3: /health accepts HEAD too (belt-and-suspenders for HEAD probes/monitors).
+    # A HEAD probe must resolve with a real status, not a 405 — that 405 was what
+    # flipped the SPA's offline ribbon on when the probe still used HEAD.
+    assert call("HEAD", "/health").status_code == 200
+
+
 def test_root_open_without_token():
     assert call("GET", "/").status_code == 200
 

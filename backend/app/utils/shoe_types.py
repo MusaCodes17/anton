@@ -33,9 +33,41 @@ SHOE_TYPES: tuple[str, ...] = (
 
 _VALID = set(SHOE_TYPES)
 
+# Default retirement mileage_limit (km) per shoe_type — a product rule
+# (runner-approved 2026-09-04, documented in docs/domain_model.md). Racers wear
+# out fastest (thin, aggressive foams); tempo/intervals sit in the middle; daily
+# trainers, long-run and recovery shoes are the durable workhorses; trail is
+# mid. This is the ONE runtime source of the map: the owned-shoe CREATE path
+# applies it when mileage_limit is omitted (routers/owned_shoes.py), and the
+# backfill migration (`..._mileage_limit_defaults`) carries a frozen copy per
+# Alembic discipline (migrations are immutable historical records).
+_FALLBACK_MILEAGE_LIMIT = 600.0
+DEFAULT_MILEAGE_LIMITS: dict[str, float] = {
+    "long_distance_racer": 450.0,
+    "short_distance_racer": 450.0,
+    "tempo": 500.0,
+    "intervals": 500.0,
+    "long_run": 700.0,
+    "daily_trainer": 700.0,
+    "recovery": 700.0,
+    "trail": 600.0,
+}
+
 
 def is_valid_shoe_type(shoe_type: Optional[str]) -> bool:
     """True iff `shoe_type` is a member of the vocabulary. `None` is not valid
     here — callers that allow clearing/omitting the type handle `None`/`""`
     explicitly (see `schemas.validate_optional_shoe_type`)."""
     return shoe_type in _VALID
+
+
+def default_mileage_limit(shoe_type: Optional[str]) -> float:
+    """The default retirement mileage_limit (km) for a shoe of `shoe_type`.
+
+    Falls back to `_FALLBACK_MILEAGE_LIMIT` for a null or off-vocabulary type,
+    so a shoe always gets a limit and can enter the retirement pipeline
+    (rotation.retirement_pipeline excludes NULL-limit shoes). Always editable
+    afterward via PUT /owned-shoes/{id}."""
+    if shoe_type is None:
+        return _FALLBACK_MILEAGE_LIMIT
+    return DEFAULT_MILEAGE_LIMITS.get(shoe_type, _FALLBACK_MILEAGE_LIMIT)

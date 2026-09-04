@@ -16,7 +16,7 @@ router = APIRouter(prefix="/deals", tags=["deals"])
 @router.get("/", response_model=List[DealResponse])
 def get_deals(
     skip: int = 0,
-    limit: int = 100,
+    limit: int = 500,
     is_active: bool = True,
     min_savings_percent: Optional[float] = Query(None, ge=0, le=100),
     brand: Optional[str] = None,

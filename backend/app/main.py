@@ -189,8 +189,11 @@ def read_root():
     }
 
 
-# Health check endpoint
-@app.get("/health")
+# Health check endpoint. Accepts HEAD as well as GET (both public via
+# PUBLIC_PATHS) — belt-and-suspenders for any HEAD-based liveness probe or
+# uptime monitor. FastAPI auto-serves HEAD for a GET route, but declaring it
+# explicitly keeps the contract obvious and stable.
+@app.api_route("/health", methods=["GET", "HEAD"])
 def health_check():
     """Health check endpoint"""
     return {"status": "healthy"}
