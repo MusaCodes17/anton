@@ -5,6 +5,23 @@
 
 ---
 
+## R4 (#7) — UI-configurable scrape schedule — 2026-09-04
+
+**[ADDED] The nightly scrape schedule (R4.1) is now editable from the Settings page — enable/disable + time, applied at runtime with no restart. No migration (`AppSettings` already existed). Does not touch shoe/run/deal serialization (no T1/T2 precursor). Suite 426 → 438 passing; `vite build` clean. INV-9 (single-process, which makes live rescheduling safe), D4 (scrape lock), C9 (confirmation — a schedule change is reversible config, not gated), and A4 intact.**
+
+- **[CHANGED] `services/schedule.py` — config source, runtime apply, validation (#7 T1):**
+  - `get_config(db)` resolves `enabled`/`cron` with precedence **DB (`AppSettings`) → env (`SCRAPE_SCHEDULE_*`) → hardcoded default**, per field, and returns a `source` dict so provenance is visible.
+  - `validate_cron(expr)` wraps `CronTrigger.from_crontab` and raises `ValueError` on a bad/out-of-range expression — gated on the write path so a bad cron never reaches storage (a stored-but-unparseable cron would let the job silently fail to register).
+  - `apply_config(db)` reconciles the live scheduler (register/reschedule via `replace_existing`, or `remove_job` when disabled); no-op-safe when the scheduler is absent/stopped and degrades gracefully on an invalid *env* fallback cron.
+  - `start(db)` now goes through `apply_config` so boot and runtime edits share one path; `get_status(db)` gains `applied_cron` (derived from the **live** job's trigger) + `source` alongside the existing keys, exposing any config/job divergence instead of hiding it. `main.py` lifespan threads a short-lived read-only session into `start(db)`.
+- **[ADDED] `PUT /api/admin/schedule` (#7 T2):** body `{enabled, cron}`; the `ScheduleUpdate` schema validates the cron via `schedule_svc.validate_cron` → **422** on a bad expression with storage untouched. Persists both keys, commits, then `apply_config` reschedules the live job. Returns the same shape as `GET /admin/schedule` (extracted to `_schedule_response`) so the frontend seeds its cache from the response. Auth via the app-wide middleware. Not confirmation-gated (C9 is for data mutations).
+- **[CHANGED] `pages/SettingsSync.jsx` — editable "Scheduled scraping" card (#7 T3):** enable `Switch`; time picker (HH:MM) as the primary daily control generating `M H * * *`; an Advanced (custom cron) field that opens pre-expanded when the stored cron isn't the daily shape; `useUpdateSchedule` mutation seeds the schedule cache from the PUT response (new next-run time shows at once) then invalidates; a 422 renders inline next to the field; the read-only Next run / Last scheduled run rows stay. Removed the "set `SCRAPE_SCHEDULE_ENABLED` in .env" hint → replaced with an America/Toronto + env-fallback note. Form state seeds from the server and re-syncs on background refetch only while not dirty (a 60 s refetch can't clobber an edit). Single-column, usable at ~380 px.
+- **[CHANGED] tests — `test_schedule.py` rewritten/extended (8 → 21):** DB→env→default precedence + provenance; `validate_cron` accept/reject (incl. `0 99 * * *`); `apply_config` register/remove + no-op-safe when scheduler absent; `get_status` reflects a DB value; PUT persists+reschedules+returns `next_run_utc`, invalid cron → 422 with stored value + live trigger untouched, disable → job removed + `next_run_utc` null, unauth → 401/429. Autouse fixture wipes `AppSettings` on the shared engine and resets the scheduler singleton between tests (extends the D6 env-leak isolation to the DB).
+
+**[VERIFIED]** Backend suite **438 passing** (`backend/venv/bin/pytest -q`; was 426, +12). `npm run build` clean (SW + manifest still emitted). Runtime/visual acceptance (toggle on → next-run appears without restart; bad cron → inline 422; toggle off → job removed; delete `AppSettings` rows → env fallback) is the on-device human step post-deploy. **Deploy:** no migration — backend `git pull` + `docker compose up -d --build`; frontend build on the Mac + `rsync dist/` to `/var/www/anton/` + `chmod -R a+rX`; **leave the `SCRAPE_SCHEDULE_*` env vars in place** (they're the fallback now — removing them changes behaviour). Decision recorded as design_decisions **E12**.
+
+---
+
 ## Bug batch (v3, scoped) — deals display cap, rotation-alert defaults, offline probe — 2026-09-04
 
 **[FIXED] Three small correctness/UX bugs, one commit each; suite 420 → 426 passing. No invariant changes (INV-6 untouched — investigation confirmed the "$189.99 not on sale" report was a real single-size clearance the scraper correctly picked, so the deals-qualification concern was withdrawn; INV-1/INV-9, C9, A4 intact). No serialization-shape change.**
