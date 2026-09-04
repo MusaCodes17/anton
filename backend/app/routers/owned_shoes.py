@@ -16,6 +16,7 @@ from app.models import (
 )
 from app.models.models import Activity, Deal, Shoe
 from app.services import rotation
+from app.utils.shoe_types import default_mileage_limit
 
 router = APIRouter(prefix="/owned-shoes", tags=["owned-shoes"])
 
@@ -82,9 +83,15 @@ def create_owned_shoe(shoe: OwnedShoeCreate, db: Session = Depends(get_db)):
     """
     Add a shoe to the personal rotation. current_mileage starts equal to
     starting_mileage (allows adding shoes already partially worn).
+
+    When mileage_limit is omitted it is defaulted by shoe_type (#8, product rule
+    in docs/domain_model.md) so the shoe can enter the retirement pipeline; the
+    runner can override it any time via PUT /owned-shoes/{id}.
     """
     db_shoe = OwnedShoe(**shoe.model_dump())
     db_shoe.current_mileage = db_shoe.starting_mileage
+    if db_shoe.mileage_limit is None:
+        db_shoe.mileage_limit = default_mileage_limit(db_shoe.shoe_type)
     db.add(db_shoe)
     db.commit()
     db.refresh(db_shoe)

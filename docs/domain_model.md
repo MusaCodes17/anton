@@ -124,6 +124,17 @@ The value set — **backend-owned since R2.4 (2026-07-08)**: the single source i
 ### 4.5 The mileage ledger — *"the counter is the truth the runner sees"*
 `current_mileage = starting_mileage + Σ(distance of attributed activities)`. This identity is maintained, not recomputed: every attribution write increments the counter; every attribution removal decrements it (floored at 0). The Phase-5 storage restructure was executed under an explicit *"counters untouched"* guarantee — displayed totals are a promise to the user.
 
+### 4.5b Retirement limit defaults — *"every shoe has a limit to be a fraction of"* (#8, 2026-09-04)
+The retirement pipeline (≥75% of `mileage_limit`, §4.2/lifecycle) can only surface a shoe that *has* a `mileage_limit` — a NULL limit is excluded (there's no denominator). So an omitted limit means the shoe is invisible to the Home shoe-health alert forever. To fix that, a shoe created without a `mileage_limit` is given a **default by `shoe_type`** (still editable afterward via `PUT /owned-shoes/{id}`). The map is a runner-approved product rule; its single runtime home is `app/utils/shoe_types.py` (`DEFAULT_MILEAGE_LIMITS` / `default_mileage_limit`), applied on owned-shoe CREATE, with a one-time backfill migration (`2b3c4d5e6f7a`) for the pre-existing NULL rows:
+
+| `shoe_type` | Default limit (km) | Rationale |
+|---|---|---|
+| `long_distance_racer`, `short_distance_racer` | 450 | thin, aggressive race foams wear fastest |
+| `tempo`, `intervals` | 500 | fast-day shoes, moderate durability |
+| `trail` | 600 | mid — rugged but abrasive terrain |
+| `long_run`, `daily_trainer`, `recovery` | 700 | durable high-mileage workhorses |
+| *NULL / off-vocabulary* | 600 | fallback so a shoe always gets a limit |
+
 ### 4.6 One write path for runs
 Every run enters the system — regardless of origin — through the single sanctioned operation (`rotation.log_run`): create the canonical Activity, create its Attribution, update the ledger, detect checkpoints. There is no second way to log a run. This is the domain's strongest integrity guarantee.
 

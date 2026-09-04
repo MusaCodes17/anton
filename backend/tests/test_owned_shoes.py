@@ -105,3 +105,67 @@ def test_update_allows_omitted_status():
     """None means 'unchanged' on update — must not be rejected."""
     update = OwnedShoeUpdate.model_validate({"nickname": "x"})
     assert update.status is None
+
+
+# --- #8: mileage_limit defaults by shoe_type ---
+
+def test_default_mileage_limit_map():
+    """The product-rule map + fallback (utils/shoe_types)."""
+    from app.utils.shoe_types import default_mileage_limit
+    assert default_mileage_limit("long_distance_racer") == 450.0
+    assert default_mileage_limit("tempo") == 500.0
+    assert default_mileage_limit("daily_trainer") == 700.0
+    assert default_mileage_limit("trail") == 600.0
+    assert default_mileage_limit(None) == 600.0          # fallback
+    assert default_mileage_limit("not_a_real_type") == 600.0  # fallback
+
+
+def test_create_defaults_mileage_limit_by_type(db):
+    """A freshly created shoe with no mileage_limit gets the type default (#8),
+    so it can enter the retirement pipeline instead of being NULL-excluded."""
+    from app.models import OwnedShoeCreate
+    from app.routers.owned_shoes import create_owned_shoe
+
+    created = create_owned_shoe(
+        OwnedShoeCreate.model_validate(
+            {"brand": "Adidas", "model": "Adios Pro 3", "shoe_type": "long_distance_racer"}
+        ),
+        db,
+    )
+    assert created.mileage_limit == 450.0
+
+
+def test_create_respects_explicit_mileage_limit(db):
+    """An explicit mileage_limit is never overridden by the default."""
+    from app.models import OwnedShoeCreate
+    from app.routers.owned_shoes import create_owned_shoe
+
+    created = create_owned_shoe(
+        OwnedShoeCreate.model_validate(
+            {"brand": "Nike", "model": "Pegasus", "shoe_type": "daily_trainer",
+             "mileage_limit": 900.0}
+        ),
+        db,
+    )
+    assert created.mileage_limit == 900.0
+
+
+def test_defaulted_limit_puts_worn_shoe_in_retirement_pipeline(db):
+    """End-to-end: a shoe created past 75% of its now-defaulted limit surfaces in
+    rotation.retirement_pipeline (the Home shoe-health alert's source)."""
+    from app.models import OwnedShoeCreate
+    from app.routers.owned_shoes import create_owned_shoe
+
+    # tempo default = 500 → 75% = 375. Seed it already worn past that.
+    created = create_owned_shoe(
+        OwnedShoeCreate.model_validate(
+            {"brand": "Saucony", "model": "Endorphin", "shoe_type": "tempo",
+             "starting_mileage": 400.0}
+        ),
+        db,
+    )
+    assert created.mileage_limit == 500.0
+    assert created.current_mileage == 400.0  # starts at starting_mileage
+
+    pipeline = rotation.retirement_pipeline(db)
+    assert any(e.shoe.id == created.id for e in pipeline)
