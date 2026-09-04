@@ -34,10 +34,16 @@ def list_deals(
     shoe_type: Optional[str] = None,
     size: Optional[str] = None,
     skip: int = 0,
-    limit: int = 100,
+    limit: int = 500,
 ) -> list[Deal]:
     """
     Return deals ordered biggest-discount-first with optional filters.
+
+    The default ``limit`` is deliberately high (500): the Deals page renders the
+    full "On sale now" set in one round trip, and at single-user scale the active
+    deal count sits in the low hundreds. A default of 100 silently truncated the
+    page (the runner saw ~18 of ~45 shoes on sale). ``skip``/``limit`` remain
+    functional for any paginated caller.
 
     brand/model/shoe_type filters are case-insensitive substring matches.
     size filtering happens in Python because SQLite has no portable JSON
