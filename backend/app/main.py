@@ -8,7 +8,7 @@ from fastapi.middleware.cors import CORSMiddleware
 import os
 from dotenv import load_dotenv
 
-from app.database import run_migrations
+from app.database import run_migrations, SessionLocal
 from app.mcp_server import mcp
 from app.middleware.access_log import AccessLogMiddleware
 from app.middleware.auth import BearerAuthMiddleware
@@ -55,7 +55,13 @@ async def lifespan(app: FastAPI):
     require_auth_config()
     run_migrations()
     print("✅ Database migrated to head")
-    schedule_svc.start()
+    # Short-lived read-only session so the scheduler can resolve its config from
+    # AppSettings (DB → env → default, #7) at boot through the same apply_config path.
+    _boot_db = SessionLocal()
+    try:
+        schedule_svc.start(_boot_db)
+    finally:
+        _boot_db.close()
     try:
         async with mcp.session_manager.run():
             yield

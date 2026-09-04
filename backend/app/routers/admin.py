@@ -63,16 +63,13 @@ def cleanup_kids_shoes(db: Session = Depends(get_db)):
     }
 
 
-@router.get("/schedule", response_model=dict)
-def get_schedule_status(db: Session = Depends(get_db)):
+def _schedule_response(db: Session) -> dict:
     """
-    Current state of the nightly scrape schedule (R4.1).
-
-    Returns the APScheduler configuration (enabled, cron, next fire time),
-    whether a scrape is running right now, and the five most recent
-    scheduled-trigger runs from scrape_runs for quick health-at-a-glance.
+    Shared body for the schedule GET/PUT: resolved status + is_scraping_now +
+    the five most recent scheduled runs. GET and PUT return the identical shape
+    so the frontend can consume a PUT response directly to refresh its cache.
     """
-    status = schedule_svc.get_status()
+    status = schedule_svc.get_status(db)
 
     recent = (
         db.query(ScrapeRun)
@@ -100,3 +97,15 @@ def get_schedule_status(db: Session = Depends(get_db)):
             for r in recent
         ],
     }
+
+
+@router.get("/schedule", response_model=dict)
+def get_schedule_status(db: Session = Depends(get_db)):
+    """
+    Current state of the nightly scrape schedule (R4.1; UI-configurable #7).
+
+    Returns the resolved configuration (enabled, cron, applied_cron, next fire
+    time, per-field source), whether a scrape is running right now, and the five
+    most recent scheduled-trigger runs from scrape_runs for health-at-a-glance.
+    """
+    return _schedule_response(db)
