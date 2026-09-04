@@ -76,7 +76,8 @@ class DealStore:
         Create or refresh a deal. Returns True only for net-new deals.
 
         Savings are measured against the shoe's MSRP (msrp - price); the caller
-        (orchestrator) guarantees msrp is set and price < msrp before calling.
+        (orchestrator) guarantees msrp is set and the price clears the minimum
+        discount floor (MIN_DEAL_DISCOUNT_PCT off MSRP) before calling.
 
         Always refreshes image/colorway/sizes when available (older deals
         predate this data and would otherwise stay blank/stale). Refreshes

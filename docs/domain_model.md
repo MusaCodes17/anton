@@ -88,12 +88,14 @@ Cardinality facts that carry business meaning:
 
 The rules below are the domain's constitution. Each is enforced in exactly one place in code (see Ownership, §5).
 
-### 4.1 Deal qualification — *"a deal is any price below list"* (B9-v2, 2026-07-06)
-A Deal exists **iff** the scraped price is **strictly below the shoe's MSRP** (`price < msrp`). Savings are measured against MSRP: `savings = msrp − price`.
+### 4.1 Deal qualification — *"a deal is any price meaningfully below list"* (B9-v3, 2026-09-04)
+A Deal exists **iff** the scraped price is at least `MIN_DEAL_DISCOUNT_PCT` **below the shoe's MSRP** — a minimum-discount floor, default **5%**, read from the env var `MIN_DEAL_DISCOUNT_PCT` at import: `(msrp − price) / msrp × 100 ≥ MIN_DEAL_DISCOUNT_PCT`. Savings are measured against MSRP: `savings = msrp − price`.
+
+The floor exists because retailers price at `$X.99` against a round `$X.00` MSRP, so a plain `price < msrp` rule surfaced almost every in-stock product as a 0%-OFF penny "deal." 5% separates those `.99`-vs-`.00` artifacts from genuine clearances; a deep single-size discount still clears the bar (the scraper reports the cheapest in-stock variant). Tune the env var if 5% proves wrong.
 
 Corollaries: a shoe **without an MSRP cannot produce deals** — there is nothing to measure against; the retailer's own compare-at/"original" price is **no longer consulted** for qualification (it survives on the price record as an observation). MSRP is read fresh at every evaluation, so editing it immediately changes what qualifies and re-scores savings. `target_price` is an **optional personal threshold** — a note-to-self, not part of qualification or savings.
 
-*Historical note:* until 2026-07-06 the rule was "genuinely discounting (`original_price > price`) AND ≤ current target price." See design_decisions B9 (superseded) → B9-v2 and the changelog entry of that date.
+*Historical note:* the rule has narrowed twice. Until 2026-07-06 it was "genuinely discounting (`original_price > price`) AND ≤ current target price" (B9); on 2026-07-06 it became "any `price < msrp`" (B9-v2); on 2026-09-04 it gained the minimum-discount floor (B9-v3). See design_decisions B9 → B9-v2 → B9-v3 and the changelog entries of those dates.
 
 ### 4.2 Deal retirement — *"deals die honestly"*
 Two mechanisms, both automatic:
@@ -243,7 +245,7 @@ The asymmetry is deliberate and worth stating: **the deal domain forgets on comm
 | **source** | Where a run came from: `strava` (frozen archive) \| `coros` (watch sync) \| `manual`. | Drives the archive-preservation rule (4.8). |
 | **watchlist** | The set of tracked shoes, as presented with best/last prices. | |
 | **rotation** | The set of active owned shoes. | Also the name of the service that owns the whole subdomain's rules. |
-| **deal** | A *qualified* opportunity per rule 4.1 (`price < msrp`) — never merely "a price." | Savings are measured against MSRP, not the retailer's markdown. |
+| **deal** | A *qualified* opportunity per rule 4.1 (price ≥ `MIN_DEAL_DISCOUNT_PCT` below `msrp`) — never merely "a price." | Savings are measured against MSRP, not the retailer's markdown. |
 | **msrp** | The shoe's list price — **the deal driver** (4.1). Required for a shoe to produce deals; read fresh at every evaluation. | |
 | **target price** | The runner's optional willingness-to-pay note — a personal threshold, **not part of qualification or savings** since B9-v2 (2026-07-06). | Pre-B9-v2 text describing it as the deal driver is historical. |
 | **checkpoint** | A 100 km wear milestone inviting a journal note. | |
