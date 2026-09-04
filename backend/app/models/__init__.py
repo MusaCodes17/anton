@@ -20,6 +20,7 @@ from app.models.schemas import (
     CorosConfirmResponse, CorosSyncStatus,
     ConversationUpsert, ConversationSummary, ConversationResponse,
     CheckpointPromptCreate, CheckpointPromptResponse,
+    ScheduleUpdate,
 )
 
 __all__ = [
@@ -42,4 +43,5 @@ __all__ = [
     "CorosConfirmResponse", "CorosSyncStatus",
     "ConversationUpsert", "ConversationSummary", "ConversationResponse",
     "CheckpointPromptCreate", "CheckpointPromptResponse",
+    "ScheduleUpdate",
 ]

@@ -449,6 +449,20 @@ What shipped:
 **Reversal candidate:** the offline WRITE-QUEUE (`RA2_2_PWA_PLAN.md` §6) is a separate, gated R5.x item — build only on a felt "I needed to log off-grid and couldn't" need, and only with idempotency + conflict detection + C9 re-confirmation.
 **Verdict:** ✅ Keep. Makes the SPA feel like an app and useful with no signal without touching any invariant; it's also the honest test of whether R5.1 (native) is ever needed.
 
+### E12. Scrape schedule is DB-configurable with an env fallback, applied at runtime (#7 — extends R4.1)
+
+**Chosen (2026-09-04):** the nightly scrape schedule (R4.1) became editable from the Settings UI. Config now resolves with precedence **DB (`AppSettings`) → env (`SCRAPE_SCHEDULE_*`) → hardcoded default**, *per field*. `PUT /api/admin/schedule` persists the two keys and then reschedules the **live** APScheduler job in-process (`apply_config`) — no restart. The env vars are deliberately **kept as a working fallback**, not removed: the schedule can still be governed (or disabled) from the server if the DB/UI is ever wedged. A DB row simply doesn't exist until the first save.
+
+Supporting choices:
+- **Cron is the single storage format.** The UI offers a friendlier time picker on top, but only the crontab string is persisted (`scrape_schedule_cron`); the daily picker generates `M H * * *` and anything else uses the raw-cron advanced field.
+- **Validate before store.** `schedule.validate_cron` (wrapping `CronTrigger.from_crontab`) gates the write schema → a bad expression is a 422 and never reaches storage. A stored-but-unparseable cron would let the job silently fail to register — the exact failure this prevents.
+- **No confirmation gate.** C9 governs destructive/data mutations; a schedule change is reversible config. The response surfaces the resulting next-run time instead of gating.
+- **One apply path.** Boot (`start(db)`) and runtime edits both go through `apply_config`, and `get_status` reports `applied_cron` (from the live job's trigger) alongside the resolved `cron`, so a config/job divergence is visible rather than silent.
+
+**Why runtime-apply is safe:** the scheduler is an in-process singleton and INV-9 guarantees exactly one process, so mutating the live job affects the only scheduler that exists. Restart-to-apply would mean SSHing into the server just to change a scrape time.
+**Trade-offs:** DB-over-env means the env var can look ignored once a row exists (documented; `source` in the status response makes provenance visible). The whole design still rests on INV-9 — if multi-worker is ever introduced, per-process schedulers would each read the same DB config but hold independent jobs (redesign alongside D4/E8).
+**Verdict:** ✅ Keep. Removes the last "edit .env + restart" chore from the deal-freshness loop without weakening validation or the single-process guarantees.
+
 ---
 
 ## Superseded Decisions (kept as history)

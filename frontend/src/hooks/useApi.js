@@ -230,6 +230,21 @@ export function useSchedule() {
   })
 }
 
+// #7: set the nightly schedule. Seeds the schedule query cache from the PUT
+// response (same shape as GET) so the new next-run time shows immediately, then
+// invalidates to reconcile. A 422 (bad cron) rejects with the inline message —
+// callers surface mutation.error next to the field.
+export function useUpdateSchedule() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (body) => adminApi.updateSchedule(body),
+    onSuccess: (data) => {
+      qc.setQueryData(queryKeys.schedule(), data)
+      qc.invalidateQueries({ queryKey: queryKeys.schedule() })
+    },
+  })
+}
+
 // ============== HOME ==============
 export function useHome() {
   return useQuery({

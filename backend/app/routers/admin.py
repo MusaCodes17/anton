@@ -5,10 +5,12 @@ from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
 from app.database import get_db
+from app.models import ScheduleUpdate
 from app.models.models import Deal, PriceRecord, ScrapeRun
 from app.scrapers.base_scraper import BaseScraper
 from app.scrapers.lock import force_release_scrape_lock, is_scrape_running
 from app.services import schedule as schedule_svc
+from app.services import settings as settings_svc
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 
@@ -63,16 +65,13 @@ def cleanup_kids_shoes(db: Session = Depends(get_db)):
     }
 
 
-@router.get("/schedule", response_model=dict)
-def get_schedule_status(db: Session = Depends(get_db)):
+def _schedule_response(db: Session) -> dict:
     """
-    Current state of the nightly scrape schedule (R4.1).
-
-    Returns the APScheduler configuration (enabled, cron, next fire time),
-    whether a scrape is running right now, and the five most recent
-    scheduled-trigger runs from scrape_runs for quick health-at-a-glance.
+    Shared body for the schedule GET/PUT: resolved status + is_scraping_now +
+    the five most recent scheduled runs. GET and PUT return the identical shape
+    so the frontend can consume a PUT response directly to refresh its cache.
     """
-    status = schedule_svc.get_status()
+    status = schedule_svc.get_status(db)
 
     recent = (
         db.query(ScrapeRun)
@@ -100,3 +99,34 @@ def get_schedule_status(db: Session = Depends(get_db)):
             for r in recent
         ],
     }
+
+
+@router.get("/schedule", response_model=dict)
+def get_schedule_status(db: Session = Depends(get_db)):
+    """
+    Current state of the nightly scrape schedule (R4.1; UI-configurable #7).
+
+    Returns the resolved configuration (enabled, cron, applied_cron, next fire
+    time, per-field source), whether a scrape is running right now, and the five
+    most recent scheduled-trigger runs from scrape_runs for health-at-a-glance.
+    """
+    return _schedule_response(db)
+
+
+@router.put("/schedule", response_model=dict)
+def update_schedule(body: ScheduleUpdate, db: Session = Depends(get_db)):
+    """
+    Set the nightly scrape schedule (#7). Persists both AppSettings keys, then
+    applies the change to the live scheduler at runtime (no restart — INV-9
+    guarantees one process holds the singleton). The cron is validated on the
+    request schema, so a bad expression is a 422 and never reaches storage.
+
+    Not confirmation-gated (C9 governs data mutations; a schedule change is
+    reversible config) — the response surfaces the resulting next-run time so
+    the change is visibly real. Auth is enforced by the app-wide middleware.
+    """
+    settings_svc.set_setting(db, "scrape_schedule_enabled", "true" if body.enabled else "false")
+    settings_svc.set_setting(db, "scrape_schedule_cron", body.cron)
+    db.commit()
+    schedule_svc.apply_config(db)
+    return _schedule_response(db)

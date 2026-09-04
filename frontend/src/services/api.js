@@ -287,6 +287,10 @@ export const checkpointsApi = {
 // ============== ADMIN ==============
 export const adminApi = {
   scheduleStatus: () => client.get('/api/admin/schedule').then((r) => r.data),
+  // #7: set the nightly schedule. Body { enabled, cron }; returns the same
+  // shape as scheduleStatus so callers can seed the cache from the response.
+  updateSchedule: ({ enabled, cron }) =>
+    client.put('/api/admin/schedule', { enabled, cron }).then((r) => r.data),
 }
 
 // ============== COROS SYNC ==============

@@ -53,7 +53,7 @@ Cross-cutting the domains is the **assistant surface** (Son of Anton in-app; Cla
 
 | Entity | Meaning |
 |---|---|
-| **App Setting** (`app_settings`) | Key/value odds-and-ends that are state, not domain (currently: when COROS last synced). |
+| **App Setting** (`app_settings`) | Key/value odds-and-ends that are state, not domain. Current keys: when COROS last synced; and the UI-configurable scrape schedule (#7) — `scrape_schedule_enabled` (`"true"`/`"false"`) and `scrape_schedule_cron` (crontab string). The schedule keys are read with precedence DB → env (`SCRAPE_SCHEDULE_*`) → hardcoded default, so a row exists only once the schedule is saved from the UI. |
 
 ---
 
