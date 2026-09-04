@@ -238,6 +238,107 @@ async def test_schedule_endpoint_disabled_by_default(monkeypatch):
     assert r.json()["next_run_utc"] is None
 
 
+# ── PUT /api/admin/schedule ───────────────────────────────────────────────────
+
+@pytest.mark.anyio
+async def test_put_schedule_persists_and_reschedules(monkeypatch):
+    monkeypatch.delenv("SCRAPE_SCHEDULE_ENABLED", raising=False)
+    monkeypatch.delenv("SCRAPE_SCHEDULE_CRON", raising=False)
+    # A started scheduler so next_run_utc actually populates (async loop is live here).
+    svc._scheduler = AsyncIOScheduler(timezone=svc._TZ)
+    svc._scheduler.start()
+
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        r = await client.put(
+            "/api/admin/schedule",
+            headers=_AUTH,
+            json={"enabled": True, "cron": "0 4 * * *"},
+        )
+        assert r.status_code == 200
+        data = r.json()
+        assert data["enabled"] is True
+        assert data["cron"] == "0 4 * * *"
+        assert data["applied_cron"] == "0 4 * * *"
+        assert data["next_run_utc"] is not None  # a live job has a next fire time
+
+        # Reschedule to a new time on the running scheduler → applied_cron follows.
+        r2 = await client.put(
+            "/api/admin/schedule",
+            headers=_AUTH,
+            json={"enabled": True, "cron": "30 5 * * *"},
+        )
+        assert r2.json()["applied_cron"] == "30 5 * * *"
+
+    # Persisted to AppSettings.
+    s = _Session()
+    assert settings_svc.get_setting(s, "scrape_schedule_enabled") == "true"
+    assert settings_svc.get_setting(s, "scrape_schedule_cron") == "30 5 * * *"
+    s.close()
+
+
+@pytest.mark.anyio
+async def test_put_schedule_invalid_cron_422_leaves_storage_untouched(monkeypatch):
+    monkeypatch.delenv("SCRAPE_SCHEDULE_ENABLED", raising=False)
+    svc._scheduler = AsyncIOScheduler(timezone=svc._TZ)
+    svc._scheduler.start()
+    # Seed a known-good stored value first.
+    s = _Session()
+    settings_svc.set_setting(s, "scrape_schedule_cron", "0 3 * * *")
+    settings_svc.set_setting(s, "scrape_schedule_enabled", "true")
+    s.commit()
+    s.close()
+    svc.apply_config(_Session())
+
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        r = await client.put(
+            "/api/admin/schedule",
+            headers=_AUTH,
+            json={"enabled": True, "cron": "0 99 * * *"},
+        )
+    assert r.status_code == 422
+
+    # Stored value unchanged, and the live job still runs the old trigger.
+    s = _Session()
+    assert settings_svc.get_setting(s, "scrape_schedule_cron") == "0 3 * * *"
+    s.close()
+    assert svc._scheduler.get_job(svc._JOB_ID) is not None
+    assert svc.get_status(_Session())["applied_cron"] == "0 3 * * *"
+
+
+@pytest.mark.anyio
+async def test_put_schedule_disable_removes_job(monkeypatch):
+    monkeypatch.delenv("SCRAPE_SCHEDULE_ENABLED", raising=False)
+    svc._scheduler = AsyncIOScheduler(timezone=svc._TZ)
+    svc._scheduler.start()
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        await client.put(
+            "/api/admin/schedule", headers=_AUTH,
+            json={"enabled": True, "cron": "0 4 * * *"},
+        )
+        r = await client.put(
+            "/api/admin/schedule", headers=_AUTH,
+            json={"enabled": False, "cron": "0 4 * * *"},
+        )
+    assert r.status_code == 200
+    assert r.json()["next_run_utc"] is None
+    assert svc._scheduler.get_job(svc._JOB_ID) is None
+
+
+@pytest.mark.anyio
+async def test_put_schedule_requires_auth():
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        r = await client.put("/api/admin/schedule", json={"enabled": True, "cron": "0 4 * * *"})
+    assert r.status_code in (401, 429)
+
+
 # ── pytest-anyio config ───────────────────────────────────────────────────────
 
 pytest_plugins = ("anyio",)
