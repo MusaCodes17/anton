@@ -7,6 +7,8 @@ import {
   ChevronDown,
   Check,
   Loader2,
+  PanelLeft,
+  X,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { UserMessage, AssistantMessage, ModelDivider, EmptyState } from '@/components/chat/ChatMessages'
@@ -112,13 +114,104 @@ function ChatArea({
         <div ref={messagesEndRef} />
       </div>
 
-      {/* Input */}
-      <div className="shrink-0 border-t border-border px-6 py-4">
+      {/* Input — pb clears the home indicator when running standalone (RA2.2). */}
+      <div className="shrink-0 border-t border-border px-6 py-4 pb-[calc(1rem+env(safe-area-inset-bottom))]">
         <div className="mx-auto max-w-3xl">
           <ChatInput onSend={handleSend} isStreaming={isStreaming} maxHeight={160} />
         </div>
       </div>
     </div>
+  )
+}
+
+// Conversation list contents — shared by the desktop aside and the mobile
+// slide-over so the two can't drift. New conversation, the list, and the
+// current-model footer.
+function ConversationPanel({
+  conversations,
+  activeConversationId,
+  onNew,
+  onSelect,
+  onDelete,
+  deleteConfirm,
+  setDeleteConfirm,
+  modelName,
+}) {
+  return (
+    <>
+      {/* New conversation */}
+      <div className="px-3 pt-3 pb-1">
+        <button
+          onClick={onNew}
+          className="flex w-full items-center gap-2 rounded-[9px] px-3 py-2 text-sm font-medium text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
+        >
+          <Plus className="h-4 w-4 shrink-0" />
+          New conversation
+        </button>
+      </div>
+
+      {/* Conversation list */}
+      <div className="flex-1 overflow-y-auto px-3 py-1 space-y-px">
+        {conversations.length === 0 ? (
+          <p className="px-3 py-3 text-xs text-faint">No conversations yet</p>
+        ) : (
+          conversations.map((conv) => (
+            <div
+              key={conv.id}
+              role="button"
+              tabIndex={0}
+              onClick={() => onSelect(conv.id)}
+              onKeyDown={(e) => e.key === 'Enter' && onSelect(conv.id)}
+              className={cn(
+                'group relative flex items-start gap-2 rounded-[9px] px-3 py-2 cursor-pointer transition-colors select-none',
+                conv.id === activeConversationId
+                  ? 'bg-accent text-accent-foreground'
+                  : 'text-muted-foreground hover:bg-secondary hover:text-foreground'
+              )}
+            >
+              <div className="flex-1 min-w-0">
+                <p className="text-xs font-medium truncate leading-snug">
+                  {conv.title ?? 'New conversation'}
+                </p>
+                <p className="text-[10px] text-faint mt-0.5">
+                  {formatRelativeTime(conv.updatedAt)}
+                </p>
+              </div>
+
+              {/* Delete button / confirm */}
+              {deleteConfirm === conv.id ? (
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    onDelete(conv.id)
+                  }}
+                  className="shrink-0 rounded p-0.5 text-red-400 hover:text-red-300 transition-colors"
+                  aria-label="Confirm delete"
+                >
+                  <Check className="h-3 w-3" />
+                </button>
+              ) : (
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    setDeleteConfirm(conv.id)
+                  }}
+                  className="shrink-0 rounded p-0.5 opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-foreground transition-opacity"
+                  aria-label="Delete conversation"
+                >
+                  <Trash2 className="h-3 w-3" />
+                </button>
+              )}
+            </div>
+          ))
+        )}
+      </div>
+
+      {/* Current model indicator */}
+      <div className="border-t border-border px-4 py-3">
+        <p className="text-[10px] text-faint truncate">{modelName}</p>
+      </div>
+    </>
   )
 }
 
@@ -139,6 +232,9 @@ export default function ChatPage() {
   const [showModelMenu, setShowModelMenu] = useState(false)
   const [modelSwitchMessage, setModelSwitchMessage] = useState(null)
   const [deleteConfirm, setDeleteConfirm] = useState(null)
+  // Mobile-only: the conversation list lives in a slide-over rather than a
+  // permanent 280px aside, so the thread gets the full 380px width.
+  const [showConvList, setShowConvList] = useState(false)
   // id of a conversation that exists only in memory (not yet written to the
   // server) because the user hasn't sent a message in it yet.
   const [unsavedId, setUnsavedId] = useState(null)
@@ -361,99 +457,92 @@ export default function ChatPage() {
     }
   }
 
+  // Selecting/creating from the mobile slide-over should also dismiss it.
+  const handleMobileSelect = (id) => {
+    handleSelectConversation(id)
+    setShowConvList(false)
+  }
+  const handleMobileNew = () => {
+    handleNewConversation()
+    setShowConvList(false)
+  }
+
   return (
-    <div className="flex h-screen bg-background">
-      {/* ── Conversation list panel — lives inside the main content area,
-          to the right of the app sidebar (rendered by Layout) ── */}
-      <aside className="flex w-[280px] shrink-0 flex-col border-r border-border bg-sidebar">
-        {/* New conversation */}
-        <div className="px-3 pt-3 pb-1">
-          <button
-            onClick={handleNewConversation}
-            className="flex w-full items-center gap-2 rounded-[9px] px-3 py-2 text-sm font-medium text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
-          >
-            <Plus className="h-4 w-4 shrink-0" />
-            New conversation
-          </button>
-        </div>
-
-        {/* Conversation list */}
-        <div className="flex-1 overflow-y-auto px-3 py-1 space-y-px">
-          {conversations.length === 0 ? (
-            <p className="px-3 py-3 text-xs text-faint">No conversations yet</p>
-          ) : (
-            conversations.map((conv) => (
-              <div
-                key={conv.id}
-                role="button"
-                tabIndex={0}
-                onClick={() => handleSelectConversation(conv.id)}
-                onKeyDown={(e) => e.key === 'Enter' && handleSelectConversation(conv.id)}
-                className={cn(
-                  'group relative flex items-start gap-2 rounded-[9px] px-3 py-2 cursor-pointer transition-colors select-none',
-                  conv.id === activeConversationId
-                    ? 'bg-accent text-accent-foreground'
-                    : 'text-muted-foreground hover:bg-secondary hover:text-foreground'
-                )}
-              >
-                <div className="flex-1 min-w-0">
-                  <p className="text-xs font-medium truncate leading-snug">
-                    {conv.title ?? 'New conversation'}
-                  </p>
-                  <p className="text-[10px] text-faint mt-0.5">
-                    {formatRelativeTime(conv.updatedAt)}
-                  </p>
-                </div>
-
-                {/* Delete button / confirm */}
-                {deleteConfirm === conv.id ? (
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation()
-                      handleDeleteConversation(conv.id)
-                    }}
-                    className="shrink-0 rounded p-0.5 text-red-400 hover:text-red-300 transition-colors"
-                    aria-label="Confirm delete"
-                  >
-                    <Check className="h-3 w-3" />
-                  </button>
-                ) : (
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation()
-                      setDeleteConfirm(conv.id)
-                    }}
-                    className="shrink-0 rounded p-0.5 opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-foreground transition-opacity"
-                    aria-label="Delete conversation"
-                  >
-                    <Trash2 className="h-3 w-3" />
-                  </button>
-                )}
-              </div>
-            ))
-          )}
-        </div>
-
-        {/* Current model indicator */}
-        <div className="border-t border-border px-4 py-3">
-          <p className="text-[10px] text-faint truncate">{getModelName(model)}</p>
-        </div>
+    // h-full (not h-screen) so ChatPage fills the <main> sized by Layout rather
+    // than re-claiming the whole viewport — the double-100vh was half the
+    // "can't get back" bug.
+    <div className="flex h-full bg-background">
+      {/* ── Conversation list panel (desktop) — lives inside the main content
+          area, to the right of the app sidebar (rendered by Layout) ── */}
+      <aside className="hidden w-[280px] shrink-0 flex-col border-r border-border bg-sidebar md:flex">
+        <ConversationPanel
+          conversations={conversations}
+          activeConversationId={activeConversationId}
+          onNew={handleNewConversation}
+          onSelect={handleSelectConversation}
+          onDelete={handleDeleteConversation}
+          deleteConfirm={deleteConfirm}
+          setDeleteConfirm={setDeleteConfirm}
+          modelName={getModelName(model)}
+        />
       </aside>
+
+      {/* ── Conversation list slide-over (mobile) ── */}
+      {showConvList && (
+        <div className="fixed inset-0 z-50 md:hidden">
+          <div
+            className="absolute inset-0 bg-black/40"
+            onClick={() => setShowConvList(false)}
+          />
+          <aside className="absolute inset-y-0 left-0 flex w-[85%] max-w-[320px] flex-col bg-sidebar shadow-xl">
+            <div className="flex shrink-0 items-center justify-between border-b border-border px-4 py-3 pt-[calc(0.75rem+env(safe-area-inset-top))]">
+              <span className="text-sm font-semibold text-foreground">Conversations</span>
+              <button
+                onClick={() => setShowConvList(false)}
+                className="rounded-md p-1 text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
+                aria-label="Close conversations"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+            <ConversationPanel
+              conversations={conversations}
+              activeConversationId={activeConversationId}
+              onNew={handleMobileNew}
+              onSelect={handleMobileSelect}
+              onDelete={handleDeleteConversation}
+              deleteConfirm={deleteConfirm}
+              setDeleteConfirm={setDeleteConfirm}
+              modelName={getModelName(model)}
+            />
+          </aside>
+        </div>
+      )}
 
       {/* ── Main area ── */}
       <div className="flex flex-1 flex-col overflow-hidden">
         {/* Header */}
-        <header className="flex shrink-0 items-center justify-between border-b border-border px-6 py-3">
-          <span className="font-semibold text-foreground">Son of Anton</span>
+        <header className="flex shrink-0 items-center justify-between gap-2 border-b border-border px-4 py-3 md:px-6">
+          <div className="flex min-w-0 items-center gap-2">
+            {/* Mobile: open the conversation list slide-over */}
+            <button
+              onClick={() => setShowConvList(true)}
+              className="rounded-md p-1 text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground md:hidden"
+              aria-label="Show conversations"
+            >
+              <PanelLeft className="h-5 w-5" />
+            </button>
+            <span className="truncate font-semibold text-foreground">Son of Anton</span>
+          </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex shrink-0 items-center gap-2">
             {/* Model selector */}
             <div className="relative">
               <button
                 onClick={() => setShowModelMenu((v) => !v)}
                 className="flex items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-xs text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
               >
-                {getModelName(model)}
+                <span className="max-w-[36vw] truncate sm:max-w-none">{getModelName(model)}</span>
                 <ChevronDown className="h-3 w-3 shrink-0" />
               </button>
 
