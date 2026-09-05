@@ -126,9 +126,12 @@ export default function Layout() {
   const isFullBleed = location.pathname === '/assistant'
 
   return (
-    <div className="min-h-screen bg-background">
+    // RA2.2 (R5.1) — flex column so the mobile header is always a non-shrinking
+    // child and the full-bleed child fills only the height left under it, not the
+    // whole viewport. 100dvh (not 100vh) so iOS toolbars don't hide the header.
+    <div className="flex min-h-[100dvh] flex-col bg-background">
       {/* RA2.2 §3 — offline banner sits above all sticky chrome. */}
-      <div className="sticky top-0 z-40">
+      <div className="sticky top-0 z-40 shrink-0">
         <OfflineIndicator />
       </div>
 
@@ -152,8 +155,9 @@ export default function Layout() {
         </div>
       </aside>
 
-      {/* Mobile top bar */}
-      <header className="sticky top-0 z-30 flex h-16 items-center justify-between border-b border-border bg-sidebar px-4 md:hidden">
+      {/* Mobile top bar — a non-shrinking flex child so it stays reachable even
+          on the full-bleed chat route (the "can't get back" bug). */}
+      <header className="sticky top-0 z-30 flex h-16 shrink-0 items-center justify-between border-b border-border bg-sidebar px-4 md:hidden">
         <Brand />
         <Button
           variant="ghost"
@@ -176,12 +180,23 @@ export default function Layout() {
         </div>
       )}
 
-      {/* Main content */}
-      <main className={cn('md:pl-[236px]', isFullBleed && 'h-screen')}>
+      {/* Main content. Full-bleed (chat) gets a definite height equal to the
+          space left under the mobile header (h-16 = 4rem), so its inner scroll
+          regions resolve without pushing the header off-screen; on md+ the header
+          is hidden, so it's the full viewport. Padded routes just fill remaining
+          column height and scroll the body. */}
+      <main
+        className={cn(
+          'md:pl-[236px]',
+          isFullBleed ? 'h-[calc(100dvh-4rem)] md:h-[100dvh]' : 'flex-1'
+        )}
+      >
         {isFullBleed ? (
           <Outlet />
         ) : (
-          <div className="p-4 sm:p-6 lg:px-[34px] lg:py-[30px]">
+          // pb clears the Son-of-Anton FAB (+ home indicator) on mobile; sm:p-6
+          // restores normal padding on wider screens.
+          <div className="p-4 pb-[calc(6rem+env(safe-area-inset-bottom))] sm:p-6 lg:px-[34px] lg:py-[30px]">
             <Outlet />
           </div>
         )}
