@@ -4,6 +4,7 @@ qualification, delegating all persistence to DealStore and all scraper
 instantiation to the registry.
 """
 import logging
+import os
 from datetime import datetime, timezone
 from typing import Dict, List, Optional
 
@@ -18,6 +19,13 @@ logger = logging.getLogger(__name__)
 # Joined per-item error strings are truncated before they land in
 # ScrapeRun.error — the column is a human-readable summary, not a log sink.
 _SCRAPE_ERROR_MAX = 2000
+
+# Minimum discount off MSRP for a price to qualify as a deal (INV-6). Retailers
+# routinely price at $X.99 against a round $X.00 MSRP, so a "strictly below MSRP"
+# rule surfaces every in-stock product as a 0%-OFF penny "deal". A percentage
+# floor separates those .99-vs-.00 artifacts from genuine clearances (a
+# single-size deep discount still clears the bar). Tunable if 5% proves wrong.
+MIN_DEAL_DISCOUNT_PCT = float(os.getenv("MIN_DEAL_DISCOUNT_PCT", "5.0"))
 
 
 class ScrapeOrchestrator:
@@ -35,11 +43,14 @@ class ScrapeOrchestrator:
         """
         Scrape a specific retailer for a specific shoe and persist results.
 
-        Deal-qualification rule: a "deal" is any price strictly below the
-        shoe's CURRENT MSRP (read fresh this scrape, so MSRP edits take effect
-        immediately). "On sale" now means "below list price" — the retailer's
-        own compare-at/original price is ignored for qualification. Shoes
-        without an MSRP can't produce deals (nothing to measure against).
+        Deal-qualification rule: a "deal" is any price at least
+        MIN_DEAL_DISCOUNT_PCT (default 5%) below the shoe's CURRENT MSRP (read
+        fresh this scrape, so MSRP edits take effect immediately). The
+        percentage floor exists because retailers price at $X.99 against round
+        $X.00 MSRPs — a plain "below MSRP" rule surfaces every in-stock product
+        as a penny "deal". "On sale" means "meaningfully below list price" — the
+        retailer's own compare-at/original price is ignored for qualification.
+        Shoes without an MSRP can't produce deals (nothing to measure against).
 
         URLs seen this scrape are tracked so orphaned deals can be retired after
         the loop (see _deactivate_orphaned_deals comment below).
@@ -120,8 +131,10 @@ class ScrapeOrchestrator:
                     if price_recorded:
                         results['prices_recorded'] += 1
 
-                        # A "deal" requires BOTH: price strictly below the shoe's
-                        # CURRENT MSRP AND at least one size in stock. Out-of-stock
+                        # A "deal" requires BOTH: price at least
+                        # MIN_DEAL_DISCOUNT_PCT below the shoe's CURRENT MSRP AND
+                        # at least one size in stock. The percentage floor rejects
+                        # the ubiquitous $X.99-vs-$X.00 penny artifacts. Out-of-stock
                         # products are never deals — they retire any existing deal
                         # so the UI reflects reality, and requalify automatically
                         # when stock returns (D8 fix).
@@ -129,7 +142,8 @@ class ScrapeOrchestrator:
                         below_msrp = (
                             shoe.msrp is not None
                             and details['price']
-                            and details['price'] < shoe.msrp
+                            and (shoe.msrp - details['price']) / shoe.msrp * 100
+                                >= MIN_DEAL_DISCOUNT_PCT
                         )
                         if below_msrp and is_stocked:
                             deal_created = self.store.upsert_deal(

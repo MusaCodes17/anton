@@ -3,9 +3,11 @@ Tests for ScrapeOrchestrator.scrape_retailer_for_shoe — the deal-qualification
 truth table and orphan retirement, exercised through an injected stub scraper
 (the orchestrator takes a registry injection, so no network or DOM fixtures).
 
-Qualification rule under test (B9-v2 + D8): a deal is any price strictly below
-the shoe's CURRENT MSRP AND with at least one size in stock; at/above MSRP or
-out-of-stock retires any stale deal; a shoe without MSRP can never produce a deal.
+Qualification rule under test (B9-v2 + D8 + mx): a deal is any price at least
+MIN_DEAL_DISCOUNT_PCT (default 5%) below the shoe's CURRENT MSRP AND with at
+least one size in stock; a price above MSRP, within the discount floor (the
+$X.99-vs-$X.00 penny artifacts), or out-of-stock retires any stale deal; a shoe
+without MSRP can never produce a deal.
 
 H2/B10 (D2) was fixed in commit bcdddc2: orphan retirement now runs against the
 union of searched + fetched URLs, so a failed detail fetch on a still-listed
@@ -67,7 +69,7 @@ def test_price_below_msrp_creates_a_deal(db):
 
 def test_price_at_msrp_creates_no_deal(db):
     retailer, shoe = _setup(db, msrp=200.0)
-    # Boundary: strictly-below only — exactly MSRP is not a deal.
+    # Exactly MSRP is a 0% discount — well under the floor, so no deal.
     res = _run(db, retailer, shoe, [{"product_url": "u1"}], {"u1": _detail("u1", 200.0)})
 
     assert res["deals_found"] == 0
@@ -128,6 +130,66 @@ def test_partial_detail_failure_does_not_orphan_a_live_deal(db):
     )
     assert db.query(Deal).filter(Deal.product_url == "u1", Deal.is_active == True).count() == 1
     assert db.query(Deal).filter(Deal.is_active == True).count() == 2
+
+
+# ── mx: minimum-discount floor (MIN_DEAL_DISCOUNT_PCT) ───────────────────────
+
+
+def test_penny_below_msrp_is_not_a_deal(db):
+    """mx: the $X.99-vs-$X.00 artifact — a price one cent below MSRP is a ~0%
+    discount, under the 5% floor, so it must not qualify."""
+    retailer, shoe = _setup(db, msrp=200.0)
+    res = _run(db, retailer, shoe, [{"product_url": "u1"}], {"u1": _detail("u1", 199.99)})
+
+    assert res["deals_found"] == 0
+    assert db.query(Deal).count() == 0
+
+
+def test_price_exactly_at_threshold_is_a_deal(db):
+    """mx: the floor is inclusive — a price exactly 5.0% below MSRP qualifies."""
+    retailer, shoe = _setup(db, msrp=200.0)
+    # 200 - 5% = 190.00 → exactly at the boundary.
+    res = _run(db, retailer, shoe, [{"product_url": "u1"}], {"u1": _detail("u1", 190.0)})
+
+    assert res["deals_found"] == 1
+    deal = db.query(Deal).one()
+    assert deal.is_active is True
+    assert deal.savings_percent == 5.0
+
+
+def test_price_well_above_threshold_is_a_deal(db):
+    """mx: a discount comfortably past the floor qualifies as before."""
+    retailer, shoe = _setup(db, msrp=200.0)
+    res = _run(db, retailer, shoe, [{"product_url": "u1"}], {"u1": _detail("u1", 150.0)})
+
+    assert res["deals_found"] == 1
+    assert db.query(Deal).one().savings_percent == 25.0
+
+
+def test_price_dropping_to_sub_threshold_retires_existing_deal(db):
+    """mx: a live deal whose price rises to within the floor (a penny artifact)
+    is retired on the next scrape via the else branch."""
+    retailer, shoe = _setup(db, msrp=200.0)
+    _run(db, retailer, shoe, [{"product_url": "u1"}], {"u1": _detail("u1", 160.0)})
+    assert db.query(Deal).one().is_active is True
+
+    # Price recovers to $199.99 — below MSRP but under the 5% floor → retire.
+    _run(db, retailer, shoe, [{"product_url": "u1"}], {"u1": _detail("u1", 199.99)})
+    assert db.query(Deal).one().is_active is False
+
+
+def test_deep_discount_on_single_size_still_qualifies(db):
+    """mx (guards the withdrawn-#4 case): the scraper reports the cheapest
+    in-stock variant, so a genuine single-size clearance — e.g. a $189.99 shoe
+    against a $310 MSRP, ~39% off — clears the floor even with only one size
+    left in stock."""
+    retailer, shoe = _setup(db, msrp=310.0)
+    detail = _detail("u1", 189.99)
+    detail["sizes_available"] = ["9.5"]  # one lonely clearance size
+    res = _run(db, retailer, shoe, [{"product_url": "u1"}], {"u1": detail})
+
+    assert res["deals_found"] == 1
+    assert db.query(Deal).one().is_active is True
 
 
 # ── D8: out-of-stock qualification guard ─────────────────────────────────────

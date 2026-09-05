@@ -131,7 +131,14 @@
 **Why (recorded):** The runner wants a single, self-evident meaning of "on sale" — below list price — and a savings % anchored to a real reference (MSRP) rather than a private willingness-to-pay number. MSRP was populated on every active shoe first, so nothing became silently un-dealable.
 **Advantages:** One honest number everywhere ("% off retail"); no dependence on retailers correctly flagging compare-at prices; higher recall.
 **Trade-offs:** Lower precision than B9 — a retailer that habitually prices below MSRP will always read as "on sale"; shoes without an MSRP produce no deals at all. Reverses B9's markdown-required guard (e.g. the Adios Pro 4 full-price-at-target false positive is now handled by MSRP instead).
-**Verdict:** ✅ Keep (current). Revisit if below-MSRP-always retailers make the feed noisy — a per-retailer floor or an optional markdown-required flag would be the escape hatch.
+**Verdict:** 🔁 **Refined by B9-v3 (2026-09-04)** — the "any price below MSRP" clause is superseded by a minimum-discount floor; MSRP-anchored savings otherwise unchanged.
+
+### B9-v3. Minimum-discount floor for deal qualification (`MIN_DEAL_DISCOUNT_PCT`)
+**Chosen:** a deal requires the price to be at least `MIN_DEAL_DISCOUNT_PCT` (default **5.0%**, read from the env at import) below MSRP — `(msrp - price)/msrp*100 >= MIN_DEAL_DISCOUNT_PCT` — replacing B9-v2's strict `price < msrp`. Everything else in B9-v2 stands: MSRP read fresh, savings measured against MSRP, `target_price` still irrelevant, `and is_stocked` (D8) unchanged. Implemented at the single qualification chokepoint in `orchestrator.scrape_retailer_for_shoe`; the `else` branch already calls `deactivate_deal`, so sub-threshold deals retire on the next scrape with no migration or backfill.
+**Why (recorded):** Retailers price at `$X.99` while MSRP is recorded as a round `$X.00`, so nearly every in-stock product qualified by one to five cents and rendered as a "0% OFF" deal (Puma Deviate Nitro Pure $189.99 vs $190.00; Mizuno Hyperwarp Pro $309.99 vs $310.00; norda 005 $324.95 vs $325.00). This is the noise-escape-hatch B9-v2 anticipated. 5% cleanly separates penny artifacts from genuine single-size clearances — the scraper reports the cheapest in-stock variant (`_money(pick_min=True)`), so a real ~39%-off clearance (Deviate Nitro Elite 4 at $189.99 vs ~$310 MSRP) still qualifies.
+**Advantages:** The deal feed means "meaningfully on sale" again; one env knob tunes precision/recall without code change; no downstream filter needed (the R3.2 deal-alert agent and MCP `get_deals` read the `deals` table directly, so a chokepoint filter — not a serving filter — is the only correct place).
+**Trade-offs:** A genuine but small (<5%) markdown is now invisible; the floor is a single global number, not per-retailer.
+**Verdict:** ✅ Keep (current). If a below-MSRP-always retailer or an over-aggressive floor emerges, tune `MIN_DEAL_DISCOUNT_PCT` or make it per-retailer.
 
 ### B10. Orphan retirement with the non-empty-search guard
 **Chosen:** Deals whose URLs vanish from a *successful, non-empty* search are deactivated; empty/failed scrapes retire nothing.
