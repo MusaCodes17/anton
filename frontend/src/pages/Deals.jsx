@@ -39,6 +39,9 @@ export default function Deals() {
   const [sort, setSort] = useState('savings_desc')
   const [selected, setSelected] = useState(null)
   const [watchingOpen, setWatchingOpen] = useState(false)
+  // Mobile-only: the six-filter deck is collapsed by default so shoes are
+  // visible above the fold; always expanded inline on md+.
+  const [filtersOpen, setFiltersOpen] = useState(false)
   const [searchParams, setSearchParams] = useSearchParams()
   const deepLinkId = searchParams.get('deal')
 
@@ -151,13 +154,16 @@ export default function Deals() {
     setSort('savings_desc')
   }
 
-  const hasFilters =
-    brand !== ALL ||
-    retailerId !== ALL ||
-    shoeType !== ALL ||
-    minSavings !== '' ||
-    size !== ALL ||
-    sort !== 'savings_desc'
+  const activeFilters = [
+    brand !== ALL,
+    retailerId !== ALL,
+    shoeType !== ALL,
+    minSavings !== '',
+    size !== ALL,
+    sort !== 'savings_desc',
+  ].filter(Boolean).length
+
+  const hasFilters = activeFilters > 0
 
   return (
     <div className="space-y-6">
@@ -165,7 +171,28 @@ export default function Deals() {
         <ScrapeButton variant="outline" />
       </PageHeader>
 
-      <Card>
+      {/* Mobile-only disclosure toggle; hidden on md+ where the deck is inline. */}
+      <button
+        type="button"
+        onClick={() => setFiltersOpen((o) => !o)}
+        className="focus-ring flex w-full items-center gap-2 rounded-[12px] border border-border bg-card px-4 py-3 text-left md:hidden"
+        aria-expanded={filtersOpen}
+      >
+        <SlidersHorizontal className="h-4 w-4 shrink-0 text-muted-foreground" />
+        <span className="font-medium text-foreground">Filters</span>
+        {activeFilters > 0 && (
+          <span className="rounded-full bg-primary/15 px-2 py-0.5 text-xs font-semibold text-primary">
+            {activeFilters}
+          </span>
+        )}
+        <ChevronDown
+          className={`ml-auto h-4 w-4 shrink-0 text-muted-foreground transition-transform duration-200 ${
+            filtersOpen ? '' : '-rotate-90'
+          }`}
+        />
+      </button>
+
+      <Card className={`md:block ${filtersOpen ? '' : 'hidden'}`}>
         <CardContent className="grid grid-cols-1 gap-4 p-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
           <div className="space-y-1.5">
             <Label>Brand</Label>
