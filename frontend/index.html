@@ -4,7 +4,9 @@
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <!-- viewport-fit=cover so the standalone PWA can paint into the iOS
-         safe-area insets (env(safe-area-inset-*) is used in index.css). -->
+         safe-area insets. black-translucent (below) then requires the app to
+         inset the top itself via env(safe-area-inset-top) — done on the shell
+         wrapper in Layout.jsx; the bottom inset is applied on <main> there too. -->
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <title>Anton</title>
 

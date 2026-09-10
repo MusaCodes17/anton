@@ -126,12 +126,18 @@ export default function Layout() {
   const isFullBleed = location.pathname === '/assistant'
 
   return (
-    // RA2.2 (R5.1) — flex column so the mobile header is always a non-shrinking
-    // child and the full-bleed child fills only the height left under it, not the
-    // whole viewport. 100dvh (not 100vh) so iOS toolbars don't hide the header.
-    <div className="flex min-h-[100dvh] flex-col bg-background">
-      {/* RA2.2 §3 — offline banner sits above all sticky chrome. */}
-      <div className="sticky top-0 z-40 shrink-0">
+    // RA2.2 (R5.2) — fixed-height app shell. Header + banner are static shrink-0
+    // children OUTSIDE the scroll region, and only <main> scrolls (min-h-0 +
+    // overflow-y-auto). This replaces the old min-h-[100dvh] document-scroll +
+    // sticky-header approach, whose sticky header intermittently scrolls off in
+    // iOS standalone mode. 100dvh (not 100vh) so iOS toolbars don't hide chrome.
+    // pt reserves the iOS status-bar inset: black-translucent + viewport-fit=cover
+    // paint web content UNDER the notch, so the app must inset the top itself —
+    // nothing else does (mirrors the env(safe-area-inset-bottom) used on <main>).
+    // A no-op wherever the inset is 0 (desktop browsers / non-notched devices).
+    <div className="flex h-[100dvh] flex-col bg-background pt-[env(safe-area-inset-top)]">
+      {/* Offline banner — static, above the header. */}
+      <div className="z-40 shrink-0">
         <OfflineIndicator />
       </div>
 
@@ -155,9 +161,11 @@ export default function Layout() {
         </div>
       </aside>
 
-      {/* Mobile top bar — a non-shrinking flex child so it stays reachable even
-          on the full-bleed chat route (the "can't get back" bug). */}
-      <header className="sticky top-0 z-30 flex h-16 shrink-0 items-center justify-between border-b border-border bg-sidebar px-4 md:hidden">
+      {/* Mobile top bar — a static shrink-0 child outside the scroll region, so
+          it stays fixed and reachable on every route including full-bleed chat
+          (the "can't get back" bug). No sticky: it can't scroll off because it
+          isn't inside the scrolling <main>. */}
+      <header className="z-30 flex h-16 shrink-0 items-center justify-between border-b border-border bg-sidebar px-4 md:hidden">
         <Brand />
         <Button
           variant="ghost"
@@ -169,9 +177,11 @@ export default function Layout() {
         </Button>
       </header>
 
-      {/* Mobile slide-down menu */}
+      {/* Mobile slide-down menu — a static shrink-0 sibling above <main>. Since
+          main scrolls internally, the menu sits between the fixed header and the
+          scroll region and is never pushed off or scrolled away. */}
       {mobileOpen && (
-        <div className="sticky top-16 z-20 border-b border-border bg-sidebar p-3 md:hidden">
+        <div className="z-20 shrink-0 border-b border-border bg-sidebar p-3 md:hidden">
           <NavLinks onNavigate={() => setMobileOpen(false)} />
           <div className="mt-1 border-t border-border pt-1">
             <SettingsLink onNavigate={() => setMobileOpen(false)} />
@@ -180,15 +190,14 @@ export default function Layout() {
         </div>
       )}
 
-      {/* Main content. Full-bleed (chat) gets a definite height equal to the
-          space left under the mobile header (h-16 = 4rem), so its inner scroll
-          regions resolve without pushing the header off-screen; on md+ the header
-          is hidden, so it's the full viewport. Padded routes just fill remaining
-          column height and scroll the body. */}
+      {/* Main is the single scroll region for all routes: flex-1 fills the height
+          left under the header, min-h-0 lets it shrink so overflow-y-auto scrolls
+          the body rather than the shell. Full-bleed (chat) just fills this box and
+          ChatPage's own h-full takes over its internal scrolling; padded routes
+          scroll here. */}
       <main
         className={cn(
-          'md:pl-[236px]',
-          isFullBleed ? 'h-[calc(100dvh-4rem)] md:h-[100dvh]' : 'flex-1'
+          'min-h-0 flex-1 overflow-y-auto md:pl-[236px]'
         )}
       >
         {isFullBleed ? (
