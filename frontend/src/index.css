@@ -90,3 +90,14 @@
     border: 3px solid var(--background);
   }
 }
+
+@layer utilities {
+  /* Hide the scrollbar on horizontally-scrollable strips (e.g. the card
+     colorway row) while keeping them scrollable — Firefox + WebKit/Blink. */
+  .scrollbar-none {
+    scrollbar-width: none;
+  }
+  .scrollbar-none::-webkit-scrollbar {
+    display: none;
+  }
+}
