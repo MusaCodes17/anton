@@ -55,7 +55,7 @@ export default function ShoeProductCard({ group, onViewDetails }) {
         )}
       </button>
 
-      <div className="flex flex-1 flex-col gap-3 p-4">
+      <div className="flex flex-1 flex-col gap-3 p-3 sm:p-4">
         <div className="min-w-0">
           <p className="text-2xs font-bold uppercase tracking-[0.1em] text-accent-foreground">
             {shoe.brand}
@@ -68,10 +68,13 @@ export default function ShoeProductCard({ group, onViewDetails }) {
           )}
         </div>
 
-        <div className="flex items-end justify-between">
-          <div>
+        {/* flex-wrap + gap so the stock badge drops below the price rather than
+            overflowing the card's right edge at the 2-up mobile width (~165px);
+            shrink-0 keeps the badge from being squeezed on wider cards. */}
+        <div className="flex flex-wrap items-end justify-between gap-x-2 gap-y-1.5">
+          <div className="min-w-0">
             <div className="flex items-baseline gap-2">
-              <p className="font-heading text-2xl font-extrabold text-foreground">
+              <p className="font-heading text-xl font-extrabold text-foreground sm:text-2xl">
                 {formatCurrency(selected.current_price)}
               </p>
               {shoe.msrp != null && (
@@ -93,13 +96,13 @@ export default function ShoeProductCard({ group, onViewDetails }) {
             </p>
           </div>
           {selected.in_stock === false ? (
-            <Badge variant="outline" className="border-border text-muted-foreground">
+            <Badge variant="outline" className="shrink-0 border-border text-muted-foreground">
               Out of stock
             </Badge>
           ) : (
             <Badge
               variant="outline"
-              className="rounded-full border-primary/40 text-accent-foreground"
+              className="shrink-0 rounded-full border-primary/40 text-accent-foreground"
             >
               In stock
             </Badge>

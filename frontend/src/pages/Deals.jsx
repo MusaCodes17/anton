@@ -318,7 +318,7 @@ export default function Deals() {
         ) : deals.isError ? (
           <ErrorState error={deals.error} onRetry={deals.refetch} />
         ) : groups.length ? (
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          <div className="grid grid-cols-2 gap-4 lg:grid-cols-3">
             {groups.map((group) => (
               <ShoeProductCard
                 key={group.shoeId}

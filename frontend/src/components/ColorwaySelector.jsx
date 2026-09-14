@@ -10,7 +10,12 @@ export default function ColorwaySelector({ options, selectedId, onSelect }) {
   if (!options || options.length <= 1) return null
 
   return (
-    <div className="flex flex-wrap gap-[7px]">
+    // Horizontal strip, not a wrapping grid: clipped to the card width and
+    // scrollable so the thumbnails never spill past the card's right edge at
+    // any card width (the 2-up mobile grid halves the width). min-w-0 lets the
+    // flex item shrink below its content; buttons keep shrink-0 so they scroll
+    // rather than compress. scrollbar-none hides the strip's scrollbar.
+    <div className="flex min-w-0 gap-[7px] overflow-x-auto scrollbar-none">
       {options.map((opt) => {
         const retailerName =
           typeof opt.retailer === 'string' ? opt.retailer : opt.retailer?.name
