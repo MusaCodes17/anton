@@ -145,6 +145,18 @@ def test_lost_unique_race_is_a_silent_noop(connected):
     assert connected.query(PendingCorosRun).count() == 1
 
 
+def test_queued_runs_carry_the_shoe_suggestion(connected):
+    daily = OwnedShoe(brand="B", model="Daily", shoe_type="daily_trainer", starting_mileage=0,
+                      current_mileage=50, status="active")
+    connected.add(daily)
+    connected.commit()
+    tick(connected, FakeClient())
+    easy = connected.query(PendingCorosRun).filter_by(label_id="480779046928548143").one()  # 6:03/km, 10.26 km
+    assert easy.suggested_shoe_id == daily.id and "daily_trainer" in easy.suggestion_reason
+    fast = connected.query(PendingCorosRun).filter_by(label_id="480858305181286402").one()  # 4:12/km, 12.53 km
+    assert fast.suggested_shoe_id == daily.id  # conflict -> union -> the only active candidate
+
+
 # --- invariants -------------------------------------------------------------------
 
 def test_poller_never_writes_runs_or_mileage(connected):

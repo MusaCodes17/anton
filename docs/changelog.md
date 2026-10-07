@@ -5,6 +5,16 @@
 
 ---
 
+## R5.7 §5 — COROS direct sync: server-side shoe suggestion — 2026-10-07
+
+**[ADDED] `services/coros_suggestion.py` replaces the §4 stub: a deterministic, no-model port of the `sync_coros_runs` prompt's Step 3, so the app inbox and Claude propose the same shoe. Read-only; a suggestion only (C9) — the runner overrides with one tap. Suite 511 → 526 passing (+1 skipped live test). No migration (`suggested_shoe_id`/`suggestion_reason` landed in §4).**
+- **Rule (heuristic, stated in the module and in each stored reason):** pace picks candidate shoe_types (primary), distance picks candidates (secondary), inclusive overlapping bands exactly as the prompt writes them; types both signals agree on win → among **active** shoes of those types the lowest `current_mileage` (ties → lowest id); if they conflict, or the agreed type isn't in the rotation, fall back to the union of both; if nothing fits, **no suggestion** with an explicit reason rather than a forced match. Retired / for_sale shoes are never suggested.
+- **Judgement calls to be aware of:** the prompt's "tempo long_distance_racer or tempo" band is read as {tempo, long_distance_racer}; `trail` is in no band so a trail shoe is never auto-suggested (the prompt has no trail rule and I didn't invent one); the plan's "each shoe's recent usage pattern" was NOT added — the existing workflow doesn't use it, and the plan says not to invent rules. If the suggestions feel off in practice, that is the lever to revisit.
+- **Drift risk:** the bands now live in two places (module + prompt text). The module docstring says to change both; §7/§8 may be the moment to make the prompt read the pending queue instead.
+- **Tests:** band boundaries (3:30, 4:15, 4:30, 5:30; 5 km, 16 km, 21 km), agree/conflict/absent-type fallbacks, tie-break, retired/for_sale exclusion, explicit no-match, reason fits the 200-char column, and poller integration (queued rows carry the suggestion).
+
+---
+
 ## R5.7 §4 — COROS direct sync: poller + pending queue — 2026-10-07
 
 **[ADDED] A scheduled poller pulls new COROS runs into a pending queue ("New runs" inbox backend). It writes ONLY `pending_coros_runs` and `coros_sync_state` — never runs, attributions or mileage (INV-1/INV-9/C9; a test asserts activities, shoe_runs and `current_mileage` are untouched). Nothing is auto-logged. Suite 493 → 511 passing (+1 skipped live test). One additive migration `8b9c0d1e2f3a` (down/up round-trip verified on a scratch DB).**
