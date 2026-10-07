@@ -5,6 +5,17 @@
 
 ---
 
+## R5.7 §3 — COROS direct sync: typed MCP client + contract tests — 2026-10-07
+
+**[ADDED] `services/coros_mcp_client.py` — the only module that speaks MCP to COROS: `list_runs(start, end)`, `get_run_detail(label_id)`, `fetch_run(run)`, normalized into a frozen `CorosRun` dataclass (units in names; `label_id` is a string). No DB, no OAuth flow (it takes a `token_provider`). Not yet called by anything — the poller is §4. Suite 466 → 493 passing (+27; 1 opt-in live test skipped in CI).**
+- **Parsing, not mapping:** COROS tool results are prose, so each field is an anchored regex. Required fields missing, header/record-count mismatch, an unknown tool (JSON-RPC -32601/-32602), the "anomalies detected" advisory COROS returns *with HTTP 200 and isError=false* for a bad detail request, and out-of-bounds pace/distance (unit change) all raise `CorosContractError` naming the field — never silent nulls. Optional fields (HR, calories, cadence, elevation, load, focus) become None only when their line is absent. List↔detail pairing is cross-checked on distance (detail text carries no id/date).
+- **Mapping decisions:** list `Duration` = detail `Workout Time` = `moving_time_s`; detail `Total Time` = `elapsed_time_s`; elevation takes the *gain* of `60 m / 48 m`. COROS's printed per-record date is used as-is (Toronto local for this account).
+- **Live-verified 2026-10-07 (read-only, spike token):** `tools/call` works with **no initialize handshake** (stateless confirmed, so none is made); an empty range answers `"No sport records found from … to …"` (→ `[]`, not an error); a bogus tool name gives JSON-RPC -32602.
+- **Transport policy:** network errors/5xx retry with 1 s / 3 s backoff (3 attempts); 4xx never retry; 401 → `CorosAuthError` (caller refreshes/marks reauth). SSE-framed replies decoded. Truncation at the 100-record list limit is logged.
+- **Tests:** real spike fixtures (`tests/fixtures/coros/`, coordinates redacted) pin units; opt-in live smoke `COROS_LIVE=1 pytest tests/test_coros_mcp_client.py -k live` passed against the real server.
+
+---
+
 ## R5.7 §2 — COROS direct sync: OAuth connect + encrypted token storage — 2026-10-07
 
 **[ADDED] Anton can now connect to the runner's COROS account as an OAuth client of the COROS MCP server (plan: COROS direct sync §2; spike: `docs/spikes/coros_mcp_client.md`). Backend only; no poller, no client, no UI yet (§3–§6). Suite 441 → 461 passing. INV-1/INV-9/C9 untouched — nothing here writes runs or mileage.**
