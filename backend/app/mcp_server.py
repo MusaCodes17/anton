@@ -646,18 +646,8 @@ async def log_run_to_shoe(
             )
             shoe = result.shoe
 
-            thresholds = [
-                (600, "approaching end of life — start thinking about replacement"),
-                (700, "consider retiring soon — performance may be degrading"),
-                (800, "past recommended limit — retire this shoe"),
-            ]
-            threshold_crossed = None
-            threshold_message = None
-            for threshold_km, message in thresholds:
-                if old_mileage < threshold_km <= shoe.current_mileage:
-                    threshold_crossed = threshold_km
-                    threshold_message = message
-                    break
+            crossed = rotation.threshold_crossed_by(old_mileage, shoe.current_mileage)
+            threshold_crossed, threshold_message = crossed if crossed else (None, None)
 
             if threshold_crossed is not None:
                 try:
