@@ -13,7 +13,7 @@ import requests
 from sqlalchemy.orm import Session
 
 from app.coros_client import activity_to_run_dict, fetch_running_activities, get_coros_config
-from app.models.models import Activity
+from app.models.models import Activity, PendingCorosRun
 from app.services import rotation, settings as settings_svc
 
 
@@ -39,6 +39,23 @@ def is_already_logged(db: Session, activity_id: str, act_date: str, dist_km: flo
         Activity.run_date == date.fromisoformat(act_date),
         Activity.distance_km.between(dist_km - 0.1, dist_km + 0.1),
     ).count() > 0
+
+
+def resolve_pending(db: Session, label_id: str) -> None:
+    """Mark the pending-inbox row for this COROS label confirmed (R5.7 §7). Does NOT
+    commit. Called from confirm_run so the app inbox, the REST confirm and the
+    `confirm_coros_run` MCP tool all clear the same queue: confirming via Claude
+    removes the run from the app, and vice versa. A dismissed row is also marked
+    confirmed — the run *is* logged now, which is the truth the queue must show."""
+    if not label_id:
+        return
+    row = db.query(PendingCorosRun).filter(
+        PendingCorosRun.label_id == label_id,
+        PendingCorosRun.status.in_(("pending", "dismissed")),
+    ).first()
+    if row is not None:
+        row.status = "confirmed"
+        row.resolved_at = datetime.now(timezone.utc)
 
 
 def fetch_unsynced(db: Session, days_back: int = 30) -> CorosFetchResult:
@@ -92,7 +109,8 @@ def confirm_run(
     """
     Log a single confirmed COROS run to an owned shoe.
 
-    Idempotent: returns None if the activity_id is already logged.
+    Idempotent: returns None if the activity_id is already logged. Either way the
+    matching pending-inbox row (if any) is resolved to `confirmed` (R5.7 §7).
     Delegates to rotation.log_run(source='coros') so checkpoint detection
     fires on the COROS path (previously it didn't on the REST confirm path).
     Stamps last_coros_sync_at after a successful write.
@@ -110,6 +128,10 @@ def confirm_run(
     if coros_activity_id and db.query(Activity).filter(
         Activity.coros_activity_id == coros_activity_id
     ).count():
+        # Already logged by some path: still make sure the inbox row isn't left
+        # dangling as "pending" (e.g. logged via Claude before the poller saw it).
+        resolve_pending(db, coros_activity_id)
+        db.commit()
         return None
 
     result = rotation.log_run(
@@ -134,6 +156,7 @@ def confirm_run(
     )
 
     settings_svc.set_setting(db, "last_coros_sync_at", datetime.now(timezone.utc).isoformat())
+    resolve_pending(db, coros_activity_id)
     db.commit()
 
     return result

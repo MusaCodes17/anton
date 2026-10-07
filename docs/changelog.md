@@ -5,6 +5,18 @@
 
 ---
 
+## R5.7 §7 — COROS direct sync: Anton MCP tools realigned to the shared queue — 2026-10-08
+
+**[CHANGED] Claude and the app now see one "New runs" queue, and confirming through either door clears it for the other; no path can log the same `label_id` twice. No schema change. Suite 540 → 556 passing (+1 skipped live test). INV-1/INV-2 (single writer), INV-5 (dedup) and C9 intact — the tools still never log without the runner's confirmation.**
+- **[CHANGED] `fetch_unsynced_coros_runs`** now reads `pending_coros_runs` (status `pending`) instead of the dormant Open-API fetch: same run keys as before (`coros_activity_id`, `date`, `distance_km`, `avg_pace`, `avg_hr`) plus the prefetched detail fields and `suggested_shoe_id` / `suggestion_reason`; adds `connection_status` and a `warning` when COROS isn't connected (queued runs are still listed). `days_back` is accepted but ignored. Its output feeds `confirm_coros_run` unchanged (tested).
+- **[CHANGED] `confirm_coros_run` behavior is unchanged** (same writer, still idempotent on `label_id`); the resolution lives one level down — **`coros.confirm_run` now resolves the matching pending row** (`pending`/`dismissed` → `confirmed`), including on its "already logged" early-return, so the app inbox, the REST confirm and the MCP tool all share it and a row can't dangle as pending after a run was logged elsewhere.
+- **[CHANGED] `get_coros_sync_status`** reports poller/connection truth: `connection_status`, `last_success_at`, `last_attempt_at`, `last_error`, `pending_count`, `poll_interval_min`, with an actionable message per state (not set up / connected / reconnect needed / not connected). Legacy keys kept: `coros_configured` now means "direct sync usable right now"; `last_sync_at` is still the last confirm.
+- **[CHANGED] `sync_coros_runs` prompt** now starts from `fetch_unsynced_coros_runs` (the COROS connector is no longer used to build the list, and the Step 1b "check what's logged" and per-run `getActivityDetail` steps are gone — the queue is already deduped and detail-complete). The shoe-suggestion bands stay in the prompt as the fallback when a run has no server suggestion; the same text still lives in `services/coros_suggestion.py` (two renderings of one rule — changing one means changing the other). Skipped runs stay in the inbox; the prompt tells the runner to Dismiss in the app (there is deliberately no MCP dismiss tool: dismiss is the runner's own decision).
+- **Known edge:** deleting a logged COROS run (`delete_shoe_run`) leaves its inbox row `confirmed`, so the poller does not re-offer it. Intended (history is sacred; re-logging is a manual act), noted here so it isn't mistaken for a bug.
+- **Not verified live:** Claude Desktop reading the queue over `/mcp` against the deployed server (tests call the tool functions directly with the session patched).
+
+---
+
 ## R5.7 §6 — COROS direct sync: "New runs" inbox + connection settings — 2026-10-07
 
 **[ADDED] The runner can now connect COROS, see queued runs, and confirm/dismiss them from the phone. Triggered by a real report: "Sync from COROS" on My Shoes was disabled because it was gated on the legacy Open-API credential check (`coros_configured`, false by design since C6) and never looked at the new direct connection. Two commits (backend with tests first, then UI). Suite 526 → 540 passing (+1 skipped live test); `vite build` clean; mobile (375 px) + desktop pass on a temp DB; no migration.**
