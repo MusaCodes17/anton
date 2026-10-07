@@ -1,7 +1,7 @@
 import { Link } from 'react-router-dom'
 import {
   Activity, Tag, Footprints, ArrowRight, TrendingUp, TrendingDown,
-  AlertTriangle, CheckCircle2, RefreshCw, Radar, ShieldCheck,
+  AlertTriangle, CheckCircle2, RefreshCw, Radar, ShieldCheck, Watch,
 } from 'lucide-react'
 import PageHeader from '@/components/PageHeader'
 import ScrapeButton from '@/components/ScrapeButton'
@@ -9,7 +9,7 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { ErrorState } from '@/components/StatusViews'
 import { Skeleton } from '@/components/ui/skeleton'
-import { useHome } from '@/hooks/useApi'
+import { useHome, useCorosStatus } from '@/hooks/useApi'
 import {
   formatCurrency, formatPercent, formatDate, formatRelativeTime, cn,
 } from '@/lib/utils'
@@ -31,6 +31,8 @@ export default function Home() {
         <ScrapeButton />
       </PageHeader>
 
+      <CorosInboxBanner />
+
       {home.isError ? (
         <ErrorState error={home.error} onRetry={home.refetch} />
       ) : (
@@ -44,6 +46,41 @@ export default function Home() {
         </>
       )}
     </div>
+  )
+}
+
+// ── COROS inbox → /new-runs (R5.7 §6) ─────────────────────────────────────────
+// Renders nothing unless there's something to act on: runs waiting, or a
+// connection that needs the runner's attention (failures are shown, not hidden).
+
+function CorosInboxBanner() {
+  const status = useCorosStatus()
+  const st = status.data
+  if (!st) return null
+  const pending = st.sync?.pending_count ?? 0
+
+  if (st.status === 'reauth_required') {
+    return (
+      <Link to="/settings/sync"
+        className="flex items-center gap-3 rounded-2xl border border-border bg-card px-5 py-3.5 text-sm">
+        <AlertTriangle className="h-4 w-4 shrink-0 text-warning" />
+        <span className="flex-1 font-semibold text-foreground">COROS needs to be reconnected</span>
+        <ArrowRight className="h-4 w-4 text-faint" />
+      </Link>
+    )
+  }
+  if (st.status !== 'connected' || pending === 0) return null
+  return (
+    <Link to="/new-runs"
+      className="flex items-center gap-3 rounded-2xl border border-border bg-card px-5 py-3.5 transition-colors hover:bg-secondary">
+      <Watch className="h-4 w-4 shrink-0 text-primary" />
+      <span className="flex-1 font-heading text-md-plus font-bold text-foreground">
+        {pending} new run{pending === 1 ? '' : 's'} from COROS
+      </span>
+      <span className="flex items-center gap-1 text-sm font-semibold text-primary">
+        Review <ArrowRight className="h-4 w-4" />
+      </span>
+    </Link>
   )
 }
 

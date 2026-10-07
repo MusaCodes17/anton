@@ -293,15 +293,17 @@ export const adminApi = {
     client.put('/api/admin/schedule', { enabled, cron }).then((r) => r.data),
 }
 
-// ============== COROS SYNC ==============
-export const corosSyncApi = {
-  status: () => client.get('/api/owned-shoes/sync-coros/status').then((r) => r.data),
-  fetch: (daysBack = 30) =>
-    client
-      .post('/api/owned-shoes/sync-coros/fetch', null, { params: { days_back: daysBack } })
-      .then((r) => r.data),
-  confirm: (assignments) =>
-    client.post('/api/owned-shoes/sync-coros/confirm', { assignments }).then((r) => r.data),
+// ============== COROS DIRECT SYNC (R5.7) ==============
+// Backend-mediated: the server holds the COROS OAuth tokens and polls; the
+// browser only ever sees status + the pending-runs inbox, never a token.
+export const corosApi = {
+  status: () => client.get('/api/coros/status').then((r) => r.data),
+  connect: () => client.post('/api/coros/connect').then((r) => r.data),
+  sync: () => client.post('/api/coros/sync').then((r) => r.data),
+  disconnect: () => client.delete('/api/coros/connection').then((r) => r.data),
+  pending: () => client.get('/api/coros/pending').then((r) => r.data),
+  confirm: (id, body) => client.post(`/api/coros/pending/${id}/confirm`, body).then((r) => r.data),
+  dismiss: (id) => client.post(`/api/coros/pending/${id}/dismiss`).then((r) => r.data),
 }
 
 export default client

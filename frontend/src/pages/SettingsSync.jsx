@@ -1,15 +1,24 @@
 import { useEffect, useRef, useState } from 'react'
+import { Link, useSearchParams } from 'react-router-dom'
 import { RefreshCw, Watch, Import, Activity, Clock } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Switch } from '@/components/ui/switch'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Button } from '@/components/ui/button'
+import { Badge } from '@/components/ui/badge'
+import {
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter,
+} from '@/components/ui/dialog'
+import { useOnline } from '@/hooks/useOnline'
 import { useToast } from '@/components/ui/toast'
 import ScrapeButton from '@/components/ScrapeButton'
 import {
   useDashboardStats,
-  useCorosSyncStatus,
+  useCorosStatus,
+  useConnectCoros,
+  useSyncCoros,
+  useDisconnectCoros,
   useStravaStatus,
   useScrapeHistory,
   useSchedule,
@@ -253,15 +262,178 @@ function RetailerHealthRow({ retailer }) {
   )
 }
 
+const COROS_ERROR_REASONS = {
+  denied: 'You declined access on COROS.',
+  invalid_state: 'That sign-in link expired or was already used. Try connecting again.',
+  exchange_rejected: 'COROS rejected the sign-in. Try connecting again.',
+  not_registered: 'Start the connection from Anton again.',
+  not_configured: 'The server is missing its COROS encryption key.',
+  unreachable: 'COROS could not be reached. Try again shortly.',
+}
+
+const OFFLINE_MSG = "You're offline — this needs a connection."
+
+// Direct COROS connection (R5.7): Anton is an OAuth client of COROS; the server
+// polls and queues runs for the inbox. States are shown honestly — a failed or
+// stale sync reads as such rather than as a quietly-old "Connected".
+function CorosConnectionCard() {
+  const { toast } = useToast()
+  const { online } = useOnline()
+  const status = useCorosStatus()
+  const connect = useConnectCoros()
+  const sync = useSyncCoros()
+  const disconnect = useDisconnectCoros()
+  const [confirmOpen, setConfirmOpen] = useState(false)
+  const [params, setParams] = useSearchParams()
+
+  // Landing back from the COROS sign-in: report the outcome once, then clean the URL.
+  useEffect(() => {
+    const result = params.get('coros')
+    if (!result) return
+    if (result === 'connected') {
+      toast({ title: 'COROS connected', description: 'New runs will appear in New runs within about 15 minutes.' })
+    } else {
+      toast({ variant: 'destructive', title: 'COROS connection failed',
+        description: COROS_ERROR_REASONS[params.get('reason')] ?? 'Something went wrong. Try again.' })
+    }
+    params.delete('coros')
+    params.delete('reason')
+    setParams(params, { replace: true })
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  const st = status.data
+  const sy = st?.sync
+  const state = !st ? null : !st.configured ? 'unconfigured' : st.status
+
+  function startConnect() {
+    connect.mutate(undefined, {
+      onSuccess: (r) => window.location.assign(r.authorize_url),
+      onError: (err) => toast({ variant: 'destructive', title: 'Could not start connection', description: err.message }),
+    })
+  }
+
+  function syncNow() {
+    sync.mutate(undefined, {
+      onSuccess: (r) => toast({
+        title: r.ok ? 'Synced with COROS' : 'Sync finished with problems',
+        description: r.ok ? (r.queued ? `${r.queued} new run${r.queued === 1 ? '' : 's'} found.` : 'No new runs.') : r.errors?.[0],
+        variant: r.ok ? undefined : 'destructive',
+      }),
+      onError: (err) => toast({ variant: 'destructive', title: 'Sync failed', description: err.message }),
+    })
+  }
+
+  function doDisconnect() {
+    disconnect.mutate(undefined, {
+      onSuccess: (r) => {
+        setConfirmOpen(false)
+        toast({
+          title: 'COROS disconnected',
+          description: r.revoked_remotely
+            ? 'Anton\'s access was revoked at COROS.'
+            : 'Tokens deleted from Anton. COROS did not confirm revocation — you can also remove Anton from your COROS account.',
+        })
+      },
+      onError: (err) => toast({ variant: 'destructive', title: 'Could not disconnect', description: err.message }),
+    })
+  }
+
+  const badge = {
+    connected: <Badge variant="success">Connected</Badge>,
+    reauth_required: <Badge variant="warning">Reconnect needed</Badge>,
+    disconnected: <Badge variant="outline">Not connected</Badge>,
+    unconfigured: <Badge variant="outline">Server not set up</Badge>,
+  }[state]
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2 text-base">
+          <Watch className="h-4 w-4 text-accent-foreground" />
+          COROS sync
+          <span className="ml-auto">{badge}</span>
+        </CardTitle>
+        <CardDescription>Runs from your watch arrive in New runs for you to confirm.</CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        {state === 'unconfigured' && (
+          <p className="text-sm text-muted-foreground">
+            The server has no COROS encryption key yet (<code>COROS_TOKEN_KEY</code>), so connecting is disabled.
+          </p>
+        )}
+        {state === 'reauth_required' && (
+          <p className="text-sm text-muted-foreground">
+            COROS stopped accepting Anton's access, so no new runs are arriving. Reconnect to resume.
+          </p>
+        )}
+        {(state === 'connected' || state === 'reauth_required') && (
+          <div>
+            <StatRow label="Last successful sync"
+              value={sy?.last_success_at ? formatRelativeTime(sy.last_success_at) : 'Never'} />
+            <StatRow label="Waiting for review" value={sy?.pending_count ?? 0} />
+            {state === 'connected' && st?.next_poll_utc && (
+              <StatRow label="Next automatic check" value={formatRelativeTime(st.next_poll_utc).replace(' ago', '')} />
+            )}
+          </div>
+        )}
+        {sy?.last_error && (
+          <p className="text-sm text-destructive">
+            Last sync failed{sy.last_attempt_at ? ` ${formatRelativeTime(sy.last_attempt_at)}` : ''}: {sy.last_error}
+          </p>
+        )}
+        <div className="flex flex-wrap gap-2 pt-1">
+          {state === 'connected' && (
+            <>
+              <Button onClick={syncNow} disabled={!online || sync.isPending} title={!online ? OFFLINE_MSG : undefined}>
+                <RefreshCw className={sync.isPending ? 'h-4 w-4 animate-spin' : 'h-4 w-4'} /> Sync now
+              </Button>
+              {(sy?.pending_count ?? 0) > 0 && (
+                <Button variant="outline" asChild><Link to="/new-runs">Review runs</Link></Button>
+              )}
+            </>
+          )}
+          {(state === 'disconnected' || state === 'reauth_required') && (
+            <Button onClick={startConnect} disabled={!online || connect.isPending} title={!online ? OFFLINE_MSG : undefined}>
+              {state === 'reauth_required' ? 'Reconnect COROS' : 'Connect COROS'}
+            </Button>
+          )}
+          {(state === 'connected' || state === 'reauth_required') && (
+            <Button variant="outline" onClick={() => setConfirmOpen(true)} disabled={!online}
+              title={!online ? OFFLINE_MSG : undefined}>
+              Disconnect
+            </Button>
+          )}
+        </div>
+        {!online && <p className="text-xs text-faint">{OFFLINE_MSG}</p>}
+      </CardContent>
+
+      <Dialog open={confirmOpen} onOpenChange={setConfirmOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Disconnect COROS?</DialogTitle>
+            <DialogDescription>
+              Anton will stop checking for new runs and its COROS tokens will be deleted. Runs already logged
+              stay. You can reconnect any time.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setConfirmOpen(false)}>Cancel</Button>
+            <Button variant="destructive" onClick={doDisconnect} disabled={disconnect.isPending}>Disconnect</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </Card>
+  )
+}
+
 /**
  * Settings → Sync & Scraping. A status surface, not a control panel: the one
- * active control is the deal scrape (ScrapeButton). COROS and Strava show
- * their current state with an honest hint about where configuration lives
- * (env/import CLI), since neither is wired for in-app setup yet.
+ * active controls are the deal scrape (ScrapeButton) and the COROS connection
+ * (R5.7). Strava shows its state with an honest hint about where configuration
+ * lives (import CLI), since it is not wired for in-app setup.
  */
 export default function SettingsSync() {
   const stats = useDashboardStats()
-  const coros = useCorosSyncStatus()
   const strava = useStravaStatus()
   const history = useScrapeHistory()
   const schedule = useSchedule()
@@ -294,29 +466,8 @@ export default function SettingsSync() {
       {/* Scheduled scraping (R4.1; UI-configurable #7) */}
       <ScheduledScrapingCard schedule={schedule} />
 
-      {/* COROS sync */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2 text-base">
-            <Watch className="h-4 w-4 text-accent-foreground" />
-            COROS sync
-          </CardTitle>
-          <CardDescription>Import runs from your watch onto tracked shoes.</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <StatRow
-            label="Credentials"
-            value={coros.data?.coros_configured ? 'Configured' : 'Not configured'}
-          />
-          <StatRow
-            label="Last sync"
-            value={coros.data?.last_sync_at ? formatRelativeTime(coros.data.last_sync_at) : 'Never'}
-          />
-          <p className="mt-3 text-xs text-faint">
-            Sync runs from the My Shoes page. Credentials are set via COROS env vars on the backend.
-          </p>
-        </CardContent>
-      </Card>
+      {/* COROS direct sync (R5.7) */}
+      <CorosConnectionCard />
 
       {/* Strava import */}
       <Card>

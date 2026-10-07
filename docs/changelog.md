@@ -5,6 +5,18 @@
 
 ---
 
+## R5.7 §6 — COROS direct sync: "New runs" inbox + connection settings — 2026-10-07
+
+**[ADDED] The runner can now connect COROS, see queued runs, and confirm/dismiss them from the phone. Triggered by a real report: "Sync from COROS" on My Shoes was disabled because it was gated on the legacy Open-API credential check (`coros_configured`, false by design since C6) and never looked at the new direct connection. Two commits (backend with tests first, then UI). Suite 526 → 540 passing (+1 skipped live test); `vite build` clean; mobile (375 px) + desktop pass on a temp DB; no migration.**
+- **[ADDED] Backend (`services/coros_inbox.py`, `routers/coros_connect.py`):** `GET /api/coros/pending`, `POST /api/coros/pending/{id}/confirm`, `POST …/dismiss`. Confirm calls `coros.confirm_run` — the same function behind the `confirm_coros_run` MCP tool → `rotation.log_run`, the single writer (INV-1/INV-2) — then marks the row confirmed. Idempotent on `label_id` (INV-5): a retry, or a run already logged by Claude, only completes the bookkeeping (tested, incl. a simulated crash between "logged" and "marked"). A failed confirm (bad shoe/tag) leaves the row pending. Dismiss keeps the row so the poller never re-queues it.
+- **[CHANGED] 600/700/800 km advisories now live in one place** (`rotation.MILEAGE_THRESHOLDS` / `threshold_crossed_by`), used by the inbox confirm and by `log_run_to_shoe` (which previously inlined the table). Behavior of the MCP tool unchanged; boundary tests added.
+- **[ADDED] Frontend:** `/new-runs` page (date · distance · pace · HR · shoe picker pre-filled with the server suggestion + its reason · Confirm · Dismiss with confirm dialog; toast reports new mileage, checkpoint and 600/700/800 flags; "last synced" label; online-only writes per RA2.2 §4); Home banner "N new runs from COROS" (and a reconnect banner), shown only when actionable; Settings → Sync "COROS sync" card (state badge, last success, waiting count, next check, last error shown honestly, Sync now / Connect / Reconnect / Disconnect-with-dialog; handles the `?coros=` redirect from the callback). My Shoes button now opens the inbox (never disabled; shows the pending count).
+- **[REMOVED] `CorosSyncModal` and its three hooks / `corosSyncApi`** — the old modal flow that depended on Open-API credentials. The legacy backend routes (`/owned-shoes/sync-coros/*`) remain (debt; removal sweep later).
+- **Verified (temp DB, browser):** list renders; confirm moved a shoe 224.53 → 238.72 km exactly once; list shrank; a failed sync (no token) flipped the card to "Reconnect needed" with the error text. A bug found and fixed in that pass: the picker didn't pre-fill the suggestion (state seeded before the shoe list loaded); a div-in-p DOM-nesting warning was also fixed.
+- **Not verified:** the real COROS sign-in redirect from the phone (needs the deploy + a COROS login — the one human step), and a 0-console-error read after the last fix was inconclusive (the pane's buffer kept stale pre-fix entries). Home banner uses its own cached status GET rather than the `/api/home` aggregate (deliberate: avoids touching Home's serialization).
+
+---
+
 ## R5.7 §5 — COROS direct sync: server-side shoe suggestion — 2026-10-07
 
 **[ADDED] `services/coros_suggestion.py` replaces the §4 stub: a deterministic, no-model port of the `sync_coros_runs` prompt's Step 3, so the app inbox and Claude propose the same shoe. Read-only; a suggestion only (C9) — the runner overrides with one tap. Suite 511 → 526 passing (+1 skipped live test). No migration (`suggested_shoe_id`/`suggestion_reason` landed in §4).**
