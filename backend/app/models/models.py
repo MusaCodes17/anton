@@ -631,3 +631,45 @@ class AuthSession(Base):
 
     def __repr__(self):
         return f"<AuthSession id={self.id} expires_at={self.expires_at}>"
+
+
+class CorosConnection(Base):
+    """
+    The runner's OAuth connection to the COROS MCP server (COROS direct sync §2).
+
+    Single row (id = 1) — there is no users table. Domain meaning: "is Anton
+    allowed to read the runner's COROS data right now, and until when". Tokens
+    are Fernet ciphertext and never leave the server (never serialized to the
+    frontend, logs, SW cache or RQ persister). `status`:
+    connected | reauth_required | disconnected.
+    COROS rotates the refresh token on every refresh, so refreshes are
+    serialized by a lock in services/coros_connection.py.
+    """
+    __tablename__ = "coros_connection"
+
+    id = Column(Integer, primary_key=True)
+    client_id = Column(String(255), nullable=True)            # from Dynamic Client Registration
+    registered_redirect_uri = Column(String(2048), nullable=True)
+    region_endpoint = Column(String(2048), nullable=True)     # the MCP URL, e.g. https://mcpus.coros.com/mcp
+    access_token_enc = Column(Text, nullable=True)
+    refresh_token_enc = Column(Text, nullable=True)
+    expires_at = Column(Float, nullable=True)                 # unix seconds, access token
+    scopes = Column(String(500), nullable=True)
+    status = Column(String(20), nullable=False, default="disconnected", server_default="disconnected")
+    connected_at = Column(DateTime(timezone=True), nullable=True)
+    last_refresh_at = Column(DateTime(timezone=True), nullable=True)
+    last_error = Column(Text, nullable=True)
+
+
+class CorosOAuthState(Base):
+    """
+    Short-lived, single-use `state` + PKCE verifier for an in-flight COROS
+    connect flow. The callback is unauthenticated (it's a browser redirect from
+    COROS), so this row IS its authorization: no matching live state, no exchange.
+    """
+    __tablename__ = "coros_oauth_states"
+
+    state = Column(String(100), primary_key=True)
+    code_verifier_enc = Column(Text, nullable=False)
+    expires_at = Column(Float, nullable=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())

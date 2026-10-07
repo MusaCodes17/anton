@@ -12,7 +12,7 @@ from app.database import run_migrations, SessionLocal
 from app.mcp_server import mcp
 from app.middleware.access_log import AccessLogMiddleware
 from app.middleware.auth import BearerAuthMiddleware
-from app.routers import shoes, retailers, deals, dashboard, scraping, export, owned_shoes, coros_sync, chat, admin, training, strava, watchlist, activities, races, home, shoe_types, checkpoints, oauth as oauth_router, session as session_router
+from app.routers import shoes, retailers, deals, dashboard, scraping, export, owned_shoes, coros_sync, coros_connect, chat, admin, training, strava, watchlist, activities, races, home, shoe_types, checkpoints, oauth as oauth_router, session as session_router
 from app.services import schedule as schedule_svc
 
 # Load environment variables
@@ -108,6 +108,7 @@ app.include_router(dashboard.router, prefix="/api")
 app.include_router(scraping.router, prefix="/api")
 app.include_router(export.router, prefix="/api")
 app.include_router(coros_sync.router, prefix="/api")
+app.include_router(coros_connect.router, prefix="/api")  # R5.7 §2 — direct COROS OAuth connection
 app.include_router(owned_shoes.router, prefix="/api")
 app.include_router(chat.router, prefix="/api")
 app.include_router(admin.router, prefix="/api")

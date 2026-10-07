@@ -5,6 +5,18 @@
 
 ---
 
+## R5.7 §2 — COROS direct sync: OAuth connect + encrypted token storage — 2026-10-07
+
+**[ADDED] Anton can now connect to the runner's COROS account as an OAuth client of the COROS MCP server (plan: COROS direct sync §2; spike: `docs/spikes/coros_mcp_client.md`). Backend only; no poller, no client, no UI yet (§3–§6). Suite 441 → 461 passing. INV-1/INV-9/C9 untouched — nothing here writes runs or mileage.**
+- **[ADDED] Migration `7a8b9c0d1e2f`** (additive, down/up round-trip verified on a scratch DB): `coros_connection` (single row id=1; Fernet-encrypted access/refresh tokens, expiry, scopes, region endpoint, DCR `client_id`, `status` connected|reauth_required|disconnected, `last_error`) and `coros_oauth_states` (single-use `state` + encrypted PKCE verifier, 10-min TTL).
+- **[ADDED] `services/coros_connection.py`:** DCR (registered once, re-registered if the redirect URI changes), PKCE S256 + `resource` param, callback exchange, lazy refresh under a process lock that re-reads the row inside it (so racing callers burn at most one rotating refresh token — tested with 4 threads). 4xx on refresh → `reauth_required` and no further traffic; 5xx/network → propagates, status untouched. Encryption happens only here.
+- **[ADDED] `POST /api/coros/connect`, `GET /api/coros/callback` (public; authorized by `state`), `GET /api/coros/status`** (`routers/coros_connect.py`). Callback redirects to `/settings/sync?coros=connected|error&reason=…`. Caddy's existing `/api/*` matcher already routes the callback; no Caddy change.
+- **[ADDED]** `COROS_TOKEN_KEY` (+ `COROS_MCP_URL`, optional `COROS_REDIRECT_URI`/`FRONTEND_URL`) in `.env.example`; **the Hetzner `.env` needs a real `COROS_TOKEN_KEY` before connecting** (missing key → `/connect` returns 503, feature disabled, nothing breaks). `cryptography` pinned in requirements.
+- **[BLOCKED] `DELETE /api/coros/connection` not built** — plan asks for confirmation first (auth-touching). Open question: COROS's revocation endpoint lists no `none` auth method, so a public client may not be able to revoke remotely; disconnect would then be local-only (tokens deleted) with a note.
+- **Not yet verified:** the live connect from the phone (needs the key set on Hetzner + deploy), and the multi-day unattended refresh proof from the spike.
+
+---
+
 ## RA2.2 (R5.2) — mobile UI fixes v2 (header notch + 2-up deals) — 2026-09-10
 
 **[FIXED] Two bugs from real installed-PWA phone use that R5.1 didn't reach: (1) the app header rendered *under* the iOS status bar / Dynamic Island on every route (read as "missing/unreachable"), and (2) the Deals grid was one full-width shoe per row on mobile. Frontend only: no backend, no migration, no serializer touch. One commit per task, `ra2:` prefix. `vite build` clean; backend suite 443 passing (unchanged — no backend touch). Verified with Chromium automation at a 390×844 iPhone viewport BEFORE deploy. Supersedes R5.1's header handling; design_decisions **E13** records both the safe-area contract and the fixed-shell layout.**

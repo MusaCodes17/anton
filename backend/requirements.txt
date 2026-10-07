@@ -58,3 +58,5 @@ pandas>=2.0.0
 
 # Testing
 pytest>=8.0.0
+# COROS direct sync §2: Fernet encryption of stored OAuth tokens (already a transitive dep of mcp[cli]; pinned explicitly because we import it directly)
+cryptography>=42

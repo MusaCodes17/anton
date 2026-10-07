@@ -74,6 +74,9 @@ PUBLIC_PATHS: frozenset[str] = frozenset({
     # the MCP connector fetches this before it holds any token, so it must be
     # public like the AS metadata above.
     "/.well-known/oauth-protected-resource",
+    # COROS OAuth redirect target (COROS direct sync §2). A browser redirect from
+    # COROS can't carry our bearer; the single-use server-side `state` is its auth.
+    "/api/coros/callback",
     "/authorize",
     "/token",
     "/revoke",
