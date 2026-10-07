@@ -5,6 +5,7 @@ COROS direct-sync connection endpoints (R5.7 §2). Thin: HTTP <-> services.coros
   GET  /api/coros/callback  PUBLIC (browser redirect from COROS) — protected by the
                             single-use OAuth `state`; redirects into the SPA
   GET  /api/coros/status    session/bearer-auth — connection state + sync summary, no tokens
+  GET  /api/coros/pending + POST /api/coros/pending/{id}/confirm|dismiss — the inbox (§6)
   POST /api/coros/sync      session/bearer-auth — one poll now (writes only the pending queue)
   DELETE /api/coros/connection  session/bearer-auth — disconnect; {revoked_remotely}
 
@@ -15,12 +16,15 @@ import logging
 from urllib.parse import urlencode
 
 import requests
+from typing import Optional
+
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import RedirectResponse
+from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.services import coros_connection as conn, coros_poller, schedule as schedule_svc
+from app.services import coros_connection as conn, coros_inbox, coros_poller, schedule as schedule_svc
 
 logger = logging.getLogger(__name__)
 
@@ -89,6 +93,42 @@ def sync_now(db: Session = Depends(get_db)):
     if result.skipped == "already_running":
         raise HTTPException(status_code=409, detail="A COROS sync is already in progress")
     return {"ok": result.ok, "found": result.found, "queued": result.queued, "errors": result.errors}
+
+
+class ConfirmBody(BaseModel):
+    owned_shoe_id: int
+    activity_tag: Optional[str] = None
+    notes: Optional[str] = None
+
+
+@router.get("/pending")
+def list_pending(db: Session = Depends(get_db)):
+    """The "New runs" inbox: pending runs newest-first, plus when we last synced
+    (the UI labels a cached list with it)."""
+    summary = coros_poller.get_sync_summary(db)
+    return {"runs": coros_inbox.list_pending(db), "last_success_at": summary["last_success_at"]}
+
+
+@router.post("/pending/{pending_id}/confirm")
+def confirm_pending(pending_id: int, body: ConfirmBody, db: Session = Depends(get_db)):
+    """Log a pending run to the chosen shoe via the single run writer. Idempotent on label_id."""
+    try:
+        return coros_inbox.confirm(db, pending_id, owned_shoe_id=body.owned_shoe_id,
+                                   activity_tag=body.activity_tag, notes=body.notes)
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+
+
+@router.post("/pending/{pending_id}/dismiss")
+def dismiss_pending(pending_id: int, db: Session = Depends(get_db)):
+    try:
+        return coros_inbox.dismiss(db, pending_id)
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
 
 
 @router.delete("/connection")

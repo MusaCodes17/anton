@@ -7,7 +7,7 @@ import {
   dashboardApi,
   scrapeApi,
   ownedShoesApi,
-  corosSyncApi,
+  corosApi,
   trainingApi,
   stravaApi,
   watchlistApi,
@@ -39,7 +39,8 @@ export const queryKeys = {
   shoeNotes: (id) => ['owned-shoes', id, 'notes'],
   replacementDeals: (id) => ['owned-shoes', id, 'replacement-deals'],
   rotationOverview: () => ['owned-shoes', 'rotation-overview'],
-  corosSyncStatus: () => ['coros', 'sync-status'],
+  corosStatus: () => ['coros', 'status'],
+  corosPending: () => ['coros', 'pending'],
   trainingSummary: (period, range) => ['training', 'summary', period, range ?? {}],
   trainingRecords: () => ['training', 'records'],
   trainingFitness: () => ['training', 'fitness'],
@@ -579,28 +580,64 @@ export function useDeleteShoeRun() {
   })
 }
 
-// ============== COROS SYNC ==============
-export function useCorosSyncStatus() {
+// ============== COROS DIRECT SYNC (R5.7) ==============
+export function useCorosStatus() {
   return useQuery({
-    queryKey: queryKeys.corosSyncStatus(),
-    queryFn: () => corosSyncApi.status(),
+    queryKey: queryKeys.corosStatus(),
+    queryFn: () => corosApi.status(),
   })
 }
 
-export function useFetchCorosRuns() {
-  return useMutation({
-    mutationFn: (daysBack) => corosSyncApi.fetch(daysBack),
+export function useCorosPending() {
+  return useQuery({
+    queryKey: queryKeys.corosPending(),
+    queryFn: () => corosApi.pending(),
   })
 }
 
-export function useConfirmCorosRuns() {
+// Returns { authorize_url }; the caller navigates the window there (COROS sign-in).
+export function useConnectCoros() {
+  return useMutation({ mutationFn: () => corosApi.connect() })
+}
+
+export function useSyncCoros() {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: (assignments) => corosSyncApi.confirm(assignments),
+    mutationFn: () => corosApi.sync(),
+    // Success or failure, the status row (last attempt / error) and queue changed.
+    onSettled: () => qc.invalidateQueries({ queryKey: ['coros'] }),
+  })
+}
+
+export function useDisconnectCoros() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: () => corosApi.disconnect(),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['coros'] }),
+  })
+}
+
+// Confirming writes a run + moves a shoe's mileage server-side, so everything
+// derived from runs/mileage is refreshed — not patched optimistically.
+export function useConfirmPendingRun() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ id, ...body }) => corosApi.confirm(id, body),
     onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['coros'] })
       qc.invalidateQueries({ queryKey: ['owned-shoes'] })
-      qc.invalidateQueries({ queryKey: queryKeys.corosSyncStatus() })
+      qc.invalidateQueries({ queryKey: queryKeys.home() })
+      qc.invalidateQueries({ queryKey: ['activities'] })
+      qc.invalidateQueries({ queryKey: ['training'] })
     },
+  })
+}
+
+export function useDismissPendingRun() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (id) => corosApi.dismiss(id),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['coros'] }),
   })
 }
 

@@ -6,6 +6,7 @@ import Deals from '@/pages/Deals'
 import Training from '@/pages/Training'
 import Shoes from '@/pages/Shoes'
 import Retailers from '@/pages/Retailers'
+import NewRuns from '@/pages/NewRuns'
 import MyShoes from '@/pages/MyShoes'
 import ShoeDetail from '@/pages/ShoeDetail'
 import ActivityDetail from '@/pages/ActivityDetail'
@@ -28,6 +29,7 @@ export default function App() {
           <Route path="training" element={<Training />} />
           <Route path="activities/:id" element={<ActivityDetail />} />
           <Route path="deals" element={<Deals />} />
+          <Route path="new-runs" element={<NewRuns />} />
           <Route path="shoes" element={<MyShoes />} />
           <Route path="shoes/:id" element={<ShoeDetail />} />
           <Route path="assistant" element={<ChatPage />} />

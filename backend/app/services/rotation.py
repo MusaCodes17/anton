@@ -55,6 +55,25 @@ class RunLogResult:
     checkpoint_km: Optional[int]
 
 
+# End-of-life advisories (km). One table for every surface that flags them (the
+# log_run_to_shoe MCP tool, the COROS inbox confirm) so they can't disagree
+# (CLAUDE.md §1: correct numbers, once). Advice only — retirement is never enacted.
+MILEAGE_THRESHOLDS: list[tuple[int, str]] = [
+    (600, "approaching end of life — start thinking about replacement"),
+    (700, "consider retiring soon — performance may be degrading"),
+    (800, "past recommended limit — retire this shoe"),
+]
+
+
+def threshold_crossed_by(old_km: float, new_km: float) -> Optional[tuple[int, str]]:
+    """The first MILEAGE_THRESHOLDS entry crossed going old_km -> new_km, else None.
+    (A single run crossing two thresholds reports the lower one, as the MCP tool always has.)"""
+    for km, message in MILEAGE_THRESHOLDS:
+        if old_km < km <= new_km:
+            return km, message
+    return None
+
+
 def crossed_checkpoint(
     old_km: float,
     new_km: float,

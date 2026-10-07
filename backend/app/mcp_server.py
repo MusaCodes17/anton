@@ -29,7 +29,7 @@ from app.database import SessionLocal
 from app.models.models import Activity, Deal, OwnedShoe, PriceRecord, Retailer, Shoe, ShoeNote, ShoeRun
 from app.scrapers.orchestrator import ScrapeOrchestrator
 from app.scrapers.lock import ScrapeInProgressError, scrape_guard
-from app.services import rotation, coros as coros_svc, settings as settings_svc, strava_stats, races as races_svc, fitness as fitness_svc, scrape_history as scrape_history_svc, deals as deals_svc, weekly_summary as weekly_summary_svc, watchlist as watchlist_svc, deal_alerts as deal_alerts_svc, race_advisor as race_advisor_svc, coupon_hunter as coupon_hunter_svc, onboarding as onboarding_svc
+from app.services import rotation, coros as coros_svc, settings as settings_svc, strava_stats, races as races_svc, fitness as fitness_svc, scrape_history as scrape_history_svc, deals as deals_svc, weekly_summary as weekly_summary_svc, watchlist as watchlist_svc, deal_alerts as deal_alerts_svc, race_advisor as race_advisor_svc, coupon_hunter as coupon_hunter_svc, onboarding as onboarding_svc, coros_connection as coros_connection_svc, coros_poller as coros_poller_svc, coros_inbox as coros_inbox_svc
 from app.utils.activity_tags import ACTIVITY_TAGS, is_valid_tag
 
 # DNS-rebinding protection (mcp SDK): the Streamable HTTP transport validates
@@ -646,18 +646,8 @@ async def log_run_to_shoe(
             )
             shoe = result.shoe
 
-            thresholds = [
-                (600, "approaching end of life — start thinking about replacement"),
-                (700, "consider retiring soon — performance may be degrading"),
-                (800, "past recommended limit — retire this shoe"),
-            ]
-            threshold_crossed = None
-            threshold_message = None
-            for threshold_km, message in thresholds:
-                if old_mileage < threshold_km <= shoe.current_mileage:
-                    threshold_crossed = threshold_km
-                    threshold_message = message
-                    break
+            crossed = rotation.threshold_crossed_by(old_mileage, shoe.current_mileage)
+            threshold_crossed, threshold_message = crossed if crossed else (None, None)
 
             if threshold_crossed is not None:
                 try:
@@ -911,60 +901,98 @@ def save_shoe_review(owned_shoe_id: int, review_text: str) -> dict:
 @mcp.tool()
 def get_coros_sync_status() -> dict:
     """
-    Check whether COROS credentials are configured and when the last sync
-    ran. Use this before fetch_unsynced_coros_runs to confirm sync is
-    available.
+    Report the state of Anton's direct COROS sync: whether the connection is
+    live, when the background poller last succeeded, the last error (if any),
+    and how many new runs are waiting for review. Use this before
+    fetch_unsynced_coros_runs. `connection_status` is one of connected,
+    reauth_required (the runner must reconnect in Settings → Sync), or
+    disconnected. Read-only.
     """
-    config = get_coros_config()
     with get_session() as db:
-        last_sync_str = settings_svc.get_setting(db, "last_coros_sync_at")
+        conn = coros_connection_svc.get_status(db)
+        summary = coros_poller_svc.get_sync_summary(db)
+        last_confirm = settings_svc.get_setting(db, "last_coros_sync_at")
+    status = conn["status"]
+    if not conn["configured"]:
+        message = "Direct COROS sync isn't set up on the server (COROS_TOKEN_KEY missing)."
+    elif status == "connected":
+        message = (f"COROS is connected. {summary['pending_count']} run(s) waiting. "
+                   "Call fetch_unsynced_coros_runs to review them.")
+        if summary["last_error"]:
+            message += f" The last poll failed: {summary['last_error']}"
+    elif status == "reauth_required":
+        message = "COROS needs to be reconnected (Settings → Sync → Reconnect COROS). No new runs are arriving."
+    else:
+        message = "COROS is not connected. Connect it in Settings → Sync."
     return {
-        "coros_configured": config is not None,
-        "last_sync_at": last_sync_str,
-        "message": (
-            "COROS sync is ready. Call fetch_unsynced_coros_runs to pull recent runs."
-            if config
-            else "COROS sync not configured. Add COROS_ACCESS_TOKEN and COROS_OPEN_ID to your .env."
-        ),
+        "coros_configured": status == "connected",   # legacy key: "direct sync usable right now"
+        "connection_status": status,
+        "last_success_at": summary["last_success_at"],
+        "last_attempt_at": summary["last_attempt_at"],
+        "last_error": summary["last_error"],
+        "pending_count": summary["pending_count"],
+        "poll_interval_min": summary["poll_interval_min"],
+        "last_sync_at": last_confirm,                # legacy: when a run was last confirmed
+        "message": message,
     }
 
 
 @mcp.tool()
 def fetch_unsynced_coros_runs(days_back: int = 30) -> dict:
     """
-    Fetch recent runs from the COROS API that haven't been logged yet.
-    Returns a list of runs for you to present to the user for shoe
-    assignment. After the user assigns shoes, call confirm_coros_run for
-    each one.
+    Return the runs waiting in Anton's "New runs" inbox — the same queue the
+    app shows. A background poller pulls them from COROS about every 15
+    minutes, already deduplicated against logged runs and with detail
+    prefetched, so there is nothing to look up in COROS first. Each run
+    carries `suggested_shoe_id` / `suggestion_reason` (the same heuristic the
+    app uses; may be null). Present them to the user for shoe assignment,
+    then call confirm_coros_run for each confirmed one, passing the fields
+    below through unchanged. Read-only; never logs anything.
 
     Args:
-        days_back: How many days back to look for runs (default 30).
-            After the first sync, pass a smaller window matching the days
-            since last_sync_at to avoid refetching old history.
+        days_back: Ignored — kept so older callers don't break. The queue
+            holds every unresolved run regardless of age.
     """
-    import requests as _requests
     with get_session() as db:
-        try:
-            result = coros_svc.fetch_unsynced(db, days_back)
-        except _requests.exceptions.RequestException as exc:
-            return {"success": False, "coros_configured": True, "error": str(exc)}
-        except ValueError as exc:
-            return {"success": False, "coros_configured": True, "error": str(exc)}
+        runs = [
+            {
+                "coros_activity_id": r["label_id"],
+                "date": r["run_date"],
+                "distance_km": r["distance_km"],
+                "avg_pace": r["avg_pace"],
+                "avg_hr": r["avg_hr"],
+                "moving_time_s": r["moving_time_s"],
+                "elapsed_time_s": r["elapsed_time_s"],
+                "elevation_gain_m": r["elevation_gain_m"],
+                "avg_cadence": r["avg_cadence"],
+                "calories": r["calories"],
+                "training_load": r["training_load"],
+                "training_focus": r["training_focus"],
+                "suggested_shoe_id": r["suggested_shoe_id"],
+                "suggestion_reason": r["suggestion_reason"],
+            }
+            for r in coros_inbox_svc.list_pending(db)
+        ]
+        conn = coros_connection_svc.get_status(db)
+        summary = coros_poller_svc.get_sync_summary(db)
 
-    if not result.coros_configured:
-        return {
-            "success": False,
-            "coros_configured": False,
-            "error": "COROS sync not configured. Add COROS_ACCESS_TOKEN and COROS_OPEN_ID to your .env.",
-        }
-
-    return {
+    result = {
         "success": True,
-        "coros_configured": True,
-        "runs": result.runs,
-        "already_synced": result.already_synced,
-        "total_fetched": len(result.runs) + result.already_synced,
+        "coros_configured": conn["status"] == "connected",
+        "connection_status": conn["status"],
+        "runs": runs,
+        "already_synced": 0,
+        "total_fetched": len(runs),
+        "last_success_at": summary["last_success_at"],
     }
+    if conn["status"] != "connected":
+        result["warning"] = (
+            "COROS isn't connected, so no new runs are arriving; the list above is only what was "
+            "queued earlier. Reconnect in Settings → Sync."
+            if conn["status"] == "reauth_required"
+            else "COROS isn't connected. Connect it in Settings → Sync to receive new runs."
+        )
+    return result
 
 
 @mcp.tool()
@@ -989,7 +1017,10 @@ def confirm_coros_run(
     """
     Log a single COROS run to an owned shoe after the user confirms the
     assignment. Call this once per run after fetching unsynced runs and
-    getting the user's shoe choice for each.
+    getting the user's shoe choice for each. Also clears the run from the
+    app's "New runs" inbox, and is safe to repeat: a run already logged
+    (by Claude or the app) returns success=False "already logged" instead
+    of logging twice.
 
     Args:
         coros_activity_id: The COROS labelId for this run.
@@ -1979,32 +2010,27 @@ def training_fitness_resource() -> str:
 @mcp.prompt()
 def sync_coros_runs(days_back: int = 2) -> str:
     """
-    Sync recent COROS runs and assign them to shoes in your rotation.
-    Fetches unsynced runs, suggests shoe assignments based on pace
-    and distance, and logs confirmed runs after your review.
+    Review the runs waiting in Anton's "New runs" inbox (pulled from COROS
+    by the backend poller) and assign them to shoes in your rotation.
+    Suggests shoe assignments based on pace and distance, and logs
+    confirmed runs after your review.
     """
     return f"""# COROS Sync Agent
 
 You are acting as a COROS run sync agent for Anton, the user's
 personal running platform. Follow this exact process.
 
-## Step 1 — Fetch recent runs from COROS
-Call querySportRecords with:
-- sportTypeCodes: [100, 101, 102, 103] (all running types)
-- pageSize: 20
-- pageIndex: 1
-- timezone: America/Toronto
+## Step 1 — Get the queued runs from Anton
+Call fetch_unsynced_coros_runs. Anton's backend polls COROS itself about
+every 15 minutes, so this returns the same "New runs" inbox the app shows:
+already deduplicated against logged runs, with the rich per-run detail
+(elevation, times, cadence, calories, load, focus) already attached and a
+server-side shoe suggestion (`suggested_shoe_id`, `suggestion_reason`).
+Do NOT query the COROS connector to build this list.
 
-This uses the COROS MCP connector directly — do NOT call 
-fetch_unsynced_coros_runs as it requires API credentials 
-that are not configured.
-
-## Step 1b — Check what's already logged
-Call get_shoe_runs for each active owned shoe to get recently 
-logged runs. Use run_date and distance_km to identify which 
-COROS activities have already been logged (match by date and 
-distance within 0.1km tolerance). Exclude already-logged runs 
-from the sync queue.
+If `runs` is empty, say so and stop. If `warning` is present (COROS not
+connected / reconnect needed), relay it — the runner fixes that in
+Settings → Sync. You may call get_coros_sync_status for details.
 
 ## Step 2 — Get current rotation
 Call get_owned_shoes to see all active shoes with their shoe_type
@@ -2013,6 +2039,10 @@ and current mileage.
 ## Step 3 — Suggest shoe assignment for each run
 For each unsynced run, reason about the best shoe match using BOTH
 signals below — do not rely on pace alone.
+
+Each queued run already carries a suggestion computed by exactly the rules
+below. Start from it; apply your own judgement only when it is null or you
+have a clear reason to differ (say why).
 
 ### Pace signal (primary)
 - < 3:30/km → favors short_distance_racer or intervals
@@ -2059,40 +2089,25 @@ Do not log anything until the user responds. Accept any natural
 language mix of confirmations, changes, and skips. If ambiguous,
 ask for clarification.
 
-## Step 6 — Fetch rich per-run detail then log confirmed runs
+## Step 6 — Log confirmed runs
 
-For EACH confirmed run you MUST call getActivityDetail before confirm_coros_run.
-Do NOT skip this call — querySportRecords does not return these fields.
+For EACH confirmed run call confirm_coros_run with the values exactly as
+returned by fetch_unsynced_coros_runs — the detail is already prefetched, so
+do NOT call getActivityDetail:
+- coros_activity_id, owned_shoe_id (the confirmed shoe)
+- date, distance_km, avg_pace, avg_hr
+- moving_time_s, elapsed_time_s, elevation_gain_m, avg_cadence, calories,
+  training_load, training_focus (omit any that are null)
 
-  Call `getActivityDetail(labelId=<coros_activity_id>, sportType=<sport_type>)`
+COROS provides no run name, so only suggest an activity_tag if the runner
+told you what the run was (e.g. "that was the tempo"); the vocabulary is
+Easy, Long Run, Recovery, Tempo, Intervals, Track, Workout, Trail, Parkrun,
+Race. Never apply a tag without the runner's confirmation (C9); omit it
+otherwise.
 
-  Extract from the response:
-  - name            → activity name/label the runner set in COROS
-  - elevation_gain_m → totalAscent (metres)
-  - moving_time_s   → movingTime (seconds)
-  - elapsed_time_s  → totalTime (seconds)
-  - avg_cadence     → avgCadence
-  - calories        → calorie
-  - training_load   → trainingLoad
-  - training_focus  → coachingZoneLabel or equivalent coaching label
-
-  All fields are optional. If getActivityDetail fails or a field is absent, omit it.
-
-Then, using the name and training_focus from getActivityDetail, infer an
-activity_tag suggestion (first match wins — the order is precedence):
-  "parkrun" → Parkrun · "interval"/"repeat" → Intervals · "track" → Track ·
-  "tempo"/"threshold" → Tempo · "long run"/"long" → Long Run · "trail" → Trail ·
-  "race"/"marathon" → Race · "recovery"/"easy"/"jog" → Easy · else untagged.
-If a tag is suggested, ask the runner to confirm or override before logging —
-e.g. "COROS name 'Tempo 8k' → tag `Tempo`? (y/n)". The full vocabulary is
-Easy, Long Run, Recovery, Tempo, Intervals, Track, Workout, Trail, Parkrun, Race.
-Never apply a tag without confirmation (C9). Omit the tag entirely if unconfirmed.
-
-Then call confirm_coros_run with:
-- coros_activity_id (from querySportRecords)
-- owned_shoe_id (the confirmed shoe)
-- date, distance_km, avg_pace, avg_hr from querySportRecords data
-- All fields extracted from getActivityDetail above
+Runs the user skips simply stay in the inbox (they are not dismissed) — tell
+them they can dismiss a run in the app (New runs → Dismiss) if it should not
+count toward any shoe.
 
 ## Step 7 — Summarise results
 "Logged [N] runs:
@@ -2106,9 +2121,10 @@ to check replacement deals or add a note.
 
 ## General rules
 - Never log a run without explicit user confirmation
-- Never invent data — basic fields (date, distance, pace, HR) come from
-  querySportRecords (Step 1); rich fields (name, elevation, times, cadence,
-  calories, load, focus) come from getActivityDetail (Step 6)
+- Never invent data — every field comes from fetch_unsynced_coros_runs
+  (Step 1)
+- If confirm_coros_run says a run is "already logged", it was handled
+  elsewhere (e.g. in the app) — note it and move on
 - If confirm_coros_run returns success: false for any run, report
   the specific error and continue processing the rest
 - Keep the tone direct and concise — this user is a competitive

@@ -5,7 +5,6 @@ import PageHeader from '@/components/PageHeader'
 import OwnedShoeForm from '@/components/OwnedShoeForm'
 import LogRunDialog from '@/components/LogRunDialog'
 import MileageProgressBar from '@/components/MileageProgressBar'
-import CorosSyncModal from '@/components/CorosSyncModal'
 import ShoeTypeBadge from '@/components/ShoeTypeBadge'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -41,7 +40,7 @@ import {
   useCreateOwnedShoe,
   useUpdateOwnedShoe,
   useDeleteOwnedShoe,
-  useCorosSyncStatus,
+  useCorosStatus,
   useShoeTypes,
 } from '@/hooks/useApi'
 import { formatShoeType } from '@/lib/shoeTypes'
@@ -87,7 +86,6 @@ export default function MyShoes() {
   const [formState, setFormState] = useState(null) // null | { shoe?: shoe }
   const [deleting, setDeleting] = useState(null)
   const [logRunShoe, setLogRunShoe] = useState(null)
-  const [corosSyncOpen, setCorosSyncOpen] = useState(false)
   const [retiredCollapsed, setRetiredCollapsed] = useState(true)
 
   const shoes = useOwnedShoes()
@@ -96,7 +94,7 @@ export default function MyShoes() {
   const create = useCreateOwnedShoe()
   const update = useUpdateOwnedShoe()
   const remove = useDeleteOwnedShoe()
-  const corosStatus = useCorosSyncStatus()
+  const corosStatus = useCorosStatus()
   const { toast } = useToast()
 
   const brands = useMemo(() => {
@@ -186,19 +184,24 @@ export default function MyShoes() {
   return (
     <div className="space-y-6">
       <PageHeader eyebrow="MY SHOES" title="Shoe rotation" count={shoes.data?.filter((s) => s.status !== 'retired').length}>
-        <Button
-          variant="outline"
-          onClick={() => setCorosSyncOpen(true)}
-          disabled={corosStatus.data && !corosStatus.data.coros_configured}
-          title={
-            corosStatus.data && !corosStatus.data.coros_configured
-              ? 'Add COROS credentials to .env to enable sync'
-              : corosStatus.data?.last_sync_at
-              ? `Last synced ${new Date(corosStatus.data.last_sync_at).toLocaleString()}`
-              : 'Sync runs from COROS watch'
-          }
-        >
-          <RefreshCw className="h-4 w-4" /> Sync from COROS
+        {/* R5.7: runs arrive via the backend poller; this opens the inbox where the
+            runner confirms them. Never disabled — the inbox explains connection state. */}
+        <Button variant="outline" asChild>
+          <Link
+            to="/new-runs"
+            title={
+              corosStatus.data?.sync?.last_success_at
+                ? `Last synced ${new Date(corosStatus.data.sync.last_success_at).toLocaleString()}`
+                : 'New runs from your COROS watch'
+            }
+          >
+            <RefreshCw className="h-4 w-4" /> New runs
+            {corosStatus.data?.sync?.pending_count > 0 && (
+              <span className="ml-1 rounded-full bg-primary px-1.5 text-xs font-bold text-primary-foreground">
+                {corosStatus.data.sync.pending_count}
+              </span>
+            )}
+          </Link>
         </Button>
         <Button onClick={() => setFormState({})}>
           <Plus className="h-4 w-4" /> Add shoe
@@ -399,13 +402,6 @@ export default function MyShoes() {
       />
 
       {/* COROS sync modal */}
-      <CorosSyncModal
-        open={corosSyncOpen}
-        onOpenChange={setCorosSyncOpen}
-        activeShoes={(shoes.data || []).filter((s) => s.status !== 'retired')}
-        lastSyncAt={corosStatus.data?.last_sync_at}
-      />
-
       {/* Delete confirmation */}
       <Dialog open={!!deleting} onOpenChange={(o) => !o && setDeleting(null)}>
         <DialogContent className="max-w-md">
