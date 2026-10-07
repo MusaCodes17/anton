@@ -4,7 +4,8 @@ COROS direct-sync connection endpoints (R5.7 §2). Thin: HTTP <-> services.coros
   POST /api/coros/connect   session/bearer-auth — returns {authorize_url}
   GET  /api/coros/callback  PUBLIC (browser redirect from COROS) — protected by the
                             single-use OAuth `state`; redirects into the SPA
-  GET  /api/coros/status    session/bearer-auth — connection state, no tokens
+  GET  /api/coros/status    session/bearer-auth — connection state + sync summary, no tokens
+  POST /api/coros/sync      session/bearer-auth — one poll now (writes only the pending queue)
   DELETE /api/coros/connection  session/bearer-auth — disconnect; {revoked_remotely}
 
 All but the callback are gated by the app-wide auth middleware. DELETE /connection
@@ -19,7 +20,7 @@ from fastapi.responses import RedirectResponse
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.services import coros_connection as conn
+from app.services import coros_connection as conn, coros_poller, schedule as schedule_svc
 
 logger = logging.getLogger(__name__)
 
@@ -70,7 +71,24 @@ def callback(
 
 @router.get("/status")
 def status(db: Session = Depends(get_db)):
-    return conn.get_status(db)
+    """Connection state + last-sync summary + queue depth. No tokens."""
+    return {
+        **conn.get_status(db),
+        "sync": coros_poller.get_sync_summary(db),
+        "next_poll_utc": schedule_svc.get_coros_poll_next_run(),
+    }
+
+
+@router.post("/sync")
+def sync_now(db: Session = Depends(get_db)):
+    """Run one poll on demand (same code as the scheduled tick). Only writes the
+    pending queue — never runs or mileage. 409 if not connected or a tick is running."""
+    result = coros_poller.run_tick(db, trigger="manual")
+    if result.skipped == "not_connected":
+        raise HTTPException(status_code=409, detail="COROS is not connected")
+    if result.skipped == "already_running":
+        raise HTTPException(status_code=409, detail="A COROS sync is already in progress")
+    return {"ok": result.ok, "found": result.found, "queued": result.queued, "errors": result.errors}
 
 
 @router.delete("/connection")

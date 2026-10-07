@@ -31,7 +31,7 @@ EXPECTED_TABLES = (
     "chat_conversations", "checkpoint_prompts",
     "oauth_auth_codes", "oauth_tokens",
     "sessions",
-    "coros_connection", "coros_oauth_states",
+    "coros_connection", "coros_oauth_states", "pending_coros_runs", "coros_sync_state",
     "alembic_version",
 )
 

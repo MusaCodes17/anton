@@ -26,13 +26,16 @@ expression is interpreted in that zone regardless of the server's system TZ.
 """
 from __future__ import annotations
 
+import asyncio
 import logging
 import os
+from datetime import datetime, timedelta
 from typing import Optional
 
 import pytz
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
+from apscheduler.triggers.interval import IntervalTrigger
 from sqlalchemy.orm import Session
 
 from app.services import settings as settings_svc
@@ -177,6 +180,55 @@ def apply_config(db: Session) -> dict:
     return get_status(db)
 
 
+_COROS_POLL_JOB_ID = "coros_poll"
+_COROS_FIRST_TICK_DELAY_S = 30  # catch up promptly after a restart instead of waiting a full interval
+
+
+async def _run_coros_poll() -> None:
+    """Scheduler entry for the COROS poller. The tick is blocking I/O (requests +
+    SQLite), so it runs in a worker thread with its own session — never on the
+    event loop (which also serves SSE/MCP)."""
+    from app.services import coros_poller
+    await asyncio.to_thread(coros_poller.run_scheduled_tick)
+
+
+def apply_coros_poll() -> None:
+    """Register (or remove) the COROS poll job on the shared scheduler (R5.7 §4).
+
+    Reuses this module's single scheduler (INV-9) rather than a second one. The
+    job is registered whenever COROS_POLL_INTERVAL_MIN > 0; ticks themselves no-op
+    unless the COROS connection is `connected`, so it is safe to leave registered.
+    """
+    from app.services import coros_poller
+    if _scheduler is None:
+        return
+    minutes = coros_poller.poll_interval_min()
+    if minutes <= 0:
+        if _scheduler.get_job(_COROS_POLL_JOB_ID):
+            _scheduler.remove_job(_COROS_POLL_JOB_ID)
+        logger.info("COROS polling disabled (COROS_POLL_INTERVAL_MIN=0)")
+        return
+    _scheduler.add_job(
+        _run_coros_poll,
+        IntervalTrigger(minutes=minutes, timezone=_TZ),
+        id=_COROS_POLL_JOB_ID,
+        coalesce=True,
+        max_instances=1,
+        replace_existing=True,
+        next_run_time=datetime.now(_TZ) + timedelta(seconds=_COROS_FIRST_TICK_DELAY_S),
+    )
+    logger.info("COROS polling active: every %d min", minutes)
+
+
+def get_coros_poll_next_run() -> Optional[str]:
+    """ISO time of the next scheduled COROS poll, or None (disabled / not running)."""
+    if _scheduler is None:
+        return None
+    job = _scheduler.get_job(_COROS_POLL_JOB_ID)
+    nrt = getattr(job, "next_run_time", None) if job else None
+    return nrt.isoformat() if nrt else None
+
+
 def start(db: Session) -> None:
     """
     Create and start the AsyncIOScheduler, then apply the resolved config.
@@ -189,6 +241,7 @@ def start(db: Session) -> None:
     global _scheduler
     _scheduler = AsyncIOScheduler(timezone=_TZ)
     apply_config(db)
+    apply_coros_poll()
     _scheduler.start()
 
     cfg = get_config(db)

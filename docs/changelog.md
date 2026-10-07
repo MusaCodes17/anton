@@ -5,6 +5,19 @@
 
 ---
 
+## R5.7 §4 — COROS direct sync: poller + pending queue — 2026-10-07
+
+**[ADDED] A scheduled poller pulls new COROS runs into a pending queue ("New runs" inbox backend). It writes ONLY `pending_coros_runs` and `coros_sync_state` — never runs, attributions or mileage (INV-1/INV-9/C9; a test asserts activities, shoe_runs and `current_mileage` are untouched). Nothing is auto-logged. Suite 493 → 511 passing (+1 skipped live test). One additive migration `8b9c0d1e2f3a` (down/up round-trip verified on a scratch DB).**
+- **[ADDED] Tables:** `pending_coros_runs` (normalized run incl. prefetched detail; `label_id` UNIQUE = the exactly-once guarantee; `suggested_shoe_id` FK→owned_shoes ON DELETE SET NULL; `status` pending|confirmed|dismissed; `first_seen_at`/`resolved_at`) and single-row `coros_sync_state` (last attempt/success, trigger, runs queued, last error).
+- **[CHANGED vs plan] No `label_id` column added to the runs table:** `activities.coros_activity_id` already exists (indexed) and is the sanctioned writer's dedup key, so the plan's contingency didn't apply. "Already logged" reuses the existing `coros.is_already_logged` rule (same id, else same date + distance ±0.1 km).
+- **[ADDED] `services/coros_poller.py`:** `run_tick` never raises. Skips silently unless connection is `connected`; lookback = max(3 days, gap since last success), cap 30, first-ever sync 14 days (so outages/disconnects self-heal); drops queued-or-logged runs *before* fetching detail; one bad run (contract error) doesn't abort the others and the tick isn't marked successful, so it's retried; network errors recorded + retried next tick; auth failure → `reauth_required`, after which ticks no-op (no retry storm). One tick at a time (non-blocking lock). IntegrityError on the unique label is a silent no-op.
+- **[CHANGED] `services/schedule.py` reuses the existing scheduler (INV-9):** `apply_coros_poll()` registers an interval job (`COROS_POLL_INTERVAL_MIN`, default 15, 0 = off; first tick 30 s after boot) that runs the blocking tick in `asyncio.to_thread` with its own session. Scheduler boot verified.
+- **[ADDED] `POST /api/coros/sync`** (session/bearer auth; same code as the scheduled tick; 409 if not connected or a tick is running); `GET /api/coros/status` now also returns the sync summary, pending count, and next poll time.
+- **[ADDED] `services/coros_suggestion.py` — stub seam** (suggests nothing) until §5.
+- **Not yet verified:** a real end-to-end poll against the live DB/COROS from the deployed app (needs the §2 connect first); "within one interval" acceptance is therefore proven by tests, not yet on the phone. Optional first-sync trigger straight after the connect callback was left out — the first poll fires 30 s after boot or on "Sync now".
+
+---
+
 ## R5.7 §3 — COROS direct sync: typed MCP client + contract tests — 2026-10-07
 
 **[ADDED] `services/coros_mcp_client.py` — the only module that speaks MCP to COROS: `list_runs(start, end)`, `get_run_detail(label_id)`, `fetch_run(run)`, normalized into a frozen `CorosRun` dataclass (units in names; `label_id` is a string). No DB, no OAuth flow (it takes a `token_provider`). Not yet called by anything — the poller is §4. Suite 466 → 493 passing (+27; 1 opt-in live test skipped in CI).**
