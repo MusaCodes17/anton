@@ -412,55 +412,6 @@ class LogRunResponse(BaseModel):
 
 # ============== SHOE NOTE SCHEMAS ==============
 
-# ============== COROS SYNC SCHEMAS ==============
-
-class CorosRun(BaseModel):
-    """A single unsynced run fetched from the COROS API."""
-    coros_activity_id: str
-    date: str  # YYYY-MM-DD
-    distance_km: float
-    avg_pace: Optional[str] = None  # "M:SS/km"
-    avg_hr: Optional[int] = None
-    sport_type: int
-    name: str
-
-
-class CorosFetchResponse(BaseModel):
-    """Response for POST /owned-shoes/sync-coros/fetch."""
-    runs: List[CorosRun]
-    already_synced: int
-    coros_configured: bool
-
-
-class CorosAssignment(BaseModel):
-    """One user-confirmed COROS run → owned shoe assignment."""
-    coros_activity_id: str
-    owned_shoe_id: int
-    date: str  # YYYY-MM-DD
-    distance_km: float
-    avg_pace: Optional[str] = None
-    avg_hr: Optional[int] = None
-    notes: Optional[str] = None
-
-
-class CorosConfirmRequest(BaseModel):
-    """Request body for POST /owned-shoes/sync-coros/confirm."""
-    assignments: List[CorosAssignment]
-
-
-class CorosConfirmResponse(BaseModel):
-    """Summary of logged runs after a COROS sync confirmation."""
-    logged: int
-    updated_shoes: List[OwnedShoeResponse]
-
-
-class CorosSyncStatus(BaseModel):
-    """Response for GET /owned-shoes/sync-coros/status."""
-    coros_configured: bool
-    last_sync_at: Optional[datetime] = None
-    pending_runs: int = 0
-
-
 class ShoeNoteCreate(BaseModel):
     """Schema for adding a journal entry to an owned shoe"""
     body: str = Field(..., min_length=1, description="The note content")

@@ -34,7 +34,7 @@ Anton is a **single-user, locally-hosted personal platform** composed of one Pyt
                          └───────┬───────────────────────────┬───────────┘
                                  │                           │
                         Retailer sites (8)          External APIs:
-                        Algolia / Shopify /         COROS Open API,
+                        Algolia / Shopify /         COROS MCP (OAuth),
                         headless-Astro storefronts  Anthropic / OpenAI / Google
 ```
 
@@ -111,7 +111,6 @@ anton/
 │       ├── main.py              # App assembly, CORS, router includes, /mcp mount, lifespan
 │       ├── database.py          # Engine, SessionLocal, get_db, init_db
 │       ├── mcp_server.py        # FastMCP server: ~20 tools, 7 resources, 1 prompt
-│       ├── coros_client.py      # COROS Open API HTTP client (no DB)
 │       ├── scrape_runner.py     # Background concurrent scrape job
 │       ├── scrape_state.py      # In-memory pub/sub for scrape SSE
 │       ├── models/
@@ -256,7 +255,7 @@ Extracted during the 2026 refactor; the stated rule is that routers and MCP tool
 | *(removed)* `strava_backfill.py` | The two-store MATCH/BACKFILL reconciliation, its CLI, and its tests were deleted in Phase 5 — the migration made its work permanent. Its design (plan-then-execute, per-shoe mileage policies, human-gated ambiguity) remains documented in `docs/changelog.md` and the planning docs as precedent. |
 | `strava_stats.py` | Weekly/monthly training summaries (distance-weighted pace via total moving time) and distance-band bests, over the canonical feed. |
 | `coros_connection.py` · `coros_mcp_client.py` · `coros_poller.py` · `coros_suggestion.py` · `coros_inbox.py` (R5.7) | Direct COROS sync. `coros_connection`: OAuth connect (DCR + PKCE), encrypted token storage, lock-serialized refresh (the refresh token rotates), best-effort revoke. `coros_mcp_client`: the only module speaking MCP to COROS — typed `CorosRun`, prose parsers, retry on network/5xx only. `coros_poller`: one tick lists runs, drops queued/logged ones, prefetches detail + suggestion, inserts `pending_coros_runs`; never raises; **writes no runs or mileage**. `coros_suggestion`: deterministic shoe suggestion. `coros_inbox`: list/confirm/dismiss over the single writer. The poll job lives on `schedule.py`'s shared scheduler. REST under `/api/coros/*`; the Anton MCP tools read the same queue. |
-| `coros.py` + `coros_client.py` | Legacy server-side COROS sync path (Open API, dormant; `coros.confirm_run` is still the shared confirm used by every path and now also resolves the pending row): fetch running activities from the COROS Open API, two-tier dedup **against `activities.coros_activity_id`**, confirm → `rotation.log_run(source="coros")`, stamp `last_coros_sync_at`. Client is HTTP-only, config from env vars; absence of credentials means the feature is cleanly disabled rather than erroring. |
+| `coros.py` | The shared COROS confirm path: `confirm_run` → `rotation.log_run(source="coros")` (idempotent on `coros_activity_id`, stamps `last_coros_sync_at`, and resolves the matching `pending_coros_runs` row — used by the app inbox and the `confirm_coros_run` MCP tool), plus the two-tier `is_already_logged` dedup the poller uses. (The legacy Open-API fetch and `coros_client.py` were removed 2026-10-08.) |
 | `home.py` | Assembles the four Home attention modules (training pulse, shoe alerts, top deals, activity strip) in one pass; explicitly budgeted (< 200 ms target) as the future mobile launch screen. |
 | `races.py` | Derived race fields (countdown, target pace) attached at the boundary; shared by router and MCP so both report identical numbers. |
 | `settings.py` | Thin key/value accessor over `app_settings`; `set_setting` deliberately does not commit (caller owns the transaction). |
@@ -277,7 +276,7 @@ Seventeen routers under `/api`, all behind the shared bearer token (R2.1 — see
 - `GET /api/training/summary|records`, `GET /api/races` (+ CRUD), `GET /api/owned-shoes/rotation-overview` (id-keyed, lightweight — the page merges it with full shoe rows client-side).
 - `GET /api/strava/status` — import health for Settings; post-Phase-5 it reports over `activities` filtered to `source='strava'`.
 
-**Domain CRUD**: `shoes` (incl. scrapability dry-run test), `retailers` (incl. promo CRUD), `deals` (list/deactivate), `owned-shoes` (CRUD + log-run + runs + notes + replacement-deals + COROS sync sub-routes under `coros_sync.py`).
+**Domain CRUD**: `shoes` (incl. scrapability dry-run test), `retailers` (incl. promo CRUD), `deals` (list/deactivate), `owned-shoes` (CRUD + log-run + runs + notes + replacement-deals); COROS connection, sync and inbox under `/api/coros/*` (`routers/coros_connect.py`).
 
 **Operations**: `scraping` (sync per-shoe/per-retailer, background `/all` + `/stream` SSE, promo detection, three no-DB scraper smoke-test endpoints), `admin` (one-off kids-shoe cleanup), `export` (regenerates `seed_data.py` from the live DB — a code-as-backup mechanism), `dashboard` (legacy stats still used by Layout/Settings).
 
@@ -403,9 +402,8 @@ Consumers: Deals page (via /watchlist), Home top-deals, MCP deal tools,
 All three sources produce the same two rows via `rotation.log_run`: one canonical `Activity` (`source` discriminated) + one `ShoeRun` attribution.
 
 1. **Manual**: UI LogRunDialog → `POST /log-run` → `rotation.log_run(source="manual")` → Activity + attribution → checkpoint flag → optional journal prompt.
-2. **COROS** (three variants):
+2. **COROS** (two variants):
    - *Backend direct sync* (R5.7, **the primary path**): `coros_poller` (scheduled, default 15 min, on the shared scheduler) → `coros_mcp_client` (OAuth'd MCP, prose parsing) → `pending_coros_runs` (deduped on `label_id` and against logged runs; shoe suggestion attached) → runner confirms in the app inbox **or** via Claude (`confirm_coros_run`) → `coros.confirm_run` → `rotation.log_run(source="coros")`, which also resolves the pending row. The poller never writes runs or mileage.
-   - *Server-side* (optional, env-credential-gated): `coros_client` → COROS Open API → dedup against `activities.coros_activity_id` → user confirms assignments → `coros.confirm_run` → `rotation.log_run(source="coros")` → `last_coros_sync_at` stamped.
    - *Claude-mediated* (secondary since R5.7): the `sync_coros_runs` prompt now reads the same pending queue via `fetch_unsynced_coros_runs`, so Claude and the app see one inbox; the COROS connector remains installed for analysis (reviews, planning), not logging.
 3. **Strava historical** (completed, one-time): export CSV → `import_strava.py` → activities with `source='strava'` (idempotent on `strava_activity_id`, `raw_json` preserved). The original gear-mapping + backfill reconciliation ran against the old two-store layout and its results were made permanent by the `canonical_activities` migration; re-running the importer against a fresh export remains supported and updates rows in place.
 
@@ -422,7 +420,6 @@ Browser (localStorage history) → `/api/chat/message` → provider loop ↔ MCP
 | Integration | Direction | Coupling / failure mode |
 |---|---|---|
 | 8 retailer storefronts (Algolia ×2, Shopify ×5, headless Astro ×1) | outbound scrape | Highest-churn boundary in the system. Mitigations: platform base classes, Algolia self-rediscovery, dynamic scrapers from DB config, per-retailer error isolation, dry-run scrapability testing. Per-retailer status: the table in §10. |
-| COROS Open API (`open.coros.com`) | outbound REST | Optional; env-gated; absence = feature disabled, not error. |
 | External COROS MCP (`mcpus.coros.com/mcp`) | **consumed by this backend** (R5.7, OAuth 2.1 client: DCR + PKCE + rotating refresh tokens) and, separately, by Claude Desktop for analysis | Tokens Fernet-encrypted in `coros_connection`; absence of `COROS_TOKEN_KEY` disables the feature (not an error). Results are prose — `coros_mcp_client` parses them against fixture contract tests and fails loudly on drift. |
 | Anthropic / OpenAI / Google APIs | outbound (chat) | Provider strategy isolates SDK differences; availability surfaced per-key in `/chat/providers`; hard-coded model catalogs are a drift point. |
 | Strava bulk export | offline file input | No live Strava API dependency; import now targets `activities` directly; import assumptions (duplicate headers, UTC dates, gear whitespace) codified with a self-checking assertion. |
@@ -476,7 +473,7 @@ Directional, in dependency order — no implementation detail intended. (Item 3 
 5. **Promote the shoe-type bridge from string to reference.** A small controlled vocabulary (lookup table or enum) shared by `shoes` and `owned_shoes` — and served to the frontend — keeps the deliberate no-FK independence between domains while eliminating silent string-mismatch failures in replacement-deal logic.
 6. **Make scraping an observable job system.** A persisted scrape-run/attempt record (per retailer: started, finished, products, errors) turns "is Altitude quietly broken?" from log archaeology into a queryable trend — and is the natural substrate if the unused APScheduler dependency ever becomes real scheduled scraping. This also forces a decision on the single-process lock (either document one-worker as a hard invariant or move coordination into the DB).
 7. **Move Anton's memory server-side.** ✅ **Done (R2.6, 2026-07-08).** Chat conversations and checkpoint-prompt state now persist in `chat_conversations` / `checkpoint_prompts` (design_decisions C10 ← C8); the assistant is aligned with the API-first, multi-client principle and the backlogged agents (R3) can share conversational context.
-8. **Retire the transition scaffolding on a schedule.** The `scraper_manager` shim, the `coros_sync → owned_shoes` private-helper import (Task D), and hard-coded chat model catalogs are each one-session cleanups; batching them into an explicit "debt sweep" keeps the decision-log habit trustworthy. (`dependency_graph.md` §11 sequences these. The changelog's stale overview tail, formerly on this list, was pruned 2026-07-06.)
+8. **Retire the transition scaffolding on a schedule.** The `scraper_manager` shim and hard-coded chat model catalogs are each one-session cleanups; batching them into an explicit "debt sweep" keeps the decision-log habit trustworthy. (`dependency_graph.md` §11 sequences these. The changelog's stale overview tail, formerly on this list, was pruned 2026-07-06.)
 9. **Codify the invariants this document describes.** The strongest properties here — single run write path, canonical-activity uniqueness, deal-qualification rule, mileage counter identity, the strava archive-preservation rule — are currently enforced by convention plus tests. A short INVARIANTS section (in `CLAUDE.md`, per the final review §3.1) that future work must check against is cheap insurance for a platform intended to outlive any one refactor.
 
 ---

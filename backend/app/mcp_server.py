@@ -24,7 +24,6 @@ from sqlalchemy.orm import contains_eager
 
 from datetime import date as date_type, datetime, timezone
 
-from app.coros_client import get_coros_config
 from app.database import SessionLocal
 from app.models.models import Activity, Deal, OwnedShoe, PriceRecord, Retailer, Shoe, ShoeNote, ShoeRun
 from app.scrapers.orchestrator import ScrapeOrchestrator

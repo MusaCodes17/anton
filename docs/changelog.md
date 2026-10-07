@@ -5,6 +5,17 @@
 
 ---
 
+## R5.7 cleanup — legacy COROS Open-API code removed — 2026-10-08
+
+**[REMOVED] The dormant Open-API COROS sync path, superseded by direct sync (C11). Suite unchanged at 556 passing + 1 skipped (no test covered it). No schema change; no frontend change (the UI stopped calling it in §6).**
+- **Deleted:** `backend/app/coros_client.py` (Open-API HTTP client), `backend/app/routers/coros_sync.py` (`/api/owned-shoes/sync-coros/{status,fetch,confirm}`) + its `main.py` wiring, the legacy schemas (`CorosRun`, `CorosFetchResponse`, `CorosAssignment`, `CorosConfirmRequest/Response`, `CorosSyncStatus`) and their `models/__init__` exports, `coros.fetch_unsynced` + `CorosFetchResult`, the `get_coros_config` import in `mcp_server.py`, and the `COROS_CLIENT_ID/SECRET/ACCESS_TOKEN/OPEN_ID` block in `.env.example`.
+- **Kept on purpose:** `coros.confirm_run`, `coros.is_already_logged`, `coros.resolve_pending` — the live shared confirm and the poller's dedup (module docstring rewritten to say so); `last_coros_sync_at` (still stamped on confirm and reported by `get_coros_sync_status`).
+- **REST parity:** the removed `POST /owned-shoes/sync-coros/confirm` is replaced by `POST /api/coros/pending/{id}/confirm` (and the MCP `confirm_coros_run`); both reach the same single writer.
+- **Docs:** `architecture.md` (module table/tree, flows, integrations), `dependency_graph.md` (revision note; the `coros_sync → owned_shoes` router edge — the last "Task D" leftover — is resolved by deletion), `project_state.md`, `design_decisions.md` C11 trade-off. Historical changelog entries and archived plans still mention the old path, as history.
+- **Ops note:** the production `.env` may still contain the four old `COROS_*` Open-API variables; they are now ignored and can be deleted.
+
+---
+
 ## R5.7 §8 — COROS direct sync: documentation — 2026-10-08
 
 **[CHANGED] Docs only — closes R5.7 (COROS direct sync, §1–§8). No code, schema or test changes (suite stays 556 passing + 1 opt-in live test skipped).** Everything the plan said not to leave silently contradicted is now recorded:
