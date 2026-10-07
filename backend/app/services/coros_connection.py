@@ -341,6 +341,54 @@ def mark_reauth_required(db: Session, reason: str) -> None:
         db.commit()
 
 
+# ---------------------------------------------------------------- disconnect
+
+def disconnect(db: Session) -> dict:
+    """
+    Forget the COROS connection: best-effort revoke at COROS, then ALWAYS delete
+    the stored tokens locally and set status=disconnected.
+
+    Local deletion is unconditional — the runner's intent to disconnect must not
+    depend on COROS being reachable or on its revocation endpoint accepting a
+    public client (its metadata lists no `none` auth method; the spike couldn't
+    tell). Returns {"revoked_remotely": bool} so the UI can say honestly which
+    happened. The DCR client_id is kept (a reconnect reuses it). Holds the refresh
+    lock so an in-flight refresh can't write tokens back after we've cleared them.
+    """
+    with _refresh_lock:
+        db.expire_all()
+        row = _row(db)
+        if row is None or (not row.refresh_token_enc and not row.access_token_enc):
+            if row is not None:
+                row.status = STATUS_DISCONNECTED
+                db.commit()
+            return {"revoked_remotely": False}
+
+        revoked = False
+        try:
+            if row.refresh_token_enc and row.client_id:
+                endpoint = _as_metadata().get("revocation_endpoint")
+                if endpoint:
+                    resp = _http_post(endpoint, data={
+                        "token": _dec(row.refresh_token_enc),
+                        "token_type_hint": "refresh_token",
+                        "client_id": row.client_id,
+                    })
+                    revoked = 200 <= resp.status_code < 300
+                    if not revoked:
+                        logger.info("COROS revoke declined (HTTP %s); deleting tokens locally", resp.status_code)
+        except (requests.RequestException, CorosAuthError, CorosNotConfigured) as exc:
+            logger.info("COROS revoke skipped (%s); deleting tokens locally", type(exc).__name__)
+
+        row.access_token_enc = None
+        row.refresh_token_enc = None
+        row.expires_at = None
+        row.status = STATUS_DISCONNECTED
+        row.last_error = None
+        db.commit()
+        return {"revoked_remotely": revoked}
+
+
 # ---------------------------------------------------------------- status
 
 def get_status(db: Session) -> dict:

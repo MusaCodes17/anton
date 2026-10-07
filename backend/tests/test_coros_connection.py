@@ -32,6 +32,7 @@ META = {
     "authorization_endpoint": "https://c.test/oauth2/authorize",
     "token_endpoint": "https://c.test/oauth2/token",
     "registration_endpoint": "https://c.test/connect/register",
+    "revocation_endpoint": "https://c.test/oauth2/revoke",
 }
 
 
@@ -56,12 +57,18 @@ class FakeCoros:
         self.exchange_status = 200
         self.n = 0
         self.delay = 0.0
+        self.revoke_status = 200
+        self.revoke_raises = False
 
     def get(self, url):
         return META
 
     def post(self, url, *, json=None, data=None):
         self.posts.append((url, json if json is not None else data))
+        if url == META["revocation_endpoint"]:
+            if self.revoke_raises:
+                raise requests.ConnectionError("down")
+            return FakeResp(self.revoke_status)
         if url == META["registration_endpoint"]:
             return FakeResp(201, {"client_id": "client-1"})
         grant = (data or {}).get("grant_type")
@@ -257,6 +264,52 @@ def test_status_when_never_connected(db, fake):
     assert s["status"] == "disconnected" and s["configured"] is True
 
 
+# --- disconnect ---------------------------------------------------------------
+
+def _revokes(fake):
+    return [p for p in fake.posts if p[0] == META["revocation_endpoint"]]
+
+
+def test_disconnect_revokes_and_clears_tokens(db, fake):
+    _connect(db, fake)
+    assert svc.disconnect(db) == {"revoked_remotely": True}
+    assert _revokes(fake)[0][1]["token"] == "refresh-1"
+    row = db.get(CorosConnection, 1)
+    assert row.status == "disconnected" and row.access_token_enc is None and row.refresh_token_enc is None
+    assert row.client_id == "client-1"  # registration kept for reconnect
+    with pytest.raises(svc.CorosAuthError):
+        svc.get_access_token(db)
+
+
+def test_disconnect_still_deletes_locally_when_revoke_declined_or_unreachable(db, fake):
+    _connect(db, fake)
+    fake.revoke_status = 401  # public client not allowed to revoke
+    assert svc.disconnect(db) == {"revoked_remotely": False}
+    assert db.get(CorosConnection, 1).refresh_token_enc is None
+
+    _connect(db, fake)
+    fake.revoke_raises = True
+    assert svc.disconnect(db) == {"revoked_remotely": False}
+    assert db.get(CorosConnection, 1).status == "disconnected"
+
+
+def test_disconnect_without_key_or_connection_is_harmless(db, fake, monkeypatch):
+    assert svc.disconnect(db) == {"revoked_remotely": False}  # never connected
+    _connect(db, fake)
+    monkeypatch.delenv("COROS_TOKEN_KEY")
+    assert svc.disconnect(db) == {"revoked_remotely": False}
+    assert db.get(CorosConnection, 1).refresh_token_enc is None
+
+
+def test_reauth_required_connection_can_be_disconnected_and_reconnected(db, fake):
+    _connect(db, fake)
+    db.get(CorosConnection, 1).status = "reauth_required"
+    db.commit()
+    svc.disconnect(db)
+    _connect(db, fake)
+    assert svc.get_status(db)["status"] == "connected"
+
+
 # --- HTTP layer: auth boundaries ------------------------------------------------
 
 @pytest.fixture()
@@ -332,6 +385,16 @@ def test_callback_success_redirects_connected(client):
     r = client("GET", f"/api/coros/callback?state={state}&code=good")
     assert r.status_code == 302 and "coros=connected" in r.headers["location"]
     assert client("GET", "/api/coros/status", TOKEN).json()["status"] == "connected"
+
+
+def test_delete_connection_requires_auth_then_disconnects(client):
+    assert client("DELETE", "/api/coros/connection").status_code == 401
+    url = client("POST", "/api/coros/connect", TOKEN).json()["authorize_url"]
+    state = parse_qs(urlparse(url).query)["state"][0]
+    client("GET", f"/api/coros/callback?state={state}&code=good")
+    r = client("DELETE", "/api/coros/connection", TOKEN)
+    assert r.status_code == 200 and r.json() == {"revoked_remotely": True}
+    assert client("GET", "/api/coros/status", TOKEN).json()["status"] == "disconnected"
 
 
 def test_callback_denied_by_user(client):

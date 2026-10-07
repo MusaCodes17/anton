@@ -5,9 +5,10 @@ COROS direct-sync connection endpoints (R5.7 §2). Thin: HTTP <-> services.coros
   GET  /api/coros/callback  PUBLIC (browser redirect from COROS) — protected by the
                             single-use OAuth `state`; redirects into the SPA
   GET  /api/coros/status    session/bearer-auth — connection state, no tokens
+  DELETE /api/coros/connection  session/bearer-auth — disconnect; {revoked_remotely}
 
-All but the callback are gated by the app-wide auth middleware. Disconnect
-(DELETE) is intentionally absent pending the runner's go-ahead (auth-touching).
+All but the callback are gated by the app-wide auth middleware. DELETE /connection
+(runner-approved 2026-10-07) forgets the tokens even if COROS can't revoke them.
 """
 import logging
 from urllib.parse import urlencode
@@ -70,3 +71,10 @@ def callback(
 @router.get("/status")
 def status(db: Session = Depends(get_db)):
     return conn.get_status(db)
+
+
+@router.delete("/connection")
+def disconnect(db: Session = Depends(get_db)):
+    """Delete stored tokens (and ask COROS to revoke them). Always succeeds locally;
+    `revoked_remotely` says whether COROS honoured the revoke."""
+    return conn.disconnect(db)
