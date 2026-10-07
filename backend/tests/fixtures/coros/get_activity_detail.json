@@ -1,0 +1,13 @@
+{
+ "jsonrpc": "2.0",
+ "id": 4,
+ "result": {
+  "content": [
+   {
+    "type": "text",
+    "text": "\"\ud83c\udfc3 Outdoor Run Activity Details\\n========================================\\n\\nWorkout Time: 52:39\\nDistance: 12.53 km\\nTotal Time: 52:39\\nAverage Pace: 4:12 /km\\nMoving Average Pace: 4:10 /km\\nAdjusted Pace: 4:10 /km\\nBest Kilometer: 3:50 /km\\nAverage Heart Rate: 171 bpm\\nAverage Cadence: 186 spm\\nAverage Stride Length: 1.28 m\\nAverage Power: 252 W\\nElevation Gain / Loss: 60 m / 48 m\\nCalories: 710 kcal\\nTraining Load: 113\\nAerobic TE: 2.7\\nAnaerobic TE: 0.8\\nTraining Focus: Base\\nPerformance: Best\""
+   }
+  ],
+  "isError": false
+ }
+}

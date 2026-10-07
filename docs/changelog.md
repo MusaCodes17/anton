@@ -5,6 +5,42 @@
 
 ---
 
+## R5.7 §4 — COROS direct sync: poller + pending queue — 2026-10-07
+
+**[ADDED] A scheduled poller pulls new COROS runs into a pending queue ("New runs" inbox backend). It writes ONLY `pending_coros_runs` and `coros_sync_state` — never runs, attributions or mileage (INV-1/INV-9/C9; a test asserts activities, shoe_runs and `current_mileage` are untouched). Nothing is auto-logged. Suite 493 → 511 passing (+1 skipped live test). One additive migration `8b9c0d1e2f3a` (down/up round-trip verified on a scratch DB).**
+- **[ADDED] Tables:** `pending_coros_runs` (normalized run incl. prefetched detail; `label_id` UNIQUE = the exactly-once guarantee; `suggested_shoe_id` FK→owned_shoes ON DELETE SET NULL; `status` pending|confirmed|dismissed; `first_seen_at`/`resolved_at`) and single-row `coros_sync_state` (last attempt/success, trigger, runs queued, last error).
+- **[CHANGED vs plan] No `label_id` column added to the runs table:** `activities.coros_activity_id` already exists (indexed) and is the sanctioned writer's dedup key, so the plan's contingency didn't apply. "Already logged" reuses the existing `coros.is_already_logged` rule (same id, else same date + distance ±0.1 km).
+- **[ADDED] `services/coros_poller.py`:** `run_tick` never raises. Skips silently unless connection is `connected`; lookback = max(3 days, gap since last success), cap 30, first-ever sync 14 days (so outages/disconnects self-heal); drops queued-or-logged runs *before* fetching detail; one bad run (contract error) doesn't abort the others and the tick isn't marked successful, so it's retried; network errors recorded + retried next tick; auth failure → `reauth_required`, after which ticks no-op (no retry storm). One tick at a time (non-blocking lock). IntegrityError on the unique label is a silent no-op.
+- **[CHANGED] `services/schedule.py` reuses the existing scheduler (INV-9):** `apply_coros_poll()` registers an interval job (`COROS_POLL_INTERVAL_MIN`, default 15, 0 = off; first tick 30 s after boot) that runs the blocking tick in `asyncio.to_thread` with its own session. Scheduler boot verified.
+- **[ADDED] `POST /api/coros/sync`** (session/bearer auth; same code as the scheduled tick; 409 if not connected or a tick is running); `GET /api/coros/status` now also returns the sync summary, pending count, and next poll time.
+- **[ADDED] `services/coros_suggestion.py` — stub seam** (suggests nothing) until §5.
+- **Not yet verified:** a real end-to-end poll against the live DB/COROS from the deployed app (needs the §2 connect first); "within one interval" acceptance is therefore proven by tests, not yet on the phone. Optional first-sync trigger straight after the connect callback was left out — the first poll fires 30 s after boot or on "Sync now".
+
+---
+
+## R5.7 §3 — COROS direct sync: typed MCP client + contract tests — 2026-10-07
+
+**[ADDED] `services/coros_mcp_client.py` — the only module that speaks MCP to COROS: `list_runs(start, end)`, `get_run_detail(label_id)`, `fetch_run(run)`, normalized into a frozen `CorosRun` dataclass (units in names; `label_id` is a string). No DB, no OAuth flow (it takes a `token_provider`). Not yet called by anything — the poller is §4. Suite 466 → 493 passing (+27; 1 opt-in live test skipped in CI).**
+- **Parsing, not mapping:** COROS tool results are prose, so each field is an anchored regex. Required fields missing, header/record-count mismatch, an unknown tool (JSON-RPC -32601/-32602), the "anomalies detected" advisory COROS returns *with HTTP 200 and isError=false* for a bad detail request, and out-of-bounds pace/distance (unit change) all raise `CorosContractError` naming the field — never silent nulls. Optional fields (HR, calories, cadence, elevation, load, focus) become None only when their line is absent. List↔detail pairing is cross-checked on distance (detail text carries no id/date).
+- **Mapping decisions:** list `Duration` = detail `Workout Time` = `moving_time_s`; detail `Total Time` = `elapsed_time_s`; elevation takes the *gain* of `60 m / 48 m`. COROS's printed per-record date is used as-is (Toronto local for this account).
+- **Live-verified 2026-10-07 (read-only, spike token):** `tools/call` works with **no initialize handshake** (stateless confirmed, so none is made); an empty range answers `"No sport records found from … to …"` (→ `[]`, not an error); a bogus tool name gives JSON-RPC -32602.
+- **Transport policy:** network errors/5xx retry with 1 s / 3 s backoff (3 attempts); 4xx never retry; 401 → `CorosAuthError` (caller refreshes/marks reauth). SSE-framed replies decoded. Truncation at the 100-record list limit is logged.
+- **Tests:** real spike fixtures (`tests/fixtures/coros/`, coordinates redacted) pin units; opt-in live smoke `COROS_LIVE=1 pytest tests/test_coros_mcp_client.py -k live` passed against the real server.
+
+---
+
+## R5.7 §2 — COROS direct sync: OAuth connect + encrypted token storage — 2026-10-07
+
+**[ADDED] Anton can now connect to the runner's COROS account as an OAuth client of the COROS MCP server (plan: COROS direct sync §2; spike: `docs/spikes/coros_mcp_client.md`). Backend only; no poller, no client, no UI yet (§3–§6). Suite 441 → 461 passing. INV-1/INV-9/C9 untouched — nothing here writes runs or mileage.**
+- **[ADDED] Migration `7a8b9c0d1e2f`** (additive, down/up round-trip verified on a scratch DB): `coros_connection` (single row id=1; Fernet-encrypted access/refresh tokens, expiry, scopes, region endpoint, DCR `client_id`, `status` connected|reauth_required|disconnected, `last_error`) and `coros_oauth_states` (single-use `state` + encrypted PKCE verifier, 10-min TTL).
+- **[ADDED] `services/coros_connection.py`:** DCR (registered once, re-registered if the redirect URI changes), PKCE S256 + `resource` param, callback exchange, lazy refresh under a process lock that re-reads the row inside it (so racing callers burn at most one rotating refresh token — tested with 4 threads). 4xx on refresh → `reauth_required` and no further traffic; 5xx/network → propagates, status untouched. Encryption happens only here.
+- **[ADDED] `POST /api/coros/connect`, `GET /api/coros/callback` (public; authorized by `state`), `GET /api/coros/status`** (`routers/coros_connect.py`). Callback redirects to `/settings/sync?coros=connected|error&reason=…`. Caddy's existing `/api/*` matcher already routes the callback; no Caddy change.
+- **[ADDED]** `COROS_TOKEN_KEY` (+ `COROS_MCP_URL`, optional `COROS_REDIRECT_URI`/`FRONTEND_URL`) in `.env.example`; **the Hetzner `.env` needs a real `COROS_TOKEN_KEY` before connecting** (missing key → `/connect` returns 503, feature disabled, nothing breaks). `cryptography` pinned in requirements.
+- **[ADDED] `DELETE /api/coros/connection`** (runner-approved 2026-10-07): tries to revoke the refresh token at COROS, then **always** deletes tokens locally → `{revoked_remotely: bool}`. COROS's revocation metadata lists no public-client auth method, so remote revoke may be declined; the UI should say which happened. Keeps the DCR `client_id` for reconnect. Suite 461 → 466.
+- **Not yet verified:** the live connect from the phone (needs the key set on Hetzner + deploy), and the multi-day unattended refresh proof from the spike.
+
+---
+
 ## RA2.2 (R5.2) — mobile UI fixes v2 (header notch + 2-up deals) — 2026-09-10
 
 **[FIXED] Two bugs from real installed-PWA phone use that R5.1 didn't reach: (1) the app header rendered *under* the iOS status bar / Dynamic Island on every route (read as "missing/unreachable"), and (2) the Deals grid was one full-width shoe per row on mobile. Frontend only: no backend, no migration, no serializer touch. One commit per task, `ra2:` prefix. `vite build` clean; backend suite 443 passing (unchanged — no backend touch). Verified with Chromium automation at a 390×844 iPhone viewport BEFORE deploy. Supersedes R5.1's header handling; design_decisions **E13** records both the safe-area contract and the fixed-shell layout.**

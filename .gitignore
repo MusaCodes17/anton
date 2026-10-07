@@ -7,3 +7,5 @@ training-default.png
 # Python tooling caches / virtualenvs (root-level — backend/ has its own too)
 .pytest_cache/
 .venv/
+
+scripts/spikes/.coros_spike_state.json

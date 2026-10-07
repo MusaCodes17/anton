@@ -631,3 +631,95 @@ class AuthSession(Base):
 
     def __repr__(self):
         return f"<AuthSession id={self.id} expires_at={self.expires_at}>"
+
+
+class CorosConnection(Base):
+    """
+    The runner's OAuth connection to the COROS MCP server (COROS direct sync §2).
+
+    Single row (id = 1) — there is no users table. Domain meaning: "is Anton
+    allowed to read the runner's COROS data right now, and until when". Tokens
+    are Fernet ciphertext and never leave the server (never serialized to the
+    frontend, logs, SW cache or RQ persister). `status`:
+    connected | reauth_required | disconnected.
+    COROS rotates the refresh token on every refresh, so refreshes are
+    serialized by a lock in services/coros_connection.py.
+    """
+    __tablename__ = "coros_connection"
+
+    id = Column(Integer, primary_key=True)
+    client_id = Column(String(255), nullable=True)            # from Dynamic Client Registration
+    registered_redirect_uri = Column(String(2048), nullable=True)
+    region_endpoint = Column(String(2048), nullable=True)     # the MCP URL, e.g. https://mcpus.coros.com/mcp
+    access_token_enc = Column(Text, nullable=True)
+    refresh_token_enc = Column(Text, nullable=True)
+    expires_at = Column(Float, nullable=True)                 # unix seconds, access token
+    scopes = Column(String(500), nullable=True)
+    status = Column(String(20), nullable=False, default="disconnected", server_default="disconnected")
+    connected_at = Column(DateTime(timezone=True), nullable=True)
+    last_refresh_at = Column(DateTime(timezone=True), nullable=True)
+    last_error = Column(Text, nullable=True)
+
+
+class CorosOAuthState(Base):
+    """
+    Short-lived, single-use `state` + PKCE verifier for an in-flight COROS
+    connect flow. The callback is unauthenticated (it's a browser redirect from
+    COROS), so this row IS its authorization: no matching live state, no exchange.
+    """
+    __tablename__ = "coros_oauth_states"
+
+    state = Column(String(100), primary_key=True)
+    code_verifier_enc = Column(Text, nullable=False)
+    expires_at = Column(Float, nullable=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+
+class PendingCorosRun(Base):
+    """
+    A COROS run the poller has found but the runner has not yet resolved (COROS
+    direct sync §4) — the "New runs" inbox. NOT a run record: it holds the
+    normalized COROS data (detail prefetched) until the runner confirms it
+    through the sanctioned writer (confirm_coros_run -> rotation.log_run) or
+    dismisses it. `label_id` is UNIQUE: that is what makes the poller exactly-once
+    across overlapping lookbacks and restarts. `suggested_shoe_id` is a
+    suggestion only (C9) — the runner decides.
+    status: pending | confirmed | dismissed.
+    """
+    __tablename__ = "pending_coros_runs"
+
+    id = Column(Integer, primary_key=True)
+    label_id = Column(String(40), nullable=False, unique=True)
+    sport_type = Column(Integer, nullable=False)
+    run_date = Column(Date, nullable=False)                  # COROS-printed (Toronto local) date
+    distance_km = Column(Float, nullable=False)
+    moving_time_s = Column(Integer, nullable=False)
+    elapsed_time_s = Column(Integer, nullable=True)
+    avg_pace_s_per_km = Column(Integer, nullable=False)
+    avg_hr = Column(Integer, nullable=True)
+    calories = Column(Float, nullable=True)
+    elevation_gain_m = Column(Float, nullable=True)
+    avg_cadence = Column(Float, nullable=True)
+    training_load = Column(Float, nullable=True)
+    training_focus = Column(String(50), nullable=True)
+    start_timestamp = Column(Integer, nullable=False)
+    end_timestamp = Column(Integer, nullable=False)
+    suggested_shoe_id = Column(Integer, ForeignKey("owned_shoes.id", ondelete="SET NULL"), nullable=True)
+    suggestion_reason = Column(String(200), nullable=True)
+    status = Column(String(20), nullable=False, default="pending", server_default="pending", index=True)
+    first_seen_at = Column(DateTime(timezone=True), server_default=func.now())
+    resolved_at = Column(DateTime(timezone=True), nullable=True)
+
+
+class CorosSyncState(Base):
+    """Single-row (id = 1) summary of the COROS poller's last run, for the UI and
+    the get_coros_sync_status MCP tool. Honest staleness: failures are recorded
+    here rather than leaving the app quietly out of date."""
+    __tablename__ = "coros_sync_state"
+
+    id = Column(Integer, primary_key=True)
+    last_attempt_at = Column(DateTime(timezone=True), nullable=True)
+    last_success_at = Column(DateTime(timezone=True), nullable=True)
+    last_trigger = Column(String(20), nullable=True)         # scheduled | manual
+    runs_found = Column(Integer, nullable=False, default=0, server_default="0")  # new runs queued by the last attempt
+    last_error = Column(Text, nullable=True)
