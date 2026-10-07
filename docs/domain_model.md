@@ -53,6 +53,8 @@ Cross-cutting the domains is the **assistant surface** (Son of Anton in-app; Cla
 
 | Entity | Meaning |
 |---|---|
+| **Pending COROS run** (`pending_coros_runs`) | A run the backend poller found on COROS that the runner hasn't resolved — the "New runs" inbox. **Not a run record and not part of any ledger:** it holds COROS's data until the runner confirms it (→ one `Activity` + attribution via the single writer) or dismisses it. Keyed on COROS `label_id` (unique), so a run is queued at most once; resolved rows are kept so it is never re-queued. Carries a *suggested* shoe (advice only). |
+| **COROS connection** (`coros_connection`) | Whether Anton may read the runner's COROS data (OAuth, encrypted tokens, `connected`/`reauth_required`/`disconnected`). Infrastructure state, not domain history. |
 | **App Setting** (`app_settings`) | Key/value odds-and-ends that are state, not domain. Current keys: when COROS last synced; and the UI-configurable scrape schedule (#7) — `scrape_schedule_enabled` (`"true"`/`"false"`) and `scrape_schedule_cron` (crontab string). The schedule keys are read with precedence DB → env (`SCRAPE_SCHEDULE_*`) → hardcoded default, so a row exists only once the schedule is saved from the UI. |
 
 ---
@@ -148,7 +150,7 @@ Every run enters the system — regardless of origin — through the single sanc
 Activities with `source='strava'` are the immutable historical record. Deleting a run attribution normally deletes the underlying activity too — **except** for archive rows, where only the attribution is removed and the run itself survives. The 8-year history can be re-attributed but never destroyed through normal operations.
 
 ### 4.9 Human confirmation gates all synced writes
-No externally-sourced run is ever auto-logged. The COROS flow (both the server path and the Claude Desktop agent protocol) must *present suggested shoe assignments and wait for explicit confirmation* before writing. Shoe suggestions rank by pace first, distance second, active shoes only, lower mileage breaking ties — but suggestions are advice, not decisions.
+No externally-sourced run is ever auto-logged. The COROS flow (the backend poller's inbox — which only *queues* — the in-app confirm, and the Claude agent protocol) must *present suggested shoe assignments and wait for explicit confirmation* before writing. Shoe suggestions rank by pace first, distance second, active shoes only, lower mileage breaking ties — but suggestions are advice, not decisions.
 
 ### 4.10 Wear milestones
 - **Checkpoints**: every 100 km crossing flags a moment to journal ("how does it feel at 300?"). The prompt is an invitation, shown once; the note is optional.

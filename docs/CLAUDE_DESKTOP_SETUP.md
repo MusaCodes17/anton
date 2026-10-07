@@ -149,3 +149,17 @@ curl -H "Authorization: Bearer $TOKEN" https://anton.musasouled.com/mcp/ \
   -H "Content-Type: application/json" -H "Accept: application/json, text/event-stream" \
   -d '{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{}}'  # → tool list
 ```
+
+---
+
+## COROS: the connector is now optional for logging (R5.7)
+
+Run logging no longer depends on Claude Desktop (or any Claude client) being in the loop. Anton's backend connects to COROS itself (**Settings → Sync → Connect COROS**, one-time sign-in) and polls about every 15 minutes; new runs land in the app's **New runs** inbox for you to confirm with one tap.
+
+What this means for Claude:
+
+- **The COROS connector in Claude Desktop is optional.** Keep it installed for analysis, reviews and planning (the COROS tools remain useful for that); it is no longer needed to log runs.
+- **`sync_coros_runs` still works** and now reads the *same* queue as the app: it calls `fetch_unsynced_coros_runs` (no COROS lookups), shows the server's shoe suggestions, and logs your confirmed runs with `confirm_coros_run`. Confirming in Claude removes the run from the app inbox, and confirming in the app makes Claude report it as already logged — a run can never be logged twice.
+- **Check state** by asking Claude to call `get_coros_sync_status` (connection, last successful poll, last error, runs waiting).
+- If the connection needs attention, the app shows **Reconnect needed** (Home banner and Settings → Sync) and Claude's tools say the same; reconnect from Settings → Sync.
+- Server prerequisite: `COROS_TOKEN_KEY` (a Fernet key) in the production `.env`; generate one with the command in `backend/.env.example`.

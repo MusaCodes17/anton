@@ -1,7 +1,20 @@
 # Anton — Session Changelog
 
-**Last Updated:** 2026-09-04
+**Last Updated:** 2026-10-08
 **Status / current focus:** see `docs/project_state.md` (the perishable snapshot). This file is the append-only session log — the authoritative record of *what happened*; the `docs/` suite is the reference material.
+
+---
+
+## R5.7 §8 — COROS direct sync: documentation — 2026-10-08
+
+**[CHANGED] Docs only — closes R5.7 (COROS direct sync, §1–§8). No code, schema or test changes (suite stays 556 passing + 1 opt-in live test skipped).** Everything the plan said not to leave silently contradicted is now recorded:
+- **[ADDED] `design_decisions.md` C11** — direct COROS sync via self-service MCP OAuth, including why it is *not* a reversal of the retired "COROS direct API" decision (that was the gated Open API; this is a different, approval-free door; push stays Partner-only so we poll), the non-writer/C9/INV constraints, token encryption + rotating-refresh lock, the prose-parsing risk, and the explicit deferrals (auto-confirm, push, webhooks, FIT, health data).
+- **[CHANGED] C6 amended** (verdict → partly superseded by C11; the text kept as history) and two rows added to the Superseded table: C6's connector-mediated logging, and the "MCP can't be called from app backends; needs an LLM mediator" learning (true of the Claude-connector setup, no longer true).
+- **[CHANGED] `claude.md`:** INV-1 notes the poller + inbox are non-writers (with the covering test); INV-9 notes the poll job / tick lock / token-refresh lock rely on the single worker; new known-trap on prose parsing, fixture refresh and `COROS_TOKEN_KEY`.
+- **[CHANGED] `architecture.md`, `domain_model.md`:** new modules/tables, the three COROS ingestion variants (backend direct is primary), the external-integration row, "Pending COROS run" / "COROS connection" entities, confirmation-gate wording.
+- **[ADDED] `CLAUDE_DESKTOP_SETUP.md` section:** the COROS connector is optional for logging; `sync_coros_runs` reads the shared queue; `get_coros_sync_status`; `COROS_TOKEN_KEY` prerequisite.
+- **[CHANGED] `roadmap.md`** (R5.7 row done + R3.5 note that a "new run waiting" push is the natural trigger to revisit it — not built), **`project_state.md`** (snapshot, §2/§4/§8/§9/§11 refreshed, human next steps), this changelog header date. The spike doc `docs/spikes/coros_mcp_client.md` was added in §1.
+- **Open human verifications (not claimable from here):** first phone connect against real COROS on the deployed server; unattended multi-week token refresh; a live read of the queue by Claude Desktop over `/mcp`.
 
 ---
 
