@@ -5,6 +5,26 @@
 
 ---
 
+## R6 scoped — daily-use improvements — 2026-10-08
+
+**[ADDED] Roadmap only; no code changes.** A review of `project_state.md` + `roadmap.md` concluded the platform is built (R5.7 makes runs arrive on their own) and the next value is making what exists more useful. New milestone **R6** in `roadmap.md` with a felt-need check on every item; **none scheduled**.
+- **R6.1** `project_state.md` top-section refresh — §1, §5, §6 quirk 5, §7, §10 still describe July (e.g. "all local, no auth"; HEAD assumed `main`). Docs only.
+- **R6.2** Retirement forecast → deal radar — projected limit date per shoe from recent weekly km, in `rotation.py` beside `retirement_pipeline`; widens (doesn't replace) the 75% band with a lookahead; surfaced on Home, `/shoes/:id` and the deal-alert digest.
+- **R6.3** My-size deal filter — `AppSettings` size preference + one tested label normaliser; ranks/badges out-of-size deals, digest counts in-size only; deal qualification stays size-agnostic.
+- **R6.4** "New run waiting" Web Push to the installed PWA — the gated R3.5 revisit; step 0 is measuring `pending_coros_runs` `first_seen_at → resolved_at` before any code.
+- **R3.5 row** now points at R6.4.
+
+---
+
+## RA3 scoped — push-to-deploy (CI/CD to Hetzner) — 2026-10-08
+
+**[ADDED] Roadmap only; no code, workflow or server changes.** New row **RA3** in the RA milestone plus a detailed **§RA3** scope in `roadmap.md`: a push to `main` runs tests + frontend build in GitHub Actions, then deploys over SSH via a committed `deploy/deploy.sh` (pre-deploy SQLite snapshot → `git pull --ff-only` → `docker compose up -d --build` → healthy wait → rsync CI-built `dist/` to `/var/www/anton` → public `/health` check). **Status: scoped, not scheduled** — the runner will execute later.
+- **Why:** deploys are two separate manual procedures (backend on the server, UI from the laptop) and were forgotten between sessions on 2026-10-07, including a `Permission denied (publickey)` on the UI rsync.
+- **Recorded decisions to make at execution:** deploy user vs root, auto-applied migrations (v1 = snapshot + Litestream + additive-only), "main is always deployable".
+- **Known doc bug noted for the RA3 docs pass (not fixed here):** `CLAUDE_DESKTOP_SETUP.md` says `docker compose restart` after editing `backend/.env`; `restart` does not re-read `env_file` — use `docker compose up -d --force-recreate`.
+
+---
+
 ## Status review & doc refresh — 2026-10-08
 
 **[CHANGED] Docs only; no code, schema or UI changes.** A read-only review of `project_state.md` / `roadmap.md` against the changelog found stale figures, now corrected.
