@@ -57,6 +57,10 @@ def rotation_overview(db: Session = Depends(get_db)):
                 "current_mileage": e.current_mileage,
                 "mileage_limit": e.mileage_limit,
                 "replacement_deals": e.replacement_deals,
+                "forecast_status": e.forecast_status,
+                "weekly_km": e.weekly_km,
+                "weeks_to_limit": e.weeks_to_limit,
+                "projected_limit_date": e.projected_limit_date,
             }
             for e in pipeline
         ],
@@ -288,7 +292,18 @@ def get_replacement_deals(owned_shoe_id: int, db: Session = Depends(get_db)):
         for d in deals
     ]
 
-    return {"shoe_type": owned_shoe.shoe_type, "deals": deal_list, "total": len(deal_list)}
+    # R6.2: the same forecast the pipeline uses, so this card and Home agree.
+    weekly = rotation.recent_weekly_km(db).get(owned_shoe.id, 0.0)
+    f_status, weeks_to_limit, projected = rotation.usage_forecast(owned_shoe, weekly)
+    return {
+        "shoe_type": owned_shoe.shoe_type,
+        "deals": deal_list,
+        "total": len(deal_list),
+        "forecast_status": f_status,
+        "weekly_km": round(weekly, 1),
+        "weeks_to_limit": weeks_to_limit,
+        "projected_limit_date": projected,
+    }
 
 
 @router.get("/{owned_shoe_id}/notes", response_model=List[ShoeNoteResponse])

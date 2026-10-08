@@ -41,6 +41,7 @@ import {
   useReplacementDeals,
 } from '@/hooks/useApi'
 import { cn, formatDate, formatCurrency } from '@/lib/utils'
+import { forecastDetail, forecastLabel } from '@/lib/forecast'
 import { formatShoeType } from '@/lib/shoeTypes'
 
 const statusVariant = { active: 'success', retired: 'secondary', for_sale: 'warning' }
@@ -224,6 +225,8 @@ function ReplacementDeals({ ownedShoeId, currentMileage, shoeType, onEditShoe })
     } else if (data) {
       const n = data.deals.length
       collapseHint = n > 0 ? `${n} deal${n === 1 ? '' : 's'} available` : 'no deals right now'
+      const lbl = forecastLabel(data)  // R6.2: surface the date even while collapsed
+      if (lbl) collapseHint = `${lbl} · ${collapseHint}`
     }
   }
 
@@ -257,6 +260,9 @@ function ReplacementDeals({ ownedShoeId, currentMileage, shoeType, onEditShoe })
       >
         <div className="overflow-hidden">
           <div className="space-y-3 pt-2 pb-1">
+            {data && forecastDetail(data) && (
+              <p className="text-sm text-muted-foreground">{forecastDetail(data)}</p>
+            )}
             {isLoading ? (
               <div className="h-[140px] animate-pulse rounded-[14px] bg-muted" />
             ) : isError ? (

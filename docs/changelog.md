@@ -5,6 +5,15 @@
 
 ---
 
+## R6.2 — retirement forecast → deal radar — 2026-10-08
+
+**[ADDED]** `rotation.recent_weekly_km` (one grouped query on `Activity` columns, last 6 weeks ÷ 6) + pure `rotation.usage_forecast` → `forecast_status` (`on_track` / `idle` / `overdue`), `weekly_km`, `weeks_to_limit`, `projected_limit_date` on every `PipelineEntry`. Derived at read time, never stored (INV-7). Surfaced on Home shoe alerts, `/shoes` pipeline rows, the ShoeDetail replacement card (also in its collapsed hint), `GET /owned-shoes/rotation-overview`, `…/{id}/replacement-deals`, the weekly-summary and race-block MCP outputs, and the deal-alert digest's `replacement_alerts`.
+**[CHANGED]** `retirement_pipeline` now also admits shoes projected to hit their limit within 8 weeks even below the 75% threshold (widens the band; the threshold is unchanged). Because Home, `/shoes`, the weekly summary, race advisor and digest share that one function, all of them see the radar shoes — "pipeline" there no longer strictly means "≥ 75%". Digest replacement alerts sort soonest-limit first (no-date shoes last, pipeline order). Constants `FORECAST_WEEKS = 6`, `RADAR_LOOKAHEAD_WEEKS = 8` are heuristics, commented.
+**[VERIFIED]** Suite 580 → **589 passing + 1 skipped** (`tests/test_retirement_forecast.py`: 70%-with-heavy-block gets a date, idle in/out of the pipeline, overdue, no-limit, exactly-8-weeks in / 8.2 out, 6-week window edge, digest ordering). `vite build` clean. Scratch-DB check (seeded recent runs; live DB untouched): Home alerts returned overdue / idle / on_track(~11 wks) / a 52% shoe on the radar (~7 wks, 2026-11-29, hand-checked: 270 km ÷ 6 = 45 km/wk, 332.85 km left); the three labels render on Home and `/shoes`; the ShoeDetail card shows "~7 wks to limit · around Nov 29, 2026"; ~380 px no horizontal scroll.
+**[NOT DONE]** No screenshots — the Browser pane was hidden so frames wouldn't render; verification was via DOM text/geometry, API values and console. The console buffer still held older scratch-session errors (401/403/422/connection refused from earlier servers), none from this feature.
+
+---
+
 ## R6.4 step 0 — confirmation-lag measurement — 2026-10-08
 
 **[VERIFIED] No code.** Runner ran, on Hetzner: `docker compose exec anton sqlite3 /data/shoe_deals.db "select count(*), round(avg(julianday(resolved_at)-julianday(first_seen_at)),2), round(max(julianday(resolved_at)-julianday(first_seen_at)),2), sum(resolved_at is null) from pending_coros_runs;"` → `1|0.1|0.1|0`: one run, confirmed in ~0.1 days, none waiting. **Decision: R6.4 is not built** — the felt-need gate came back negative. Caveat: n=1 is thin; re-run the same query after a few weeks and revisit only if runs sit for days.

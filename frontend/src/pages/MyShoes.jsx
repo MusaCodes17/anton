@@ -44,6 +44,7 @@ import {
   useShoeTypes,
 } from '@/hooks/useApi'
 import { formatShoeType } from '@/lib/shoeTypes'
+import { forecastLabel } from '@/lib/forecast'
 
 const ALL = '__all__'
 
@@ -452,6 +453,7 @@ function RetirementPipeline({ entries, onOpenDetail }) {
 
 function PipelineRow({ entry, onOpenDetail }) {
   const { shoe, pct, current_mileage, mileage_limit, replacement_deals } = entry
+  const forecast = forecastLabel(entry)
   const image = shoe.image_url || shoe.matched_image_url
   const overLimit = pct >= 1
 
@@ -479,6 +481,7 @@ function PipelineRow({ entry, onOpenDetail }) {
           <div className="mt-1.5 max-w-[240px]">
             <MileageProgressBar mileage={current_mileage} limit={mileage_limit} />
           </div>
+          {forecast && <div className="mt-1 text-2xs text-muted-foreground">{forecast}</div>}
         </div>
       </button>
       <div className="shrink-0 sm:pl-2">
