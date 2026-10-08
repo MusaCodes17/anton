@@ -5,6 +5,12 @@
 
 ---
 
+## R6.4 step 0 — confirmation-lag measurement — 2026-10-08
+
+**[VERIFIED] No code.** Runner ran, on Hetzner: `docker compose exec anton sqlite3 /data/shoe_deals.db "select count(*), round(avg(julianday(resolved_at)-julianday(first_seen_at)),2), round(max(julianday(resolved_at)-julianday(first_seen_at)),2), sum(resolved_at is null) from pending_coros_runs;"` → `1|0.1|0.1|0`: one run, confirmed in ~0.1 days, none waiting. **Decision: R6.4 is not built** — the felt-need gate came back negative. Caveat: n=1 is thin; re-run the same query after a few weeks and revisit only if runs sit for days.
+
+---
+
 ## R6.3 — my-size deal filter — 2026-10-08
 
 **[ADDED]** `app/utils/shoe_sizes.py` (label normaliser — formats sampled from the live DB: `9`, `9.0`, `10 / 11.5`; the first value of a unisex pair is read as the men's size, a labelled heuristic — plus `size_fit` in/out/unknown); `preferred_shoe_size` + `hide_other_sizes` in `AppSettings` via `services/settings.py`; `GET/PUT /api/preferences` (422 on an invalid size); `size_fit` on every deal returned by `services/deals.py` (derived, never stored; qualification untouched) and in the MCP deal dicts; `SizePreferenceCard` on Settings → Tracking; Deals page ranks in-size → unknown → out, badges "Not in your size", and hides out-of-size deals when the toggle is on.
