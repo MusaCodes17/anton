@@ -1,6 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
-import { useOutletContext } from 'react-router-dom'
 import {
   MessageCircle,
   Plus,
@@ -11,7 +10,6 @@ import {
   PanelLeft,
   X,
   SquarePen,
-  Menu,
   ArrowDown,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
@@ -157,10 +155,9 @@ function ChatArea({
         )}
       </div>
 
-      {/* Composer. Bottom padding clears the iOS home indicator, except while
-          the keyboard is up (Layout sets html.keyboard-open) — the keyboard
-          already covers that inset, and the extra gap would float the field. */}
-      <div className="shrink-0 border-t border-divider px-3 pt-2 pb-[calc(0.625rem+env(safe-area-inset-bottom))] md:px-6 md:py-4 [.keyboard-open_&]:pb-2">
+      {/* Composer. On phones the tab bar below owns the home-indicator inset,
+          and it hides while the keyboard is up, so a fixed small pb suffices. */}
+      <div className="shrink-0 border-t border-divider px-3 pt-2 pb-2.5 md:px-6 md:py-4">
         <div className="mx-auto max-w-3xl">
           <ChatInput onSend={handleSend} isStreaming={isStreaming} onStop={stop} maxHeight={160} />
         </div>
@@ -351,10 +348,6 @@ export default function ChatPage() {
   // server) because the user hasn't sent a message in it yet.
   const [unsavedId, setUnsavedId] = useState(null)
   const didAutoSelect = useRef(false)
-  // Layout hides its mobile top bar on this route (the chat header replaces
-  // it) and hands over its nav toggle so the app menu stays one tap away.
-  const { openNav } = useOutletContext() ?? {}
-
   // Escape closes the mobile sheet (keyboard users / iPad with keyboard).
   // Closing the sheet also abandons a half-finished delete, so it can't be
   // confirmed by accident the next time the sheet opens.
@@ -684,8 +677,9 @@ export default function ChatPage() {
 
       {/* ── Main area ── */}
       <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
-        {/* Header — on mobile this is the only bar on the screen (Layout drops
-            its own), so it carries conversations, title, new and app menu. */}
+        {/* Header — on mobile this is the only top bar (Layout drops its own;
+            app navigation is the tab bar below), so it carries conversations,
+            title/model and new chat. */}
         <header className="flex h-[52px] shrink-0 items-center gap-1 border-b border-divider px-1.5 md:h-auto md:justify-between md:gap-2 md:border-border md:px-6 md:py-3">
           <button
             type="button"
@@ -715,16 +709,6 @@ export default function ChatPage() {
           >
             <SquarePen className="h-5 w-5" />
           </button>
-          {openNav && (
-            <button
-              type="button"
-              onClick={openNav}
-              className="focus-ring flex h-11 w-11 shrink-0 items-center justify-center rounded-[10px] text-secondary-foreground hover:bg-secondary md:hidden"
-              aria-label="Toggle navigation"
-            >
-              <Menu className="h-5 w-5" />
-            </button>
-          )}
 
           {/* Desktop actions */}
           <div className="hidden shrink-0 items-center gap-2 md:flex">

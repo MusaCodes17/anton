@@ -1,6 +1,7 @@
 import { NavLink, Outlet } from 'react-router-dom'
 import { Footprints, Store, RefreshCw } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { LogoutButton } from '@/components/layout/Layout'
 
 // Settings is a control room, not a primary domain. It re-homes the former
 // top-level "Tracked Shoes" and "Retailers" pages plus a new sync/scraping
@@ -45,6 +46,12 @@ export default function Settings() {
       </nav>
 
       <Outlet />
+
+      {/* Phones have no sidebar, so Sign out lives here (desktop keeps it in
+          the sidebar footer). */}
+      <div className="mt-10 border-t border-border pt-3 md:hidden">
+        <LogoutButton />
+      </div>
     </div>
   )
 }

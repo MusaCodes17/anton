@@ -27,7 +27,8 @@ export function ToastProvider({ children }) {
   return (
     <ToastContext.Provider value={{ toast, dismiss }}>
       {children}
-      <div className="fixed bottom-0 right-0 z-[100] flex max-h-screen w-full flex-col gap-2 p-4 sm:max-w-sm">
+      {/* Mobile: lifted above the bottom tab bar (h-14 + home indicator). */}
+      <div className="fixed bottom-[calc(3.5rem+env(safe-area-inset-bottom))] right-0 z-[100] flex max-h-screen w-full flex-col gap-2 p-4 sm:max-w-sm md:bottom-0">
         {toasts.map((t) => (
           <ToastItem key={t.id} toast={t} onDismiss={() => dismiss(t.id)} />
         ))}

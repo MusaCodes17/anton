@@ -52,8 +52,8 @@ export default function ChatDrawer() {
         onClick={() => setIsOpen(true)}
         aria-label="Open Son of Anton"
         className={cn(
-          // Bottom offset clears the iOS home indicator in the installed PWA.
-          'fixed bottom-[calc(1.5rem+env(safe-area-inset-bottom))] right-6 z-40 flex items-center gap-2 rounded-full bg-primary px-4 py-3 text-sm font-semibold text-primary-foreground hover:bg-primary/90 transition-all duration-200',
+          // Desktop only: on phones the tab bar's Anton tab replaces the FAB.
+          'fixed bottom-6 right-6 z-40 hidden items-center md:flex gap-2 rounded-full bg-primary px-4 py-3 text-sm font-semibold text-primary-foreground hover:bg-primary/90 transition-all duration-200',
           isOpen ? 'opacity-0 pointer-events-none translate-y-2' : 'opacity-100 translate-y-0'
         )}
       >
