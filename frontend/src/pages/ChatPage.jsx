@@ -9,6 +9,8 @@ import {
   Loader2,
   PanelLeft,
   X,
+  SquarePen,
+  ArrowDown,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { UserMessage, AssistantMessage, ModelDivider, EmptyState } from '@/components/chat/ChatMessages'
@@ -45,18 +47,38 @@ function ChatArea({
   modelSwitchMessage,
   onModelSwitchApplied,
 }) {
-  const { displayMessages, setDisplayMessages, apiMessages, isStreaming, sendMessage } = useChatStream({
+  const { displayMessages, setDisplayMessages, apiMessages, isStreaming, sendMessage, stop } = useChatStream({
     model,
     initialDisplayMessages,
     initialApiMessages,
   })
 
-  const messagesEndRef = useRef(null)
+  const scrollRef = useRef(null)
   const isFirstRun = useRef(true)
+  // Stick-to-bottom: follow the stream only while the reader is already at
+  // the bottom. Scrolling up to re-read pauses following and offers a
+  // "latest" button instead of yanking the thread back on every token.
+  const [atBottom, setAtBottom] = useState(true)
+  const atBottomRef = useRef(true)
 
+  const scrollToBottom = useCallback((behavior = 'auto') => {
+    const el = scrollRef.current
+    if (el) el.scrollTo({ top: el.scrollHeight, behavior })
+  }, [])
+
+  const handleScroll = () => {
+    const el = scrollRef.current
+    if (!el) return
+    const near = el.scrollHeight - el.scrollTop - el.clientHeight < 80
+    atBottomRef.current = near
+    setAtBottom(near)
+  }
+
+  // 'auto' (instant) while streaming: a smooth scroll per token stutters on
+  // phones because each one restarts before the last finishes.
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }, [displayMessages])
+    if (atBottomRef.current) scrollToBottom('auto')
+  }, [displayMessages, scrollToBottom])
 
   // Insert model switch divider and persist immediately (isStreaming doesn't change here)
   useEffect(() => {
@@ -89,44 +111,104 @@ function ChatArea({
     (displayContent, apiContent, pillPreviews) => {
       const trimmed = typeof displayContent === 'string' ? displayContent.trim() : ''
       if (!trimmed || isStreaming) return
+      // Sending always returns the reader to the bottom to watch the reply.
+      atBottomRef.current = true
+      setAtBottom(true)
       sendMessage(trimmed, apiContent, pillPreviews)
     },
     [isStreaming, sendMessage]
   )
 
   return (
-    <div className="flex flex-1 flex-col overflow-hidden">
+    <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
       {/* Messages */}
-      <div className="flex-1 overflow-y-auto px-6 py-4">
-        {displayMessages.length === 0 ? (
-          <div className="mx-auto max-w-3xl">
-            <EmptyState onPromptClick={handleSend} isStreaming={isStreaming} />
-          </div>
-        ) : (
-          <div className="mx-auto max-w-3xl space-y-4">
-            {displayMessages.map((msg) => {
-              if (msg.role === 'user') return <UserMessage key={msg.id} content={msg.content} pillPreviews={msg.pillPreviews} />
-              if (msg.role === 'divider') return <ModelDivider key={msg.id} content={msg.content} />
-              return <AssistantMessage key={msg.id} message={msg} />
-            })}
-          </div>
+      <div className="relative min-h-0 flex-1">
+        <div
+          ref={scrollRef}
+          onScroll={handleScroll}
+          className="h-full overflow-y-auto overscroll-contain px-4 py-4 md:px-6"
+        >
+          {displayMessages.length === 0 ? (
+            // min-h-full + justify-end pins the empty state above the composer.
+            <div className="mx-auto flex min-h-full max-w-3xl flex-col justify-end">
+              <EmptyState onPromptClick={handleSend} isStreaming={isStreaming} />
+            </div>
+          ) : (
+            <div className="mx-auto max-w-3xl space-y-5">
+              {displayMessages.map((msg) => {
+                if (msg.role === 'user') return <UserMessage key={msg.id} content={msg.content} pillPreviews={msg.pillPreviews} />
+                if (msg.role === 'divider') return <ModelDivider key={msg.id} content={msg.content} />
+                return <AssistantMessage key={msg.id} message={msg} />
+              })}
+            </div>
+          )}
+        </div>
+        {!atBottom && displayMessages.length > 0 && (
+          <button
+            type="button"
+            onClick={() => scrollToBottom('smooth')}
+            className="focus-ring absolute bottom-3 left-1/2 flex h-9 -translate-x-1/2 items-center gap-1.5 rounded-full border border-edge bg-secondary px-3.5 text-sm font-semibold text-secondary-foreground"
+          >
+            <ArrowDown className="h-4 w-4" />
+            Latest
+          </button>
         )}
-        <div ref={messagesEndRef} />
       </div>
 
-      {/* Input — pb clears the home indicator when running standalone (RA2.2). */}
-      <div className="shrink-0 border-t border-border px-6 py-4 pb-[calc(1rem+env(safe-area-inset-bottom))]">
+      {/* Composer. On phones the tab bar below owns the home-indicator inset,
+          and it hides while the keyboard is up, so a fixed small pb suffices. */}
+      <div className="shrink-0 border-t border-divider px-3 pt-2 pb-2.5 md:px-6 md:py-4">
         <div className="mx-auto max-w-3xl">
-          <ChatInput onSend={handleSend} isStreaming={isStreaming} maxHeight={160} />
+          <ChatInput onSend={handleSend} isStreaming={isStreaming} onStop={stop} maxHeight={160} />
         </div>
       </div>
     </div>
   )
 }
 
+// Model choices, grouped by provider — shared by the desktop header dropdown
+// and the mobile conversations sheet.
+function ModelOptions({ providers, model, onChange }) {
+  if (!providers) return <p className="px-3 py-2 text-sm text-muted-foreground">Loading models…</p>
+  return Object.entries(providers.providers ?? {}).map(([key, provider]) => (
+    <div key={key}>
+      <div className="flex items-center gap-2 px-3 py-1.5">
+        <span className="text-2xs font-semibold uppercase tracking-[0.1em] text-muted-foreground">
+          {provider.name}
+        </span>
+        {!provider.available && (
+          <span className="rounded border border-border px-1 py-0.5 text-2xs text-faint">no key</span>
+        )}
+      </div>
+      {(provider.models ?? []).map((m) => (
+        <button
+          key={m.id}
+          type="button"
+          onClick={() => provider.available && onChange(m.id)}
+          disabled={!provider.available}
+          className={cn(
+            'focus-ring flex min-h-11 w-full items-center gap-2 rounded-[9px] px-3 py-2 text-sm transition-colors md:min-h-0',
+            !provider.available
+              ? 'cursor-not-allowed text-faint'
+              : m.id === model
+              ? 'bg-accent text-accent-foreground'
+              : 'text-muted-foreground hover:bg-secondary hover:text-foreground'
+          )}
+        >
+          <span className="w-3.5 shrink-0">
+            {m.id === model && provider.available && <Check className="h-3.5 w-3.5 text-primary" />}
+          </span>
+          <span className="flex-1 text-left">{m.name}</span>
+          <span className="text-xs text-muted-foreground">{m.description}</span>
+        </button>
+      ))}
+    </div>
+  ))
+}
+
 // Conversation list contents — shared by the desktop aside and the mobile
-// slide-over so the two can't drift. New conversation, the list, and the
-// current-model footer.
+// sheet so the two can't drift. `showNew` is off in the sheet, which renders
+// its own primary New button above the model picker.
 function ConversationPanel({
   conversations,
   activeConversationId,
@@ -136,81 +218,108 @@ function ConversationPanel({
   deleteConfirm,
   setDeleteConfirm,
   modelName,
+  showNew = true,
 }) {
   return (
     <>
-      {/* New conversation */}
-      <div className="px-3 pt-3 pb-1">
-        <button
-          onClick={onNew}
-          className="flex w-full items-center gap-2 rounded-[9px] px-3 py-2 text-sm font-medium text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
-        >
-          <Plus className="h-4 w-4 shrink-0" />
-          New conversation
-        </button>
-      </div>
+      {showNew && (
+        <div className="px-3 pt-3 pb-1">
+          <button
+            type="button"
+            onClick={onNew}
+            className="focus-ring flex w-full items-center gap-2 rounded-[9px] px-3 py-2 text-sm font-medium text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
+          >
+            <Plus className="h-4 w-4 shrink-0" />
+            New conversation
+          </button>
+        </div>
+      )}
 
       {/* Conversation list */}
-      <div className="flex-1 overflow-y-auto px-3 py-1 space-y-px">
+      <div className="flex-1 space-y-px overflow-y-auto overscroll-contain px-2 py-1 md:px-3">
         {conversations.length === 0 ? (
-          <p className="px-3 py-3 text-xs text-faint">No conversations yet</p>
+          <p className="px-3 py-3 text-sm text-muted-foreground">No conversations yet</p>
         ) : (
-          conversations.map((conv) => (
-            <div
-              key={conv.id}
-              role="button"
-              tabIndex={0}
-              onClick={() => onSelect(conv.id)}
-              onKeyDown={(e) => e.key === 'Enter' && onSelect(conv.id)}
-              className={cn(
-                'group relative flex items-start gap-2 rounded-[9px] px-3 py-2 cursor-pointer transition-colors select-none',
-                conv.id === activeConversationId
-                  ? 'bg-accent text-accent-foreground'
-                  : 'text-muted-foreground hover:bg-secondary hover:text-foreground'
-              )}
-            >
-              <div className="flex-1 min-w-0">
-                <p className="text-xs font-medium truncate leading-snug">
-                  {conv.title ?? 'New conversation'}
-                </p>
-                <p className="text-[10px] text-faint mt-0.5">
-                  {formatRelativeTime(conv.updatedAt)}
-                </p>
-              </div>
+          conversations.map((conv) => {
+            const isActive = conv.id === activeConversationId
+            const confirming = deleteConfirm === conv.id
+            const title = conv.title ?? 'New conversation'
+            return (
+              <div
+                key={conv.id}
+                className={cn(
+                  'group flex items-center rounded-[10px] transition-colors',
+                  isActive ? 'bg-accent' : 'hover:bg-secondary'
+                )}
+              >
+                <button
+                  type="button"
+                  onClick={() => onSelect(conv.id)}
+                  aria-current={isActive ? 'true' : undefined}
+                  className="focus-ring flex min-h-14 min-w-0 flex-1 items-center gap-3 rounded-[10px] px-3 py-2 text-left md:min-h-0"
+                >
+                  <span
+                    className={cn(
+                      'h-[7px] w-[7px] shrink-0 rotate-45 rounded-[2px]',
+                      isActive ? 'bg-primary' : 'bg-nav-inactive'
+                    )}
+                  />
+                  <span className="min-w-0 flex-1">
+                    <span
+                      className={cn(
+                        'block truncate text-md-plus leading-snug md:text-xs',
+                        isActive ? 'font-bold text-accent-foreground' : 'font-medium text-foreground md:text-muted-foreground md:group-hover:text-foreground'
+                      )}
+                    >
+                      {title}
+                    </span>
+                    <span className="mt-0.5 block text-xs text-muted-foreground md:text-2xs">
+                      {formatRelativeTime(conv.updatedAt)}
+                    </span>
+                  </span>
+                </button>
 
-              {/* Delete button / confirm */}
-              {deleteConfirm === conv.id ? (
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation()
-                    onDelete(conv.id)
-                  }}
-                  className="shrink-0 rounded p-0.5 text-red-400 hover:text-red-300 transition-colors"
-                  aria-label="Confirm delete"
-                >
-                  <Check className="h-3 w-3" />
-                </button>
-              ) : (
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation()
-                    setDeleteConfirm(conv.id)
-                  }}
-                  className="shrink-0 rounded p-0.5 opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-foreground transition-opacity"
-                  aria-label="Delete conversation"
-                >
-                  <Trash2 className="h-3 w-3" />
-                </button>
-              )}
-            </div>
-          ))
+                {/* Delete is two-step. Visible on touch (no hover there);
+                    desktop keeps it on hover/focus to stay quiet. */}
+                {confirming ? (
+                  <span className="flex shrink-0 items-center pr-1">
+                    <button
+                      type="button"
+                      onClick={() => onDelete(conv.id)}
+                      className="focus-ring h-9 rounded-lg bg-destructive px-3 text-sm font-semibold text-destructive-foreground md:h-7 md:px-2 md:text-xs"
+                    >
+                      Delete
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setDeleteConfirm(null)}
+                      aria-label="Cancel delete"
+                      className="focus-ring flex h-11 w-11 items-center justify-center rounded-lg text-muted-foreground hover:text-foreground md:h-7 md:w-7"
+                    >
+                      <X className="h-4 w-4 md:h-3.5 md:w-3.5" />
+                    </button>
+                  </span>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => setDeleteConfirm(conv.id)}
+                    aria-label={`Delete ${title}`}
+                    className="focus-ring mr-1 flex h-11 w-11 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-opacity hover:text-foreground md:h-7 md:w-7 md:opacity-0 md:focus-visible:opacity-100 md:group-hover:opacity-100"
+                  >
+                    <Trash2 className="h-4 w-4 md:h-3.5 md:w-3.5" />
+                  </button>
+                )}
+              </div>
+            )
+          })
         )}
       </div>
 
-      {/* Current model indicator */}
-      <div className="border-t border-border px-4 py-3">
-        <p className="text-[10px] text-faint truncate">{modelName}</p>
-      </div>
+      {modelName && (
+        <div className="border-t border-border px-4 py-3">
+          <p className="truncate text-2xs text-muted-foreground">{modelName}</p>
+        </div>
+      )}
     </>
   )
 }
@@ -239,6 +348,18 @@ export default function ChatPage() {
   // server) because the user hasn't sent a message in it yet.
   const [unsavedId, setUnsavedId] = useState(null)
   const didAutoSelect = useRef(false)
+  // Escape closes the mobile sheet (keyboard users / iPad with keyboard).
+  // Closing the sheet also abandons a half-finished delete, so it can't be
+  // confirmed by accident the next time the sheet opens.
+  useEffect(() => {
+    if (!showConvList) {
+      setDeleteConfirm(null)
+      return
+    }
+    const onKey = (e) => e.key === 'Escape' && setShowConvList(false)
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [showConvList])
 
   const activeConv = conversations.find((c) => c.id === activeConversationId) ?? null
 
@@ -487,24 +608,59 @@ export default function ChatPage() {
         />
       </aside>
 
-      {/* ── Conversation list slide-over (mobile) ── */}
+      {/* ── Conversations sheet (mobile) — a bottom sheet rather than a side
+          drawer: it opens from where the thumb is, and also carries the model
+          picker that the narrow header has no room for. ── */}
       {showConvList && (
         <div className="fixed inset-0 z-50 md:hidden">
           <div
-            className="absolute inset-0 bg-black/40"
+            className="absolute inset-0 bg-black/55"
             onClick={() => setShowConvList(false)}
           />
-          <aside className="absolute inset-y-0 left-0 flex w-[85%] max-w-[320px] flex-col bg-sidebar shadow-xl">
-            <div className="flex shrink-0 items-center justify-between border-b border-border px-4 py-3 pt-[calc(0.75rem+env(safe-area-inset-top))]">
-              <span className="text-sm font-semibold text-foreground">Conversations</span>
+          <section
+            role="dialog"
+            aria-modal="true"
+            aria-label="Conversations"
+            className="absolute inset-x-0 bottom-0 flex max-h-[85dvh] flex-col rounded-t-[20px] border-t border-border bg-sidebar pb-[env(safe-area-inset-bottom)]"
+          >
+            <div className="flex justify-center pt-2 pb-1">
+              <span className="h-[5px] w-9 rounded-full bg-nav-inactive" />
+            </div>
+            <div className="flex shrink-0 items-center justify-between pl-5 pr-2">
+              <h2 className="font-heading text-[19px] font-extrabold tracking-[-0.025em] text-foreground">
+                Conversations
+              </h2>
               <button
+                type="button"
                 onClick={() => setShowConvList(false)}
-                className="rounded-md p-1 text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
+                className="focus-ring flex h-11 w-11 items-center justify-center rounded-[10px] text-muted-foreground hover:text-foreground"
                 aria-label="Close conversations"
               >
-                <X className="h-4 w-4" />
+                <X className="h-5 w-5" />
               </button>
             </div>
+            <div className="shrink-0 px-4 pt-1 pb-3">
+              <button
+                type="button"
+                onClick={handleMobileNew}
+                className="focus-ring flex h-11 w-full items-center justify-center gap-2 rounded-[10px] bg-primary font-heading text-[15px] font-extrabold text-primary-foreground hover:bg-primary/90"
+              >
+                <Plus className="h-4 w-4" strokeWidth={2.5} />
+                New conversation
+              </button>
+            </div>
+            <details className="group/model mx-4 mb-3 shrink-0 rounded-[12px] border border-border bg-card">
+              <summary className="focus-ring flex min-h-[52px] cursor-pointer list-none items-center gap-3 rounded-[12px] px-3.5 [&::-webkit-details-marker]:hidden">
+                <span className="flex min-w-0 flex-1 flex-col">
+                  <span className="text-2xs font-semibold uppercase tracking-[0.1em] text-muted-foreground">Model</span>
+                  <span className="truncate text-md-plus font-semibold text-foreground">{getModelName(model)}</span>
+                </span>
+                <ChevronDown className="h-4 w-4 text-muted-foreground transition-transform group-open/model:rotate-180" />
+              </summary>
+              <div className="max-h-[40dvh] overflow-y-auto px-1 pb-1">
+                <ModelOptions providers={providers} model={model} onChange={handleModelChange} />
+              </div>
+            </details>
             <ConversationPanel
               conversations={conversations}
               activeConversationId={activeConversationId}
@@ -513,94 +669,74 @@ export default function ChatPage() {
               onDelete={handleDeleteConversation}
               deleteConfirm={deleteConfirm}
               setDeleteConfirm={setDeleteConfirm}
-              modelName={getModelName(model)}
+              showNew={false}
             />
-          </aside>
+          </section>
         </div>
       )}
 
       {/* ── Main area ── */}
-      <div className="flex flex-1 flex-col overflow-hidden">
-        {/* Header */}
-        <header className="flex shrink-0 items-center justify-between gap-2 border-b border-border px-4 py-3 md:px-6">
-          <div className="flex min-w-0 items-center gap-2">
-            {/* Mobile: open the conversation list slide-over */}
-            <button
-              onClick={() => setShowConvList(true)}
-              className="rounded-md p-1 text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground md:hidden"
-              aria-label="Show conversations"
-            >
-              <PanelLeft className="h-5 w-5" />
-            </button>
-            <span className="truncate font-semibold text-foreground">Son of Anton</span>
+      <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
+        {/* Header — on mobile this is the only top bar (Layout drops its own;
+            app navigation is the tab bar below), so it carries conversations,
+            title/model and new chat. */}
+        <header className="flex h-[52px] shrink-0 items-center gap-1 border-b border-divider px-1.5 md:h-auto md:justify-between md:gap-2 md:border-border md:px-6 md:py-3">
+          <button
+            type="button"
+            onClick={() => setShowConvList(true)}
+            className="focus-ring flex h-11 w-11 shrink-0 items-center justify-center rounded-[10px] text-secondary-foreground hover:bg-secondary md:hidden"
+            aria-label="Show conversations"
+          >
+            <PanelLeft className="h-5 w-5" />
+          </button>
+          <div className="flex min-w-0 flex-1 flex-col px-1 md:flex-none md:px-0">
+            <span className="truncate text-md-plus font-semibold text-foreground md:text-base">
+              <span className="md:hidden">{activeConv?.title ?? 'Son of Anton'}</span>
+              <span className="hidden md:inline">Son of Anton</span>
+            </span>
+            <span className="flex items-center gap-1.5 truncate text-xs text-muted-foreground md:hidden">
+              <span className="h-1.5 w-1.5 shrink-0 rotate-45 rounded-[1.5px] bg-primary" />
+              <span className="truncate">Son of Anton · {getModelName(model)}</span>
+            </span>
           </div>
 
-          <div className="flex shrink-0 items-center gap-2">
-            {/* Model selector */}
+          {/* Mobile actions */}
+          <button
+            type="button"
+            onClick={handleNewConversation}
+            className="focus-ring flex h-11 w-11 shrink-0 items-center justify-center rounded-[10px] text-secondary-foreground hover:bg-secondary md:hidden"
+            aria-label="New conversation"
+          >
+            <SquarePen className="h-5 w-5" />
+          </button>
+
+          {/* Desktop actions */}
+          <div className="hidden shrink-0 items-center gap-2 md:flex">
             <div className="relative">
               <button
+                type="button"
                 onClick={() => setShowModelMenu((v) => !v)}
-                className="flex items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-xs text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
+                className="focus-ring flex items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-xs text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
               >
-                <span className="max-w-[36vw] truncate sm:max-w-none">{getModelName(model)}</span>
+                <span>{getModelName(model)}</span>
                 <ChevronDown className="h-3 w-3 shrink-0" />
               </button>
 
               {showModelMenu && (
                 <>
                   {/* Click-away overlay */}
-                  <div
-                    className="fixed inset-0 z-10"
-                    onClick={() => setShowModelMenu(false)}
-                  />
-                  <div className="absolute right-0 top-full mt-1 z-20 w-60 rounded-[10px] border border-border bg-sidebar py-1 shadow-xl">
-                    {providers &&
-                      Object.entries(providers.providers ?? {}).map(([key, provider]) => (
-                        <div key={key}>
-                          <div className="flex items-center gap-2 px-3 py-1.5">
-                            <span className="text-[10px] font-semibold uppercase tracking-wider text-faint">
-                              {provider.name}
-                            </span>
-                            {!provider.available && (
-                              <span className="text-[9px] text-faint border border-border rounded px-1 py-0.5">
-                                no key
-                              </span>
-                            )}
-                          </div>
-                          {(provider.models ?? []).map((m) => (
-                            <button
-                              key={m.id}
-                              onClick={() => provider.available && handleModelChange(m.id)}
-                              disabled={!provider.available}
-                              className={cn(
-                                'flex w-full items-center gap-2 px-3 py-2 text-sm transition-colors',
-                                !provider.available
-                                  ? 'text-muted-foreground/40 cursor-not-allowed'
-                                  : m.id === model
-                                  ? 'text-foreground bg-accent/40'
-                                  : 'text-muted-foreground hover:bg-secondary hover:text-foreground'
-                              )}
-                            >
-                              <span className="w-3.5 shrink-0">
-                                {m.id === model && provider.available && (
-                                  <Check className="h-3 w-3 text-primary" />
-                                )}
-                              </span>
-                              <span className="flex-1 text-left">{m.name}</span>
-                              <span className="text-[10px] text-faint">{m.description}</span>
-                            </button>
-                          ))}
-                        </div>
-                      ))}
+                  <div className="fixed inset-0 z-10" onClick={() => setShowModelMenu(false)} />
+                  <div className="absolute right-0 top-full z-20 mt-1 w-64 rounded-[10px] border border-border bg-popover p-1">
+                    <ModelOptions providers={providers} model={model} onChange={handleModelChange} />
                   </div>
                 </>
               )}
             </div>
 
-            {/* New conversation shortcut */}
             <button
+              type="button"
               onClick={handleNewConversation}
-              className="flex items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-xs text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
+              className="focus-ring flex items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-xs text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
             >
               <Plus className="h-3 w-3 shrink-0" />
               New

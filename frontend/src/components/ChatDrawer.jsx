@@ -11,7 +11,7 @@ const DEFAULT_MODEL = 'claude-haiku-4-5-20251001'
 export default function ChatDrawer() {
   const [isOpen, setIsOpen] = useState(false)
 
-  const { displayMessages, apiMessages, isStreaming, sendMessage } = useChatStream({
+  const { displayMessages, apiMessages, isStreaming, sendMessage, stop } = useChatStream({
     model: DEFAULT_MODEL,
   })
 
@@ -52,7 +52,8 @@ export default function ChatDrawer() {
         onClick={() => setIsOpen(true)}
         aria-label="Open Son of Anton"
         className={cn(
-          'fixed bottom-6 right-6 z-40 flex items-center gap-2 rounded-full bg-primary px-4 py-3 text-sm font-semibold text-primary-foreground shadow-lg hover:bg-primary/90 transition-all duration-200',
+          // Desktop only: on phones the tab bar's Anton tab replaces the FAB.
+          'fixed bottom-6 right-6 z-40 hidden items-center md:flex gap-2 rounded-full bg-primary px-4 py-3 text-sm font-semibold text-primary-foreground hover:bg-primary/90 transition-all duration-200',
           isOpen ? 'opacity-0 pointer-events-none translate-y-2' : 'opacity-100 translate-y-0'
         )}
       >
@@ -72,18 +73,19 @@ export default function ChatDrawer() {
       {/* Drawer */}
       <div
         className={cn(
-          'fixed right-0 top-0 z-[51] flex h-full w-[400px] flex-col border-l border-border bg-sidebar transition-transform duration-300',
+          // pt: fixed to the viewport, so it must inset itself below the iOS notch.
+          'fixed right-0 top-0 z-[51] flex h-[var(--app-height,100dvh)] w-[400px] flex-col border-l border-border bg-sidebar pt-[env(safe-area-inset-top)] transition-transform duration-300',
           'max-[500px]:w-full',
           isOpen ? 'translate-x-0' : 'translate-x-full'
         )}
       >
         {/* Header */}
-        <div className="flex shrink-0 items-center justify-between border-b border-border px-4 py-3">
+        <div className="flex shrink-0 items-center justify-between border-b border-border py-1 pl-4 pr-1">
           <span className="font-semibold text-foreground">Son of Anton</span>
           <div className="flex items-center gap-1">
             <button
               onClick={handleOpenFullPage}
-              className="rounded-md p-1 text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
+              className="focus-ring flex h-11 w-11 items-center justify-center rounded-[10px] text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
               aria-label="Open full page"
               title="Open full page"
             >
@@ -91,7 +93,7 @@ export default function ChatDrawer() {
             </button>
             <button
               onClick={() => setIsOpen(false)}
-              className="rounded-md p-1 text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
+              className="focus-ring flex h-11 w-11 items-center justify-center rounded-[10px] text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
               aria-label="Close"
             >
               <X className="h-4 w-4" />
@@ -104,7 +106,7 @@ export default function ChatDrawer() {
           {displayMessages.length === 0 ? (
             <EmptyState onPromptClick={handleSend} isStreaming={isStreaming} />
           ) : (
-            <div className="space-y-3">
+            <div className="space-y-5">
               {displayMessages.map((msg) => {
                 if (msg.role === 'user') return <UserMessage key={msg.id} content={msg.content} pillPreviews={msg.pillPreviews} />
                 if (msg.role === 'divider') return <ModelDivider key={msg.id} content={msg.content} />
@@ -116,8 +118,8 @@ export default function ChatDrawer() {
         </div>
 
         {/* Input */}
-        <div className="shrink-0 border-t border-border px-4 py-3">
-          <ChatInput onSend={handleSend} isStreaming={isStreaming} maxHeight={120} />
+        <div className="shrink-0 border-t border-border px-3 pt-2 pb-[calc(0.75rem+env(safe-area-inset-bottom))] [.keyboard-open_&]:pb-2">
+          <ChatInput onSend={handleSend} isStreaming={isStreaming} onStop={stop} maxHeight={120} />
         </div>
       </div>
     </>

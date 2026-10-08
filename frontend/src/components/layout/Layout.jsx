@@ -1,20 +1,22 @@
-import { useState } from 'react'
 import { NavLink, Outlet, useLocation } from 'react-router-dom'
-import { Home, Activity, Tag, PersonStanding, Sparkles, Settings as SettingsIcon, Menu, X, LogOut } from 'lucide-react'
+import { Home, Activity, Tag, PersonStanding, Sparkles, Settings as SettingsIcon, LogOut } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { Button } from '@/components/ui/button'
 import { authApi, UNAUTHENTICATED_EVENT } from '@/services/api'
 import { useDashboardStats } from '@/hooks/useApi'
 import { formatRelativeTime } from '@/lib/utils'
 import BrandMark from '@/components/layout/BrandMark'
 import OfflineIndicator from '@/components/pwa/OfflineIndicator'
+import { useKeyboardViewport } from '@/hooks/useKeyboardViewport'
 
+// `short` is the bottom tab bar label (five tabs at 380px leave ~76px each);
+// `also` lists child routes that should light the tab, e.g. an activity
+// opened from Training keeps Training active.
 const navItems = [
-  { to: '/', label: 'Home', icon: Home, end: true },
-  { to: '/training', label: 'Training', icon: Activity },
-  { to: '/shoes', label: 'Shoes', icon: PersonStanding },
-  { to: '/deals', label: 'Deals', icon: Tag },
-  { to: '/assistant', label: 'Son of Anton', icon: Sparkles },
+  { to: '/', label: 'Home', short: 'Home', icon: Home, end: true, also: ['/new-runs'] },
+  { to: '/training', label: 'Training', short: 'Training', icon: Activity, also: ['/activities'] },
+  { to: '/shoes', label: 'Shoes', short: 'Shoes', icon: PersonStanding },
+  { to: '/deals', label: 'Deals', short: 'Deals', icon: Tag },
+  { to: '/assistant', label: 'Son of Anton', short: 'Anton', icon: Sparkles },
 ]
 
 const settingsItem = { to: '/settings', label: 'Settings', icon: SettingsIcon }
@@ -77,10 +79,53 @@ function SettingsLink({ onNavigate }) {
   )
 }
 
+// Mobile primary navigation (UI tab-bar pass). Five destinations in thumb
+// reach, replacing the old hamburger + slide-down menu. A static shrink-0
+// child of the shell (not position:fixed), so it can't overlap content and
+// needs no matching padding on every page. Hidden while the iOS keyboard is
+// up (html.keyboard-open) so the chat composer sits directly on the keyboard.
+function MobileTabBar() {
+  const { pathname } = useLocation()
+  const isActive = ({ to, end, also = [] }) => {
+    const hit = (p) => pathname === p || pathname.startsWith(`${p}/`)
+    return (end ? pathname === to : hit(to)) || also.some(hit)
+  }
+  return (
+    <nav
+      aria-label="Primary"
+      className="z-30 grid shrink-0 grid-cols-5 border-t border-divider bg-sidebar pb-[env(safe-area-inset-bottom)] md:hidden [.keyboard-open_&]:hidden"
+    >
+      {navItems.map((item) => {
+        const active = isActive(item)
+        const Icon = item.icon
+        return (
+          <NavLink
+            key={item.to}
+            to={item.to}
+            end={item.end}
+            aria-current={active ? 'page' : undefined}
+            className={cn(
+              'focus-ring relative flex h-14 flex-col items-center justify-center gap-1 text-2xs transition-colors',
+              active ? 'font-bold text-accent-foreground' : 'font-semibold text-muted-foreground hover:text-foreground'
+            )}
+          >
+            {/* The nav's diamond signature, moved above the icon. */}
+            {active && (
+              <span className="absolute top-0 h-[7px] w-[7px] -translate-y-1/2 rotate-45 rounded-[2px] bg-primary" />
+            )}
+            <Icon className="h-[22px] w-[22px]" strokeWidth={1.8} />
+            {item.short}
+          </NavLink>
+        )
+      })}
+    </nav>
+  )
+}
+
 // RA2.1 logout — clears the session cookie server-side, then fires the app-wide
 // unauthenticated event so AuthGate drops back to the login view. Dispatches the
 // event even if the request fails, so a click always returns the user to login.
-function LogoutButton({ onNavigate }) {
+export function LogoutButton({ onNavigate }) {
   const handleLogout = async () => {
     try {
       await authApi.logout()
@@ -117,13 +162,13 @@ function Brand() {
 }
 
 export default function Layout() {
-  const [mobileOpen, setMobileOpen] = useState(false)
   const stats = useDashboardStats()
   const location = useLocation()
   // Chat manages its own internal scroll regions and needs the full
   // viewport height with no page padding — every other route gets the
   // standard padded, naturally-scrolling page wrapper.
   const isFullBleed = location.pathname === '/assistant'
+  useKeyboardViewport()
 
   return (
     // RA2.2 (R5.2) — fixed-height app shell. Header + banner are static shrink-0
@@ -133,9 +178,11 @@ export default function Layout() {
     // iOS standalone mode. 100dvh (not 100vh) so iOS toolbars don't hide chrome.
     // pt reserves the iOS status-bar inset: black-translucent + viewport-fit=cover
     // paint web content UNDER the notch, so the app must inset the top itself —
-    // nothing else does (mirrors the env(safe-area-inset-bottom) used on <main>).
+    // nothing else does. The bottom inset is owned by MobileTabBar on phones.
     // A no-op wherever the inset is 0 (desktop browsers / non-notched devices).
-    <div className="flex h-[100dvh] flex-col bg-background pt-[env(safe-area-inset-top)]">
+    // --app-height is set only while the iOS keyboard is up (useKeyboardViewport)
+    // so the shell shrinks to the space above it instead of being panned away.
+    <div className="flex h-[var(--app-height,100dvh)] flex-col bg-background pt-[env(safe-area-inset-top)]">
       {/* Offline banner — static, above the header. */}
       <div className="z-40 shrink-0">
         <OfflineIndicator />
@@ -161,55 +208,50 @@ export default function Layout() {
         </div>
       </aside>
 
-      {/* Mobile top bar — a static shrink-0 child outside the scroll region, so
-          it stays fixed and reachable on every route including full-bleed chat
-          (the "can't get back" bug). No sticky: it can't scroll off because it
-          isn't inside the scrolling <main>. */}
-      <header className="z-30 flex h-16 shrink-0 items-center justify-between border-b border-border bg-sidebar px-4 md:hidden">
-        <Brand />
-        <Button
-          variant="ghost"
-          size="icon"
-          onClick={() => setMobileOpen((o) => !o)}
-          aria-label="Toggle navigation"
-        >
-          {mobileOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
-        </Button>
-      </header>
-
-      {/* Mobile slide-down menu — a static shrink-0 sibling above <main>. Since
-          main scrolls internally, the menu sits between the fixed header and the
-          scroll region and is never pushed off or scrolled away. */}
-      {mobileOpen && (
-        <div className="z-20 shrink-0 border-b border-border bg-sidebar p-3 md:hidden">
-          <NavLinks onNavigate={() => setMobileOpen(false)} />
-          <div className="mt-1 border-t border-border pt-1">
-            <SettingsLink onNavigate={() => setMobileOpen(false)} />
-            <LogoutButton onNavigate={() => setMobileOpen(false)} />
-          </div>
-        </div>
-      )}
-
-      {/* Main is the single scroll region for all routes: flex-1 fills the height
-          left under the header, min-h-0 lets it shrink so overflow-y-auto scrolls
-          the body rather than the shell. Full-bleed (chat) just fills this box and
-          ChatPage's own h-full takes over its internal scrolling; padded routes
-          scroll here. */}
-      <main
+      {/* Mobile top bar — brand + Settings gear (Settings is plumbing, kept out
+          of the tab bar). Static shrink-0 child outside the scroll region, so it
+          can't scroll off. Hidden on full-bleed chat, whose own header replaces
+          it so the phone shows one bar, not two. */}
+      <header
         className={cn(
-          'min-h-0 flex-1 overflow-y-auto md:pl-[236px]'
+          'z-30 flex h-14 shrink-0 items-center justify-between border-b border-border bg-sidebar pl-4 pr-1.5 md:hidden',
+          isFullBleed && 'hidden'
         )}
       >
+        <Brand />
+        <NavLink
+          to="/settings"
+          aria-label="Settings"
+          className={({ isActive }) =>
+            cn(
+              'focus-ring flex h-11 w-11 items-center justify-center rounded-[10px] transition-colors hover:bg-secondary',
+              isActive ? 'text-accent-foreground' : 'text-muted-foreground'
+            )
+          }
+        >
+          <SettingsIcon className="h-5 w-5" />
+        </NavLink>
+      </header>
+
+      {/* Main is the single scroll region for all routes: flex-1 fills the height
+          left between header and tab bar, min-h-0 lets it shrink so
+          overflow-y-auto scrolls the body rather than the shell. Full-bleed
+          (chat) just fills this box and ChatPage's own h-full takes over its
+          internal scrolling; padded routes scroll here. */}
+      <main className="min-h-0 flex-1 overflow-y-auto md:pl-[236px]">
         {isFullBleed ? (
           <Outlet />
         ) : (
-          // pb clears the Son-of-Anton FAB (+ home indicator) on mobile; sm:p-6
-          // restores normal padding on wider screens.
-          <div className="p-4 pb-[calc(6rem+env(safe-area-inset-bottom))] sm:p-6 lg:px-[34px] lg:py-[30px]">
+          // pb-8 on mobile: the tab bar sits below <main>, so no FAB or
+          // home-indicator clearance is needed any more; sm:p-6 restores
+          // normal padding on wider screens.
+          <div className="p-4 pb-8 sm:p-6 lg:px-[34px] lg:py-[30px]">
             <Outlet />
           </div>
         )}
       </main>
+
+      <MobileTabBar />
     </div>
   )
 }

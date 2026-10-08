@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useRef } from 'react'
 import { authHeaders } from '@/services/api'
 import { useToast } from '@/components/ui/toast'
 
@@ -20,6 +20,14 @@ export function useChatStream({
   const [apiMessages, setApiMessages] = useState(initialApiMessages)
   const [isStreaming, setIsStreaming] = useState(false)
   const { toast } = useToast()
+  // Aborts the in-flight SSE fetch when the user taps Stop. Closing the
+  // connection is the whole protocol: the backend stops streaming on client
+  // disconnect, and whatever text already arrived is kept as the reply.
+  const abortRef = useRef(null)
+
+  const stop = useCallback(() => {
+    abortRef.current?.abort()
+  }, [])
 
   const insertDivider = useCallback((content) => {
     setDisplayMessages((prev) => [
@@ -74,9 +82,12 @@ export function useChatStream({
       setIsStreaming(true)
 
       let fullContent = ''
+      const controller = new AbortController()
+      abortRef.current = controller
 
       try {
         const res = await fetch('/api/chat/message', {
+          signal: controller.signal,
           method: 'POST',
           headers: { 'Content-Type': 'application/json', ...authHeaders() },
           // RA2.1: send the httpOnly session cookie with the SSE POST.
@@ -170,14 +181,17 @@ export function useChatStream({
           }
         }
       } catch (err) {
+        // A user-initiated Stop is not an error: keep the partial reply as-is.
+        const stopped = err?.name === 'AbortError'
         setDisplayMessages((prev) =>
           updateLast(prev, (m) => ({
             ...m,
-            content: m.content || `Error: ${err.message}`,
+            content: m.content || (stopped ? '_Stopped._' : `Error: ${err.message}`),
             isStreaming: false,
           }))
         )
       } finally {
+        abortRef.current = null
         setIsStreaming(false)
         if (fullContent) {
           setApiMessages((prev) => [...prev, { role: 'assistant', content: fullContent }])
@@ -188,5 +202,5 @@ export function useChatStream({
     [model, apiMessages, isStreaming, toast]
   )
 
-  return { displayMessages, setDisplayMessages, apiMessages, isStreaming, sendMessage, insertDivider }
+  return { displayMessages, setDisplayMessages, apiMessages, isStreaming, sendMessage, stop, insertDivider }
 }

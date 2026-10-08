@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react'
-import { Send, X, Loader2 } from 'lucide-react'
+import { ArrowUp, Square, X, Loader2, BarChart3, AlertTriangle } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { authHeaders } from '@/services/api'
 
@@ -29,7 +29,7 @@ function ResourcePicker({ groups, filter, activeIndex, onSelect, onClose, contai
     >
       {groups.map((group) => (
         <div key={group.label}>
-          <div className="px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-faint select-none">
+          <div className="px-3 py-1.5 text-2xs font-semibold uppercase tracking-wider text-muted-foreground select-none">
             {group.label}
           </div>
           {group.items.map((item) => {
@@ -41,7 +41,7 @@ function ResourcePicker({ groups, filter, activeIndex, onSelect, onClose, contai
                 data-active={isActive}
                 onClick={() => onSelect(item)}
                 className={cn(
-                  'flex w-full flex-col px-3 py-2 text-left transition-colors',
+                  'flex min-h-11 w-full flex-col justify-center px-3 py-2 text-left transition-colors',
                   isActive ? 'bg-accent text-accent-foreground' : 'text-muted-foreground hover:bg-secondary hover:text-foreground'
                 )}
               >
@@ -64,26 +64,27 @@ function ResourcePill({ pill, onRemove }) {
   return (
     <span
       className={cn(
-        'inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs shrink-0',
+        'inline-flex h-[30px] items-center gap-1.5 rounded-full pl-2.5 pr-0.5 text-[13px] font-semibold shrink-0',
         pill.status === 'error'
-          ? 'border-red-500/30 bg-red-500/10 text-red-400'
-          : 'border-primary/30 bg-primary/10 text-primary'
+          ? 'bg-secondary text-destructive'
+          : 'bg-accent text-accent-foreground'
       )}
     >
       {pill.status === 'loading' ? (
-        <Loader2 className="h-3 w-3 animate-spin shrink-0" />
+        <Loader2 className="h-3.5 w-3.5 animate-spin shrink-0" />
       ) : pill.status === 'error' ? (
-        <span>⚠</span>
+        <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
       ) : (
-        <span>📊</span>
+        <BarChart3 className="h-3.5 w-3.5 shrink-0" />
       )}
-      <span className="max-w-[140px] truncate">{pill.label}</span>
+      <span className="max-w-[160px] truncate">{pill.label}</span>
       <button
+        type="button"
         onClick={() => onRemove(pill.id)}
-        className="ml-0.5 opacity-60 hover:opacity-100 transition-opacity"
+        className="focus-ring flex h-[26px] w-[26px] items-center justify-center rounded-full opacity-70 transition-opacity hover:opacity-100"
         aria-label={`Remove ${pill.label}`}
       >
-        <X className="h-2.5 w-2.5" />
+        <X className="h-3 w-3" />
       </button>
     </span>
   )
@@ -96,7 +97,9 @@ function ResourcePill({ pill, onRemove }) {
  *
  * Props:
  *   onSend(displayContent, apiContent, pillPreviews) — called when message is submitted
- *   isStreaming — disables the textarea and send button while streaming
+ *   isStreaming — while true, Enter won't send and the send button becomes Stop;
+ *                 the textarea stays editable so the next message can be drafted
+ *   onStop — aborts the in-flight reply (Stop button); omit to hide Stop
  *   placeholder — textarea placeholder text
  *   maxHeight — max textarea height in px (default 160)
  *   textareaClassName — extra classes for the textarea
@@ -104,7 +107,8 @@ function ResourcePill({ pill, onRemove }) {
 export default function ChatInput({
   onSend,
   isStreaming,
-  placeholder = 'Ask about your shoes…',
+  onStop,
+  placeholder = 'Message Son of Anton',
   maxHeight = 160,
   textareaClassName,
 }) {
@@ -121,8 +125,12 @@ export default function ChatInput({
   const textareaRef = useRef(null)
   const wrapperRef = useRef(null)
 
-  // Focus on mount
-  useEffect(() => { textareaRef.current?.focus() }, [])
+  // Focus on mount — desktop only. On a phone, focusing raises the keyboard
+  // over half the thread before the user has read anything; a coarse pointer
+  // is the signal (touch-first device), not viewport width.
+  useEffect(() => {
+    if (window.matchMedia?.('(pointer: fine)').matches) textareaRef.current?.focus()
+  }, [])
 
   // Load resource list from API (once)
   const loadResources = useCallback(async () => {
@@ -283,6 +291,8 @@ export default function ChatInput({
   }
 
   const pickerOpen = atFilter !== null && filteredGroups.length > 0
+  const showStop = isStreaming && onStop
+  const sendDisabled = isStreaming || !input.trim() || pills.some((p) => p.status === 'loading')
 
   return (
     <div className="flex flex-col gap-2">
@@ -295,8 +305,12 @@ export default function ChatInput({
         </div>
       )}
 
-      {/* Input row with picker anchor */}
-      <div className="relative flex items-end gap-2" ref={wrapperRef}>
+      {/* Input row with picker anchor. One rounded field holding the textarea
+          and the send/stop button, so the whole composer reads as one control. */}
+      <div
+        className="relative flex items-end gap-1 rounded-[22px] border border-input bg-card p-1 transition-colors focus-within:border-primary"
+        ref={wrapperRef}
+      >
         {pickerOpen && (
           <ResourcePicker
             groups={filteredGroups}
@@ -308,6 +322,8 @@ export default function ChatInput({
           />
         )}
 
+        {/* 16px text below md is load-bearing: iOS Safari zooms the page into
+            any focused field under 16px, which breaks the fixed PWA shell. */}
         <textarea
           ref={textareaRef}
           value={input}
@@ -315,24 +331,38 @@ export default function ChatInput({
           onKeyDown={handleKeyDown}
           onInput={handleAutoResize}
           placeholder={placeholder}
-          disabled={isStreaming}
+          aria-label="Message"
+          enterKeyHint="send"
           rows={1}
           className={cn(
-            'flex-1 resize-none rounded-[10px] border border-input bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:ring-offset-background disabled:opacity-50',
+            'min-w-0 flex-1 resize-none bg-transparent px-3 py-[9px] text-base leading-[22px] placeholder:text-muted-foreground focus:outline-none md:text-sm',
             textareaClassName
           )}
-          style={{ minHeight: '38px', maxHeight: `${maxHeight}px`, overflowY: 'auto' }}
+          style={{ minHeight: '40px', maxHeight: `${maxHeight}px`, overflowY: 'auto' }}
         />
-        <button
-          onClick={handleSend}
-          disabled={isStreaming || !input.trim() || pills.some((p) => p.status === 'loading')}
-          aria-label="Send"
-          className="flex h-[38px] w-[38px] shrink-0 items-center justify-center rounded-[10px] bg-primary text-primary-foreground transition-colors hover:bg-primary/90 disabled:pointer-events-none disabled:opacity-50"
-        >
-          <Send className="h-4 w-4" />
-        </button>
+        {showStop ? (
+          <button
+            type="button"
+            onClick={onStop}
+            aria-label="Stop generating"
+            className="focus-ring flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-foreground text-background transition-opacity hover:opacity-90"
+          >
+            <Square className="h-3.5 w-3.5 fill-current" />
+          </button>
+        ) : (
+          <button
+            type="button"
+            onClick={handleSend}
+            disabled={sendDisabled}
+            aria-label="Send"
+            className="focus-ring flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground transition-colors hover:bg-primary/90 disabled:bg-border disabled:text-faint"
+          >
+            <ArrowUp className="h-[18px] w-[18px]" strokeWidth={2.5} />
+          </button>
+        )}
       </div>
-      <p className="text-xs text-faint px-1">Enter to send · Shift+Enter for newline · @ to mention a resource</p>
+      {/* Keyboard hints only mean something with a hardware keyboard. */}
+      <p className="hidden px-1 text-xs text-faint md:block">Enter to send · Shift+Enter for newline · @ to mention a resource</p>
     </div>
   )
 }
