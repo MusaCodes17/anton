@@ -8,6 +8,7 @@ import { useDashboardStats } from '@/hooks/useApi'
 import { formatRelativeTime } from '@/lib/utils'
 import BrandMark from '@/components/layout/BrandMark'
 import OfflineIndicator from '@/components/pwa/OfflineIndicator'
+import { useKeyboardViewport } from '@/hooks/useKeyboardViewport'
 
 const navItems = [
   { to: '/', label: 'Home', icon: Home, end: true },
@@ -124,6 +125,7 @@ export default function Layout() {
   // viewport height with no page padding — every other route gets the
   // standard padded, naturally-scrolling page wrapper.
   const isFullBleed = location.pathname === '/assistant'
+  useKeyboardViewport()
 
   return (
     // RA2.2 (R5.2) — fixed-height app shell. Header + banner are static shrink-0
@@ -135,7 +137,9 @@ export default function Layout() {
     // paint web content UNDER the notch, so the app must inset the top itself —
     // nothing else does (mirrors the env(safe-area-inset-bottom) used on <main>).
     // A no-op wherever the inset is 0 (desktop browsers / non-notched devices).
-    <div className="flex h-[100dvh] flex-col bg-background pt-[env(safe-area-inset-top)]">
+    // --app-height is set only while the iOS keyboard is up (useKeyboardViewport)
+    // so the shell shrinks to the space above it instead of being panned away.
+    <div className="flex h-[var(--app-height,100dvh)] flex-col bg-background pt-[env(safe-area-inset-top)]">
       {/* Offline banner — static, above the header. */}
       <div className="z-40 shrink-0">
         <OfflineIndicator />
@@ -165,7 +169,14 @@ export default function Layout() {
           it stays fixed and reachable on every route including full-bleed chat
           (the "can't get back" bug). No sticky: it can't scroll off because it
           isn't inside the scrolling <main>. */}
-      <header className="z-30 flex h-16 shrink-0 items-center justify-between border-b border-border bg-sidebar px-4 md:hidden">
+      {/* Hidden on full-bleed chat: ChatPage's own header carries the nav
+          toggle (via Outlet context), so the phone gets one bar, not two. */}
+      <header
+        className={cn(
+          'z-30 flex h-16 shrink-0 items-center justify-between border-b border-border bg-sidebar px-4 md:hidden',
+          isFullBleed && 'hidden'
+        )}
+      >
         <Brand />
         <Button
           variant="ghost"
@@ -201,7 +212,7 @@ export default function Layout() {
         )}
       >
         {isFullBleed ? (
-          <Outlet />
+          <Outlet context={{ openNav: () => setMobileOpen((o) => !o) }} />
         ) : (
           // pb clears the Son-of-Anton FAB (+ home indicator) on mobile; sm:p-6
           // restores normal padding on wider screens.
