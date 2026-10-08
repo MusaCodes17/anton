@@ -5,6 +5,13 @@
 
 ---
 
+## R6.1 — project_state top-section refresh — 2026-10-08
+
+**[CHANGED] Docs only; no code, schema or UI changes.** `project_state.md` §1 (deployed/auth'd/PWA, current status), §5 (replaced the shipped-items list with the live scoped roadmap), §6 quirk 5 (struck — fixed by C10), §7 top debt (struck — auth shipped R2.1), §10 (phase branches, production = Hetzner, DB in `~/anton-data/`) rewritten to match reality. R6.1 marked done in `roadmap.md`. Suite untouched (558 + 1 skipped).
+**[CHANGED]** R5.7 human steps recorded as fully closed (runner-confirmed) in `project_state.md` §2/§11/§1.
+
+---
+
 ## R6 scoped — daily-use improvements — 2026-10-08
 
 **[ADDED] Roadmap only; no code changes.** A review of `project_state.md` + `roadmap.md` concluded the platform is built (R5.7 makes runs arrive on their own) and the next value is making what exists more useful. New milestone **R6** in `roadmap.md` with a felt-need check on every item; **none scheduled**.
@@ -30,7 +37,7 @@
 **[CHANGED] Docs only; no code, schema or UI changes.** A read-only review of `project_state.md` / `roadmap.md` against the changelog found stale figures, now corrected.
 - `project_state.md`: §11 header suite count (443) and "RA1.5 is the blocking human task" fixed (RA1.5 closed 2026-08-29; R4.2/R4.3 declined, R3.5 deferred); §2 suite row updated; maintenance note re-dated.
 - **Verified:** full pytest run on branch `r5.7-remove-legacy-coros` = **558 passed, 1 skipped** (docs previously said 556). No UI work, so no `vite build` pass this session.
-- **R5.7 human steps (reported by the runner, same day):** `COROS_TOKEN_KEY` set on Hetzner and first phone connect working as expected. **Still open:** the multi-week unattended-refresh check (runner is monitoring); optional deletion of the old `COROS_*` Open-API `.env` lines. Not-started long-term items: R5.3, R5.4, R5.5, P2.3 sparkline.
+- **R5.7 human steps (reported by the runner, same day):** `COROS_TOKEN_KEY` set on Hetzner and first phone connect working as expected. **Update (later 2026-10-08):** the runner confirmed all remaining human steps closed, including the unattended-refresh check. Not-started long-term items: R5.3, R5.4, R5.5, P2.3 sparkline.
 
 ---
 
