@@ -1308,6 +1308,10 @@ def get_weekly_summary() -> dict:
                     "current_mileage": p.current_mileage,
                     "mileage_limit": p.mileage_limit,
                     "replacement_deals": p.replacement_deals,
+                    "forecast_status": p.forecast_status,
+                    "weekly_km": p.weekly_km,
+                    "weeks_to_limit": p.weeks_to_limit,
+                    "projected_limit_date": p.projected_limit_date,
                 }
                 for p in s.pipeline
             ],
@@ -2265,6 +2269,8 @@ def get_deal_alerts() -> dict:
         return {
             "owned_shoe_id": a.owned_shoe_id, "brand": a.brand, "model": a.model,
             "nickname": a.nickname, "pct": a.pct, "shoe_type": a.shoe_type,
+            "forecast_status": a.forecast_status, "weeks_to_limit": a.weeks_to_limit,
+            "projected_limit_date": a.projected_limit_date,
             "new_deals": a.new_deals,
         }
 
@@ -2455,6 +2461,10 @@ def get_race_block_context(weeks_back: int = 12) -> dict:
                 "current_mileage": p.current_mileage,
                 "mileage_limit": p.mileage_limit,
                 "replacement_deals": p.replacement_deals,
+                "forecast_status": p.forecast_status,
+                "weekly_km": p.weekly_km,
+                "weeks_to_limit": p.weeks_to_limit,
+                "projected_limit_date": p.projected_limit_date,
             }
             for p in ctx.pipeline
         ],

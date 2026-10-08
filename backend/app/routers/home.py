@@ -52,6 +52,10 @@ class ShoeAlertResponse(BaseModel):
     mileage_limit: float
     pct: float
     replacement_deals: int
+    forecast_status: str = "idle"
+    weekly_km: float = 0.0
+    weeks_to_limit: Optional[float] = None
+    projected_limit_date: Optional[str] = None
 
 
 class TopDealResponse(BaseModel):
