@@ -20,8 +20,23 @@ from sqlalchemy import desc
 from sqlalchemy.orm import Session
 
 from app.models.models import Deal, Shoe
+from app.services import settings as settings_svc
+from app.utils.shoe_sizes import parse_size_label, size_fit
 
 logger = logging.getLogger(__name__)
+
+
+def attach_size_fit(db: Session, deals: list[Deal]) -> list[Deal]:
+    """
+    Stamp each deal with a transient ``size_fit`` ("in"/"out"/"unknown", or None
+    when no size preference is set) — R6.3. Derived at the boundary, never
+    stored (INV-7), and qualification stays size-agnostic: a deal is a deal,
+    size is a per-runner view.
+    """
+    preferred = settings_svc.get_preferred_size(db)
+    for d in deals:
+        d.size_fit = size_fit(d.sizes_available, preferred)
+    return deals
 
 
 def list_deals(
@@ -69,17 +84,30 @@ def list_deals(
     if size:
         deals = [
             d for d in query.limit(limit * 5).all()
-            if size in (d.sizes_available or [])
+            if _has_size(d.sizes_available, size)
         ][:limit]
     else:
         deals = query.offset(skip).limit(limit).all()
 
-    return deals
+    return attach_size_fit(db, deals)
+
+
+def _has_size(sizes_available, size: str) -> bool:
+    """Normalised membership ("9" matches "9.0" and "9 / 10.5"); falls back to
+    the exact string for a label the parser can't read."""
+    wanted = parse_size_label(size)
+    for label in sizes_available or []:
+        if label == size or (wanted is not None and parse_size_label(label) == wanted):
+            return True
+    return False
 
 
 def get_deal(db: Session, deal_id: int) -> Deal | None:
     """Return a single deal by primary key, or None if not found."""
-    return db.query(Deal).filter(Deal.id == deal_id).first()
+    deal = db.query(Deal).filter(Deal.id == deal_id).first()
+    if deal:
+        attach_size_fit(db, [deal])
+    return deal
 
 
 def deactivate_deal(db: Session, deal_id: int) -> Deal:
@@ -108,7 +136,7 @@ def get_deals_for_shoe(
     query = db.query(Deal).filter(Deal.shoe_id == shoe_id)
     if is_active is not None:
         query = query.filter(Deal.is_active == is_active)
-    return query.order_by(desc(Deal.savings_percent)).all()
+    return attach_size_fit(db, query.order_by(desc(Deal.savings_percent)).all())
 
 
 def get_deals_for_retailer(
@@ -121,4 +149,4 @@ def get_deals_for_retailer(
     query = db.query(Deal).filter(Deal.retailer_id == retailer_id)
     if is_active is not None:
         query = query.filter(Deal.is_active == is_active)
-    return query.order_by(desc(Deal.savings_percent)).all()
+    return attach_size_fit(db, query.order_by(desc(Deal.savings_percent)).all())

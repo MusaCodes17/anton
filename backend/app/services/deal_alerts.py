@@ -29,6 +29,8 @@ from sqlalchemy.orm import Session
 
 from app.models.models import Deal, PriceRecord, Shoe
 from app.services import rotation
+from app.services import settings as settings_svc
+from app.utils.shoe_sizes import OUT, size_fit
 
 
 @dataclass
@@ -85,6 +87,9 @@ class DealAlertDigest:
     new_deals: list[NewDealAlert] = field(default_factory=list)
     price_drops: list[PriceDropAlert] = field(default_factory=list)
     replacement_alerts: list[ReplacementDealAlert] = field(default_factory=list)
+    # R6.3: new-deal / price-drop alerts left out because the deal has sizes listed
+    # and none is the runner's size. 0 when no size preference is set.
+    out_of_size_suppressed: int = 0
 
     @property
     def has_alerts(self) -> bool:
@@ -126,6 +131,17 @@ def deal_alerts(
         .order_by(desc(Deal.savings_percent))
         .all()
     )
+    # R6.3 — count only in-size deals. Unknown sizes ("maybe") are kept; with no
+    # preference set size_fit is None and nothing is suppressed.
+    preferred = settings_svc.get_preferred_size(db)
+    suppressed = 0
+    in_size_rows = []
+    for d in new_deal_rows:
+        if size_fit(d.sizes_available, preferred) == OUT:
+            suppressed += 1
+        else:
+            in_size_rows.append(d)
+    new_deal_rows = in_size_rows
     new_deals = [
         NewDealAlert(
             deal_id=d.id,
@@ -145,6 +161,14 @@ def deal_alerts(
 
     # 2 — Price drops on pre-existing active deals
     price_drops = _find_price_drops(db, effective_since)
+    if preferred is not None and price_drops:
+        sizes_by_deal = {
+            d.id: d.sizes_available
+            for d in db.query(Deal).filter(Deal.id.in_([p.deal_id for p in price_drops]))
+        }
+        kept = [p for p in price_drops if size_fit(sizes_by_deal.get(p.deal_id), preferred) != OUT]
+        suppressed += len(price_drops) - len(kept)
+        price_drops = kept
 
     # 3 — Replacement alerts: pipeline shoes with new same-type deals
     replacement_alerts = _find_replacement_alerts(db, effective_since)
@@ -156,6 +180,7 @@ def deal_alerts(
         new_deals=new_deals,
         price_drops=price_drops,
         replacement_alerts=replacement_alerts,
+        out_of_size_suppressed=suppressed,
     )
 
 

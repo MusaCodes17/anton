@@ -79,6 +79,7 @@ def _deal_to_dict(deal: Deal) -> dict:
         "savings_percent": deal.savings_percent,
         "in_stock": deal.in_stock,
         "sizes_available": deal.sizes_available,
+        "size_fit": getattr(deal, "size_fit", None),  # R6.3: in|out|unknown, None = no size set
         "colorway": deal.colorway,
         "product_url": deal.product_url,
         "detected_at": deal.detected_at.isoformat() if deal.detected_at else None,
@@ -107,11 +108,15 @@ def get_deals(
         brand: Filter to a specific shoe brand (case-insensitive substring
             match), e.g. "Adidas".
         size: Filter to deals with this US size currently in stock,
-            e.g. "10.5". Sizes are matched exactly as recorded by the scraper.
+            e.g. "10.5". Matched numerically, so "9" also finds "9.0" and "9 / 10.5".
         shoe_type: Filter by shoe category, e.g. "long_distance_racer",
             "daily_trainer", "tempo", "trail", "recovery", "intervals",
             "short_distance_racer".
         limit: Max number of deals to return (default 20, capped at 100).
+
+    Each deal carries size_fit ("in" | "out" | "unknown") against the runner's
+    saved shoe size; null means no size is saved. Prefer "in" deals when
+    recommending, and say so when a deal's sizes are unknown.
     """
     limit = max(1, min(limit, 100))
     with get_session() as db:
@@ -2210,6 +2215,11 @@ def get_deal_alerts() -> dict:
     window and sets first_run=True in the response — a reasonable catch-up
     window without flooding the first report.
 
+    If the runner has set a shoe size (Settings → preferred size), new_deals and
+    price_drops exclude deals whose listed sizes don't include it (deals with
+    unknown sizes are kept); out_of_size_suppressed reports how many were left
+    out so you can mention it.
+
     The high-water mark (AppSettings key "last_deal_alert_check_at") is updated
     on every call; subsequent calls report only incremental events.
 
@@ -2263,6 +2273,7 @@ def get_deal_alerts() -> dict:
         "checked_at": digest.checked_at,
         "first_run": digest.first_run,
         "has_alerts": digest.has_alerts,
+        "out_of_size_suppressed": digest.out_of_size_suppressed,
         "new_deals": [_new_deal_to_dict(a) for a in digest.new_deals],
         "price_drops": [_drop_to_dict(a) for a in digest.price_drops],
         "replacement_alerts": [_replacement_to_dict(a) for a in digest.replacement_alerts],
