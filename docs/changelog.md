@@ -5,6 +5,15 @@
 
 ---
 
+## R6.3 — my-size deal filter — 2026-10-08
+
+**[ADDED]** `app/utils/shoe_sizes.py` (label normaliser — formats sampled from the live DB: `9`, `9.0`, `10 / 11.5`; the first value of a unisex pair is read as the men's size, a labelled heuristic — plus `size_fit` in/out/unknown); `preferred_shoe_size` + `hide_other_sizes` in `AppSettings` via `services/settings.py`; `GET/PUT /api/preferences` (422 on an invalid size); `size_fit` on every deal returned by `services/deals.py` (derived, never stored; qualification untouched) and in the MCP deal dicts; `SizePreferenceCard` on Settings → Tracking; Deals page ranks in-size → unknown → out, badges "Not in your size", and hides out-of-size deals when the toggle is on.
+**[CHANGED]** `list_deals(size=…)` and the MCP `size` arg now match numerically (`9` finds `9.0` / `9 / 10.5`). `deal_alerts` drops out-of-size new-deal and price-drop alerts when a size is set and reports `out_of_size_suppressed`; unknown sizes are kept ("maybe"). No size set = behaviour unchanged. No schema change (settings are key/value).
+**[VERIFIED]** Suite 558 → **580 passing + 1 skipped** (`tests/test_size_preference.py`, 22 cases: formats, unknown-never-out, bounds, router 422, numeric filter, digest suppression and no-preference no-op). `vite build` clean.
+**[NOT DONE]** Desktop + ~380 px visual pass and 0-console-error check on Deals and Settings → Tracking. The Deals page's own size dropdown still matches labels exactly (unchanged; it lists the raw labels). Follow-up if wanted.
+
+---
+
 ## R6.1 — project_state top-section refresh — 2026-10-08
 
 **[CHANGED] Docs only; no code, schema or UI changes.** `project_state.md` §1 (deployed/auth'd/PWA, current status), §5 (replaced the shipped-items list with the live scoped roadmap), §6 quirk 5 (struck — fixed by C10), §7 top debt (struck — auth shipped R2.1), §10 (phase branches, production = Hetzner, DB in `~/anton-data/`) rewritten to match reality. R6.1 marked done in `roadmap.md`. Suite untouched (558 + 1 skipped).
