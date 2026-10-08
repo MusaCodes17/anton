@@ -5,6 +5,15 @@
 
 ---
 
+## Status review & doc refresh — 2026-10-08
+
+**[CHANGED] Docs only; no code, schema or UI changes.** A read-only review of `project_state.md` / `roadmap.md` against the changelog found stale figures, now corrected.
+- `project_state.md`: §11 header suite count (443) and "RA1.5 is the blocking human task" fixed (RA1.5 closed 2026-08-29; R4.2/R4.3 declined, R3.5 deferred); §2 suite row updated; maintenance note re-dated.
+- **Verified:** full pytest run on branch `r5.7-remove-legacy-coros` = **558 passed, 1 skipped** (docs previously said 556). No UI work, so no `vite build` pass this session.
+- **Open (unchanged):** R5.7 human steps — set `COROS_TOKEN_KEY` on Hetzner, first phone connect, multi-week refresh check, optional deletion of the old `COROS_*` Open-API `.env` lines. Not-started long-term items: R5.3, R5.4, R5.5, P2.3 sparkline.
+
+---
+
 ## R5.7 cleanup — legacy COROS Open-API code removed — 2026-10-08
 
 **[REMOVED] The dormant Open-API COROS sync path, superseded by direct sync (C11). Suite unchanged at 556 passing + 1 skipped (no test covered it). No schema change; no frontend change (the UI stopped calling it in §6).**
