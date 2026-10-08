@@ -10,7 +10,7 @@
 **[CHANGED] Docs only; no code, schema or UI changes.** A read-only review of `project_state.md` / `roadmap.md` against the changelog found stale figures, now corrected.
 - `project_state.md`: §11 header suite count (443) and "RA1.5 is the blocking human task" fixed (RA1.5 closed 2026-08-29; R4.2/R4.3 declined, R3.5 deferred); §2 suite row updated; maintenance note re-dated.
 - **Verified:** full pytest run on branch `r5.7-remove-legacy-coros` = **558 passed, 1 skipped** (docs previously said 556). No UI work, so no `vite build` pass this session.
-- **Open (unchanged):** R5.7 human steps — set `COROS_TOKEN_KEY` on Hetzner, first phone connect, multi-week refresh check, optional deletion of the old `COROS_*` Open-API `.env` lines. Not-started long-term items: R5.3, R5.4, R5.5, P2.3 sparkline.
+- **R5.7 human steps (reported by the runner, same day):** `COROS_TOKEN_KEY` set on Hetzner and first phone connect working as expected. **Still open:** the multi-week unattended-refresh check (runner is monitoring); optional deletion of the old `COROS_*` Open-API `.env` lines. Not-started long-term items: R5.3, R5.4, R5.5, P2.3 sparkline.
 
 ---
 
