@@ -106,7 +106,7 @@ Grouped; dates are `docs/changelog.md` entries.
 
 Authoritative detail: `docs/roadmap.md`. Nothing here is scheduled; each row carries a felt-need check.
 
-- ~~R6.3 My-size deal filter~~ ✅ shipped 2026-10-08 (visual pass pending). Remaining: **R6.2 Retirement forecast → deal radar**, **R6.4 "New run waiting" Web Push** (gated on measuring `pending_coros_runs` confirmation lag) — milestone R6.
+- ~~R6.3 My-size deal filter~~ ✅ shipped 2026-10-08. Remaining: **R6.2 Retirement forecast → deal radar**, **R6.4 "New run waiting" Web Push** (gated on measuring `pending_coros_runs` confirmation lag) — milestone R6.
 - **RA3 push-to-deploy** (GitHub Actions → SSH deploy script to Hetzner).
 - **R3.5 Notification channel** — deferred; see R6.4.
 - **Native mobile client (R5.1)** — verdict parked after the PWA; offline write-queue deferred (`RA2_2_PWA_PLAN.md` §6).

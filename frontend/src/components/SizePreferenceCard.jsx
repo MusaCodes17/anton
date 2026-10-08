@@ -37,7 +37,7 @@ export default function SizePreferenceCard() {
       }
     )
 
-  const error = update.error?.response?.data?.detail || update.error?.message
+  const error = update.error?.message  // api.js already normalises FastAPI errors to a message
 
   return (
     <Card>
