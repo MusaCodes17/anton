@@ -227,6 +227,8 @@ class DealResponse(DealBase):
     id: int
     detected_at: datetime
     expires_at: Optional[datetime] = None
+    # R6.3 — derived per request from the size preference; None = no preference set.
+    size_fit: Optional[str] = Field(None, description='"in" | "out" | "unknown" vs the preferred size')
     
     # Include related shoe and retailer info
     shoe: Optional[ShoeResponse] = None

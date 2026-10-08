@@ -293,6 +293,13 @@ export const adminApi = {
     client.put('/api/admin/schedule', { enabled, cron }).then((r) => r.data),
 }
 
+// ============== PREFERENCES (R6.3) ==============
+export const preferencesApi = {
+  get: () => client.get('/api/preferences').then((r) => r.data),
+  // Body { preferred_size: string|null, hide_other_sizes: bool }; a bad size is a 422.
+  update: (body) => client.put('/api/preferences', body).then((r) => r.data),
+}
+
 // ============== COROS DIRECT SYNC (R5.7) ==============
 // Backend-mediated: the server holds the COROS OAuth tokens and polls; the
 // browser only ever sees status + the pending-runs inbox, never a token.

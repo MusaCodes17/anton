@@ -107,6 +107,12 @@ export default function ShoeProductCard({ group, onViewDetails }) {
               In stock
             </Badge>
           )}
+          {/* R6.3: server-derived fit vs the saved size; "unknown" stays silent. */}
+          {selected.size_fit === 'out' && (
+            <Badge variant="outline" className="shrink-0 border-border text-muted-foreground">
+              Not in your size
+            </Badge>
+          )}
         </div>
 
         {promo && (
