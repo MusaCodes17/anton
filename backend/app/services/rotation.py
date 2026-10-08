@@ -6,7 +6,7 @@ detection, pace averaging, and related calculations. Routers and MCP tools
 are thin adapters over these functions.
 """
 from dataclasses import dataclass
-from datetime import date
+from datetime import date, timedelta
 from typing import Optional
 
 from sqlalchemy import func, or_
@@ -28,6 +28,20 @@ CHECKPOINT_INTERVAL_KM = 100
 # shoe-alerts module and the /shoes lifecycle view so both agree.
 RETIREMENT_THRESHOLD = 0.75
 
+# R6.2 usage forecast. Recent weekly km = attributed distance over the last
+# FORECAST_WEEKS full weeks / FORECAST_WEEKS (a heuristic — 6 weeks smooths one
+# easy week without hiding a new training block). A shoe projected to hit its
+# limit within RADAR_LOOKAHEAD_WEEKS joins the pipeline even below the 75%
+# threshold: a heavy block can take a shoe from 70% to done before the
+# threshold notices. The forecast widens the 75% band, it doesn't replace it.
+FORECAST_WEEKS = 6
+RADAR_LOOKAHEAD_WEEKS = 8
+
+# forecast_status values
+FORECAST_ON_TRACK = "on_track"   # has recent use → weeks_to_limit / projected date set
+FORECAST_IDLE = "idle"           # no attributed km in the window → no date (not "never")
+FORECAST_OVERDUE = "overdue"     # already at/over the limit → no date
+
 
 @dataclass
 class LifetimeStats:
@@ -44,6 +58,11 @@ class PipelineEntry:
     current_mileage: float
     mileage_limit: float
     replacement_deals: int        # active deals on a tracked shoe of the same type
+    # R6.2 forecast (derived at read time, never stored — INV-7)
+    forecast_status: str = FORECAST_IDLE
+    weekly_km: float = 0.0                       # recent attributed km per week
+    weeks_to_limit: Optional[float] = None       # None unless on_track
+    projected_limit_date: Optional[str] = None   # ISO local date; None unless on_track
 
 
 @dataclass
@@ -143,14 +162,59 @@ def active_deal_counts_by_type(db: Session) -> dict[str, int]:
     return counts
 
 
+def recent_weekly_km(
+    db: Session, *, today: Optional[date] = None, weeks: int = FORECAST_WEEKS
+) -> dict[int, float]:
+    """
+    Average attributed km per week over the last ``weeks`` weeks, keyed by
+    owned_shoe_id (shoes with no attributed run in the window are absent).
+
+    Queries ``Activity`` columns, not the ``ShoeRun`` proxies (which don't work
+    in ``filter()``; CLAUDE.md §6). One grouped query for all shoes — no N+1.
+    ``run_date`` is the America/Toronto local date, so ``today`` must be local.
+    """
+    today = today or date.today()
+    since = today - timedelta(days=7 * weeks)
+    rows = (
+        db.query(ShoeRun.owned_shoe_id, func.sum(Activity.distance_km))
+        .join(Activity, Activity.id == ShoeRun.activity_id)
+        .filter(Activity.run_date > since, Activity.run_date <= today)
+        .group_by(ShoeRun.owned_shoe_id)
+        .all()
+    )
+    return {sid: (km or 0.0) / weeks for sid, km in rows}
+
+
+def usage_forecast(
+    shoe: OwnedShoe, weekly_km: float, *, today: Optional[date] = None
+) -> tuple[str, Optional[float], Optional[str]]:
+    """
+    ``(status, weeks_to_limit, projected_limit_date)`` for one shoe.
+
+    Pure. ``overdue`` once current_mileage >= limit; ``idle`` when there is no
+    recent use (so no honest projection); otherwise remaining km / weekly km.
+    """
+    today = today or date.today()
+    if shoe.mileage_limit and shoe.current_mileage >= shoe.mileage_limit:
+        return FORECAST_OVERDUE, None, None
+    if not shoe.mileage_limit or weekly_km <= 0:
+        return FORECAST_IDLE, None, None
+    weeks = (shoe.mileage_limit - shoe.current_mileage) / weekly_km
+    return FORECAST_ON_TRACK, round(weeks, 1), (today + timedelta(days=round(weeks * 7))).isoformat()
+
+
 def retirement_pipeline(
-    db: Session, threshold: float = RETIREMENT_THRESHOLD
+    db: Session,
+    threshold: float = RETIREMENT_THRESHOLD,
+    *,
+    today: Optional[date] = None,
 ) -> list[PipelineEntry]:
     """
-    Active rotation shoes at/over ``threshold`` of their mileage_limit, worst
-    (closest to or past the limit) first, each annotated with a count of
-    matching replacement deals. Shoes without a mileage_limit are excluded —
-    there is no limit to be a fraction of.
+    Active rotation shoes at/over ``threshold`` of their mileage_limit — plus
+    (R6.2) shoes projected to reach the limit within RADAR_LOOKAHEAD_WEEKS at
+    their recent pace — worst (highest pct) first, each annotated with a count
+    of matching replacement deals and the usage forecast. Shoes without a
+    mileage_limit are excluded — there is no limit to be a fraction of.
     """
     shoes = (
         db.query(OwnedShoe)
@@ -158,13 +222,17 @@ def retirement_pipeline(
         .all()
     )
     counts = active_deal_counts_by_type(db)
+    weekly = recent_weekly_km(db, today=today)
 
     out: list[PipelineEntry] = []
     for s in shoes:
         if not s.mileage_limit:
             continue
         pct = s.current_mileage / s.mileage_limit
-        if pct < threshold:
+        wk = weekly.get(s.id, 0.0)
+        status, weeks_to_limit, projected = usage_forecast(s, wk, today=today)
+        on_radar = weeks_to_limit is not None and weeks_to_limit <= RADAR_LOOKAHEAD_WEEKS
+        if pct < threshold and not on_radar:
             continue
         out.append(PipelineEntry(
             shoe=s,
@@ -172,6 +240,10 @@ def retirement_pipeline(
             current_mileage=round(s.current_mileage, 1),
             mileage_limit=round(s.mileage_limit, 1),
             replacement_deals=counts.get(s.shoe_type.lower(), 0) if s.shoe_type else 0,
+            forecast_status=status,
+            weekly_km=round(wk, 1),
+            weeks_to_limit=weeks_to_limit,
+            projected_limit_date=projected,
         ))
 
     out.sort(key=lambda e: e.pct, reverse=True)

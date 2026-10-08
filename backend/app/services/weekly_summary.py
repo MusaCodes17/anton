@@ -64,6 +64,10 @@ class WeeklyPipelineEntry:
     current_mileage: float
     mileage_limit: float
     replacement_deals: int
+    forecast_status: str = "idle"                 # on_track | idle | overdue (R6.2)
+    weekly_km: float = 0.0
+    weeks_to_limit: Optional[float] = None
+    projected_limit_date: Optional[str] = None
 
 
 @dataclass
@@ -177,6 +181,10 @@ def weekly_summary(db: Session, today: Optional[date] = None) -> WeeklySummary:
             current_mileage=e.current_mileage,
             mileage_limit=e.mileage_limit,
             replacement_deals=e.replacement_deals,
+            forecast_status=e.forecast_status,
+            weekly_km=e.weekly_km,
+            weeks_to_limit=e.weeks_to_limit,
+            projected_limit_date=e.projected_limit_date,
         )
         for e in rotation_svc.retirement_pipeline(db)
     ]

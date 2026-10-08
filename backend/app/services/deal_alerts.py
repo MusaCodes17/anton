@@ -76,6 +76,10 @@ class ReplacementDealAlert:
     pct: float           # current_mileage / mileage_limit (0..1+)
     shoe_type: str
     new_deals: list[dict]  # compact deal dicts for each new type-matching deal
+    # R6.2 — when the shoe is projected to hit its limit (None unless on_track)
+    forecast_status: str = "idle"
+    weeks_to_limit: Optional[float] = None
+    projected_limit_date: Optional[str] = None
 
 
 @dataclass
@@ -319,6 +323,9 @@ def _find_replacement_alerts(
                 nickname=owned.nickname,
                 pct=entry.pct,
                 shoe_type=owned.shoe_type,
+                forecast_status=entry.forecast_status,
+                weeks_to_limit=entry.weeks_to_limit,
+                projected_limit_date=entry.projected_limit_date,
                 new_deals=[
                     {
                         "deal_id": d.id,
@@ -334,4 +341,8 @@ def _find_replacement_alerts(
             )
         )
 
+    # R6.2: soonest projected limit first — the shoe that needs replacing soonest
+    # leads the digest. Shoes without a projection (idle/overdue) keep pipeline
+    # (worst-pct-first) order after those with a date; sort is stable.
+    alerts.sort(key=lambda a: (a.weeks_to_limit is None, a.weeks_to_limit or 0.0))
     return alerts
