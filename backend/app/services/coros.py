@@ -1,27 +1,20 @@
 """
-Business logic for COROS GPS watch synchronisation.
+The shared COROS confirm path (R5.7).
 
-Wraps coros_client HTTP calls and delegates run persistence to rotation.log_run
-so checkpoint detection works on the COROS path too (previously missing from the
-REST confirm endpoint).
+Every way a COROS run gets logged — the app's "New runs" inbox, the
+`confirm_coros_run` MCP tool — goes through `confirm_run` here, which delegates
+to `rotation.log_run` (the single run writer) and resolves the matching
+`pending_coros_runs` row. Also owns the two-tier "already logged?" dedup the
+poller uses. (The legacy Open-API fetch that used to live here was removed with
+`coros_client.py` — see design_decisions C11.)
 """
-from dataclasses import dataclass, field
 from datetime import date, datetime, timezone
 from typing import Optional
 
-import requests
 from sqlalchemy.orm import Session
 
-from app.coros_client import activity_to_run_dict, fetch_running_activities, get_coros_config
 from app.models.models import Activity, PendingCorosRun
 from app.services import rotation, settings as settings_svc
-
-
-@dataclass
-class CorosFetchResult:
-    runs: list          # list of activity_to_run_dict dicts
-    already_synced: int
-    coros_configured: bool
 
 
 def is_already_logged(db: Session, activity_id: str, act_date: str, dist_km: float) -> bool:
@@ -56,34 +49,6 @@ def resolve_pending(db: Session, label_id: str) -> None:
     if row is not None:
         row.status = "confirmed"
         row.resolved_at = datetime.now(timezone.utc)
-
-
-def fetch_unsynced(db: Session, days_back: int = 30) -> CorosFetchResult:
-    """
-    Fetch recent running activities from COROS and return those not yet logged.
-
-    Propagates requests.RequestException and ValueError to the caller — adapters
-    map these to HTTP 502 or success:False as appropriate.
-    Returns a result with coros_configured=False (not an error) when credentials
-    are absent.
-    """
-    config = get_coros_config()
-    if not config:
-        return CorosFetchResult(runs=[], already_synced=0, coros_configured=False)
-
-    activities = fetch_running_activities(config, days_back)
-
-    new_runs = []
-    already_synced = 0
-    for act in activities:
-        run = activity_to_run_dict(act)
-        if is_already_logged(db, run["coros_activity_id"], run["date"], run["distance_km"]):
-            already_synced += 1
-        else:
-            new_runs.append(run)
-
-    new_runs.sort(key=lambda r: r["date"], reverse=True)
-    return CorosFetchResult(runs=new_runs, already_synced=already_synced, coros_configured=True)
 
 
 def confirm_run(

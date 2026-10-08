@@ -5,6 +5,53 @@
 
 ---
 
+## R6.1 — project_state top-section refresh — 2026-10-08
+
+**[CHANGED] Docs only; no code, schema or UI changes.** `project_state.md` §1 (deployed/auth'd/PWA, current status), §5 (replaced the shipped-items list with the live scoped roadmap), §6 quirk 5 (struck — fixed by C10), §7 top debt (struck — auth shipped R2.1), §10 (phase branches, production = Hetzner, DB in `~/anton-data/`) rewritten to match reality. R6.1 marked done in `roadmap.md`. Suite untouched (558 + 1 skipped).
+**[CHANGED]** R5.7 human steps recorded as fully closed (runner-confirmed) in `project_state.md` §2/§11/§1.
+
+---
+
+## R6 scoped — daily-use improvements — 2026-10-08
+
+**[ADDED] Roadmap only; no code changes.** A review of `project_state.md` + `roadmap.md` concluded the platform is built (R5.7 makes runs arrive on their own) and the next value is making what exists more useful. New milestone **R6** in `roadmap.md` with a felt-need check on every item; **none scheduled**.
+- **R6.1** `project_state.md` top-section refresh — §1, §5, §6 quirk 5, §7, §10 still describe July (e.g. "all local, no auth"; HEAD assumed `main`). Docs only.
+- **R6.2** Retirement forecast → deal radar — projected limit date per shoe from recent weekly km, in `rotation.py` beside `retirement_pipeline`; widens (doesn't replace) the 75% band with a lookahead; surfaced on Home, `/shoes/:id` and the deal-alert digest.
+- **R6.3** My-size deal filter — `AppSettings` size preference + one tested label normaliser; ranks/badges out-of-size deals, digest counts in-size only; deal qualification stays size-agnostic.
+- **R6.4** "New run waiting" Web Push to the installed PWA — the gated R3.5 revisit; step 0 is measuring `pending_coros_runs` `first_seen_at → resolved_at` before any code.
+- **R3.5 row** now points at R6.4.
+
+---
+
+## RA3 scoped — push-to-deploy (CI/CD to Hetzner) — 2026-10-08
+
+**[ADDED] Roadmap only; no code, workflow or server changes.** New row **RA3** in the RA milestone plus a detailed **§RA3** scope in `roadmap.md`: a push to `main` runs tests + frontend build in GitHub Actions, then deploys over SSH via a committed `deploy/deploy.sh` (pre-deploy SQLite snapshot → `git pull --ff-only` → `docker compose up -d --build` → healthy wait → rsync CI-built `dist/` to `/var/www/anton` → public `/health` check). **Status: scoped, not scheduled** — the runner will execute later.
+- **Why:** deploys are two separate manual procedures (backend on the server, UI from the laptop) and were forgotten between sessions on 2026-10-07, including a `Permission denied (publickey)` on the UI rsync.
+- **Recorded decisions to make at execution:** deploy user vs root, auto-applied migrations (v1 = snapshot + Litestream + additive-only), "main is always deployable".
+- **Known doc bug noted for the RA3 docs pass (not fixed here):** `CLAUDE_DESKTOP_SETUP.md` says `docker compose restart` after editing `backend/.env`; `restart` does not re-read `env_file` — use `docker compose up -d --force-recreate`.
+
+---
+
+## Status review & doc refresh — 2026-10-08
+
+**[CHANGED] Docs only; no code, schema or UI changes.** A read-only review of `project_state.md` / `roadmap.md` against the changelog found stale figures, now corrected.
+- `project_state.md`: §11 header suite count (443) and "RA1.5 is the blocking human task" fixed (RA1.5 closed 2026-08-29; R4.2/R4.3 declined, R3.5 deferred); §2 suite row updated; maintenance note re-dated.
+- **Verified:** full pytest run on branch `r5.7-remove-legacy-coros` = **558 passed, 1 skipped** (docs previously said 556). No UI work, so no `vite build` pass this session.
+- **R5.7 human steps (reported by the runner, same day):** `COROS_TOKEN_KEY` set on Hetzner and first phone connect working as expected. **Update (later 2026-10-08):** the runner confirmed all remaining human steps closed, including the unattended-refresh check. Not-started long-term items: R5.3, R5.4, R5.5, P2.3 sparkline.
+
+---
+
+## R5.7 cleanup — legacy COROS Open-API code removed — 2026-10-08
+
+**[REMOVED] The dormant Open-API COROS sync path, superseded by direct sync (C11). Suite unchanged at 556 passing + 1 skipped (no test covered it). No schema change; no frontend change (the UI stopped calling it in §6).**
+- **Deleted:** `backend/app/coros_client.py` (Open-API HTTP client), `backend/app/routers/coros_sync.py` (`/api/owned-shoes/sync-coros/{status,fetch,confirm}`) + its `main.py` wiring, the legacy schemas (`CorosRun`, `CorosFetchResponse`, `CorosAssignment`, `CorosConfirmRequest/Response`, `CorosSyncStatus`) and their `models/__init__` exports, `coros.fetch_unsynced` + `CorosFetchResult`, the `get_coros_config` import in `mcp_server.py`, and the `COROS_CLIENT_ID/SECRET/ACCESS_TOKEN/OPEN_ID` block in `.env.example`.
+- **Kept on purpose:** `coros.confirm_run`, `coros.is_already_logged`, `coros.resolve_pending` — the live shared confirm and the poller's dedup (module docstring rewritten to say so); `last_coros_sync_at` (still stamped on confirm and reported by `get_coros_sync_status`).
+- **REST parity:** the removed `POST /owned-shoes/sync-coros/confirm` is replaced by `POST /api/coros/pending/{id}/confirm` (and the MCP `confirm_coros_run`); both reach the same single writer.
+- **Docs:** `architecture.md` (module table/tree, flows, integrations), `dependency_graph.md` (revision note; the `coros_sync → owned_shoes` router edge — the last "Task D" leftover — is resolved by deletion), `project_state.md`, `design_decisions.md` C11 trade-off. Historical changelog entries and archived plans still mention the old path, as history.
+- **Ops note:** the production `.env` may still contain the four old `COROS_*` Open-API variables; they are now ignored and can be deleted.
+
+---
+
 ## R5.7 §8 — COROS direct sync: documentation — 2026-10-08
 
 **[CHANGED] Docs only — closes R5.7 (COROS direct sync, §1–§8). No code, schema or test changes (suite stays 556 passing + 1 opt-in live test skipped).** Everything the plan said not to leave silently contradicted is now recorded:
