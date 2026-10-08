@@ -497,6 +497,29 @@ Supporting choices:
 
 ---
 
+### E14. Mobile primary nav is a bottom tab bar; the shell follows the iOS keyboard via `visualViewport` (UI pass 2026-10-08 — extends E13)
+
+**Chosen (2026-10-08):**
+- **Tab bar.** Below `md`, primary navigation is a five-tab bottom bar (Home · Training · Shoes · Deals · Anton). It replaces the hamburger + slide-down menu and the Son of Anton FAB on phones. Settings stays plumbing: a gear in the mobile top bar, Sign out on the Settings page.
+- **Static, not fixed.** The bar is a static `shrink-0` child of E13's fixed shell, below `<main>`, not `position: fixed`. So it owns the bottom safe-area inset and pages need no clearance padding.
+- **Keyboard-aware shell.** While the iOS keyboard is up, `useKeyboardViewport` sets `--app-height` on `<html>` to `visualViewport.height` (the shell is `h-[var(--app-height,100dvh)]`), adds `html.keyboard-open` (the tab bar hides) and pins scroll at 0. Android gets `interactive-widget=resizes-content` instead.
+- **One bar in chat.** The chat route hides the mobile top bar; its own 52px header replaces it.
+
+**Why:**
+- The PWA is used one-handed after runs, and five destinations fit thumb reach better than a top hamburger.
+- iOS doesn't shrink `100dvh` for the keyboard: it pans the page, which pushed E13's fixed header off-screen and floated the chat composer. `visualViewport` is the only API that reports the space actually left.
+- A static bar can't overlap content, unlike the FAB's `pb-24` clearance pattern.
+
+**Trade-offs:**
+- The 150px threshold for "keyboard open" is a heuristic, and pinch-zoom is excluded via `vv.scale`.
+- Five tabs at 380px leave ~76px each, so "Son of Anton" shortens to "Anton".
+- Settings is one tap further on mobile (a gear, not a menu row).
+
+**Verification limit:** as with E13, Chromium can't emulate the iOS keyboard or the safe-area insets. The keyboard path is a by-hand check on the installed iPhone PWA.
+**Verdict:** ✅ Keep.
+
+---
+
 ## Superseded Decisions (kept as history)
 
 | Decision | Was | Superseded by | When |
