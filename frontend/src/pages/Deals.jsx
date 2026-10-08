@@ -18,7 +18,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { ErrorState, EmptyState, CardSkeletonGrid } from '@/components/StatusViews'
-import { useDeals, useShoes, useRetailers, useWatchlist } from '@/hooks/useApi'
+import { useDeals, useShoes, useRetailers, useWatchlist, usePreferences } from '@/hooks/useApi'
 import { formatShoeType } from '@/lib/shoeTypes'
 
 const SORTS = {
@@ -29,6 +29,9 @@ const SORTS = {
 }
 
 const ALL = '__all__'
+
+// size_fit ranking (R6.3); null (no size saved) ranks equal so the sort is unchanged.
+const FIT_RANK = { in: 0, unknown: 1, out: 2, null: 0, undefined: 0 }
 
 export default function Deals() {
   const [brand, setBrand] = useState(ALL)
@@ -58,6 +61,7 @@ export default function Deals() {
   const shoes = useShoes()
   const retailers = useRetailers()
   const watchlist = useWatchlist()
+  const prefs = usePreferences()
 
   // Deep link from the Dashboard: /deals?deal=<id> opens that deal's modal
   // once the deals are loaded. The param is cleared when the modal closes.
@@ -114,8 +118,12 @@ export default function Deals() {
     if (size !== ALL) {
       list = list.filter((d) => (d.sizes_available || []).includes(size))
     }
-    return [...list].sort(SORTS[sort])
-  }, [deals.data, retailerId, shoeType, size, sort])
+    // R6.3: size_fit is derived server-side (null when no size is saved). Hide
+    // out-of-size deals if the toggle is on; otherwise rank in-size first, then
+    // unknown, then out — the chosen sort breaks ties within each band.
+    if (prefs.data?.hide_other_sizes) list = list.filter((d) => d.size_fit !== 'out')
+    return [...list].sort((a, b) => FIT_RANK[a.size_fit] - FIT_RANK[b.size_fit] || SORTS[sort](a, b))
+  }, [deals.data, retailerId, shoeType, size, sort, prefs.data?.hide_other_sizes])
 
   // Consolidate colorways/retailers: one card per tracked shoe. Groups inherit
   // the sorted order of `visible`, so each group's first (best) deal also orders

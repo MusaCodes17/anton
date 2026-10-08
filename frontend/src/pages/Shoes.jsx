@@ -1,3 +1,4 @@
+import SizePreferenceCard from '@/components/SizePreferenceCard'
 import { useMemo, useState } from 'react'
 import {
   Plus,
@@ -165,6 +166,8 @@ export default function Shoes() {
           <Plus className="h-4 w-4" /> Add shoe
         </Button>
       </PageHeader>
+
+      <SizePreferenceCard />
 
       <div className="relative max-w-sm">
         <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />

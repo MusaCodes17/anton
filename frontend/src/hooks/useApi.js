@@ -4,6 +4,7 @@ import {
   shoesApi,
   retailersApi,
   dealsApi,
+  preferencesApi,
   dashboardApi,
   scrapeApi,
   ownedShoesApi,
@@ -33,6 +34,7 @@ export const queryKeys = {
   dashboardStats: () => ['dashboard', 'stats'],
   scrapeHistory: () => ['scrape', 'history'],
   schedule: () => ['admin', 'schedule'],
+  preferences: () => ['preferences'],
   ownedShoes: (params) => ['owned-shoes', params ?? {}],
   ownedShoe: (id) => ['owned-shoes', 'detail', id],
   shoeRuns: (id) => ['owned-shoes', id, 'runs'],
@@ -242,6 +244,27 @@ export function useUpdateSchedule() {
     onSuccess: (data) => {
       qc.setQueryData(queryKeys.schedule(), data)
       qc.invalidateQueries({ queryKey: queryKeys.schedule() })
+    },
+  })
+}
+
+// Runner preferences (R6.3): shoe size + hide-other-sizes toggle.
+export function usePreferences() {
+  return useQuery({
+    queryKey: queryKeys.preferences(),
+    queryFn: () => preferencesApi.get(),
+  })
+}
+
+// Saving a size changes every deal's server-derived size_fit, so deals are
+// invalidated alongside the preferences cache.
+export function useUpdatePreferences() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (body) => preferencesApi.update(body),
+    onSuccess: (data) => {
+      qc.setQueryData(queryKeys.preferences(), data)
+      qc.invalidateQueries({ queryKey: ['deals'] })
     },
   })
 }
