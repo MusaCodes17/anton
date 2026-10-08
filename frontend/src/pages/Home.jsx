@@ -14,6 +14,7 @@ import {
   formatCurrency, formatPercent, formatDate, formatRelativeTime, cn,
 } from '@/lib/utils'
 import { runSourceVariant, runSourceLabel } from '@/lib/runSource'
+import { forecastLabel } from '@/lib/forecast'
 
 /**
  * Home — the attention surface (§4 Phase 4). Four modules, each answering one
@@ -295,6 +296,7 @@ function ShoeAlertRow({ alert }) {
         </div>
         <div className="mt-0.5 text-xs text-muted-foreground tabular-nums">
           {Math.round(alert.current_mileage)} km / {Math.round(alert.mileage_limit)} km
+          {forecastLabel(alert) && <span>{' · '}{forecastLabel(alert)}</span>}
           {alert.replacement_deals > 0 && (
             <span className="text-accent-foreground">
               {' · '}{alert.replacement_deals} replacement deal{alert.replacement_deals === 1 ? '' : 's'}
