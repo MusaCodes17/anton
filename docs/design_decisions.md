@@ -203,7 +203,23 @@
 **Why:** the runner expected a re-tagged race to stop being a record; under B16 every non-interval tag stayed eligible. Elapsed (gun) time is what race results and Strava best efforts mean, and it penalises a stop-heavy session on its own — the job the ratio guard did heuristically.
 **Advantages:** the tag means what the runner expects (computed live, so re-tagging takes effect on the next load); one clock across records and race results; no heuristic constant. Completed races with no run can be linked from the Races card (R8.3 actions) so they count.
 **Trade-offs:** Race PBs depend on tagging or linking — most of the 8-year archive is untagged, so that list starts sparse. Still whole-activity times; segments inside longer runs are R8.2. A typed race result with no linked run is not a Race PB.
-**Verdict:** ✅ Keep. Revisit Best efforts when R8.2 lands (segments replace whole-activity times there; Race PBs stay whole results).
+**Verdict:** ✅ Keep for Race PBs. Best efforts moved to segments in R8.2 (B19), and the Intervals/Track exclusion went with it.
+
+### B19. Best efforts are segments, stored per run, scanned off the request path (R8.2, 2026-10-09)
+**Chosen:** the Best efforts list is the fastest stretch inside any run at 1k, mile, 5k, 10k, half and full, found by a sliding window over the run's per-second stream (`app/utils/best_efforts`). The results are **stored** in `activity_best_efforts`, one row per (run, distance), with `activity_effort_scans` recording which runs were scanned. Sources:
+- the Strava archive, via a one-off backfill against the bulk export (`scripts/backfill_best_efforts`);
+- COROS runs, whose FIT file comes from the COROS MCP server, 5 per poll tick after polling, never on the confirm path.
+
+Intervals and Track **count** (the runner's call). A stretch is continuous running on the elapsed clock, so a rep is a real effort. A run with no scanned stream competes with its whole time in 5k → full. Race PBs (B18) stay whole race results.
+**Why stored (an INV-7 exception):** the efforts can't be computed at read time, because the source files aren't in the database. The archive lives in the export folder; a COROS FIT is a rationed download whose URL must not be kept. Recomputing them means re-reading the files, which the backfill and the scan log make cheap and idempotent. They are derived, never hand-edited, and cascade-deleted with their run.
+**Advantages:** a 5k inside a 10k race, or a half inside a marathon, finally counts. The confirm path stays fast and network-free (INV-8 untouched). A COROS outage or a bad file costs only "no efforts yet" for that run.
+**Trade-offs:**
+- A third stored derived value.
+- Production needs a one-time backfill where the export lives.
+- COROS efforts appear a tick (≤ 15 min) after a run is confirmed.
+- The COROS FIT URL is an unsigned link to the GPS track, so it's parsed in memory and never stored or logged; scan errors keep only the exception type.
+- GPX streams (33 old runs) get a jump filter (8 m/s); FIT distance is trusted as recorded.
+**Verdict:** ✅ Keep. Revisit storage if a source of streams appears that can be read at request time.
 ---
 
 ## C. AI Layer

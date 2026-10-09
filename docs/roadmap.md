@@ -429,7 +429,7 @@ Scoped 2026-10-09 with greps over `frontend/src`; re-run them at session start, 
 | # | Item | Description | Why it matters | Dependencies | Complexity |
 |---|---|---|---|---|---|
 | R8.1 | **Records: who counts, and on what clock** – ✅ **Done (2026-10-09)**: two lists (runner's choice), elapsed clock, ratio guard retired (B18) | Rewrite PB eligibility so the tag means what the runner expects, and time records on **elapsed** time, not moving time. Detail in §R8.1. | Today a run stays a record after its Race tag is changed to anything except Intervals/Track — the rule is "eligible unless excluded", the opposite of what the runner expects. Moving time also flatters stop-heavy runs. | R2.7 T1/T3 (tags, current rule) | Low |
-| R8.2 | **Best efforts inside longer runs (Strava-style)** – 📋 **scoped, spike first** | Find the fastest 5k / 10k / half *segment* inside any run (e.g. a 5k PB set during a 10k race) from per-second data, stored per activity. Detail in §R8.2. | Whole-activity bands can never see a 5k inside a 10k. This is how Strava, COROS and Garmin do best efforts. | R8.1 (eligibility + elapsed clock); spike S1 | Medium–High |
+| R8.2 | **Best efforts inside longer runs (Strava-style)** – ✅ **Done (2026-10-09)**: spike GO → built (segments 1k → full, intervals count, archive backfill + COROS FIT in the poll tick; B19). Prod: run the backfill after deploy | Find the fastest 5k / 10k / half *segment* inside any run (e.g. a 5k PB set during a 10k race) from per-second data, stored per activity. Detail in §R8.2. | Whole-activity bands can never see a 5k inside a 10k. This is how Strava, COROS and Garmin do best efforts. | R8.1 (eligibility + elapsed clock); spike S1 | Medium–High |
 | R8.3 | **Past races with no run attached** – ✅ **Done (2026-10-09)**: build was current; a run that day kept the race; past-race actions added (link the run / mark skipped / delete) | Make sure a plan that didn't happen leaves "Past races": confirm the B17 prune (PR #43) is live in production, then decide whether the rule should be stricter. Detail in §R8.3. | "Parkrun Time Trial" (planned, 2026-07-18, no activity) still shows in production on 2026-10-09, 83 days later. | B17 `races.prune_unrun_races`; RA3 would prevent "merged but not deployed" | Low |
 | R8.4 | **Training dashboards rework** – 📋 **placeholder — plan in its own session** | The charts and cards on the Training page need a broader rework. Not scoped yet; see §R8.4 for what to bring to that session. | Runner: "the dashboards need a lot of work." | R8.1–R8.3 (records and races feed the page) | High (to be sized) |
 
@@ -454,6 +454,8 @@ Scoped 2026-10-09 with greps over `frontend/src`; re-run them at session start, 
 **Exit:** re-tagging a race to a training tag removes it from Race PBs on the next load; an interval session with standing rests can't top a band; tests cover each tag class, missing elapsed time, and the two-list split.
 
 ### §R8.2 — Best efforts inside longer runs
+
+**Spike S1 result (2026-10-09): GO** — see `docs/spikes/best_efforts.md`. All 694 archive runs have 1 s FIT/GPX streams; COROS FIT files come from an unsigned S3 URL via `queryActivityFitFileDownloadUrls`; `fitdecode`/`gpxpy` are dependency-free. Before the build, the runner decides: intervals in segment efforts, 1k/mile bands, segments in Best efforts, and FIT-URL handling.
 
 **Feasible, with one data question.** Exact best efforts need per-second (or per-record) distance + time streams; laps are only an approximation (fastest N consecutive auto-laps, exact only when laps are whole km).
 

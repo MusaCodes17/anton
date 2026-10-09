@@ -11,15 +11,14 @@ const VIEWS = [
 ]
 
 /**
- * Card wrapper for the records grid (F4). Two lists behind one toggle so the
- * card keeps its height: Race PBs (runs tagged Race/Parkrun or linked to a
- * race) and Best efforts (any run except intervals/track). Both are
- * whole-activity elapsed times. Two-up at every width, matching PredictionsCard.
+ * Card wrapper for the records grid (F4). Two lists behind one toggle: Race
+ * PBs (whole runs tagged Race/Parkrun or linked to a race, R8.1) and Best
+ * efforts (the fastest stretch inside any run, 1K → Full, R8.2). Both on
+ * elapsed time. Two-up at every width, matching PredictionsCard.
  */
 export default function RecordsCard({ records }) {
   const [view, setView] = useState('race_pbs')
   const list = records.data?.[view] ?? []
-  const excluded = records.data?.excluded_count ?? 0
 
   return (
     <div className="rounded-2xl border border-border bg-card">
@@ -66,11 +65,7 @@ export default function RecordsCard({ records }) {
             <p className="text-xs text-muted-foreground">
               {view === 'race_pbs'
                 ? 'Runs tagged Race or Parkrun, or linked to a race. Elapsed time.'
-                : `Your fastest whole runs, races included. Elapsed time.${
-                    excluded > 0
-                      ? ` ${excluded} interval/track ${excluded === 1 ? 'session' : 'sessions'} not counted.`
-                      : ''
-                  }`}
+                : 'The fastest stretch inside any run, like a 5k inside a 10k race. Elapsed time.'}
             </p>
           </div>
         ) : view === 'race_pbs' ? (

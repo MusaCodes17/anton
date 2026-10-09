@@ -723,3 +723,39 @@ class CorosSyncState(Base):
     last_trigger = Column(String(20), nullable=True)         # scheduled | manual
     runs_found = Column(Integer, nullable=False, default=0, server_default="0")  # new runs queued by the last attempt
     last_error = Column(Text, nullable=True)
+
+
+class ActivityBestEffort(Base):
+    """
+    The fastest stretch of one run at a standard distance (R8.2) — e.g. the 5k
+    inside a 10k race — found from the run's per-second stream on the elapsed
+    clock. Derived data: rebuilt by re-scanning the run's FIT/GPX file
+    (services/best_efforts), never hand-edited, and it dies with its activity
+    (ON DELETE CASCADE). One row per (activity, distance).
+    """
+    __tablename__ = "activity_best_efforts"
+    __table_args__ = (UniqueConstraint("activity_id", "distance_label", name="uq_best_effort_activity_distance"),)
+
+    id = Column(Integer, primary_key=True)
+    activity_id = Column(Integer, ForeignKey("activities.id", ondelete="CASCADE"), nullable=False, index=True)
+    distance_label = Column(String(10), nullable=False, index=True)  # utils.best_efforts.EFFORT_DISTANCES label
+    elapsed_s = Column(Integer, nullable=False)                      # elapsed time over exactly that distance
+    start_offset_m = Column(Integer, nullable=False)                 # where in the run the stretch starts
+    source = Column(String(10), nullable=False)                      # fit | gpx
+
+
+class ActivityEffortScan(Base):
+    """
+    That a run's stream has been scanned for best efforts (R8.2), so scans
+    aren't repeated: a run shorter than 1 km has a scan but no effort rows.
+    status: ok | no_stream | failed. `failed` (download or parse error) is
+    retried up to MAX_SCAN_ATTEMPTS times; COROS FIT downloads have a daily cap.
+    """
+    __tablename__ = "activity_effort_scans"
+
+    activity_id = Column(Integer, ForeignKey("activities.id", ondelete="CASCADE"), primary_key=True)
+    status = Column(String(20), nullable=False)
+    source = Column(String(10), nullable=True)                       # fit | gpx when a stream was read
+    attempts = Column(Integer, nullable=False, default=1, server_default="1")
+    error = Column(String(300), nullable=True)
+    scanned_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())

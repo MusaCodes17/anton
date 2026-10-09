@@ -29,16 +29,16 @@ ACTIVITY_TAGS: tuple[str, ...] = (
 
 _VALID = set(ACTIVITY_TAGS)
 
-# --- Records eligibility (R2.7 T3, reworked R8.1) --------------------------
+# --- Records eligibility (R2.7 T3 → R8.1 → R8.2) ---------------------------
 # Records come in two lists (strava_stats.personal_bests):
 #   - Race PBs: official results only — a run tagged Race/Parkrun, or one linked
 #     to a planned race. Re-tagging a race to anything else removes it.
-#   - Best efforts: the fastest whole runs of any kind except Intervals/Track,
-#     whose rep distances would fake a record.
-# Both are timed on ELAPSED time (R8.1), so a stop-heavy session's rests count
-# against it — which retired T3's untagged elapsed/moving ratio guard.
+#   - Best efforts: the fastest stretch inside ANY run (R8.2), intervals
+#     included — a stretch is continuous running on the elapsed clock, so a
+#     rep is a real effort and rests inside a stretch count against it. That
+#     retired both T3's untagged ratio guard (R8.1) and the Intervals/Track
+#     exclusion (R8.2).
 RACE_RESULT_TAGS = frozenset({"Race", "Parkrun"})       # a Race PB
-PB_EXCLUDED_TAGS = frozenset({"Intervals", "Track"})    # never a best effort
 
 
 def is_valid_tag(tag: Optional[str]) -> bool:
@@ -80,12 +80,3 @@ def suggest_tag_from_name(name: Optional[str]) -> Optional[str]:
             return tag
     return None
 
-
-def pb_exclusion_reason(tag: Optional[str]) -> Optional[str]:
-    """Return a short reason string if a run with this tag is INELIGIBLE as a
-    best effort, else None. Only Intervals/Track are excluded; untagged history
-    (the 8-year archive) counts — the elapsed clock keeps stop-heavy runs honest.
-    """
-    if tag in PB_EXCLUDED_TAGS:
-        return "interval/track session"
-    return None

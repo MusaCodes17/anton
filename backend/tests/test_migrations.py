@@ -32,6 +32,7 @@ EXPECTED_TABLES = (
     "oauth_auth_codes", "oauth_tokens",
     "sessions",
     "coros_connection", "coros_oauth_states", "pending_coros_runs", "coros_sync_state",
+    "activity_best_efforts", "activity_effort_scans",
     "alembic_version",
 )
 

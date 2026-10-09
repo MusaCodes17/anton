@@ -5,6 +5,60 @@
 
 ---
 
+## R8.2 — Best efforts inside longer runs — 2026-10-09
+
+**[ADDED] Segment best efforts, built on the spike (runner's decisions: intervals count; 1k and mile added; segments replace the Best efforts list).**
+- **Engine** `app/utils/best_efforts` (pure):
+  - FIT/GPX → `(elapsed_s, distance_m)` stream;
+  - a two-pointer sliding window with an interpolated end point;
+  - a GPX-only 8 m/s jump filter (filtering FIT distance cost 2 s on a known 10k, so FIT is trusted as recorded).
+  - Adds `fitdecode` + `gpxpy` (pure Python, no deps; A7 pins untouched).
+- **Tables (additive migration `9c0d1e2f3a4b`):** `activity_best_efforts` (one row per run × distance, UNIQUE, cascade-delete) and `activity_effort_scans` (ok / no_stream / failed + attempts, so scans aren't repeated; failures retry up to 3×).
+- **Scanning** `services/best_efforts`:
+  - `scan_archive` against the Strava bulk export, via `python -m app.scripts.backfill_best_efforts --export-dir …` (idempotent, per-run isolation, commits per run).
+  - `scan_coros` runs from the poll tick after polling, 5 per tick to ration COROS's daily FIT limit. The confirm path is untouched (INV-1/INV-8), and a scan failure never fails the poll.
+- **COROS:** `coros_mcp_client.fit_url` → `queryActivityFitFileDownloadUrls` by labelId, parsed by an anchored contract (fixture `fit_download_urls.json`, ids redacted). The URL is an unsigned link to the GPS track: never stored or logged, and scan errors keep only the exception type.
+- **Records:** Best efforts = the fastest stretch inside any run at 1k, mile, 5k, 10k, half, full. Unscanned runs compete with their whole time (5k → full). The Intervals/Track exclusion and `excluded_count` / `excluded_reason` are removed. Race PBs unchanged (whole results).
+  - API + `get_personal_bests`: `segment` and `run_distance_km` per record; the MCP docstring says how to describe each list.
+  - Card: 1K / Mile labels, "in 10.6 km" + "inside <run>" for segments, no HR on segments.
+
+**[DECIDED]** B19 (segments, stored, scanned off the request path) — a recorded **INV-7 exception** (the source files aren't in the DB), noted in CLAUDE.md §9/§14 and domain_model §4.11. B18 verdict amended. `architecture.md` (tables, services) and `domain_model.md` §4.12 updated.
+
+**[VERIFIED]**
+- `test_best_efforts.py` (7, engine) + `test_best_efforts_service.py` (7: archive scan, isolation + bounded retry, rescan, cascade, URL contract, rationing + no URL stored, poll hook) + `test_activities_union.py` (segment records, intervals count, scanned-vs-unscanned); `test_migrations` expects both tables. Suite **654 → 670 + 1 skipped**.
+- Migration upgrade → downgrade → upgrade on a DB copy.
+- **Backfill on a scratch DB copy:** 694 runs scanned, 0 failed, 2,438 efforts stored. Best efforts:
+  - 1k 2:52 (a track session)
+  - mile 4:55 (a 2×1-mile session)
+  - 5k 15:39 (the time trial)
+  - 10k 34:28 (inside the Longueuil 10K)
+  - half 1:16:16 (inside the 21k de Montreal)
+  - full 2:41:40 (inside the Ottawa Marathon)
+- `vite build` clean. Desktop + 375 px pass (the segment label was shortened to fit beside MILE/10K). 0 console errors in a fresh tab. Live DB mtime unchanged.
+
+**[NOT DONE] Production steps after deploy (the migration runs on start):**
+1. Run the backfill where the export can be read. Copy `~/Workspace/export_33354574/activities/` (72 MB) to the server and run `docker compose exec anton python -m app.scripts.backfill_best_efforts --export-dir <path>` (~6–7 min).
+2. COROS runs fill in on their own, 5 per poll tick.
+3. Sunday's Beneva Marathon (2026-10-11) is the first live COROS test.
+
+---
+
+---
+
+## R8.2 spike S1 — best efforts inside longer runs: GO — 2026-10-09
+
+**[SPIKE] No product code.** Report: `docs/spikes/best_efforts.md`; throwaway script: `scripts/spikes/best_efforts.py`.
+- **Strava archive:** all 929 activities link to existing files (896 `.fit.gz`, 33 `.gpx`); all 694 runs yield 1-second streams. A full sweep took 525 s with 0 parse errors.
+- **COROS:** `queryActivityFitFileDownloadUrls` (by `labelId`) returns an unsigned S3 FIT URL, checked with a `HEAD` request only. The URL is public, so never store or log it.
+- **Parser:** `fitdecode` + `gpxpy` are pure Python with no dependencies; the image is Python 3.11, so the A7 pins are unaffected.
+- **Results look right:** a 2:41:40 full inside the Ottawa Marathon, a 1:16:16 half inside the 21k de Montreal, a 34:28 10k and 16:58 5k inside the Longueuil 10K. Only 1 run (a GPX with a GPS jump) gave an implausible effort; a step-speed filter handles it. Most raw outliers were rides, which records never read.
+
+**[CHANGED]** Removed root `DESIGN.md`, `PRODUCT.md` and `.impeccable/` at the runner's request (only history references them). Deleted the merged local and remote branches `r8.3-past-race-actions` and `r8.1-records`.
+
+**[NOT DONE]** The build waits on four runner decisions (report, last section). The COROS FIT file itself was not downloaded or parsed. Suite unchanged (654 + 1 skipped).
+
+---
+
 ## R8.1 — Records: Race PBs + Best efforts, on elapsed time — 2026-10-09
 
 **[CHANGED] `strava_stats.personal_bests` → two lists** (runner chose two lists over race-only):

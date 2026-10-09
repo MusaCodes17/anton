@@ -194,7 +194,7 @@ def test_records_attribute_shoe(db):
     assert ten.total_time_s == 2400           # no elapsed time here → moving clock
     assert ten.clock == "moving"
     assert ten.shoe is not None and ten.shoe["id"] == shoe.id
-    assert result.excluded_count == 0
+    assert ten.segment is False               # no scanned stream: the whole run competes
     assert result.race_pbs == []              # nothing tagged or linked as a race
 
 
@@ -253,15 +253,47 @@ def test_untagged_run_linked_to_a_race_is_a_race_pb(db):
     assert _band(strava_stats.personal_bests(db).race_pbs, "half").activity_id == a.id
 
 
-def test_intervals_and_track_never_set_a_best_effort(db):
-    _timed(db, said=6, dist=5.0, moving_s=1100, elapsed_s=1110)
-    _timed(db, said=7, dist=5.0, moving_s=800, elapsed_s=900, tag="Intervals")
-    _timed(db, said=8, dist=5.0, moving_s=800, elapsed_s=900, tag="Track")
+# ── Best efforts from segments (R8.2) ────────────────────────────────────────
+
+def _segment(db, activity, label, elapsed_s, start_m=0):
+    from app.models.models import ActivityBestEffort, ActivityEffortScan
+    db.add(ActivityBestEffort(activity_id=activity.id, distance_label=label,
+                              elapsed_s=elapsed_s, start_offset_m=start_m, source="fit"))
+    if not db.get(ActivityEffortScan, activity.id):
+        db.add(ActivityEffortScan(activity_id=activity.id, status="ok", source="fit"))
+    db.flush()
+
+
+def test_a_5k_inside_a_10k_race_is_the_5k_best_effort(db):
+    race = _timed(db, said=20, dist=10.09, moving_s=2095, elapsed_s=2095, tag="Race")
+    _segment(db, race, "5k", 1018, start_m=5000)
+    _segment(db, race, "10k", 2068)
+    _timed(db, said=21, dist=5.02, moving_s=1050, elapsed_s=1060)   # a slower whole 5k, unscanned
     db.commit()
     result = strava_stats.personal_bests(db)
-    assert _band(result.best_efforts, "5k").total_time_s == 1110
-    assert result.excluded_count == 2
-    assert result.excluded_reason == "2 interval/track session"
+    five = _band(result.best_efforts, "5k")
+    assert (five.activity_id, five.total_time_s, five.segment) == (race.id, 1018, True)
+    assert five.distance_km == 5.0 and five.run_distance_km == 10.09
+    assert five.avg_pace == "3:24/km" and five.avg_hr is None        # segment pace; no run-average HR
+    assert _band(result.race_pbs, "10k").total_time_s == 2095        # Race PBs stay whole results
+
+
+def test_interval_reps_count_as_best_efforts(db):
+    track = _timed(db, said=22, dist=8.0, moving_s=2400, elapsed_s=3000, tag="Track")
+    _segment(db, track, "1k", 172)
+    db.commit()
+    one = _band(strava_stats.personal_bests(db).best_efforts, "1k")
+    assert (one.activity_id, one.total_time_s) == (track.id, 172)
+
+
+def test_a_scanned_run_competes_only_through_its_segments(db):
+    # A scanned run never also competes as a whole run; an unscanned one does.
+    scanned = _timed(db, said=23, dist=5.0, moving_s=1100, elapsed_s=1100)
+    _segment(db, scanned, "1k", 215)                                 # (a scan stores what the stream covers)
+    unscanned = _timed(db, said=24, dist=5.0, moving_s=1200, elapsed_s=1200)
+    db.commit()
+    five = _band(strava_stats.personal_bests(db).best_efforts, "5k")
+    assert five.activity_id == unscanned.id and five.segment is False
 
 
 def test_record_carries_canonical_activity_id(db):

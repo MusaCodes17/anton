@@ -230,6 +230,25 @@ def parse_activity_detail(text: str) -> CorosRunDetail:
     )
 
 
+# queryActivityFitFileDownloadUrls (R8.2): "1. <labelId>.fit" then the URL on
+# the next line. Anchored on the label so another run's file can't be taken.
+def parse_fit_url(text: str, label_id: str) -> str:
+    """The FIT download URL for `label_id` from a queryActivityFitFileDownloadUrls
+    result. The URL is an unsigned S3 link (anyone holding it can download the
+    run, GPS track included): callers fetch it and drop it — never store or log it.
+    Raises CorosContractError if the response doesn't carry one.
+    """
+    body = _unwrap_text(text)
+    m = re.search(
+        rf"^\s*\d+\.\s+{re.escape(str(label_id))}\.fit\s*\n\s*(https://\S+/{re.escape(str(label_id))}\.fit)\s*$",
+        body, re.MULTILINE,
+    )
+    if not m:
+        # No response excerpt in the message: it could carry another run's URL.
+        raise CorosContractError(f"queryActivityFitFileDownloadUrls: no FIT URL for {label_id} (response shape changed?)")
+    return m.group(1)
+
+
 def merge_detail(run: CorosRun, detail: CorosRunDetail) -> CorosRun:
     """Attach detail to a list record. The detail text carries no id or date, so
     the only cross-check available is distance — a mismatch means we paired the
@@ -292,6 +311,15 @@ class CorosMcpClient:
     def get_run_detail(self, label_id: str, sport_type: int = 100) -> CorosRunDetail:
         text = self._call_tool("getActivityDetail", {"labelId": str(label_id), "sportType": sport_type})
         return parse_activity_detail(text)
+
+    def fit_url(self, label_id: str, sport_type: int = 100) -> str:
+        """The run's original FIT file URL (R8.2 best efforts). Counts against
+        COROS's daily FIT download limit — callers ration it. Ask by labelId:
+        the date-range form of this tool proved unreliable in the spike."""
+        text = self._call_tool("queryActivityFitFileDownloadUrls", {
+            "labelId": str(label_id), "sportType": sport_type, "limit": 1,
+        })
+        return parse_fit_url(text, label_id)
 
     def fetch_run(self, run: CorosRun) -> CorosRun:
         """Return `run` with its detail attached."""
