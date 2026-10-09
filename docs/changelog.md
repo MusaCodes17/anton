@@ -5,6 +5,16 @@
 
 ---
 
+## R8 scoped — Training page: records, races & dashboards — 2026-10-09
+
+**[ADDED] Roadmap only; no code changes.** New milestone **R8** in `roadmap.md` from the runner's Training-page feedback; **not scheduled**.
+- **R8.1 Records rules:** the reported bug (a re-tagged race stays the 5k record) is the current rule working as written: everything except `Intervals`/`Track` is eligible, timed on moving time. Proposed: elapsed-time clock, and a Race PBs list (Race/Parkrun) separate from Best efforts; the 1.5× ratio guard retires once elapsed time is in.
+- **R8.2 Best efforts inside longer runs:** feasible from per-second FIT/GPX streams; spike S1 checks COROS FIT download via the backend's MCP client, the Strava export's `activities/` files, and a parser inside the A7 pins.
+- **R8.3 Past races:** "Parkrun Time Trial" (planned, 2026-07-18, unlinked) still listed in production; B17 pruned it on a DB copy, so step 1 is checking the server build includes PR #43. Rule decisions recorded (any-activity vs linked-only; completed-without-activity, e.g. "Spring Half"; delete vs `skipped`).
+- **R8.4 Dashboards:** placeholder for its own planning session.
+
+---
+
 ## R7.4 — Boutique Courir scraper — 2026-10-09
 
 **[ADDED] `scrapers/boutique_courir.py`**, registered as bespoke (so it leaves the onboarding queue). Probe findings that shaped it:
