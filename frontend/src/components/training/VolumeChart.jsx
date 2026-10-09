@@ -8,7 +8,7 @@ import {
   ResponsiveContainer,
 } from 'recharts'
 
-const GREEN = 'oklch(0.74 0.17 153)'
+const GREEN = 'var(--primary)'
 
 function VolumeTooltip({ active, payload }) {
   if (!active || !payload?.length) return null
@@ -68,11 +68,11 @@ export default function VolumeChart({ data, height = 220, xTicks, xTickFormatter
             <stop offset="100%" stopColor={GREEN} stopOpacity={0} />
           </linearGradient>
         </defs>
-        <CartesianGrid strokeDasharray="3 3" stroke="#1E2126" vertical={false} />
+        <CartesianGrid strokeDasharray="3 3" stroke="var(--chart-grid)" vertical={false} />
         <XAxis
           dataKey="label"
-          tick={{ fontSize: 11, fill: '#6A6F76' }}
-          stroke="#1E2126"
+          tick={{ fontSize: 11, fill: 'var(--faint)' }}
+          stroke="var(--chart-grid)"
           fontFamily="JetBrains Mono, monospace"
           {...(xTicks ? { ticks: xTicks } : { interval: 'preserveStartEnd' })}
           {...(xTickFormatter ? { tickFormatter: xTickFormatter } : {})}
@@ -80,8 +80,8 @@ export default function VolumeChart({ data, height = 220, xTicks, xTickFormatter
         />
         <YAxis
           orientation="right"
-          tick={{ fontSize: 11, fill: '#6A6F76' }}
-          stroke="#1E2126"
+          tick={{ fontSize: 11, fill: 'var(--faint)' }}
+          stroke="var(--chart-grid)"
           fontFamily="JetBrains Mono, monospace"
           tickFormatter={(v) => `${v} km`}
           width={52}

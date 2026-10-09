@@ -36,9 +36,9 @@ function retailerStatus(retailer) {
 }
 
 const STATUS_DOT = {
-  success: 'bg-primary shadow-[0_0_0_4px_oklch(0.74_0.17_153_/_0.16)]',
-  warning: 'bg-warning shadow-[0_0_0_4px_oklch(0.8_0.15_75_/_0.16)]',
-  muted: 'bg-faint shadow-[0_0_0_4px_rgba(106,111,118,0.16)]',
+  success: 'bg-primary ring-4 ring-primary/[0.16]',
+  warning: 'bg-warning ring-4 ring-warning/[0.16]',
+  muted: 'bg-faint ring-4 ring-faint/[0.16]',
 }
 const STATUS_PILL = {
   success: 'bg-primary/[0.13] text-accent-foreground',

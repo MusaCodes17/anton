@@ -88,6 +88,10 @@ export default {
         divider: token('divider'),
         edge: token('edge'),
         'nav-inactive': token('nav-inactive'),
+        photo: {
+          DEFAULT: token('photo'),
+          foreground: token('photo-foreground'),
+        },
       },
       borderRadius: {
         lg: 'var(--radius)',
