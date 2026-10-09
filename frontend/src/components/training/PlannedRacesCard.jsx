@@ -223,7 +223,7 @@ export default function PlannedRacesCard() {
         onSuccess: () => {
           setDoneRace(null)
           setResultTime('')
-          toast({ variant: 'success', title: 'Race completed 🎉' })
+          toast({ variant: 'success', title: 'Race completed' })
         },
         onError: (e) => toast({ variant: 'destructive', title: 'Could not save', description: e?.message }),
       }

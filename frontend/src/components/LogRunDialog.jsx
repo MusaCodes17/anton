@@ -100,7 +100,7 @@ export default function LogRunDialog({ shoe, open, onOpenChange }) {
         ) : (
           <>
             <DialogHeader>
-              <DialogTitle>Checkpoint reached 🎯</DialogTitle>
+              <DialogTitle>Checkpoint reached</DialogTitle>
               <DialogDescription>
                 Your {shoe.nickname || shoe.model} just hit {checkpointKm}km. Add a note about how
                 they're feeling?
