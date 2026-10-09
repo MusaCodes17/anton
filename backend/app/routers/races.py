@@ -2,6 +2,10 @@
 Planned races API (P3.4). Thin router over app.services.races — the
 countdown/pace derivation lives in the service so REST and MCP agree.
 """
+from dataclasses import asdict
+from datetime import date
+from typing import Optional
+
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
@@ -12,7 +16,9 @@ from app.models.schemas import (
     PlannedRaceLinkActivity,
     PlannedRaceResponse,
     PlannedRaceUpdate,
+    RaceReadinessResponse,
 )
+from app.services import race_advisor
 from app.services import races as races_svc
 
 router = APIRouter(prefix="/races", tags=["races"])
@@ -23,6 +29,14 @@ router = APIRouter(prefix="/races", tags=["races"])
 def get_races(db: Session = Depends(get_db)):
     """All planned races, soonest first, with computed countdown + target pace."""
     return races_svc.list_races(db)
+
+
+@router.get("/readiness", response_model=RaceReadinessResponse)
+def get_race_readiness(as_of: Optional[date] = None, db: Session = Depends(get_db)):
+    """"Am I ready for my next race?" (R8.4.4) — a checklist with numbers, not a
+    score. `as_of` defaults to today (Toronto); `has_race` False when no race is
+    ahead. Same data as the MCP tool get_race_block_context's `readiness`."""
+    return RaceReadinessResponse(**asdict(race_advisor.race_readiness(db, as_of=as_of)))
 
 
 @router.post("", response_model=PlannedRaceResponse, status_code=status.HTTP_201_CREATED)

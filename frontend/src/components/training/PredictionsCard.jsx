@@ -1,5 +1,5 @@
 import { Target } from 'lucide-react'
-import { formatDuration } from '@/lib/utils'
+import { formatDate, formatDuration } from '@/lib/utils'
 
 const PREDICTION_DISTANCES = [
   { label: '5K',   keys: ['5.0', '5'] },
@@ -26,9 +26,15 @@ export default function PredictionsCard({ data }) {
 
   return (
     <div className="rounded-2xl border border-border bg-card">
-      <div className="flex items-center border-b border-border px-5 py-3">
-        <Target className="h-4 w-4 text-primary" />
-        <span className="ml-2.5 font-heading text-md-plus font-bold text-foreground">Predictions</span>
+      <div className="flex items-center justify-between border-b border-border px-5 py-3">
+        <div className="flex items-center gap-2.5">
+          <Target className="h-4 w-4 text-primary" />
+          <span className="font-heading text-md-plus font-bold text-foreground">Predictions</span>
+        </div>
+        {/* Freshness (R8.4.5): predictions come from the same COROS snapshot. */}
+        {preds.length > 0 && data?.captured_at && (
+          <span className="text-2xs text-faint">as of {formatDate(data.captured_at)}</span>
+        )}
       </div>
       {preds.length === 0 ? (
         <p className="px-5 py-8 text-center text-sm text-muted-foreground">

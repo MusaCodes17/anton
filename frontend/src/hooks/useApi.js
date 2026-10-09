@@ -47,10 +47,13 @@ export const queryKeys = {
   trainingSummary: (period, range) => ['training', 'summary', period, range ?? {}],
   trainingRecords: () => ['training', 'records'],
   trainingFitness: () => ['training', 'fitness'],
+  trainingTrends: () => ['training', 'trends'],
   stravaStatus: () => ['strava', 'status'],
   watchlist: () => ['watchlist'],
   activities: (params) => ['activities', params ?? {}],
   races: () => ['races'],
+  // Under the ['races'] prefix, so every race mutation's invalidation covers it.
+  raceReadiness: () => ['races', 'readiness'],
   home: () => ['home'],
   conversations: () => ['conversations'],
   conversation: (id) => ['conversations', 'detail', id],
@@ -301,6 +304,31 @@ export function useTrainingFitness() {
   })
 }
 
+// R8.4.5 "Now" strip — load (building/holding…) + form (efficiency, best
+// efforts, fitness history). Derived from runs, races (taper) and fitness
+// snapshots, so run/race/sync writes invalidate it (under ['training']).
+export function useTrainingTrends() {
+  return useQuery({
+    queryKey: queryKeys.trainingTrends(),
+    queryFn: () => trainingApi.trends(),
+  })
+}
+
+// Runs and races both feed the readiness checklist, so run writes invalidate
+// this key explicitly (race mutations reach it via the ['races'] prefix).
+export function useRaceReadiness() {
+  return useQuery({
+    queryKey: queryKeys.raceReadiness(),
+    queryFn: () => racesApi.readiness(),
+  })
+}
+
+// Race edits move the load verdict's taper window, so race mutations refresh it.
+function invalidateAfterRaceWrite(qc) {
+  qc.invalidateQueries({ queryKey: queryKeys.races() })
+  qc.invalidateQueries({ queryKey: queryKeys.trainingTrends() })
+}
+
 // ============== ACTIVITIES ==============
 export function useActivities(params) {
   return useQuery({
@@ -415,6 +443,7 @@ function invalidateAfterActivityWrite(qc, id) {
   qc.invalidateQueries({ queryKey: ['owned-shoes'] })
   qc.invalidateQueries({ queryKey: ['training'] })
   qc.invalidateQueries({ queryKey: ['home'] })
+  qc.invalidateQueries({ queryKey: queryKeys.raceReadiness() })
 }
 
 export function useUpdateActivity(id) {
@@ -437,7 +466,7 @@ export function usePromoteToRace(id) {
   const qc = useQueryClient()
   return useMutation({
     mutationFn: () => activitiesApi.promoteToRace(id),
-    onSuccess: () => { invalidateAfterActivityWrite(qc, id); qc.invalidateQueries({ queryKey: ['races'] }) },
+    onSuccess: () => { invalidateAfterActivityWrite(qc, id); invalidateAfterRaceWrite(qc) },
   })
 }
 
@@ -453,7 +482,7 @@ export function useCreateRace() {
   const qc = useQueryClient()
   return useMutation({
     mutationFn: (data) => racesApi.create(data),
-    onSuccess: () => qc.invalidateQueries({ queryKey: queryKeys.races() }),
+    onSuccess: () => invalidateAfterRaceWrite(qc),
   })
 }
 
@@ -461,7 +490,7 @@ export function useUpdateRace() {
   const qc = useQueryClient()
   return useMutation({
     mutationFn: ({ id, data }) => racesApi.update(id, data),
-    onSuccess: () => qc.invalidateQueries({ queryKey: queryKeys.races() }),
+    onSuccess: () => invalidateAfterRaceWrite(qc),
   })
 }
 
@@ -471,7 +500,7 @@ export function useLinkRaceActivity() {
   return useMutation({
     mutationFn: ({ id, activityId }) => racesApi.linkActivity(id, activityId),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: queryKeys.races() })
+      invalidateAfterRaceWrite(qc)
       qc.invalidateQueries({ queryKey: queryKeys.trainingRecords() }) // a linked run is a Race PB (R8.1)
       qc.invalidateQueries({ queryKey: ['home'] })
     },
@@ -483,7 +512,7 @@ export function useDeleteRace() {
   return useMutation({
     mutationFn: (id) => racesApi.remove(id),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: queryKeys.races() })
+      invalidateAfterRaceWrite(qc)
       qc.invalidateQueries({ queryKey: queryKeys.trainingRecords() }) // a race-linked run may drop out of Race PBs
     },
   })
@@ -616,6 +645,10 @@ export function useLogRun() {
     onSuccess: (_data, { id }) => {
       qc.invalidateQueries({ queryKey: ['owned-shoes'] })
       qc.invalidateQueries({ queryKey: queryKeys.shoeRuns(id) })
+      // A new run moves every run-derived surface (R8.4.5 "Now" strip included).
+      qc.invalidateQueries({ queryKey: ['activities'] })
+      qc.invalidateQueries({ queryKey: ['training'] })
+      qc.invalidateQueries({ queryKey: queryKeys.raceReadiness() })
     },
   })
 }
@@ -648,6 +681,10 @@ export function useDeleteShoeRun() {
       // on success, or quietly corrects it if the delete failed.
       qc.invalidateQueries({ queryKey: ['owned-shoes'] })
       qc.invalidateQueries({ queryKey: queryKeys.shoeRuns(run.owned_shoe_id) })
+      // A manual run's activity goes with it, so run-derived surfaces refresh.
+      qc.invalidateQueries({ queryKey: ['activities'] })
+      qc.invalidateQueries({ queryKey: ['training'] })
+      qc.invalidateQueries({ queryKey: queryKeys.raceReadiness() })
     },
   })
 }
@@ -681,6 +718,7 @@ export function useSyncCoros() {
     onSettled: () => {
       qc.invalidateQueries({ queryKey: ['coros'] })
       qc.invalidateQueries({ queryKey: queryKeys.trainingFitness() })
+      qc.invalidateQueries({ queryKey: queryKeys.trainingTrends() }) // form.fitness history
     },
   })
 }
@@ -705,6 +743,7 @@ export function useConfirmPendingRun() {
       qc.invalidateQueries({ queryKey: queryKeys.home() })
       qc.invalidateQueries({ queryKey: ['activities'] })
       qc.invalidateQueries({ queryKey: ['training'] })
+      qc.invalidateQueries({ queryKey: queryKeys.raceReadiness() })
     },
   })
 }

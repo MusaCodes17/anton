@@ -15,7 +15,9 @@ history R8.4.3 charts.
 """
 from __future__ import annotations
 
+from datetime import date, timezone
 from typing import Optional
+from zoneinfo import ZoneInfo
 
 from sqlalchemy.orm import Session
 
@@ -83,3 +85,16 @@ def record_if_changed(
         db, vo2max=vo2max, threshold_pace_s_per_km=threshold_pace_s_per_km,
         race_predictions=race_predictions, running_level=running_level,
     )
+
+
+def captured_local_date(snap: AthleteMetric) -> Optional[date]:
+    """A snapshot's Toronto calendar date — the one conversion every surface
+    uses, so a 03:20 UTC reading reads as the previous evening everywhere.
+    SQLite hands back the server-stamped UTC `func.now()` as a naive datetime,
+    so naive means UTC."""
+    at = snap.captured_at
+    if at is None:
+        return None
+    if at.tzinfo is None:
+        at = at.replace(tzinfo=timezone.utc)
+    return at.astimezone(ZoneInfo("America/Toronto")).date()
