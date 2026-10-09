@@ -1,3 +1,12 @@
+// Theme colours are CSS variables (index.css), which Tailwind can't split into
+// channels — so a bare 'var(--x)' silently drops every opacity modifier
+// (`bg-primary/90` generated no CSS at all; roadmap §R7.1). Wrapping each token
+// in color-mix() with Tailwind's <alpha-value> placeholder makes `/N` work and
+// renders the plain class (alpha 1 → 100%) exactly as before. color-mix needs
+// Safari 16.2+ / Chrome 111+, which the installed PWA targets already meet.
+const token = (name) =>
+  `color-mix(in oklab, var(--${name}) calc(<alpha-value> * 100%), transparent)`
+
 /** @type {import('tailwindcss').Config} */
 export default {
   darkMode: ['class'],
@@ -25,60 +34,60 @@ export default {
         stat: '23px',
       },
       colors: {
-        border: 'var(--border)',
-        input: 'var(--input)',
-        ring: 'var(--ring)',
-        background: 'var(--background)',
-        foreground: 'var(--foreground)',
+        border: token('border'),
+        input: token('input'),
+        ring: token('ring'),
+        background: token('background'),
+        foreground: token('foreground'),
         primary: {
-          DEFAULT: 'var(--primary)',
-          foreground: 'var(--primary-foreground)',
+          DEFAULT: token('primary'),
+          foreground: token('primary-foreground'),
         },
         secondary: {
-          DEFAULT: 'var(--secondary)',
-          foreground: 'var(--secondary-foreground)',
+          DEFAULT: token('secondary'),
+          foreground: token('secondary-foreground'),
         },
         destructive: {
-          DEFAULT: 'var(--destructive)',
-          foreground: 'var(--destructive-foreground)',
+          DEFAULT: token('destructive'),
+          foreground: token('destructive-foreground'),
         },
         muted: {
-          DEFAULT: 'var(--muted)',
-          foreground: 'var(--muted-foreground)',
+          DEFAULT: token('muted'),
+          foreground: token('muted-foreground'),
         },
         accent: {
-          DEFAULT: 'var(--accent)',
-          foreground: 'var(--accent-foreground)',
+          DEFAULT: token('accent'),
+          foreground: token('accent-foreground'),
         },
         popover: {
-          DEFAULT: 'var(--popover)',
-          foreground: 'var(--popover-foreground)',
+          DEFAULT: token('popover'),
+          foreground: token('popover-foreground'),
         },
         card: {
-          DEFAULT: 'var(--card)',
-          foreground: 'var(--card-foreground)',
+          DEFAULT: token('card'),
+          foreground: token('card-foreground'),
         },
         success: {
-          DEFAULT: 'var(--success)',
-          foreground: 'var(--success-foreground)',
+          DEFAULT: token('success'),
+          foreground: token('success-foreground'),
         },
         warning: {
-          DEFAULT: 'var(--warning)',
-          foreground: 'var(--warning-foreground)',
+          DEFAULT: token('warning'),
+          foreground: token('warning-foreground'),
         },
         strava: {
-          DEFAULT: 'var(--strava)',
-          foreground: 'var(--strava-foreground)',
+          DEFAULT: token('strava'),
+          foreground: token('strava-foreground'),
         },
         // "Velocity" design system: a second, slightly lighter dark tone used
         // for nested tiles/rows inside a --card panel (stat tiles, table rows),
         // distinct from the panel background itself.
-        surface: 'var(--surface)',
-        faint: 'var(--faint)',
-        sidebar: 'var(--sidebar)',
-        divider: 'var(--divider)',
-        edge: 'var(--edge)',
-        'nav-inactive': 'var(--nav-inactive)',
+        surface: token('surface'),
+        faint: token('faint'),
+        sidebar: token('sidebar'),
+        divider: token('divider'),
+        edge: token('edge'),
+        'nav-inactive': token('nav-inactive'),
       },
       borderRadius: {
         lg: 'var(--radius)',
