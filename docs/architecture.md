@@ -89,12 +89,14 @@ Dev-time coupling: the Vite dev server proxies `/api` to `127.0.0.1:8000` (expli
 ```
 anton/
 ├── CLAUDE.md                    # Claude development guide (conventions); the session log is docs/changelog.md
-├── CLAUDE_DESKTOP_SETUP.md, MAINTENANCE_PLAN.md, REMOTE_ACCESS_PLAN.md   # live root docs (setup · maintenance queue · RA runbook)
 ├── docs/                        # The documentation suite (this file, domain_model, design_decisions, …)
 │   │                            #   + changelog.md — the session log (authoritative history, formerly root claude.md)
+│   │                            #   + CLAUDE_DESKTOP_SETUP.md (MCP client setup) + spikes/ (spike reports)
 │   └── archive/                 # retired docs (QUICKSTART, TROUBLESHOOTING) + completed execution plans (H2, 2026-07-14):
 │                                #   REDESIGN_PLAN, REFACTOR_PLAN, TRAINING_DEPTH_PLAN, SECURITY_PASS_PLAN, CHAT_PERSISTENCE_PLAN,
-│                                #   UI_REVIEW_TASKS, STRAVA_IMPORT_REVIEW_TASKS, strava-historical-import-plan, documentation_creation
+│                                #   UI_REVIEW_TASKS, STRAVA_IMPORT_REVIEW_TASKS, strava-historical-import-plan, documentation_creation;
+│                                #   + 2026-10-09: REMOTE_ACCESS_PLAN, RA2_2_PWA_PLAN, MAINTENANCE_PLAN, documentation_review,
+│                                #   skills_library, ai_context
 │                                #   — the "§N"/"P3.4" references in code comments now resolve under docs/archive/
 ├── .claude/commands/            # Claude Code project commands (/project:migrate etc.)
 ├── .playwright-mcp/             # Browser-testing session artifacts (logs/snapshots; not app code)
@@ -238,7 +240,7 @@ Two aggregates, one canonical run store, several enforced invariants:
 
 **Conventions worth knowing**
 - Pace now has **one persisted representation**: integer seconds-per-km on `activities`, formatted to `"M:SS/km"` only at boundaries (`rotation.seconds_to_pace`). Residual duplication: the `ShoeRun.avg_pace` property proxy re-implements the formatting inline (models can't import services), and `coros_client` carries a third copy — see §15.
-- "Personal bests" are explicitly *whole-activity* times within a distance band, not segment PBs, and the code insists this be described accurately downstream.
+- Records (R8.1, B18) come as two lists — **Race PBs** (Race/Parkrun-tagged or race-linked runs) and **Best efforts** (any run except Intervals/Track) — both whole-activity *elapsed* times within a distance band, not segments inside a longer run; the code insists this be described accurately downstream.
 - Timezone: America/Toronto is the canonical local zone for run dates (hard-coded in the Strava importer; COROS sync protocol passes it explicitly).
 
 ---

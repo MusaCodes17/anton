@@ -40,27 +40,29 @@ class RecordShoe(BaseModel):
 
 class PersonalBestResponse(BaseModel):
     """One distance-band record from strava_stats.personal_bests. Whole-activity
-    average-pace best, not a segment PB."""
+    elapsed time, not a segment inside a longer run."""
     band: str              # "5k" | "10k" | "half" | "full"
     target_km: float
     run_date: Optional[str] = None
     name: Optional[str] = None
     distance_km: float
-    total_time_s: int      # whole-activity time — the headline figure
+    total_time_s: int      # whole-activity elapsed time — the headline figure
     avg_pace: str
     avg_hr: Optional[int] = None
     source: str
     shoe: Optional[RecordShoe] = None
     strava_activity_id: Optional[int] = None
     activity_id: Optional[int] = None      # canonical id → the activity detail/editor
+    clock: str = "elapsed"                 # "moving" when the run has no elapsed time
 
     class Config:
         from_attributes = True
 
 
 class PersonalBestsResponse(BaseModel):
-    """The records plus what the eligibility filter dropped (R2.7 T3)."""
-    records: List[PersonalBestResponse]
+    """Race PBs and best efforts (R8.1), plus what the best-efforts filter dropped."""
+    race_pbs: List[PersonalBestResponse]
+    best_efforts: List[PersonalBestResponse]
     excluded_count: int = 0
     excluded_reason: Optional[str] = None
 
@@ -113,8 +115,7 @@ def get_fitness(db: Session = Depends(get_db)):
 
 @router.get("/records", response_model=PersonalBestsResponse)
 def get_training_records(db: Session = Depends(get_db)):
-    """Fastest average pace at each distance band, over the unioned run history.
-    These are whole-activity average-pace bests, not segment PBs. Interval/track
-    and stop-heavy untagged runs are excluded (R2.7 T3); the dropped count rides
-    along so the UI can prompt the runner to tag history."""
+    """Records per distance band, as two lists (R8.1): Race PBs (Race/Parkrun-
+    tagged or race-linked runs) and best efforts (any run except Intervals/
+    Track). Whole-activity elapsed times, not segments."""
     return strava_stats.personal_bests(db)

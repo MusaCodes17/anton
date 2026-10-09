@@ -126,8 +126,10 @@ function ResultDelta({ race }) {
 
 /**
  * A past race. Planned races still open past their date (the prune kept them
- * because a run exists that day — R8.3) get Link run / Skipped; every real
- * race row can be deleted. Activity-synthesized rows stay deep-link only.
+ * because a run exists that day — R8.3) get Link run / Skipped. A completed
+ * race with no run attached can be linked too, so it counts as a Race PB
+ * (R8.1). Every real race row can be deleted. Activity-synthesized rows stay
+ * deep-link only.
  */
 function PastRow({ race, onLink, onSkip, onDelete }) {
   const unresolved = race.status === 'planned'
@@ -165,15 +167,15 @@ function PastRow({ race, onLink, onSkip, onDelete }) {
       )}
       {!race.from_activity && (
         <div className="flex shrink-0 items-center pr-1.5">
+          {race.activity_id == null && race.status !== 'skipped' && (
+            <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => onLink(race)} title="Link the run">
+              <Link2 className="h-4 w-4" />
+            </Button>
+          )}
           {unresolved && (
-            <>
-              <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => onLink(race)} title="Link the run">
-                <Link2 className="h-4 w-4" />
-              </Button>
-              <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => onSkip(race)} title="Mark skipped">
-                <Ban className="h-4 w-4" />
-              </Button>
-            </>
+            <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => onSkip(race)} title="Mark skipped">
+              <Ban className="h-4 w-4" />
+            </Button>
           )}
           <Button
             variant="ghost"
@@ -484,7 +486,7 @@ export default function PlannedRacesCard() {
           <DialogHeader>
             <DialogTitle>Link the run</DialogTitle>
             <DialogDescription>
-              Which run on {linking && formatDate(linking.race_date)} was {linking?.name}? Its time becomes the result.
+              Which run on {linking && formatDate(linking.race_date)} was {linking?.name}? Its elapsed time becomes the result{linking?.result_time_s != null ? ', replacing the time entered' : ''}, and it counts as a Race PB.
             </DialogDescription>
           </DialogHeader>
           {linking && <RunPicker race={linking} onPick={confirmLink} picking={linkRace.isPending} />}

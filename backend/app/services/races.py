@@ -16,6 +16,7 @@ from sqlalchemy.orm import Session
 
 from app.models.models import Activity, PendingCorosRun, PlannedRace, ShoeRun
 from app.services import rotation
+from app.utils.activity_tags import RACE_RESULT_TAGS
 
 logger = logging.getLogger(__name__)
 
@@ -28,9 +29,9 @@ UNRUN_RACE_GRACE_DAYS = 3
 
 
 def _activity_result_s(a: Activity) -> Optional[int]:
-    """A race result from a run: real moving time, else pace × distance so the
-    result is set. (R8.1 will move race results to elapsed time — change it here.)"""
-    return a.moving_time_s or (
+    """A race result from a run, on the records clock (R8.1): elapsed (gun) time,
+    else moving time, else pace × distance so the result is set."""
+    return a.elapsed_time_s or a.moving_time_s or (
         round(a.avg_pace_s_per_km * a.distance_km) if a.avg_pace_s_per_km and a.distance_km else None
     )
 
@@ -216,7 +217,7 @@ def list_races(db: Session, today: Optional[date] = None) -> list:
     q = (
         db.query(Activity)
         .filter(
-            Activity.activity_tag.in_(("Race", "Parkrun")),
+            Activity.activity_tag.in_(tuple(RACE_RESULT_TAGS)),
             Activity.run_date < today,
         )
     )
@@ -237,7 +238,7 @@ def list_races(db: Session, today: Optional[date] = None) -> list:
             planned_shoe_id=None,
             notes=None,
             status="completed",
-            result_time_s=a.moving_time_s,
+            result_time_s=_activity_result_s(a),
             activity_id=a.id,
             created_at=datetime.combine(a.run_date, datetime.min.time()),
             planned_shoe=None,

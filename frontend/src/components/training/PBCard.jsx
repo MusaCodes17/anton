@@ -5,14 +5,14 @@ import { formatDate, formatDuration } from '@/lib/utils'
 const BAND_LABEL = { '5k': '5K', '10k': '10K', half: 'Half', full: 'Full' }
 
 /**
- * One personal-record card for a distance band. Headline is the fastest
- * whole-activity time in that band, with average pace and HR beneath. Honest
- * labelling: whole-activity times, not segment PBs. The date deep-links to the
+ * One record card for a distance band. Headline is the fastest whole-activity
+ * elapsed time in that band (R8.1), with the pace from that time and HR beneath.
+ * Honest labelling: whole runs, not segments inside a longer run. The date deep-links to the
  * activity's detail/editor (to retag/exclude it), and the shoe chip to the
  * attributed owned shoe.
  */
 export default function PBCard({ record }) {
-  const { band, total_time_s, avg_pace, avg_hr, run_date, distance_km, shoe, activity_id } = record
+  const { band, total_time_s, avg_pace, avg_hr, run_date, distance_km, shoe, activity_id, clock } = record
   return (
     <div className="flex flex-col gap-3 rounded-[14px] border border-border bg-surface p-4">
       <div className="flex items-center justify-between">
@@ -28,6 +28,9 @@ export default function PBCard({ record }) {
         </div>
         <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-muted-foreground tabular-nums">
           <span>{avg_pace}</span>
+          {clock === 'moving' && (
+            <span className="text-faint" title="This run has no elapsed time recorded">moving time</span>
+          )}
           {avg_hr != null && (
             <span className="inline-flex items-center gap-1">
               <Heart className="h-3 w-3 text-faint" />

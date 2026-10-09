@@ -1,7 +1,7 @@
 # CLAUDE.md — Anton Development Guide
 
 **Audience:** Claude Code (and any AI coding session) working in this repository.
-**Read with:** `docs/project_state.md` (what's true right now) and `docs/ai_context.md` (orientation, once it exists). Deep references: `docs/architecture.md`, `docs/domain_model.md`, `docs/design_decisions.md`, `docs/dependency_graph.md`.
+**Read with:** `docs/project_state.md` (what's true right now — read it first) and `docs/roadmap.md` (what's next). Deep references: `docs/architecture.md`, `docs/domain_model.md`, `docs/design_decisions.md`, `docs/dependency_graph.md`.
 **Session changelog lives at `docs/changelog.md`** (formerly this file) — append a session entry there at the top after every working session. This file is the *stable* guide; the changelog is the *running* history.
 
 ---
@@ -55,7 +55,7 @@ frontend/src/
   services/api.js  the single axios client, grouped per domain
   lib/             pure helpers (no React, no fetch)
 docs/              the documentation suite + changelog.md
-.claude/skills/    13 workflow skills (S01–S13) — implemented per docs/skills_library.md:
+.claude/skills/    13 workflow skills (S01–S13) — the files are the source of truth (original design: docs/archive/skills_library.md):
                    add-service-capability · add-api-endpoint · add-database-model ·
                    data-migration · add-retailer · add-mcp-tool · ai-agent ·
                    add-frontend-page · write-tests · refactor-service ·
@@ -70,7 +70,7 @@ docs/              the documentation suite + changelog.md
 - **phase `<name>`** — execute a named roadmap phase end to end, one commit per task, ending in S13.
 - **wrapup** — run the S13 session-wrapup skill to close a session (changelog, project_state, decisions, roadmap).
 
-Placement rules: new business logic → `services/` (never a router, never an MCP tool, never a React component). New endpoint → thin function in the matching router. New scraper → subclass in its own file, registered in `registry.py`. New query hook → `useApi.js`, calling a function added to `api.js`. Completed planning docs live under `docs/archive/` (`docs/archive/REDESIGN_PLAN.md` etc.) and remain citable references — code comments cite them as `§N` / `P3.4`. Live plan docs stay at the root (`REMOTE_ACCESS_PLAN.md`, `MAINTENANCE_PLAN.md`).
+Placement rules: new business logic → `services/` (never a router, never an MCP tool, never a React component). New endpoint → thin function in the matching router. New scraper → subclass in its own file, registered in `registry.py`. New query hook → `useApi.js`, calling a function added to `api.js`. Completed planning docs live under `docs/archive/` (`docs/archive/REDESIGN_PLAN.md` etc.) and remain citable references — code comments cite them as `§N` / `P3.4`. Live plan docs (a multi-session plan while it executes) sit in `docs/` and move to `docs/archive/` when the phase ships — as `REMOTE_ACCESS_PLAN.md`, `RA2_2_PWA_PLAN.md` and `MAINTENANCE_PLAN.md` did on 2026-10-09. Planned work otherwise lives in `docs/roadmap.md` §-sections; spike reports go in `docs/spikes/`.
 
 ---
 
@@ -219,7 +219,7 @@ Placement rules: new business logic → `services/` (never a router, never an MC
 
 ## 14. Invariants
 
-The checkable list. One line per invariant: what must hold → owning code path → covering test. The narrative behind each is `docs/domain_model.md` §4; this list is the canonical "never break these" reference (`docs/ai_context.md` §8 cites it; CLAUDE.md §6 remains the separate *mechanical traps* list). Verify the relevant lines whenever a session touches their paths.
+The checkable list. One line per invariant: what must hold → owning code path → covering test. The narrative behind each is `docs/domain_model.md` §4; this list is the canonical "never break these" reference (CLAUDE.md §6 remains the separate *mechanical traps* list). Verify the relevant lines whenever a session touches their paths.
 
 - **INV-1 · Mileage ledger:** `current_mileage = starting_mileage + Σ attributed distances` — maintained, never recomputed → `rotation.log_run` / `rotation.delete_run` / `rotation.adjust_mileage` (the sole sanctioned manual override, journals the drift) / `rotation.reassign_attribution` (R2.7 T6 — moves a run's distance between two shoes' counters when its attribution changes) → `tests/test_rotation.py` (increment) + `tests/test_activities_model.py` (delete round-trip) + `tests/test_owned_shoes.py` (PUT drops `current_mileage`/`starting_mileage`; `adjust_mileage` sets + notes) + `tests/test_activity_edit.py` (reassignment moves mileage both shoes). **C1 fixed 2026-07-07** — `PUT /owned-shoes/{id}` can no longer write the ledger; corrections go through `POST /owned-shoes/{id}/adjust-mileage`. **R5.7 (2026-10):** the COROS poller and the `pending_coros_runs` inbox are **non-writers** — they never touch `activities`, `shoe_runs` or mileage (`tests/test_coros_poller.py::test_poller_never_writes_runs_or_mileage`); only a confirm (→ `coros.confirm_run` → `rotation.log_run`) moves the ledger.
 - **INV-2 · Single run writer:** every Activity + Attribution pair is born via `rotation.log_run` (escape hatches, never parallel paths) → `rotation.py` → no direct test of the "no parallel path" rule is possible; **documentation-only** — enforcement is convention + review (see refactor.md C1 for the one known breach).

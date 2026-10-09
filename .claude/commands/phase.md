@@ -6,11 +6,11 @@ the session-wrapup skill.
 
 ## Steps
 
-1. Read `docs/ai_context.md`, `CLAUDE.md`, and `docs/project_state.md` to orient.
+1. Read `CLAUDE.md`, `docs/project_state.md` and `docs/roadmap.md` to orient.
 2. Read `docs/roadmap.md`; find the named phase's entry (the `<name>` argument,
    case-insensitive). If it isn't there, stop and say so.
 3. Read any relevant plan doc for that phase — live runbooks at the repo root
-   (e.g. `REMOTE_ACCESS_PLAN.md` for RA) or completed plans under `docs/archive/`
+   (e.g. `docs/archive/REMOTE_ACCESS_PLAN.md` for RA) or completed plans under `docs/archive/`
    (e.g. `docs/archive/SECURITY_PASS_PLAN.md` for R2.1). If none exists, derive
    the task list from the roadmap entry.
 4. Read the skill files the phase's tasks require (`.claude/skills/*.md`).
@@ -20,7 +20,7 @@ the session-wrapup skill.
    row moves, design_decisions updates.
 
 ## Required files to read first
-- `docs/ai_context.md`, `CLAUDE.md`, `docs/project_state.md`
+- `CLAUDE.md`, `docs/project_state.md`
 - `docs/roadmap.md` + the phase's plan doc
 - the `.claude/skills/*.md` files the phase touches
 
