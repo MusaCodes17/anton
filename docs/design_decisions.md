@@ -338,6 +338,7 @@ Intervals and Track **count** (the runner's call). A stretch is continuous runni
 **Key sub-decisions:**
 - **Only-if-changed** keeps the history's steps real. A metric COROS stops reporting counts as a change and is stored as None — nothing is carried forward.
 - **Never fails the poll:** like the R8.2 best-effort scan, a fetch/parse failure is logged and the tick stays a success; the day counts as checked, so a broken parser logs once a day. An auth failure still marks `reauth_required`.
+- **Son of Anton / Claude trigger it with `sync_coros_now`** (MCP twin of Sync now), which skips the confirmation card (`chat_proposals.NO_CONFIRM_TOOLS`, a narrow exception to C12's default-deny): it only fills the inbox and saves this reading; every run is still confirmed on its own card.
 - **"Checked today" is in memory** (INV-9, one process): a restart costs at most one extra call — not worth a column.
 - The prose parser follows C11: anchored regexes, fixture-pinned (`fitness_overview.json`); a missing line is None, a garbled present line is a `CorosContractError`.
 **Advantages:** Fitness stays current with no Claude session; the card and the coming trend chart read the same rows.

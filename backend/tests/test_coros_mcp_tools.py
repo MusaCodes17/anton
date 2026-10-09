@@ -5,6 +5,7 @@ clears it for the other; no path can log the same label_id twice (INV-5); the
 status tool reports poller/connection truth; the prompt no longer routes
 through the COROS connector for logging.
 """
+import asyncio
 import os
 from contextlib import contextmanager
 from datetime import date
@@ -169,6 +170,49 @@ def test_fetch_never_logs_anything(db):
     pending(db)
     mcp_server.fetch_unsynced_coros_runs()
     assert db.query(Activity).count() == 0
+
+
+# --- sync_coros_now (Son of Anton / Claude can run the app's Sync now) --------------------
+
+class _FakeCoros:
+    """Stands in for CorosMcpClient inside the poller: no runs, a fitness reading."""
+    def __init__(self, *a, **k):
+        from app.services.coros_mcp_client import CorosFitness
+        self.fitness = CorosFitness(59.0, 97.0, 204, {"42.195": 8864})
+
+    def list_runs(self, start, end):
+        return []
+
+    def fitness_overview(self):
+        return self.fitness
+
+
+@pytest.fixture()
+def inline_thread(monkeypatch):
+    """The test DB is in-memory SQLite (one connection per thread), so run the
+    tool's worker-thread body on this thread."""
+    async def run_inline(fn, *a, **k):
+        return fn(*a, **k)
+    monkeypatch.setattr(mcp_server.asyncio, "to_thread", run_inline)
+
+
+def test_sync_coros_now_runs_the_manual_sync_and_saves_fitness(db, monkeypatch, inline_thread):
+    from app.services import best_efforts as be, coros_poller
+    monkeypatch.setattr(coros_poller, "CorosMcpClient", _FakeCoros)
+    monkeypatch.setattr(be, "scan_coros", lambda db, client: be.ScanSummary())
+    connect(db)
+    out = asyncio.run(mcp_server.sync_coros_now())
+    assert out["success"] is True and out["queued"] == 0 and out["fitness_recorded"] is True
+    assert out["fitness"]["vo2max"] == 59.0 and out["fitness"]["threshold_pace"] == "3:24/km"
+    assert db.get(CorosSyncState, 1).last_trigger == "manual"
+    again = asyncio.run(mcp_server.sync_coros_now())
+    assert again["fitness_recorded"] is False                      # unchanged → not re-saved
+    assert db.query(Activity).count() == 0                         # never logs a run
+
+
+def test_sync_coros_now_not_connected_is_a_clean_failure(db, inline_thread):
+    out = asyncio.run(mcp_server.sync_coros_now())
+    assert out == {"success": False, "error": "COROS isn't connected. Connect it in Settings → Sync."}
 
 
 # --- get_coros_sync_status ----------------------------------------------------------------

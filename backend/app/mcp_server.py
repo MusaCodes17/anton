@@ -10,6 +10,7 @@ exactly one place business logic lives. Each tool opens its own DB session
 (FastMCP tools aren't FastAPI route handlers, so they can't use
 Depends(get_db)) and closes it when done, mirroring get_db's lifecycle.
 """
+import asyncio
 import os
 
 from contextlib import contextmanager
@@ -942,6 +943,56 @@ def get_coros_sync_status() -> dict:
 
 
 @mcp.tool()
+async def sync_coros_now() -> dict:
+    """
+    Run Anton's COROS sync right now — the same sync as the app's "Sync now"
+    button and the background poller (about every 15 minutes). It pulls new
+    runs into the "New runs" inbox and reads the runner's COROS fitness (VO2 max,
+    running level, threshold pace, race predictions), saving a fitness snapshot
+    when it changed. Use it when the user asks to sync, refresh or update their
+    runs or fitness, or when fitness data looks stale.
+
+    No confirmation needed: it never logs a run or touches mileage (new runs
+    wait in the inbox — present them with fetch_unsynced_coros_runs and log
+    each through confirm_coros_run as usual), and a fitness snapshot is a
+    reading COROS computed, saved as-is (design decisions C13).
+
+    Returns `queued` (new runs added to the inbox), `pending_count`,
+    `fitness_recorded` (whether the reading changed), the latest `fitness`
+    snapshot, and `errors`. `success` is False when COROS isn't connected or a
+    sync is already running.
+    """
+    def _run() -> dict:
+        # Own session in the worker thread (one session per thread, CLAUDE.md §9).
+        with get_session() as db:
+            result = coros_poller_svc.run_tick(db, trigger="manual")
+            if result.skipped == "not_connected":
+                return {"success": False, "error": "COROS isn't connected. Connect it in Settings → Sync."}
+            if result.skipped == "already_running":
+                return {"success": False, "error": "A COROS sync is already running; try again in a moment."}
+            snap = fitness_svc.latest(db)
+            return {
+                "success": result.ok,
+                "found": result.found,
+                "queued": result.queued,
+                "pending_count": coros_poller_svc.get_sync_summary(db)["pending_count"],
+                "fitness_recorded": result.fitness_recorded,
+                "fitness": None if snap is None else {
+                    "captured_at": snap.captured_at.isoformat() if snap.captured_at else None,
+                    "vo2max": snap.vo2max,
+                    "running_level": snap.running_level,
+                    "threshold_pace": rotation.seconds_to_pace(snap.threshold_pace_s_per_km)
+                    if snap.threshold_pace_s_per_km else None,
+                    "race_predictions_s": snap.race_predictions,
+                },
+                "errors": result.errors,
+            }
+
+    # run_tick makes blocking COROS calls; keep them off the event loop.
+    return await asyncio.to_thread(_run)
+
+
+@mcp.tool()
 def fetch_unsynced_coros_runs(days_back: int = 30) -> dict:
     """
     Return the runs waiting in Anton's "New runs" inbox — the same queue the
@@ -1219,9 +1270,11 @@ def record_athlete_metrics(
     pace, race predictions, running level) for the Training tab's fitness card.
     Append-only: each call stores one dated snapshot; the card shows the most recent.
 
-    Anton cannot fetch these itself (server-side COROS is dormant). Use the
-    sync_fitness prompt to fetch from the COROS MCP and confirm with the runner
-    (C9) before calling this.
+    Anton reads these from COROS itself on every sync (R8.4.1): to refresh
+    fitness, call sync_coros_now instead. This tool is the manual path only —
+    for values the runner gives you, or read from a COROS connector when
+    Anton's own COROS connection is down — and it is confirmed by the runner
+    before it runs.
 
     Args:
         vo2max: VO2 max in ml/kg/min.
@@ -1979,7 +2032,7 @@ def training_fitness_resource() -> str:
         snap = fitness_svc.latest(db)
 
     if snap is None:
-        no_data = "# Fitness Metrics\n\n_No fitness data recorded yet. Use the `sync_fitness` prompt to fetch metrics from COROS._"
+        no_data = "# Fitness Metrics\n\n_No fitness data recorded yet. Call `sync_coros_now` to read it from COROS._"
         return f"{no_data}\n\n```json\n{{\"has_data\": false}}\n```"
 
     threshold_pace = rotation.seconds_to_pace(snap.threshold_pace_s_per_km) if snap.threshold_pace_s_per_km else None
@@ -2155,15 +2208,20 @@ def sync_fitness() -> str:
     """
     Sync COROS athlete fitness metrics (VO2 max, threshold pace, race
     predictions, running level) into Anton's Training tab fitness card.
-    Fetches the latest snapshot from COROS, confirms with the runner,
-    then records it via record_athlete_metrics.
+    Normally one call to sync_coros_now; the connector + confirm steps are
+    the fallback when Anton's own COROS connection is down.
     """
     return """# COROS Fitness Sync Agent
 
 You are syncing athlete-level fitness metrics from COROS into Anton.
-Follow this exact process.
 
-## Step 1 — Fetch fitness assessment from COROS
+## Step 0 — Use Anton's own COROS sync (normal path)
+Call `sync_coros_now`. Anton reads COROS fitness itself and saves a snapshot
+when it changed — no confirmation needed (C13). Report the returned
+`fitness` values (and whether they changed), then stop.
+Only if it fails because COROS isn't connected, fall back to the steps below.
+
+## Step 1 — Fetch fitness assessment from COROS (fallback)
 Call `queryFitnessAssessmentOverview` from the COROS MCP connector.
 This returns VO2 max, lactate-threshold pace, race predictions, and
 running level. Do NOT call record_athlete_metrics yet.

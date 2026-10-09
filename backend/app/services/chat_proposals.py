@@ -42,6 +42,13 @@ READ_ONLY_TOOLS = frozenset({
     "probe_retailer",
 })
 
+# Tools that write, but only data the runner ruled needs no confirmation card:
+# sync_coros_now fills the "New runs" inbox (each run is still confirmed one by
+# one) and saves COROS's fitness reading as-is (design decisions C13).
+NO_CONFIRM_TOOLS = frozenset({
+    "sync_coros_now",
+})
+
 PROPOSAL_TTL = timedelta(minutes=30)   # a card older than this can't be confirmed; ask again
 CONFIRM_WAIT_S = 20.0                  # confirm() returns "executing" after this; the card polls
 MAX_HELD = 200                         # defensive cap on the in-memory registry
@@ -77,7 +84,7 @@ def requires_confirmation(tool: str, args: dict) -> bool:
     Default-deny: unknown tools are held. A call with `confirm=False` (the
     onboarding tools' preview mode) writes nothing, so it runs immediately.
     """
-    if tool.startswith("get_") or tool in READ_ONLY_TOOLS:
+    if tool.startswith("get_") or tool in READ_ONLY_TOOLS or tool in NO_CONFIRM_TOOLS:
         return False
     if args.get("confirm") is False:
         return False
