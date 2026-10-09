@@ -129,3 +129,84 @@ def test_already_linked_activity_not_duplicated(db):
     races = races_svc.list_races(db, today=today)
     tagged = [r for r in races if getattr(r, "from_activity", False)]
     assert len(tagged) == 0   # already covered by the PlannedRace row
+
+
+# ── Pruning planned races that were never run ─────────────────────────────
+
+def _pending(db, run_date, status="pending"):
+    from app.models.models import PendingCorosRun
+    db.add(PendingCorosRun(
+        label_id=f"L{run_date.isoformat()}{status}", sport_type=100, run_date=run_date,
+        distance_km=5.0, moving_time_s=1500, avg_pace_s_per_km=300,
+        start_timestamp=0, end_timestamp=1500, status=status,
+    ))
+    db.flush()
+
+
+def test_prune_removes_unrun_past_planned_race(db):
+    today = date(2026, 10, 8)
+    _race(db, "Parkrun Time Trial", date(2026, 7, 18))
+    db.commit()
+
+    assert races_svc.prune_unrun_races(db, today) == ["Parkrun Time Trial"]
+    assert db.query(PlannedRace).count() == 0
+    assert all(r.name != "Parkrun Time Trial" for r in races_svc.list_races(db, today))
+
+
+def test_prune_grace_boundary(db):
+    today = date(2026, 10, 8)
+    grace = races_svc.UNRUN_RACE_GRACE_DAYS
+    _race(db, "Exactly at grace", today - timedelta(days=grace))       # pruned (inclusive)
+    _race(db, "Inside grace", today - timedelta(days=grace - 1))       # kept — COROS may still sync
+    _race(db, "Today", today)
+    _race(db, "Future", today + timedelta(days=3))
+    db.commit()
+
+    assert races_svc.prune_unrun_races(db, today) == ["Exactly at grace"]
+    assert {r.name for r in db.query(PlannedRace)} == {"Inside grace", "Today", "Future"}
+
+
+def test_prune_keeps_race_with_a_run_that_day(db):
+    today = date(2026, 10, 8)
+    d = date(2026, 9, 20)
+    _race(db, "Ran it", d)
+    db.add(Activity(source="coros", activity_type="Run", run_date=d, distance_km=5.0, moving_time_s=1200))
+    db.commit()
+
+    assert races_svc.prune_unrun_races(db, today) == []
+
+
+def test_prune_keeps_race_with_coros_run_waiting_to_sync(db):
+    today = date(2026, 10, 8)
+    d = date(2026, 9, 20)
+    _race(db, "In the inbox", d)
+    _pending(db, d)
+    db.commit()
+
+    assert races_svc.prune_unrun_races(db, today) == []
+
+
+def test_prune_ignores_dismissed_inbox_runs(db):
+    today = date(2026, 10, 8)
+    d = date(2026, 9, 20)
+    _race(db, "Dismissed run only", d)
+    _pending(db, d, status="dismissed")
+    db.commit()
+
+    assert races_svc.prune_unrun_races(db, today) == ["Dismissed run only"]
+
+
+def test_prune_never_touches_completed_skipped_or_linked(db):
+    today = date(2026, 10, 8)
+    d = date(2026, 7, 18)
+    _race(db, "Done", d, status="completed")
+    _race(db, "Skipped on purpose", d, status="skipped")
+    a = Activity(source="strava", activity_type="Run", run_date=date(2026, 7, 1), distance_km=5.0, moving_time_s=1200)
+    db.add(a)
+    db.flush()
+    linked = _race(db, "Linked", d)
+    linked.activity_id = a.id
+    db.commit()
+
+    assert races_svc.prune_unrun_races(db, today) == []
+    assert db.query(PlannedRace).count() == 3
