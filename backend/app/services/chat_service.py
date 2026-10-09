@@ -26,8 +26,9 @@ import os
 from abc import ABC, abstractmethod
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
-from datetime import timedelta
+from datetime import datetime, timedelta
 from typing import Any, AsyncGenerator, AsyncIterator, Callable, Optional
+from zoneinfo import ZoneInfo
 
 from mcp import types as mcp_types
 from mcp.client.session_group import ClientSessionGroup, StreamableHttpParameters
@@ -126,6 +127,17 @@ PROVIDERS: dict[str, dict] = {
     "openai":    {"name": "ChatGPT", "api_key_env": "OPENAI_API_KEY"},
     "google":    {"name": "Gemini",  "api_key_env": "GOOGLE_API_KEY"},
 }
+
+
+def _date_context() -> str:
+    """Today's runner-local date for the system prompt. Without it the model
+    guesses "today" from its training data and proposes runs on the wrong
+    date (seen live in R7.2's card). Run dates are America/Toronto (B14)."""
+    today = datetime.now(ZoneInfo("America/Toronto")).date()
+    return (
+        f"\n\nToday's date is {today.isoformat()} ({today:%A}), America/Toronto. Resolve "
+        "\"today\", \"yesterday\" and weekday names against it."
+    )
 
 
 def get_models() -> list[dict]:
@@ -690,7 +702,7 @@ async def _run_chat(messages: list, model: str, queue: asyncio.Queue) -> None:
                     return json.dumps({"error": str(exc)}), False
 
             context_addition = await _load_context_resources(group)
-            augmented_system_prompt = SYSTEM_PROMPT + context_addition
+            augmented_system_prompt = SYSTEM_PROMPT + _date_context() + context_addition
 
             await provider.run(
                 initial_messages=messages,

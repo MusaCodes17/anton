@@ -309,3 +309,12 @@ def test_cancelled_run_writes_nothing(db, shoe, in_process_mcp):
     db.expire_all()
     assert _runs(db) == (0, 0)
     assert db.get(OwnedShoe, shoe.id).current_mileage == 500.0
+
+
+def test_system_prompt_carries_toronto_date():
+    from datetime import datetime
+    from zoneinfo import ZoneInfo
+    from app.services.chat_service import _date_context
+
+    today = datetime.now(ZoneInfo("America/Toronto")).date().isoformat()
+    assert today in _date_context()
