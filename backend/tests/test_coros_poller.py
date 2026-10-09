@@ -18,15 +18,19 @@ import pytest
 import requests
 
 from app.models.models import (
-    Activity, CorosConnection, CorosSyncState, OwnedShoe, PendingCorosRun, ShoeRun,
+    Activity, AthleteMetric, CorosConnection, CorosSyncState, OwnedShoe, PendingCorosRun, ShoeRun,
 )
 from app.services import coros_poller as poller
 from app.services.coros_connection import CorosAuthError
-from app.services.coros_mcp_client import CorosContractError, parse_sport_records
+from app.services.coros_mcp_client import (
+    CorosContractError, parse_fitness_overview, parse_sport_records,
+)
 
 FIX = Path(__file__).parent / "fixtures" / "coros" / "query_sport_records.json"
 RUNS = parse_sport_records(json.loads(FIX.read_text())["result"]["content"][0]["text"])
 TODAY = date(2026, 10, 7)
+FITNESS = parse_fitness_overview(json.loads(
+    (FIX.parent / "fitness_overview.json").read_text())["result"]["content"][0]["text"])
 
 
 class FakeClient:
@@ -37,12 +41,21 @@ class FakeClient:
         self.list_exc = None
         self.fetch_exc = {}           # label_id -> exception
         self.on_fetch = None
+        self.fitness = FITNESS
+        self.fitness_calls = 0
+        self.fitness_exc = None
 
     def list_runs(self, start, end):
         self.list_calls.append((start, end))
         if self.list_exc:
             raise self.list_exc
         return self.runs
+
+    def fitness_overview(self):
+        self.fitness_calls += 1
+        if self.fitness_exc:
+            raise self.fitness_exc
+        return self.fitness
 
     def fetch_run(self, run):
         if self.on_fetch:
@@ -57,6 +70,7 @@ class FakeClient:
 
 @pytest.fixture(autouse=True)
 def _release_lock():
+    poller._fitness_checked_on = None
     yield
     if poller._tick_lock.locked():
         poller._tick_lock.release()
@@ -167,6 +181,80 @@ def test_poller_never_writes_runs_or_mileage(connected):
     connected.expire_all()
     assert connected.query(Activity).count() == 0 and connected.query(ShoeRun).count() == 0
     assert connected.get(OwnedShoe, shoe.id).current_mileage == 123.4
+
+
+# --- fitness snapshots (R8.4.1) ------------------------------------------------------
+
+def test_first_tick_saves_a_fitness_snapshot_without_confirmation(connected):
+    r = tick(connected, FakeClient())
+    assert r.fitness_recorded is True
+    snap = connected.query(AthleteMetric).one()
+    assert (snap.vo2max, snap.running_level, snap.threshold_pace_s_per_km) == (59.0, 97.0, 204)
+    assert snap.race_predictions["42.195"] == 8864
+
+
+def test_quiet_scheduled_tick_does_not_refetch_fitness_the_same_day(connected):
+    tick(connected, FakeClient())
+    c = FakeClient()                                  # same runs: nothing new queued
+    r = tick(connected, c)
+    assert r.queued == 0 and c.fitness_calls == 0 and r.fitness_recorded is False
+
+
+def test_new_day_fetches_fitness_as_a_fallback(connected):
+    tick(connected, FakeClient())
+    c = FakeClient()
+    poller.run_tick(connected, client=c, today=TODAY + timedelta(days=1))
+    assert c.fitness_calls == 1
+
+
+def test_a_new_run_refetches_fitness_the_same_day(connected):
+    tick(connected, FakeClient(RUNS[1:]))
+    c = FakeClient()
+    r = tick(connected, c)
+    assert r.queued == 1 and c.fitness_calls == 1
+
+
+def test_manual_sync_always_fetches_fitness(connected):
+    tick(connected, FakeClient())
+    c = FakeClient()
+    tick(connected, c, trigger="manual")
+    assert c.fitness_calls == 1
+
+
+def test_unchanged_fitness_is_not_saved_again_and_a_change_is(connected):
+    tick(connected, FakeClient())
+    r = tick(connected, FakeClient(), trigger="manual")
+    assert r.fitness_recorded is False and connected.query(AthleteMetric).count() == 1
+    c = FakeClient()
+    c.fitness = dataclasses.replace(FITNESS, vo2max=60.0)
+    assert tick(connected, c, trigger="manual").fitness_recorded is True
+    assert connected.query(AthleteMetric).count() == 2
+
+
+def test_fitness_failure_never_fails_the_poll(connected):
+    c = FakeClient()
+    c.fitness_exc = CorosContractError("VO2max reworded")
+    r = tick(connected, c)
+    assert r.ok and r.queued == 14 and r.fitness_recorded is False
+    assert connected.query(AthleteMetric).count() == 0
+    assert connected.get(CorosSyncState, 1).last_error is None
+    c2 = FakeClient()
+    tick(connected, c2)                               # the day counts as checked: no retry storm
+    assert c2.fitness_calls == 0
+
+
+def test_fitness_auth_failure_marks_reauth(connected):
+    c = FakeClient()
+    c.fitness_exc = CorosAuthError("401")
+    tick(connected, c)
+    assert connected.get(CorosConnection, 1).status == "reauth_required"
+
+
+def test_failed_poll_skips_fitness(connected):
+    c = FakeClient()
+    c.list_exc = requests.ConnectionError("down")
+    tick(connected, c, trigger="manual")
+    assert c.fitness_calls == 0
 
 
 # --- failure behaviour --------------------------------------------------------------
@@ -318,7 +406,8 @@ def test_sync_endpoint_runs_a_tick_and_status_reports_it(http, monkeypatch):
     s.close()
     monkeypatch.setattr(poller, "CorosMcpClient", lambda *a, **k: FakeClient(RUNS[:3]))
     r = http("POST", "/api/coros/sync")
-    assert r.status_code == 200 and r.json() == {"ok": True, "found": 3, "queued": 3, "errors": []}
+    assert r.status_code == 200 and r.json() == {"ok": True, "found": 3, "queued": 3,
+                                       "fitness_recorded": True, "errors": []}
     st = http("GET", "/api/coros/status").json()
     assert st["sync"]["pending_count"] == 3 and st["sync"]["last_trigger"] == "manual"
     assert st["sync"]["last_error"] is None

@@ -5,6 +5,26 @@
 
 ---
 
+## R8.4.1 — Fitness recorded automatically by the COROS sync — 2026-10-09
+
+**[ADDED] COROS fitness snapshots without a Claude session (runner's call: same sync as runs, no confirmation).**
+- **Parser** `coros_mcp_client.parse_fitness_overview` + `CorosMcpClient.fitness_overview()` → `queryFitnessAssessmentOverview` (no arguments). Anchored per-line regexes, pinned by `tests/fixtures/coros/fitness_overview.json` (the spike's live capture). A missing line is None; a garbled present line (`--`, `/mi`, out-of-bounds pace, a reworded duration) or an unknown header is a `CorosContractError`. Prediction keys match the July snapshot and `PredictionsCard`.
+- **Service** `fitness.record_if_changed`: appends through `record_snapshot` only when the reading differs from the newest row; an all-empty reading writes nothing; a dropped metric is a change stored as None.
+- **Poll tick** `coros_poller._sync_fitness`, after a clean poll and before the best-effort scan. Fetches when the tick queued a new run, on **Sync now**, or on the first tick of a Toronto day (in-memory "checked today", INV-9). Failures are logged and never fail the poll; an auth failure marks `reauth_required`. `TickResult.fitness_recorded` → `POST /api/coros/sync` returns `fitness_recorded`.
+- **Frontend:** `useSyncCoros` also invalidates the fitness query, so the card refreshes after Sync now.
+- **Docs in code:** the stale "written via the Claude-Desktop agent (C6)" wording fixed in `services/fitness.py` and the `AthleteMetric` docstring; the poller module docstring lists the new write.
+
+**[DECIDED]** C13 — fitness snapshots are saved by the poller without confirmation (not a run: no ledger, no attribution; INV-8 untouched). `architecture.md` `athlete_metrics` line updated. Roadmap R8.4.1 ✅.
+
+**[VERIFIED]**
+- `test_coros_mcp_client.py` +10 (exact units, missing lines, empty report, 5 garbled-line cases, header, tool call shape), `test_coros_poller.py` +9 (first tick saves; a quiet tick doesn't refetch; new day / new run / manual do; unchanged not re-saved; failure never fails the poll and doesn't retry every tick; auth → reauth; failed poll skips), `test_fitness.py` +4. Suite **672 → 695 + 1 skipped** (R8.2's entry recorded 670; the run before this change counted 672).
+- **Live:** `fitness_overview()` against the real COROS server with the spike token parsed VO₂ max 59, level 97, threshold 204 s/km, predictions {5k 977, 10k 2007, half 4349, full 8864} — identical to the fixture. Read-only; no DB written.
+- `vite build` clean. The only UI change is a cache invalidation, so no visual pass.
+
+**[NOT DONE]** After deploy, the first poll tick saves the first automatic snapshot (VO₂ max 59 vs. July's 61). Nothing to run by hand.
+
+---
+
 ## R8.2 — Best efforts inside longer runs — 2026-10-09
 
 **[ADDED] Segment best efforts, built on the spike (runner's decisions: intervals count; 1k and mile added; segments replace the Best efforts list).**

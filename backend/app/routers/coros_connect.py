@@ -85,14 +85,16 @@ def status(db: Session = Depends(get_db)):
 
 @router.post("/sync")
 def sync_now(db: Session = Depends(get_db)):
-    """Run one poll on demand (same code as the scheduled tick). Only writes the
-    pending queue — never runs or mileage. 409 if not connected or a tick is running."""
+    """Run one poll on demand (same code as the scheduled tick). Writes the
+    pending queue and, if COROS's reading changed, a fitness snapshot (R8.4.1) —
+    never runs or mileage. 409 if not connected or a tick is running."""
     result = coros_poller.run_tick(db, trigger="manual")
     if result.skipped == "not_connected":
         raise HTTPException(status_code=409, detail="COROS is not connected")
     if result.skipped == "already_running":
         raise HTTPException(status_code=409, detail="A COROS sync is already in progress")
-    return {"ok": result.ok, "found": result.found, "queued": result.queued, "errors": result.errors}
+    return {"ok": result.ok, "found": result.found, "queued": result.queued,
+            "fitness_recorded": result.fitness_recorded, "errors": result.errors}
 
 
 class ConfirmBody(BaseModel):

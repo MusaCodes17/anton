@@ -45,3 +45,38 @@ def test_running_level_absent_stays_none(db):
     resp = get_fitness(db=db)
     assert resp.has_data is True
     assert resp.running_level is None
+
+
+# --- R8.4.1: automatic snapshots are saved only when the reading changed ----------
+
+PRED = {"5.0": 977, "10.0": 2007, "21.0975": 4349, "42.195": 8864}
+
+
+def test_record_if_changed_saves_first_then_skips_repeats(db):
+    first = fitness_svc.record_if_changed(db, vo2max=59.0, running_level=97.0,
+                                          threshold_pace_s_per_km=204, race_predictions=PRED)
+    assert first is not None
+    again = fitness_svc.record_if_changed(db, vo2max=59, running_level=97,     # ints == floats
+                                          threshold_pace_s_per_km=204, race_predictions=dict(PRED))
+    assert again is None
+    assert fitness_svc.latest(db).id == first.id
+
+
+def test_record_if_changed_saves_any_single_change(db):
+    fitness_svc.record_if_changed(db, vo2max=59.0, running_level=97.0,
+                                  threshold_pace_s_per_km=204, race_predictions=PRED)
+    changed = fitness_svc.record_if_changed(db, vo2max=59.0, running_level=97.0, threshold_pace_s_per_km=204,
+                                            race_predictions={**PRED, "42.195": 8850})
+    assert changed is not None and fitness_svc.latest(db).race_predictions["42.195"] == 8850
+
+
+def test_record_if_changed_ignores_an_empty_reading(db):
+    assert fitness_svc.record_if_changed(db) is None
+    assert fitness_svc.record_if_changed(db, race_predictions={}) is None
+    assert fitness_svc.latest(db) is None
+
+
+def test_a_dropped_metric_is_a_change_stored_as_none(db):
+    fitness_svc.record_if_changed(db, vo2max=59.0, running_level=97.0)
+    snap = fitness_svc.record_if_changed(db, vo2max=59.0)
+    assert snap is not None and snap.running_level is None

@@ -486,8 +486,9 @@ class AthleteMetric(Base):
     A periodic snapshot of COROS athlete-level fitness (R2.7 T5) — not per
     activity, but per sync. Append-only: each row is one point in time, so the
     Training-tab fitness card reads the newest and the history is preserved for
-    future trend views. Written via the Claude-Desktop sync agent (design
-    decisions C6 — server-side COROS is dormant), never computed by Anton.
+    future trend views. Written by the COROS poller when the reading changes
+    (R8.4.1, design decisions C13) or by hand via `record_athlete_metrics`;
+    never computed by Anton.
     """
     __tablename__ = "athlete_metrics"
 

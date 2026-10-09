@@ -20,6 +20,7 @@ from app.services.coros_mcp_client import (
     CorosMcpClient,
     merge_detail,
     parse_activity_detail,
+    parse_fitness_overview,
     parse_sport_records,
 )
 
@@ -32,6 +33,7 @@ def _fixture_text(name: str) -> str:
 
 LIST_TEXT = _fixture_text("query_sport_records.json")
 DETAIL_TEXT = _fixture_text("get_activity_detail.json")
+FITNESS_TEXT = _fixture_text("fitness_overview.json")
 
 
 # --- list parsing: units and shapes --------------------------------------------
@@ -269,3 +271,49 @@ def test_live_smoke_returns_normalized_runs():
     assert runs, "expected at least one run this month"
     full = c.fetch_run(runs[0])
     assert full.has_detail and full.elapsed_time_s >= full.moving_time_s - 1
+
+
+# --- fitness overview (R8.4.1) --------------------------------------------------
+
+def test_fitness_fixture_exact_units():
+    f = parse_fitness_overview(FITNESS_TEXT)
+    assert (f.vo2max, f.running_level) == (59.0, 97.0)
+    assert f.threshold_pace_s_per_km == 3 * 60 + 24              # "3:24 /km"
+    # keys match the July snapshot / PredictionsCard; "16:17" is M:SS, "2:27:44" H:MM:SS
+    assert f.race_predictions == {"5.0": 16 * 60 + 17, "10.0": 33 * 60 + 27,
+                                  "21.0975": 3600 + 12 * 60 + 29, "42.195": 2 * 3600 + 27 * 60 + 44}
+
+
+def test_fitness_missing_lines_are_none_not_errors():
+    text = "Fitness Assessment Overview\n=====\n\nVO2max: 59\nMarathon Prediction: 2:27:44\n"
+    f = parse_fitness_overview(text)
+    assert f.vo2max == 59.0 and f.running_level is None and f.threshold_pace_s_per_km is None
+    assert f.race_predictions == {"42.195": 8864}
+
+
+def test_fitness_with_no_metrics_has_no_predictions_dict():
+    f = parse_fitness_overview("Fitness Assessment Overview\n=====\n")
+    assert f == type(f)(None, None, None, None)
+
+
+@pytest.mark.parametrize("line", [
+    "VO2max: --",
+    "Running Level: high",
+    "Threshold Pace: 3:24 /mi",
+    "Threshold Pace: 0:30 /km",            # outside sane pace bounds
+    "Marathon Prediction: 2h27m",
+])
+def test_fitness_garbled_present_line_fails_loudly(line):
+    with pytest.raises(CorosContractError):
+        parse_fitness_overview(f"Fitness Assessment Overview\n=====\n\n{line}\n")
+
+
+def test_fitness_unrecognized_header_fails_loudly():
+    with pytest.raises(CorosContractError, match="header"):
+        parse_fitness_overview("No fitness assessment available")
+
+
+def test_fitness_overview_calls_the_tool_with_no_arguments():
+    c, s, _ = client(ok(FITNESS_TEXT))
+    assert c.fitness_overview().vo2max == 59.0
+    assert s.calls[0]["json"]["params"] == {"name": "queryFitnessAssessmentOverview", "arguments": {}}

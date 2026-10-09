@@ -1,0 +1,13 @@
+{
+ "jsonrpc": "2.0",
+ "id": 1,
+ "result": {
+  "content": [
+   {
+    "type": "text",
+    "text": "\"Fitness Assessment Overview\\n========================\\n\\nVO2max: 59\\nRunning Level: 97\\nThreshold Pace: 3:24 /km\\n5 km Prediction: 16:17\\n10 km Prediction: 33:27\\nHalf Marathon Prediction: 1:12:29\\nMarathon Prediction: 2:27:44\""
+   }
+  ],
+  "isError": false
+ }
+}
