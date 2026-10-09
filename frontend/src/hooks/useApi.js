@@ -472,6 +472,7 @@ export function useLinkRaceActivity() {
     mutationFn: ({ id, activityId }) => racesApi.linkActivity(id, activityId),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: queryKeys.races() })
+      qc.invalidateQueries({ queryKey: queryKeys.trainingRecords() }) // a linked run is a Race PB (R8.1)
       qc.invalidateQueries({ queryKey: ['home'] })
     },
   })
@@ -481,7 +482,10 @@ export function useDeleteRace() {
   const qc = useQueryClient()
   return useMutation({
     mutationFn: (id) => racesApi.remove(id),
-    onSuccess: () => qc.invalidateQueries({ queryKey: queryKeys.races() }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: queryKeys.races() })
+      qc.invalidateQueries({ queryKey: queryKeys.trainingRecords() }) // a race-linked run may drop out of Race PBs
+    },
   })
 }
 

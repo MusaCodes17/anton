@@ -1163,37 +1163,44 @@ def get_training_summary(period: str = "monthly") -> dict:
 @mcp.tool()
 def get_personal_bests() -> dict:
     """
-    Fastest whole-activity time at each distance band (5k, 10k, half, full)
-    across the full run history (imported Strava runs unioned with live COROS/
-    manual runs). Each best also reports average pace and HR.
+    The runner's records at each distance band (5k, 10k, half, full) across the
+    full run history, as two lists:
 
-    IMPORTANT: these are *whole-activity* times within a distance tolerance —
-    not true segment/split PBs. Describe them that way to the user (e.g. "your
-    fastest 10k run", not "your 10k PB").
+    - race_pbs: official race results — runs tagged Race or Parkrun, or linked
+      to a planned race. Call these "race PBs" / "your 10k race PB".
+    - best_efforts: the fastest whole runs of any kind except Intervals/Track
+      sessions (races included). Call these "your fastest 10k run".
+
+    Times are whole-activity ELAPSED time (gun time); avg_pace is derived from
+    that time. clock is "moving" for the rare run with no elapsed time. These
+    are whole runs within a distance tolerance — not a 5k split inside a longer
+    run, so don't describe them as segment bests.
     """
+    def _row(b):
+        return {
+            "band": b.band,
+            "target_km": b.target_km,
+            "run_date": b.run_date,
+            "name": b.name,
+            "distance_km": b.distance_km,
+            "total_time_s": b.total_time_s,
+            "avg_pace": b.avg_pace,
+            "avg_hr": b.avg_hr,
+            "clock": b.clock,
+            "source": b.source,
+            "shoe": b.shoe,
+            "strava_activity_id": b.strava_activity_id,
+            "activity_id": b.activity_id,
+        }
+
     with get_session() as db:
         result = strava_stats.personal_bests(db)
         return {
-            "note": "Whole-activity average-pace bests within a distance tolerance, not segment PBs.",
+            "note": "Whole-activity elapsed times within a distance tolerance, not segments inside longer runs.",
+            "race_pbs": [_row(b) for b in result.race_pbs],
+            "best_efforts": [_row(b) for b in result.best_efforts],
             "excluded_count": result.excluded_count,
             "excluded_reason": result.excluded_reason,
-            "bests": [
-                {
-                    "band": b.band,
-                    "target_km": b.target_km,
-                    "run_date": b.run_date,
-                    "name": b.name,
-                    "distance_km": b.distance_km,
-                    "total_time_s": b.total_time_s,
-                    "avg_pace": b.avg_pace,
-                    "avg_hr": b.avg_hr,
-                    "source": b.source,
-                    "shoe": b.shoe,
-                    "strava_activity_id": b.strava_activity_id,
-                    "activity_id": b.activity_id,
-                }
-                for b in result.records
-            ],
         }
 
 

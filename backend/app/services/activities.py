@@ -43,7 +43,7 @@ class UnifiedActivity:
     avg_hr: Optional[int] = None
     elevation_m: Optional[float] = None
     name: Optional[str] = None
-    elapsed_time_s: Optional[int] = None   # for the PB elapsed-time guard (R2.7 T3)
+    elapsed_time_s: Optional[int] = None   # the records clock (R8.1)
     activity_tag: Optional[str] = None     # controlled vocab; drives PB eligibility (R2.7 T3)
     activity_id: Optional[int] = None      # canonical Activity id (for edit/detail — R2.7 T6)
     shoe: Optional[UnifiedShoe] = None

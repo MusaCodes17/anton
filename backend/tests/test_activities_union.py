@@ -189,67 +189,90 @@ def test_records_attribute_shoe(db):
     assert len(resp) >= 2
 
     result = strava_stats.personal_bests(db)
-    ten = next(b for b in result.records if b.band == "10k")
+    ten = _band(result.best_efforts, "10k")
     assert ten.avg_pace == "4:00/km"          # the faster one won
-    assert ten.total_time_s == 2400           # 10km * 240s/km — the headline figure
+    assert ten.total_time_s == 2400           # no elapsed time here → moving clock
+    assert ten.clock == "moving"
     assert ten.shoe is not None and ten.shoe["id"] == shoe.id
-    assert result.excluded_count == 0         # nothing tagged/stop-heavy here
-
-
-def _band(result, band):
-    return next((b for b in result.records if b.band == band), None)
-
-
-def test_pb_excludes_interval_and_track_sessions(db):
-    # A blazing "5k" total time from an Intervals session must NOT set a 5k PB.
-    _activity(db, said=10, run_date=date(2026, 6, 2), dist=5.0, pace_s=200)  # untagged, legit
-    fake = _activity(db, said=11, run_date=date(2026, 6, 3), dist=5.0, pace_s=150)
-    fake.activity_tag = "Intervals"
-    db.commit()
-    result = strava_stats.personal_bests(db)
-    five = _band(result, "5k")
-    assert five is not None
-    assert five.total_time_s == 1000          # the untagged 5.0km * 200s/km, not the 150 interval
-    assert result.excluded_count == 1
-    assert "interval/track session" in result.excluded_reason
-
-
-def test_pb_includes_race_even_if_fast(db):
-    race = _activity(db, said=12, run_date=date(2026, 6, 4), dist=5.0, pace_s=175)
-    race.activity_tag = "Race"
-    db.commit()
-    result = strava_stats.personal_bests(db)
-    assert _band(result, "5k").total_time_s == 875   # race counts
     assert result.excluded_count == 0
+    assert result.race_pbs == []              # nothing tagged or linked as a race
 
 
-def test_pb_elapsed_guard_excludes_stop_heavy_untagged(db):
-    # Untagged, elapsed 2000 > 1.5 * moving 1000 → stop-heavy, excluded.
-    a = _activity(db, said=13, run_date=date(2026, 6, 5), dist=5.0, pace_s=200, moving_s=1000)
-    a.elapsed_time_s = 2000
+# ── Records: two lists on the elapsed clock (R8.1) ───────────────────────────
+
+def _band(records, band):
+    return next((b for b in records if b.band == band), None)
+
+
+def _timed(db, *, said, dist, moving_s, elapsed_s, tag=None, run_date=date(2026, 6, 1)):
+    a = _activity(db, said=said, run_date=run_date, dist=dist,
+                  pace_s=round(moving_s / dist), moving_s=moving_s)
+    a.elapsed_time_s = elapsed_s
+    a.activity_tag = tag
+    db.flush()
+    return a
+
+
+def test_records_are_timed_on_elapsed_time(db):
+    # A stop-heavy run with the faster moving time loses to a clean run once
+    # its standing rests count — this is what retired the 1.5x ratio guard.
+    _timed(db, said=1, dist=5.0, moving_s=1000, elapsed_s=1400)   # untagged, stops a lot
+    clean = _timed(db, said=2, dist=5.0, moving_s=1050, elapsed_s=1060)
+    db.commit()
+    five = _band(strava_stats.personal_bests(db).best_efforts, "5k")
+    assert five.activity_id == clean.id
+    assert five.total_time_s == 1060 and five.clock == "elapsed"
+    assert five.avg_pace == "3:32/km"          # 1060 s / 5 km — pace from the same clock
+
+
+def test_retagging_a_race_removes_it_from_race_pbs(db):
+    race = _timed(db, said=3, dist=10.0, moving_s=2100, elapsed_s=2110, tag="Race")
     db.commit()
     result = strava_stats.personal_bests(db)
-    assert _band(result, "5k") is None
-    assert result.excluded_count == 1
-    assert "stop-heavy untagged run" in result.excluded_reason
+    assert _band(result.race_pbs, "10k").activity_id == race.id
+    assert _band(result.best_efforts, "10k").activity_id == race.id   # races count there too
 
-
-def test_pb_carries_canonical_activity_id(db):
-    # The record exposes the canonical activity_id so the Records card can deep-link
-    # to the /activities/:id editor (to retag/exclude a run).
-    a = _activity(db, said=14, run_date=date(2026, 6, 6), dist=10.0, pace_s=240)
+    race.activity_tag = "Tempo"                # the reported bug
     db.commit()
     result = strava_stats.personal_bests(db)
-    ten = _band(result, "10k")
-    assert ten is not None
-    assert ten.activity_id == a.id
+    assert result.race_pbs == []
+    assert _band(result.best_efforts, "10k").activity_id == race.id   # still a fast run
 
 
-def test_pb_elapsed_guard_boundary_keeps_clean_run(db):
-    # elapsed exactly 1.5 * moving is NOT > 1.5x → still eligible.
-    a = _activity(db, said=14, run_date=date(2026, 6, 6), dist=5.0, pace_s=200, moving_s=1000)
-    a.elapsed_time_s = 1500
+def test_parkrun_counts_as_a_race_pb(db):
+    _timed(db, said=4, dist=5.0, moving_s=1000, elapsed_s=1005, tag="Parkrun")
+    db.commit()
+    assert _band(strava_stats.personal_bests(db).race_pbs, "5k").total_time_s == 1005
+
+
+def test_untagged_run_linked_to_a_race_is_a_race_pb(db):
+    from app.models.models import PlannedRace
+    a = _timed(db, said=5, dist=21.1, moving_s=4600, elapsed_s=4631)
+    db.add(PlannedRace(name="Spring Half", race_date=date(2026, 6, 1), status="completed", activity_id=a.id))
+    db.commit()
+    assert _band(strava_stats.personal_bests(db).race_pbs, "half").activity_id == a.id
+
+
+def test_intervals_and_track_never_set_a_best_effort(db):
+    _timed(db, said=6, dist=5.0, moving_s=1100, elapsed_s=1110)
+    _timed(db, said=7, dist=5.0, moving_s=800, elapsed_s=900, tag="Intervals")
+    _timed(db, said=8, dist=5.0, moving_s=800, elapsed_s=900, tag="Track")
     db.commit()
     result = strava_stats.personal_bests(db)
-    assert _band(result, "5k") is not None
-    assert result.excluded_count == 0
+    assert _band(result.best_efforts, "5k").total_time_s == 1110
+    assert result.excluded_count == 2
+    assert result.excluded_reason == "2 interval/track session"
+
+
+def test_record_carries_canonical_activity_id(db):
+    # The card deep-links to the /activities/:id editor (to retag a run).
+    a = _activity(db, said=9, run_date=date(2026, 6, 6), dist=10.0, pace_s=240)
+    db.commit()
+    assert _band(strava_stats.personal_bests(db).best_efforts, "10k").activity_id == a.id
+
+
+def test_promoted_race_result_uses_elapsed_time(db):
+    from app.services import races as races_svc
+    a = _timed(db, said=10, dist=10.0, moving_s=2100, elapsed_s=2130, tag="Race")
+    db.commit()
+    assert races_svc.create_completed_from_activity(db, a.id).result_time_s == 2130
