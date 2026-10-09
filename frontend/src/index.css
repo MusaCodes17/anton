@@ -39,7 +39,7 @@
 
     /* Velocity-specific tones not covered by the shadcn set above. */
     --surface: #16181b;
-    --faint: #6a6f76;
+    --faint: #7c8188;         /* ≥ 4.5:1 on background/card/surface/sidebar (was #6a6f76, ~3.5–3.8:1); stays below --muted-foreground */
     --sidebar: #101215;       /* sidebar / topbar background */
     --divider: #1a1d22;       /* subtle row divider, softer than --border */
     --edge: #2e3239;          /* dashed "add card" border */
