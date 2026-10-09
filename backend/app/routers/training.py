@@ -39,14 +39,14 @@ class RecordShoe(BaseModel):
 
 
 class PersonalBestResponse(BaseModel):
-    """One distance-band record from strava_stats.personal_bests. Whole-activity
-    elapsed time, not a segment inside a longer run."""
+    """One distance record from strava_stats.personal_bests: a whole race result
+    (Race PBs) or the fastest stretch inside a run (Best efforts, `segment`)."""
     band: str              # "5k" | "10k" | "half" | "full"
     target_km: float
     run_date: Optional[str] = None
     name: Optional[str] = None
-    distance_km: float
-    total_time_s: int      # whole-activity elapsed time — the headline figure
+    distance_km: float     # the effort's distance (the band's, for a segment)
+    total_time_s: int      # elapsed time over that distance — the headline figure
     avg_pace: str
     avg_hr: Optional[int] = None
     source: str
@@ -54,17 +54,17 @@ class PersonalBestResponse(BaseModel):
     strava_activity_id: Optional[int] = None
     activity_id: Optional[int] = None      # canonical id → the activity detail/editor
     clock: str = "elapsed"                 # "moving" when the run has no elapsed time
+    segment: bool = False                  # a stretch inside the run (R8.2)
+    run_distance_km: Optional[float] = None  # the whole run's distance, when segment
 
     class Config:
         from_attributes = True
 
 
 class PersonalBestsResponse(BaseModel):
-    """Race PBs and best efforts (R8.1), plus what the best-efforts filter dropped."""
+    """Race PBs (R8.1) and best efforts (R8.2)."""
     race_pbs: List[PersonalBestResponse]
     best_efforts: List[PersonalBestResponse]
-    excluded_count: int = 0
-    excluded_reason: Optional[str] = None
 
     class Config:
         from_attributes = True
@@ -115,7 +115,7 @@ def get_fitness(db: Session = Depends(get_db)):
 
 @router.get("/records", response_model=PersonalBestsResponse)
 def get_training_records(db: Session = Depends(get_db)):
-    """Records per distance band, as two lists (R8.1): Race PBs (Race/Parkrun-
-    tagged or race-linked runs) and best efforts (any run except Intervals/
-    Track). Whole-activity elapsed times, not segments."""
+    """Records as two lists: Race PBs (whole Race/Parkrun-tagged or race-linked
+    runs, 5k → full) and Best efforts (the fastest stretch inside any run, 1k →
+    full, R8.2). All on elapsed time."""
     return strava_stats.personal_bests(db)

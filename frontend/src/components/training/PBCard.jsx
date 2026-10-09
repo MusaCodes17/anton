@@ -2,24 +2,28 @@ import { Link } from 'react-router-dom'
 import { Footprints, Heart } from 'lucide-react'
 import { formatDate, formatDuration } from '@/lib/utils'
 
-const BAND_LABEL = { '5k': '5K', '10k': '10K', half: 'Half', full: 'Full' }
+const BAND_LABEL = { '1k': '1K', mile: 'Mile', '5k': '5K', '10k': '10K', half: 'Half', full: 'Full' }
 
 /**
- * One record card for a distance band. Headline is the fastest whole-activity
- * elapsed time in that band (R8.1), with the pace from that time and HR beneath.
- * Honest labelling: whole runs, not segments inside a longer run. The date deep-links to the
+ * One record card for a distance. Headline is the elapsed time (R8.1), with the
+ * pace from that time beneath. A Race PB is a whole race (with its average HR);
+ * a best effort is usually a stretch inside a longer run (R8.2, `segment`), so
+ * the card names the run it came from and shows no HR (the run's average isn't
+ * the stretch's). The date deep-links to the
  * activity's detail/editor (to retag/exclude it), and the shoe chip to the
  * attributed owned shoe.
  */
 export default function PBCard({ record }) {
-  const { band, total_time_s, avg_pace, avg_hr, run_date, distance_km, shoe, activity_id, clock } = record
+  const { band, total_time_s, avg_pace, avg_hr, run_date, distance_km, shoe, activity_id, clock, segment, run_distance_km, name } = record
   return (
     <div className="flex flex-col gap-3 rounded-[14px] border border-border bg-surface p-4">
       <div className="flex items-center justify-between">
         <span className="font-heading text-sm font-extrabold uppercase tracking-[0.06em] text-accent-foreground">
           {BAND_LABEL[band] ?? band}
         </span>
-        <span className="text-2xs font-medium text-faint">{distance_km.toFixed(2)} km</span>
+        <span className="text-2xs font-medium text-faint">
+          {segment ? `in a ${run_distance_km.toFixed(1)} km run` : `${distance_km.toFixed(2)} km`}
+        </span>
       </div>
 
       <div>
@@ -38,6 +42,11 @@ export default function PBCard({ record }) {
             </span>
           )}
         </div>
+        {segment && name && (
+          <div className="mt-0.5 truncate text-2xs text-faint" title={name}>
+            inside {name}
+          </div>
+        )}
       </div>
 
       {/* Wraps so the shoe chip drops below the date in the two-up phone grid. */}

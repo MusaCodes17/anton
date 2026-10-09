@@ -1163,18 +1163,21 @@ def get_training_summary(period: str = "monthly") -> dict:
 @mcp.tool()
 def get_personal_bests() -> dict:
     """
-    The runner's records at each distance band (5k, 10k, half, full) across the
-    full run history, as two lists:
+    The runner's records, as two lists:
 
-    - race_pbs: official race results — runs tagged Race or Parkrun, or linked
-      to a planned race. Call these "race PBs" / "your 10k race PB".
-    - best_efforts: the fastest whole runs of any kind except Intervals/Track
-      sessions (races included). Call these "your fastest 10k run".
+    - race_pbs: whole race results at 5k, 10k, half and full — runs tagged Race
+      or Parkrun, or linked to a planned race. Call these "race PBs" ("your 10k
+      race PB is 34:55 at the Longueuil 10K").
+    - best_efforts: the fastest stretch inside ANY run at 1k, mile, 5k, 10k,
+      half and full, found from the run's per-second data — e.g. a 5k inside a
+      10k race, or a 1k rep in a track session. When `segment` is true, say
+      where it came from ("your best 5k effort, 16:58, was inside the Longueuil
+      10K"); run_distance_km is the whole run. A run not yet scanned competes
+      with its whole time (segment false).
 
-    Times are whole-activity ELAPSED time (gun time); avg_pace is derived from
-    that time. clock is "moving" for the rare run with no elapsed time. These
-    are whole runs within a distance tolerance — not a 5k split inside a longer
-    run, so don't describe them as segment bests.
+    Times are ELAPSED time (gun time); avg_pace is derived from that time and
+    the effort's distance. clock is "moving" for the rare run with no elapsed
+    time. avg_hr is the whole run's and is omitted for segments.
     """
     def _row(b):
         return {
@@ -1187,6 +1190,8 @@ def get_personal_bests() -> dict:
             "avg_pace": b.avg_pace,
             "avg_hr": b.avg_hr,
             "clock": b.clock,
+            "segment": b.segment,
+            "run_distance_km": b.run_distance_km,
             "source": b.source,
             "shoe": b.shoe,
             "strava_activity_id": b.strava_activity_id,
@@ -1196,11 +1201,9 @@ def get_personal_bests() -> dict:
     with get_session() as db:
         result = strava_stats.personal_bests(db)
         return {
-            "note": "Whole-activity elapsed times within a distance tolerance, not segments inside longer runs.",
+            "note": "Elapsed times. Race PBs are whole race results; best efforts are the fastest stretch inside any run.",
             "race_pbs": [_row(b) for b in result.race_pbs],
             "best_efforts": [_row(b) for b in result.best_efforts],
-            "excluded_count": result.excluded_count,
-            "excluded_reason": result.excluded_reason,
         }
 
 
