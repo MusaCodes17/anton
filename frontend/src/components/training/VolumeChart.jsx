@@ -1,6 +1,7 @@
 import {
-  AreaChart,
+  ComposedChart,
   Area,
+  Line,
   XAxis,
   YAxis,
   CartesianGrid,
@@ -9,6 +10,9 @@ import {
 } from 'recharts'
 
 const GREEN = 'var(--primary)'
+// The 4-week rolling average (R8.4.2) is context for the green series, so it
+// sits back in a muted dashed line rather than competing in a second hue.
+const ROLLING = 'var(--muted-foreground)'
 
 function VolumeTooltip({ active, payload }) {
   if (!active || !payload?.length) return null
@@ -19,6 +23,9 @@ function VolumeTooltip({ active, payload }) {
       <div className="text-muted-foreground">
         {d.total_km.toFixed(1)} km · {d.run_count} run{d.run_count === 1 ? '' : 's'}
       </div>
+      {d.rolling_4wk_km != null && (
+        <div className="text-faint">4-wk avg {d.rolling_4wk_km.toFixed(1)} km</div>
+      )}
     </div>
   )
 }
@@ -29,6 +36,8 @@ function VolumeTooltip({ active, payload }) {
  * with a solid dot + halo. Data is expected already chronological with
  * { label, fullLabel, total_km, run_count }. Kept legible at ~340px:
  * ≤12 points, abbreviated x labels, right-hand y-axis, no fixed pixel widths.
+ * Weekly data carries `rolling_4wk_km` (server-computed, R8.4.2), drawn as a
+ * dashed trend line with a one-line key; monthly data has none, so no line.
  */
 export default function VolumeChart({ data, height = 220, xTicks, xTickFormatter }) {
   const lastIndex = data.length - 1
@@ -36,6 +45,7 @@ export default function VolumeChart({ data, height = 220, xTicks, xTickFormatter
   // so drop them past a threshold and let the line carry the trend. The accented
   // most-recent dot always renders.
   const showHistoryDots = data.length <= 16
+  const showRolling = data.some((d) => d.rolling_4wk_km != null)
 
   // Open circles for history, a solid haloed dot for the most recent period —
   // matching the reference. Hollow fill uses the card background so the ring
@@ -60,45 +70,67 @@ export default function VolumeChart({ data, height = 220, xTicks, xTickFormatter
   }
 
   return (
-    <ResponsiveContainer width="100%" height={height}>
-      <AreaChart data={data} margin={{ top: 12, right: 4, left: 0, bottom: 0 }}>
-        <defs>
-          <linearGradient id="volumeFill" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor={GREEN} stopOpacity={0.26} />
-            <stop offset="100%" stopColor={GREEN} stopOpacity={0} />
-          </linearGradient>
-        </defs>
-        <CartesianGrid strokeDasharray="3 3" stroke="var(--chart-grid)" vertical={false} />
-        <XAxis
-          dataKey="label"
-          tick={{ fontSize: 11, fill: 'var(--faint)' }}
-          stroke="var(--chart-grid)"
-          fontFamily="JetBrains Mono, monospace"
-          {...(xTicks ? { ticks: xTicks } : { interval: 'preserveStartEnd' })}
-          {...(xTickFormatter ? { tickFormatter: xTickFormatter } : {})}
-          tickMargin={8}
-        />
-        <YAxis
-          orientation="right"
-          tick={{ fontSize: 11, fill: 'var(--faint)' }}
-          stroke="var(--chart-grid)"
-          fontFamily="JetBrains Mono, monospace"
-          tickFormatter={(v) => `${v} km`}
-          width={52}
-          tickCount={3}
-        />
-        <Tooltip cursor={{ stroke: GREEN, strokeOpacity: 0.35, strokeWidth: 1 }} content={<VolumeTooltip />} />
-        <Area
-          type="monotone"
-          dataKey="total_km"
-          stroke={GREEN}
-          strokeWidth={2.5}
-          fill="url(#volumeFill)"
-          dot={renderDot}
-          activeDot={{ r: 5, fill: GREEN, stroke: 'var(--card)', strokeWidth: 2 }}
-          isAnimationActive={false}
-        />
-      </AreaChart>
-    </ResponsiveContainer>
+    <>
+      <ResponsiveContainer width="100%" height={height}>
+        <ComposedChart data={data} margin={{ top: 12, right: 4, left: 0, bottom: 0 }}>
+          <defs>
+            <linearGradient id="volumeFill" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor={GREEN} stopOpacity={0.26} />
+              <stop offset="100%" stopColor={GREEN} stopOpacity={0} />
+            </linearGradient>
+          </defs>
+          <CartesianGrid strokeDasharray="3 3" stroke="var(--chart-grid)" vertical={false} />
+          <XAxis
+            dataKey="label"
+            tick={{ fontSize: 11, fill: 'var(--faint)' }}
+            stroke="var(--chart-grid)"
+            fontFamily="JetBrains Mono, monospace"
+            {...(xTicks ? { ticks: xTicks } : { interval: 'preserveStartEnd' })}
+            {...(xTickFormatter ? { tickFormatter: xTickFormatter } : {})}
+            tickMargin={8}
+          />
+          <YAxis
+            orientation="right"
+            tick={{ fontSize: 11, fill: 'var(--faint)' }}
+            stroke="var(--chart-grid)"
+            fontFamily="JetBrains Mono, monospace"
+            tickFormatter={(v) => `${v} km`}
+            width={52}
+            tickCount={3}
+          />
+          <Tooltip cursor={{ stroke: GREEN, strokeOpacity: 0.35, strokeWidth: 1 }} content={<VolumeTooltip />} />
+          <Area
+            type="monotone"
+            dataKey="total_km"
+            stroke={GREEN}
+            strokeWidth={2.5}
+            fill="url(#volumeFill)"
+            dot={renderDot}
+            activeDot={{ r: 5, fill: GREEN, stroke: 'var(--card)', strokeWidth: 2 }}
+            isAnimationActive={false}
+          />
+          {showRolling && (
+            <Line
+              type="monotone"
+              dataKey="rolling_4wk_km"
+              stroke={ROLLING}
+              strokeWidth={1.5}
+              strokeDasharray="4 3"
+              dot={false}
+              activeDot={false}
+              isAnimationActive={false}
+            />
+          )}
+        </ComposedChart>
+      </ResponsiveContainer>
+      {showRolling && (
+        <div className="mt-2 flex items-center gap-1.5 text-xs text-faint">
+          <svg width="18" height="6" aria-hidden="true">
+            <line x1="0" y1="3" x2="18" y2="3" stroke={ROLLING} strokeWidth="1.5" strokeDasharray="4 3" />
+          </svg>
+          4-week average
+        </div>
+      )}
+    </>
   )
 }
