@@ -146,12 +146,70 @@ class LoadTrendResponse(BaseModel):
     heuristic: bool = True
 
 
+class EfficiencyMonthResponse(BaseModel):
+    month: str                           # "2026-07"
+    steady_runs: int
+    m_per_beat: Optional[float] = None   # None below min_month_runs
+
+
+class EffortPointResponse(BaseModel):
+    time_s: int
+    pace_s_per_km: int
+    distance_km: float
+    run_date: Optional[str] = None
+    name: Optional[str] = None
+    activity_id: Optional[int] = None
+    segment: bool
+
+
+class RollingBestResponse(BaseModel):
+    label: str                           # "5k" | "10k"
+    target_km: float
+    recent: Optional[EffortPointResponse] = None     # best in the last 90 days
+    all_time: Optional[EffortPointResponse] = None
+    pct_off_all_time: Optional[float] = None         # pace, recent vs. all-time
+
+
+class FitnessPointResponse(BaseModel):
+    captured_date: str
+    vo2max: Optional[float] = None
+    threshold_pace_s_per_km: Optional[int] = None
+    running_level: Optional[float] = None
+
+
+class FormTrendResponse(BaseModel):
+    """"What's my form now?" (R8.4.3): steady-run efficiency (m per heartbeat),
+    90-day vs. all-time best 5k/10k, and the COROS fitness line. A heuristic —
+    the thresholds and minimums ride along so the UI can say so."""
+    as_of: str
+    verdict: str                 # improving | steady | slipping | not_enough_data
+    change_pct: Optional[float] = None
+    recent_m_per_beat: Optional[float] = None
+    recent_steady_runs: int
+    baseline_m_per_beat: Optional[float] = None
+    baseline_steady_runs: int
+    months: List[EfficiencyMonthResponse]
+    best_efforts: List[RollingBestResponse]
+    fitness: List[FitnessPointResponse]
+    recent_days: int
+    baseline_days: int
+    min_steady_runs: int
+    min_month_runs: int
+    improving_above_pct: float
+    slipping_below_pct: float
+    heuristic: bool = True
+
+
 class TrendsResponse(BaseModel):
-    """The Training page's "Now" answers (R8.4). Form (R8.4.3) joins `load` here."""
+    """The Training page's "Now" answers (R8.4): load (R8.4.2) and form (R8.4.3)."""
     load: LoadTrendResponse
+    form: FormTrendResponse
 
 
 @router.get("/trends", response_model=TrendsResponse)
 def get_training_trends(as_of: Optional[date] = None, db: Session = Depends(get_db)):
     """Trend verdicts for the Training page; `as_of` defaults to today (Toronto)."""
-    return TrendsResponse(load=asdict(training_trends.load_trend(db, as_of=as_of)))
+    return TrendsResponse(
+        load=asdict(training_trends.load_trend(db, as_of=as_of)),
+        form=asdict(training_trends.form_trend(db, as_of=as_of)),
+    )
