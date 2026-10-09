@@ -2510,9 +2510,10 @@ No new deal events since [since if set, else "the last 7 days"]. All quiet.
 
 
 @mcp.tool()
-def get_race_block_context(weeks_back: int = 12) -> dict:
+def get_race_block_context(weeks_back: int = 12, as_of: Optional[str] = None) -> dict:
     """
-    Compile the race-block training context for the advisor prompt (R3.6).
+    Compile the race-block training context for the advisor prompt (R3.6), and
+    answer "am I ready for my next race?" (R8.4.4).
 
     Returns a structured snapshot covering:
     - Next upcoming race: name, date, distance, days/weeks to race, target pace.
@@ -2523,18 +2524,40 @@ def get_race_block_context(weeks_back: int = 12) -> dict:
       Includes shoe_type so you can flag race-shoe wear concerns specifically.
     - Latest fitness snapshot: VO2 max, lactate-threshold pace (as "M:SS/km"),
       race predictions, and running level from COROS (if ever synced).
+    - `readiness`: the same readiness checklist the Training page shows
+      (`GET /api/races/readiness`). `readiness.has_race` false → no race ahead;
+      don't talk about readiness. Otherwise `readiness.checklist` is a list of
+      items {key, label, status, rule, value, target, unit}: weeks_to_go and
+      peak_week are `info`; longest_run, long_runs (runs ≥ `long_run_km` in the
+      block — 28 km for a marathon) and key_effort (the recent best effort at
+      ~half race distance vs. target pace, in s/km — lower is faster) are
+      `met` / `not_met`, or `n/a` with the reason in `rule`. Quote the numbers
+      and the rule; it is a heuristic checklist, NOT a score — never sum it
+      into one. The block is `block_start`→`block_end` (a fixed number of
+      weeks ending race week, by race distance); `recent_efforts` carry
+      `vs_target_s_per_km` (negative = faster than target pace).
 
     This is read-only — no writes, no confirmation gate needed.
-    Call this before running the race_block_advisor prompt.
+    Call this before running the race_block_advisor prompt, or for "am I ready
+    for my race?".
 
     Args:
         weeks_back: Number of recent weekly buckets to include (default 12, max 52).
+        as_of: ISO date to answer for (default today). Use a past date to ask
+            "was I ready for <race>?" — a completed race still counts before its date.
     """
+    from dataclasses import asdict
+    from datetime import date as _date
+    try:
+        day = _date.fromisoformat(as_of) if as_of else None
+    except ValueError:
+        return {"error": "as_of must be an ISO date (YYYY-MM-DD)"}
     weeks_back = max(1, min(weeks_back, 52))
     with get_session() as db:
-        ctx = race_advisor_svc.race_block_context(db, weeks_back=weeks_back)
+        ctx = race_advisor_svc.race_block_context(db, today=day, weeks_back=weeks_back)
 
     result: dict = {
+        "readiness": asdict(ctx.readiness) if ctx.readiness else None,
         "has_next_race": ctx.has_next_race,
         "next_race": None,
         "recent_weeks": [
@@ -2613,7 +2636,8 @@ This is READ-ONLY — no writes, no confirmation gates. Advisory only.
 
 ## Step 1 — Fetch the context
 Call `get_race_block_context()`. It returns the next race, recent weekly
-volumes, rotation pipeline state, and latest fitness metrics.
+volumes, rotation pipeline state, latest fitness metrics, and the readiness
+checklist (`readiness`).
 
 ## Step 2 — Produce the advisory
 
@@ -2647,6 +2671,13 @@ Average: [avg_weekly_km] km/week
  quantity; key workouts at target pace matter more than peak volume."]
 [If has_next_race and weeks_to_race > 8: "Still in the base-building window — volume consistency
  is the priority."]
+
+### Readiness
+[If readiness.has_race:]
+[For each item in readiness.checklist, one line:]
+- [label]: [value][" " + unit] [" (target " + target + ")" if target set] — [status] · [rule]
+  [For s/km values show them as M:SS/km.]
+[Then one sentence naming the not_met items — no score, no verdict word.]
 
 ### Rotation
 [If pipeline is non-empty:]

@@ -499,6 +499,83 @@ class PlannedRaceResponse(PlannedRaceBase):
         from_attributes = True
 
 
+# --- Race readiness (R8.4.4) — mirrors services.race_advisor.RaceReadiness ---
+
+class ReadinessRaceResponse(BaseModel):
+    id: int
+    name: str
+    race_date: str
+    distance_km: Optional[float] = None
+    status: str
+    days_to_race: int
+    weeks_to_race: int
+    target_time_s: Optional[int] = None
+    target_pace: Optional[str] = None
+    target_pace_s_per_km: Optional[int] = None
+
+
+class ReadinessWeekResponse(BaseModel):
+    period: str                       # ISO week key, as the Volume chart
+    total_km: float
+    run_count: int
+
+
+class ReadinessRunResponse(BaseModel):
+    run_date: str
+    distance_km: float
+    name: Optional[str] = None
+    activity_id: Optional[int] = None
+
+
+class ReadinessEffortResponse(BaseModel):
+    label: str
+    distance_km: float
+    time_s: int
+    pace: str
+    pace_s_per_km: int
+    vs_target_s_per_km: Optional[int] = None   # negative = faster than target pace
+    run_date: Optional[str] = None
+    name: Optional[str] = None
+    activity_id: Optional[int] = None
+    segment: bool = False
+
+
+class ReadinessChecklistItem(BaseModel):
+    key: str                          # weeks_to_go | peak_week | longest_run | long_runs | key_effort
+    label: str
+    status: str                       # met | not_met | info | n/a
+    rule: Optional[str] = None
+    value: Optional[float] = None
+    target: Optional[float] = None
+    unit: str
+
+
+class RaceReadinessResponse(BaseModel):
+    """"Am I ready for race X?" — a checklist with numbers, not a score (R8.4.4).
+    `has_race` False → no race ahead; the readiness card hides."""
+    has_race: bool
+    as_of: str
+    race: Optional[ReadinessRaceResponse] = None
+    race_class: Optional[str] = None
+    block_weeks: Optional[int] = None
+    block_start: Optional[str] = None
+    block_end: Optional[str] = None
+    block_started: bool = False
+    block_km: float = 0.0
+    block_runs: int = 0
+    peak_week: Optional[ReadinessWeekResponse] = None
+    current_week: Optional[ReadinessWeekResponse] = None
+    longest_run: Optional[ReadinessRunResponse] = None
+    long_run_km: Optional[float] = None
+    long_runs_needed: int
+    long_runs: List[ReadinessRunResponse] = []
+    effort_window_start: Optional[str] = None
+    key_effort: Optional[str] = None
+    recent_efforts: List[ReadinessEffortResponse] = []
+    checklist: List[ReadinessChecklistItem] = []
+    heuristic: bool = True
+
+
 # ── Chat persistence (R2.6) ─────────────────────────────────────────────────
 
 class ConversationUpsert(BaseModel):

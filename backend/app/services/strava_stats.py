@@ -206,7 +206,12 @@ def _band_bests(runs: list[tuple[UnifiedActivity, float, str]]) -> list[Personal
     return out
 
 
-def personal_bests(db: Session) -> PersonalBestsResult:
+def personal_bests(
+    db: Session,
+    *,
+    date_from: Optional[date] = None,
+    date_to: Optional[date] = None,
+) -> PersonalBestsResult:
     """
     Records per distance, as two lists:
 
@@ -225,6 +230,10 @@ def personal_bests(db: Session) -> PersonalBestsResult:
     Everything is on elapsed time (see _record_time_s). Whole-table pass over
     the unioned history: acceptable at personal scale (~1k runs), as in
     training_summary.
+
+    `date_from`/`date_to` (inclusive, R8.4.4) restrict the runs that compete —
+    the race-readiness checklist asks "what are my *recent* bests?" under the
+    exact same rules as the Records card, so the two can never disagree.
     """
     race_linked = {
         aid for (aid,) in db.query(PlannedRace.activity_id).filter(PlannedRace.activity_id.isnot(None))
@@ -235,7 +244,7 @@ def personal_bests(db: Session) -> PersonalBestsResult:
     by_id: dict[int, UnifiedActivity] = {}
     races: list[tuple[UnifiedActivity, float, str]] = []
     unscanned: list[tuple[UnifiedActivity, float, str]] = []
-    for r in activities_svc.unified_activities(db):
+    for r in activities_svc.unified_activities(db, date_from=date_from, date_to=date_to):
         if not r.distance_km:
             continue
         by_id[r.activity_id] = r
