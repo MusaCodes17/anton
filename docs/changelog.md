@@ -5,6 +5,44 @@
 
 ---
 
+## R7.2 — Confirmation card in chat — 2026-10-09
+
+**[ADDED] Held write calls (`r7:` commit 1, backend).**
+- `services/chat_proposals.py` holds Son of Anton's data-changing tool calls instead of running them. Gating is default-deny: anything not `get_*` or in `READ_ONLY_TOOLS` is held, and `confirm=False` previews run.
+- Each held call gets a runner-facing summary: the shoe name for an id, the mileage before → after, and an Edit prefill for log runs.
+- `BaseLLMProvider.run` takes `hold_for_confirmation`. A turn that holds a call still runs its reads, emits a `proposal` SSE event per held call, and ends with `done`.
+- `GET /api/chat/proposals/{id}`, `POST …/confirm`, `POST …/cancel`. Confirm runs the held call once over a loopback MCP session (`chat_service.call_tool_once`): same tool, same service path. It is idempotent (a repeat waits on or returns the stored result) and returns `executing` after 20 s for long tools.
+- In-memory registry with a 30-min TTL (INV-9). System-prompt rule 6 tells the model the tool call *is* the proposal, so it no longer asks for a typed "yes". Recorded as decision **C12**.
+
+**[FIXED] Son of Anton didn't know today's date (commit 2).** The live check showed the model proposing "today" as 2026-07-17. The system prompt now carries today's America/Toronto date (B14). The card caught it before anything was written; this fixes it at the source.
+**[ADDED] `ProposalCard` (commit 3, frontend).**
+- Confirm / Edit / Cancel, 44 px targets, mono details. Rendered in both ChatPage and ChatDrawer.
+- `useChatStream` handles `proposal` (the card replaces the tool's spinner and a transcript note goes into the model's history) and `resolveProposal`, which stores the outcome and runs a hidden follow-up turn with the server-written decision text.
+- Edit opens `LogRunDialog` prefilled (new `initialValues` / `onLogged` props), and a logged edit cancels the proposal with the form's values.
+- Offline disables Confirm (RA2.2). Long tools poll `useChatProposal`, and confirmed writes invalidate every cached query.
+- After a decision the card collapses to one line ("Log run — done · …").
+- Normalized axios errors now carry `.status`, so the card can tell 404 (expired) from 409 (already decided).
+
+**[VERIFIED]** Suite 595 → **628 passing + 1 skipped**:
+- gating table, summaries, confirm-once and concurrent-confirm, long-tool polling, failure-as-outcome, cancel/expire, Edit text, and the loop holding a write while running reads;
+- **INV-8 end to end through the real MCP tool**: proposing writes nothing, Confirm writes exactly one activity with +12.4 km, a double tap writes nothing more, and Cancel writes nothing;
+- HTTP 404/409/auth.
+
+`vite build` clean. **Live check with Claude Haiku** against a throwaway backend on a **copy** of the dev DB, with COROS disconnected, schedule off and a test login. The live DB was untouched (mtime checked). Scratch-only env overrides: a `loopback` token and `ANTON_HOST_URL=http://localhost:5173`, since the dev `.env` points the CSRF origin at production.
+- A wrong-date card → Cancel: nothing written, card "cancelled, nothing changed", model asks what to change.
+- The re-ask with the date fix → card dated 2026-10-09 → Confirm: exactly one activity (945 → 946), 12.4 km at 275 s/km, shoe 284.76 → 297.16 km; the model reported the result.
+- A repeat confirm through the API → 200 `done`, still 946.
+- At 375 px: a "yesterday" card resolved to 2026-10-08. The card is 343 px wide with 44 px buttons and no overflow (screenshot taken). Edit opened the form prefilled (8 km, 2026-10-08); logging 8.5 km wrote one 8.5 km run (220.63 → 229.13 km) and the card read "done in the form instead".
+- Every console error was from the test setup itself: the pre-login 401, a refused connection during a backend restart, the two pre-override 403s, and a deliberate 404 confirm of a proposal cleared by that restart.
+
+**[NOT DONE]**
+- Desktop width wasn't screenshotted with a card (it was exercised at desktop width via DOM).
+- Not tried against GPT or Gemini.
+- The drawer (desktop FAB) shares the component but wasn't driven separately.
+- Edit exists only for log-run.
+
+---
+
 ## R7.1 — Design cleanup — 2026-10-09
 
 **[CHANGED] Tailwind opacity modifiers now work on theme tokens (`r7:` commit 1).** The theme colours in `tailwind.config.js` were bare `var(--x)` values, which Tailwind can't split into channels. So every `/N` modifier on a token generated no CSS at all: 54 uses across 25 files, including `bg-primary/90` hovers, `border-primary/40` hover outlines, the tinted error/warning/success boxes and `surface/50–60` panels. Each token is now `color-mix(in oklab, var(--x) calc(<alpha-value> * 100%), transparent)`, and the plain classes compile to the same colour as before. Screens that had been rendering *without* their intended tints now render as written: hovers dim, status boxes tint, faded icons fade. color-mix needs Safari 16.2+, which the installed PWA already requires.

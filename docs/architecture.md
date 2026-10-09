@@ -159,7 +159,8 @@ Most routers are synchronous `def` handlers (FastAPI runs them on a threadpool).
 1. `POST /api/chat/message` with the full message history (client-managed state; the server is stateless per request).
 2. `stream_chat()` spawns `_run_chat` as an isolated asyncio Task communicating over an `asyncio.Queue` — a deliberate structure to confine anyio cancel scopes inside one task so they never cross the SSE generator boundary.
 3. `_run_chat` opens an MCP `ClientSessionGroup`, connects to `MCP_SERVER_URL` (default: this same server's `/mcp`), discovers tools, pre-reads the `shoes://rotation` and `shoes://deals/active` resources and appends them to the system prompt as "live context".
-4. The provider (Anthropic/OpenAI/Gemini, routed by model-name prefix) runs an agentic stream/tool-call loop, capped at `MAX_AGENTIC_TURNS = 25`, pushing `{text | tool_call | tool_result | done | error}` events onto the queue.
+4. The provider (Anthropic/OpenAI/Gemini, routed by model-name prefix) runs an agentic stream/tool-call loop, capped at `MAX_AGENTIC_TURNS = 25`, pushing `{text | tool_call | tool_result | proposal | done | error}` events onto the queue.
+   Data-changing tool calls are not run here (R7.2, design_decisions C12): `services/chat_proposals` holds the exact call, a `proposal` event is emitted and the turn ends. The app renders a confirmation card; `POST /api/chat/proposals/{id}/confirm` runs the held call once over a loopback MCP session (`chat_service.call_tool_once`), `…/cancel` runs nothing, and the decision goes back to the model as a hidden follow-up user turn. Held calls live in memory (30-min TTL; single worker, INV-9).
 5. The router wraps the queue in an `EventSourceResponse`; the frontend's `useChatStream` parses SSE frames by hand and renders text + tool indicators incrementally.
 
 ### Background scrape (`POST /api/scrape/all`)
