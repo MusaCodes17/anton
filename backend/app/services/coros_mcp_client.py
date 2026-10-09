@@ -249,6 +249,74 @@ def parse_fit_url(text: str, label_id: str) -> str:
     return m.group(1)
 
 
+# queryFitnessAssessmentOverview (R8.4.1): one "Label: value" line per metric.
+# COROS returns only today's values (no history, no date argument), as whole
+# numbers. The prediction keys match the July snapshot and PredictionsCard.
+_FITNESS_HEADER = re.compile(r"^\s*Fitness Assessment Overview\b")
+_FITNESS_PREDICTIONS = (
+    ("5 km", "5.0"),
+    ("10 km", "10.0"),
+    ("Half Marathon", "21.0975"),
+    ("Marathon", "42.195"),
+)
+
+
+@dataclass(frozen=True)
+class CorosFitness:
+    """The runner's current COROS fitness assessment. A metric COROS can't
+    assess yet is omitted from its report and is None here."""
+    vo2max: Optional[float]
+    running_level: Optional[float]
+    threshold_pace_s_per_km: Optional[int]
+    race_predictions: Optional[dict]   # {"5.0": seconds, ...}; None when COROS gave none
+
+
+def _fitness_line(body: str, label: str) -> Optional[str]:
+    """The value after `label:` on its own line, or None if the line is absent."""
+    m = re.search(rf"(?m)^{re.escape(label)}:[ \t]*(.*?)\s*$", body)
+    return m.group(1) if m else None
+
+
+def parse_fitness_overview(text: str) -> CorosFitness:
+    """Parse a queryFitnessAssessmentOverview result. A missing line is None
+    (COROS omits what it can't assess); a present line whose value doesn't
+    parse raises CorosContractError — a rewording must be loud, never a null."""
+    body = _unwrap_text(text)
+    ctx = "queryFitnessAssessmentOverview"
+    if not _FITNESS_HEADER.match(body):
+        raise CorosContractError(f"{ctx}: unrecognized response header: {body[:120]!r}")
+
+    def number(label: str) -> Optional[float]:
+        raw = _fitness_line(body, label)
+        if raw is None:
+            return None
+        if not re.fullmatch(r"\d+(?:\.\d+)?", raw):
+            raise CorosContractError(f"{ctx}: {label} {raw!r} is not a number (format change?)")
+        return float(raw)
+
+    threshold = _fitness_line(body, "Threshold Pace")
+    if threshold is not None:
+        m = re.fullmatch(r"([\d:]+)\s*/km", threshold)
+        if not m:
+            raise CorosContractError(f"{ctx}: Threshold Pace {threshold!r} is not M:SS /km (unit change?)")
+        threshold_s: Optional[int] = _pace_s(m.group(1), f"{ctx} Threshold Pace")
+    else:
+        threshold_s = None
+
+    predictions: dict[str, int] = {}
+    for label, key in _FITNESS_PREDICTIONS:
+        raw = _fitness_line(body, f"{label} Prediction")
+        if raw is not None:
+            predictions[key] = parse_duration_s(raw, f"{ctx} {label} Prediction")
+
+    return CorosFitness(
+        vo2max=number("VO2max"),
+        running_level=number("Running Level"),
+        threshold_pace_s_per_km=threshold_s,
+        race_predictions=predictions or None,
+    )
+
+
 def merge_detail(run: CorosRun, detail: CorosRunDetail) -> CorosRun:
     """Attach detail to a list record. The detail text carries no id or date, so
     the only cross-check available is distance — a mismatch means we paired the
@@ -320,6 +388,10 @@ class CorosMcpClient:
             "labelId": str(label_id), "sportType": sport_type, "limit": 1,
         })
         return parse_fit_url(text, label_id)
+
+    def fitness_overview(self) -> CorosFitness:
+        """The runner's current fitness assessment (R8.4.1). Read-only, no arguments."""
+        return parse_fitness_overview(self._call_tool("queryFitnessAssessmentOverview", {}))
 
     def fetch_run(self, run: CorosRun) -> CorosRun:
         """Return `run` with its detail attached."""

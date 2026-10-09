@@ -676,8 +676,12 @@ export function useSyncCoros() {
   const qc = useQueryClient()
   return useMutation({
     mutationFn: () => corosApi.sync(),
-    // Success or failure, the status row (last attempt / error) and queue changed.
-    onSettled: () => qc.invalidateQueries({ queryKey: ['coros'] }),
+    // Success or failure, the status row (last attempt / error) and queue changed;
+    // a manual sync also reads COROS fitness (R8.4.1), so the fitness card may too.
+    onSettled: () => {
+      qc.invalidateQueries({ queryKey: ['coros'] })
+      qc.invalidateQueries({ queryKey: queryKeys.trainingFitness() })
+    },
   })
 }
 

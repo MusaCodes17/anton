@@ -5,9 +5,10 @@ Job: each tick lists recent COROS runs, drops anything already queued or already
 logged, prefetches detail + a shoe suggestion for the rest, and inserts them as
 `pending_coros_runs`. **It never writes runs, attributions or mileage** (INV-1,
 INV-9, C9): the only tables it writes are `pending_coros_runs`,
-`coros_sync_state`, and — after polling, for runs the runner has already
-confirmed — the derived best-effort tables (R8.2, services/best_efforts).
-Logging stays the runner's confirm, through the one writer.
+`coros_sync_state`, and — after polling — the derived best-effort tables for
+runs the runner has already confirmed (R8.2, services/best_efforts) and an
+`athlete_metrics` fitness snapshot when COROS's reading changed (R8.4.1,
+services/fitness). Logging stays the runner's confirm, through the one writer.
 
 Dedup (exactly-once across overlapping lookbacks and restarts):
 1. `pending_coros_runs.label_id` is UNIQUE and rows are never deleted by the
@@ -49,6 +50,7 @@ from app.models.models import CorosSyncState, PendingCorosRun
 from app.services import best_efforts as best_efforts_svc
 from app.services import coros as coros_svc
 from app.services import coros_connection as conn
+from app.services import fitness as fitness_svc
 from app.services.coros_mcp_client import (
     CorosApiError, CorosContractError, CorosMcpClient, CorosRun,
 )
@@ -64,6 +66,11 @@ MAX_LOOKBACK_DAYS = 30
 _STATE_ID = 1
 
 _tick_lock = threading.Lock()
+
+# R8.4.1: the Toronto date of the last fitness fetch, so a quiet day still gets
+# one. In-memory on purpose (INV-9, one process): a restart costs at most one
+# extra fetch, which isn't worth a column and a migration.
+_fitness_checked_on: Optional[date] = None
 
 
 def _env_int(name: str, default: int) -> int:
@@ -89,6 +96,7 @@ class TickResult:
     skipped: Optional[str] = None            # "not_connected" | "already_running"
     found: int = 0                           # runs COROS listed in the window
     queued: int = 0                          # new rows inserted as pending
+    fitness_recorded: bool = False           # a changed fitness snapshot was saved
     errors: list[str] = field(default_factory=list)
 
     @property
@@ -201,6 +209,8 @@ def _tick(db: Session, trigger: str, client: Optional[CorosMcpClient], today: da
         result.errors.append(f"not configured: {exc}")
 
     if not result.errors:
+        if trigger == "manual" or result.queued or _fitness_checked_on != today:
+            result.fitness_recorded = _sync_fitness(db, client, today)
         _scan_best_efforts(db, client)
 
     st = _state(db)
@@ -211,6 +221,39 @@ def _tick(db: Session, trigger: str, client: Optional[CorosMcpClient], today: da
     db.commit()
     logger.info("COROS poll (%s): listed=%d queued=%d errors=%d", trigger, result.found, result.queued, len(result.errors))
     return result
+
+
+def _sync_fitness(db: Session, client: CorosMcpClient, today: date) -> bool:
+    """R8.4.1: read COROS's fitness overview and save it when it changed.
+
+    Called after a clean poll when the tick found a new run (COROS recomputes
+    fitness after it processes a run), on a manual sync, or on the first tick of
+    a Toronto day — not every 15 minutes. No confirmation (design decisions C13):
+    a snapshot is a reading COROS computed, not a run. Like the best-effort scan,
+    a failure is logged and never fails the poll; the day still counts as
+    checked, so a broken parser logs once a day, not once a tick.
+    Returns True when a snapshot was saved.
+    """
+    global _fitness_checked_on
+    _fitness_checked_on = today
+    try:
+        fit = client.fitness_overview()
+        snap = fitness_svc.record_if_changed(
+            db, vo2max=fit.vo2max, running_level=fit.running_level,
+            threshold_pace_s_per_km=fit.threshold_pace_s_per_km,
+            race_predictions=fit.race_predictions,
+        )
+    except conn.CorosAuthError as exc:
+        db.rollback()
+        conn.mark_reauth_required(db, str(exc))
+        return False
+    except Exception as exc:  # never let fitness break the poll
+        db.rollback()
+        logger.warning("COROS fitness snapshot skipped: %s: %s", type(exc).__name__, exc)
+        return False
+    if snap is not None:
+        logger.info("COROS fitness changed: snapshot %d saved", snap.id)
+    return snap is not None
 
 
 def _scan_best_efforts(db: Session, client: CorosMcpClient) -> None:
