@@ -5,6 +5,23 @@
 
 ---
 
+## R7.3 — Sport Experts spike → marked unscrapable — 2026-10-09
+
+**[VERIFIED] No code (spike only).** Findings:
+- **The stored URL was wrong.** The site is `sportsexperts.ca`. Retailer #4's `https://www.sportexperts.ca` has no DNS record (the bare `sportexperts.ca` redirects to the real site). `probe_retailer` failed at name resolution for that reason.
+- **Platform: FGL's Orckestra Composer, behind Imperva (Incapsula).** Plain HTTP gets a 403 "Request unsuccessful" challenge page. A real (headed) browser clears it with no interaction.
+- **The data would be easy to read.** Search and category pages embed the full results as JSON in a `data-oc-controller="Product.SearchResults"` element's `data-context` attribute: Brand, DisplayName, Price, ListPrice, IsOnSale, IsAvailableToSell, Url, ImageUrl. Product pages embed `allVariants` with `ShoeSize` and per-variant availability.
+- **robots.txt disallows `/en-CA/Search*`** and `?sortBy` URLs for all agents. Category pages (`/en-CA/running/running/running-shoes`, 383 shoes, 24/page) and plain `?page=N` are allowed, so a polite design would have crawled about 16 category pages and matched tracked shoes locally.
+- **The decisive test, on Hetzner:** the runner ran BaseScraper's exact setup (`chromium.launch(headless=True)`, no stealth) in the production container against two category pages and one product page. Result: **403 + Imperva challenge on all three.**
+
+**[CHANGED] Production data:** Sport Experts (#4) marked unscrapable via `mark_retailer_unscrapable` (runner-confirmed in chat; C9). The reason is stored on the row; scraping is disabled; it left the onboarding queue (verified). Getting past Imperva would need evasion tooling, which is declined on the same principle as Sporting Life (D3).
+**[NOT DONE]**
+- The retailer row's `base_url` still has the typo. MCP has no retailer-update tool, so this is a human step in Settings → Retailers (`https://www.sportsexperts.ca/en-CA`).
+- SportChek (#14) is also an FGL banner; whether it shares this stack or protection is unchecked. It remains unprobed in the onboarding queue, along with ssense (#15) and Boutique Courir (#16).
+- Suite untouched (628 + 1 skipped, no code change).
+
+---
+
 ## R7.2 — Confirmation card in chat — 2026-10-09
 
 **[ADDED] Held write calls (`r7:` commit 1, backend).**
