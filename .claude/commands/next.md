@@ -6,7 +6,7 @@ pick up work without a hand-written handover prompt.
 
 ## Steps
 
-1. Read `docs/ai_context.md`, `CLAUDE.md`, `docs/project_state.md` **§11**, and
+1. Read `CLAUDE.md`, `docs/project_state.md` **§11**, and
    `docs/roadmap.md` to orient.
 2. Identify the **single** highest-priority next task — the first item in
    project_state §11. State it back in one sentence.
@@ -21,7 +21,7 @@ pick up work without a hand-written handover prompt.
    trivial and the user is mid-flow.
 
 ## Required files to read first
-- `docs/ai_context.md`, `CLAUDE.md`
+- `CLAUDE.md`
 - `docs/project_state.md` §11, `docs/roadmap.md`
 - the one `.claude/skills/*.md` matching the task type
 

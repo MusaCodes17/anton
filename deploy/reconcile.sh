@@ -7,7 +7,7 @@
 # and adds the integrity + FK + alembic-head checks you want confirmed before
 # copying the live DB to the host.
 #
-# The four canonical metrics (as used in REMOTE_ACCESS_PLAN.md §7):
+# The four canonical metrics (as used in docs/archive/REMOTE_ACCESS_PLAN.md §7):
 #   activities  = COUNT(*) FROM activities                         (all sport types)
 #   runs        = COUNT(*) FROM activities WHERE activity_type='Run'
 #   attributed  = COUNT(*) FROM shoe_runs                          (runs tied to a shoe)

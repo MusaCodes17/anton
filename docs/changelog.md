@@ -5,6 +5,21 @@
 
 ---
 
+## Docs review — six docs archived — 2026-10-09
+
+**[FIXED] Restored `docs/archive/` (12 files) and `docs/MAINTENANCE_PLAN.md`.** The R8.3 docs commit (`23b707a`, merged in #48) ran `git add docs`, which staged working-tree deletions of those files. They came back from its parent in their own commit.
+
+**[CHANGED] Archived to `docs/archive/` (`git mv`, reasons in its README):**
+- Shipped plans: `REMOTE_ACCESS_PLAN.md` (RA1/RA2 done; RA3 lives in roadmap §RA3), `RA2_2_PWA_PLAN.md`, `MAINTENANCE_PLAN.md` (every row done; leftover debt is in `refactoring/tech_debt.md`).
+- Superseded: `documentation_review.md` (July one-off), `skills_library.md` (the skills exist; the files are the truth), `ai_context.md` (stale since July, suite 64).
+- Kept: the core suite, `CLAUDE_DESKTOP_SETUP.md` (current), `spikes/`.
+
+**[CHANGED] Citations:** code comments, `deploy/reconcile.sh`, the living docs, `.claude/commands/{next,phase}.md` and the debugging skill now point at `docs/archive/…`. `CLAUDE.md` "Read with" now names `project_state.md` + `roadmap.md`, the skills line cites the archived design, and the plan-doc rule says live plans sit in `docs/` and move to the archive when they ship. Changelog history was not rewritten.
+
+**[NOT DONE]** `refactoring/` (outside `docs/`) is July-dated too. It's still cited by CLAUDE.md §14, so it stays for now. Root `DESIGN.md`, `PRODUCT.md` and `.impeccable/` are deleted in the working tree by something outside these sessions; left uncommitted for the runner to decide.
+
+---
+
 ## R8.3 — Past-race actions: link the run, mark skipped, delete — 2026-10-09
 
 **[FOUND] Why "Parkrun Time Trial" stayed in production.** It wasn't a stale build. The server runs current code (`prune_unrun_races` present in the container), but production has a COROS run on 2026-07-18 (activity 948, 8.83 km). B17 keeps a race when any run exists that day, in case it was the race. The runner confirmed it was a normal run; the race was skipped. Past races had no buttons, so the app gave no way to say so.
