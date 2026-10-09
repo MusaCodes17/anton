@@ -238,25 +238,45 @@ def personal_bests(
     race_linked = {
         aid for (aid,) in db.query(PlannedRace.activity_id).filter(PlannedRace.activity_id.isnot(None))
     }
+    runs = activities_svc.unified_activities(db, date_from=date_from, date_to=date_to)
+    races: list[tuple[UnifiedActivity, float, str]] = []
+    for r in runs:
+        if not r.distance_km:
+            continue
+        total_s, clock = _record_time_s(r)
+        if total_s and (r.activity_tag in RACE_RESULT_TAGS or r.activity_id in race_linked):
+            races.append((r, total_s, clock))
+    return PersonalBestsResult(race_pbs=_band_bests(races), best_efforts=best_efforts_among(db, runs))
+
+
+def best_efforts_among(
+    db: Session, runs: list[UnifiedActivity], *, labels: Optional[tuple[str, ...]] = None,
+) -> list[PersonalBest]:
+    """The Best-efforts rule (R8.2) over a given set of runs — the one place it
+    lives, so the Records card and the form trend's rolling 90-day bests
+    (R8.4.3, training_trends.form_trend) can't disagree.
+
+    Per distance, the fastest of: the best scanned segment among `runs`, and —
+    for runs with no successful scan — the whole run's record time in the 5k →
+    full bands. Candidates compete on pace (time / distance) so a 5.2 km whole
+    run and a 5.000 km segment compare fairly. `labels` limits the distances
+    (EFFORT_DISTANCES order is kept). Reads every effort row and scan row:
+    acceptable at personal scale (a few thousand rows).
+    """
     scanned = {
         aid for (aid,) in db.query(ActivityEffortScan.activity_id).filter(ActivityEffortScan.status == "ok")
     }
     by_id: dict[int, UnifiedActivity] = {}
-    races: list[tuple[UnifiedActivity, float, str]] = []
     unscanned: list[tuple[UnifiedActivity, float, str]] = []
-    for r in activities_svc.unified_activities(db, date_from=date_from, date_to=date_to):
+    for r in runs:
         if not r.distance_km:
             continue
         by_id[r.activity_id] = r
         total_s, clock = _record_time_s(r)
-        if not total_s:
-            continue
-        if r.activity_tag in RACE_RESULT_TAGS or r.activity_id in race_linked:
-            races.append((r, total_s, clock))
-        if r.activity_id not in scanned:
+        if total_s and r.activity_id not in scanned:
             unscanned.append((r, total_s, clock))
 
-    # Fastest segment per distance (only efforts of runs in the unioned history).
+    # Fastest segment per distance (only efforts of the given runs).
     seg_best: dict[str, tuple[int, int]] = {}  # label -> (elapsed_s, activity_id)
     for label, elapsed_s, aid in db.query(
         ActivityBestEffort.distance_label, ActivityBestEffort.elapsed_s, ActivityBestEffort.activity_id
@@ -267,6 +287,8 @@ def personal_bests(
 
     best_efforts: list[PersonalBest] = []
     for label, metres in EFFORT_DISTANCES:
+        if labels is not None and label not in labels:
+            continue
         candidates = []
         if label in seg_best:
             elapsed_s, aid = seg_best[label]
@@ -276,5 +298,4 @@ def personal_bests(
             candidates.append(whole_best[label])
         if candidates:
             best_efforts.append(min(candidates, key=lambda b: b.total_time_s / b.distance_km))
-
-    return PersonalBestsResult(race_pbs=_band_bests(races), best_efforts=best_efforts)
+    return best_efforts

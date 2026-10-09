@@ -1215,21 +1215,45 @@ def get_training_summary(period: str = "monthly") -> dict:
 @mcp.tool()
 def get_training_trends(as_of: Optional[str] = None) -> dict:
     """
-    Is the runner building, holding or easing their training? Compares the last
-    7 days' km with the average week of the 28 days before (`ratio`), and gives
-    a `verdict`: building (ratio above 1.10), holding (0.90–1.10), easing (below
-    0.90), taper (easing with a planned race within 3 weeks — `taper_race`
-    names it), or no_baseline (no running in the prior 28 days, so nothing to
-    compare). Also returns last-7-day km, run count and longest run, and the
-    prior average week and longest run.
+    The runner's training trends, as two answers: `load` and `form`.
 
-    It's a heuristic on distance, not a physiological load model — say so if
-    you quote the verdict. Use it for "am I building or holding?", "how's my
-    training load?", "am I tapering properly?". Read-only.
+    load — is the runner building, holding or easing their training? Compares
+    the last 7 days' km with the average week of the 28 days before (`ratio`),
+    and gives a `verdict`: building (ratio above 1.10), holding (0.90–1.10),
+    easing (below 0.90), taper (easing with a planned race within 3 weeks —
+    `taper_race` names it), or no_baseline (no running in the prior 28 days, so
+    nothing to compare). Also returns last-7-day km, run count and longest run,
+    and the prior average week and longest run. A heuristic on distance, not a
+    physiological load model.
+
+    form — what's the runner's form now?
+    - Efficiency in metres per heartbeat (distance ÷ (avg HR × moving
+      minutes)) over STEADY runs only: untagged or Easy / Long Run, ≥ 5 km,
+      with avg HR, without long stops. Higher = more ground per beat = fitter.
+      `verdict` compares the median of the last 42 days' steady runs
+      (`recent_m_per_beat`) with the 84 days before (`baseline_m_per_beat`):
+      improving (change_pct above +3%), steady (−3% to +3%), slipping (below
+      −3%), or not_enough_data (under 5 steady runs in either window). Heat,
+      hills and fatigue move HR too — present it as a trend, not a test result.
+    - `months`: the monthly median m/beat for the last 12 months (the current
+      month is partial); m_per_beat is null when a month had under 4 steady
+      runs — say "too few steady runs", not "no running".
+    - `best_efforts`: the best 5k and 10k in the last 90 days (`recent`) vs.
+      all time (`all_time`), same rules and times as get_personal_bests (elapsed
+      time; `segment` true = a stretch inside a longer run). pct_off_all_time
+      is how much slower the recent pace is (0.0 = the recent one IS the
+      all-time best); recent is null when nothing qualifies in 90 days.
+    - `fitness`: COROS VO₂ max, threshold pace (s/km) and running level, one
+      point per day a reading changed, oldest first — a step line; COROS's
+      model, not Anton's.
+
+    Both verdicts are heuristics — say so if you quote them. Use this for "am I
+    building or holding?", "how's my training load?", "am I tapering
+    properly?", "what's my form?", "am I getting fitter?". Read-only.
 
     Args:
-        as_of: ISO date the 7-day window ends on (inclusive); defaults to today
-            in Toronto.
+        as_of: ISO date the windows end on (inclusive); defaults to today in
+            Toronto.
     """
     from dataclasses import asdict
     from datetime import date as _date
@@ -1238,7 +1262,10 @@ def get_training_trends(as_of: Optional[str] = None) -> dict:
     except ValueError:
         return {"error": "as_of must be an ISO date (YYYY-MM-DD)"}
     with get_session() as db:
-        return {"load": asdict(training_trends_svc.load_trend(db, as_of=day))}
+        return {
+            "load": asdict(training_trends_svc.load_trend(db, as_of=day)),
+            "form": asdict(training_trends_svc.form_trend(db, as_of=day)),
+        }
 
 
 @mcp.tool()
