@@ -2093,7 +2093,7 @@ def training_fitness_resource() -> str:
         return f"{no_data}\n\n```json\n{{\"has_data\": false}}\n```"
 
     threshold_pace = rotation.seconds_to_pace(snap.threshold_pace_s_per_km) if snap.threshold_pace_s_per_km else None
-    captured = snap.captured_at.strftime("%Y-%m-%d") if snap.captured_at else "—"
+    captured = fitness_svc.captured_local_date(snap).isoformat() if snap.captured_at else "—"
 
     md_lines = [f"# Fitness Metrics (as of {captured})", ""]
     if snap.vo2max is not None:

@@ -46,7 +46,7 @@ from __future__ import annotations
 
 import statistics
 from dataclasses import dataclass
-from datetime import date, datetime, timedelta, timezone
+from datetime import date, datetime, timedelta
 from typing import Optional
 from zoneinfo import ZoneInfo
 
@@ -54,6 +54,7 @@ from sqlalchemy.orm import Session
 
 from app.models.models import AthleteMetric, PlannedRace
 from app.services import activities as activities_svc
+from app.services import fitness as fitness_svc
 from app.services import strava_stats
 # Private by convention, shared on purpose: the same moving-seconds fallback
 # (moving time, else pace × distance) the Volume chart's pace uses. Renaming it
@@ -330,14 +331,6 @@ def _rolling_bests(db: Session, runs: list[UnifiedActivity], as_of: date) -> lis
     return out
 
 
-def _captured_date(captured_at: datetime) -> date:
-    """Toronto local date of a snapshot. SQLite hands back the server-stamped
-    UTC `func.now()` as a naive datetime, so naive means UTC."""
-    if captured_at.tzinfo is None:
-        captured_at = captured_at.replace(tzinfo=timezone.utc)
-    return captured_at.astimezone(_TZ).date()
-
-
 def _fitness_line(db: Session, as_of: date) -> list[FitnessPoint]:
     """Snapshots captured on or before `as_of`, oldest first, one per day (the
     day's last reading). Rows are only written when a value changes (C13), so
@@ -346,7 +339,7 @@ def _fitness_line(db: Session, as_of: date) -> list[FitnessPoint]:
     for snap in db.query(AthleteMetric).order_by(AthleteMetric.captured_at.asc(), AthleteMetric.id.asc()):
         if snap.captured_at is None:
             continue
-        day = _captured_date(snap.captured_at)
+        day = fitness_svc.captured_local_date(snap)
         if day <= as_of:
             by_day[day] = snap
     return [

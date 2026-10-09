@@ -190,7 +190,7 @@ def race_block_context(
             race_predictions=snap.race_predictions,
             running_level=snap.running_level,
             captured_at=(
-                snap.captured_at.date().isoformat() if snap.captured_at else None
+                fitness_svc.captured_local_date(snap).isoformat() if snap.captured_at else None
             ),
         )
 
