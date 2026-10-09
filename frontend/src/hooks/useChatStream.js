@@ -36,13 +36,11 @@ export function useChatStream({
     ])
   }, [])
 
-  const sendMessage = useCallback(
-    // apiContent defaults to displayContent when pills are not involved.
-    // pillPreviews is an array of {uri, label, content} for display in the thread.
-    async (displayContent, apiContent, pillPreviews = []) => {
-      const content = (typeof displayContent === 'string' ? displayContent : '').trim()
-      if (!content || isStreaming) return
-
+  // One streamed turn. `userMsg` is the bubble to show, or null for a hidden
+  // turn — the confirmation-card follow-up, where the runner's decision goes
+  // to the model as text but the thread shows the card, not a message.
+  const runTurn = useCallback(
+    async ({ userMsg, apiBody }) => {
       // RA2.2 §4 — chat send is a write over fetch() (not axios), so it bypasses
       // the api.js write-guard; block it here when offline rather than posting
       // into the void. Mirrors the "writes require connectivity" boundary.
@@ -55,18 +53,7 @@ export function useChatStream({
         return
       }
 
-      const apiBody = typeof apiContent === 'string' && apiContent.trim()
-        ? apiContent.trim()
-        : content
-
       const timestamp = new Date().toISOString()
-      const userMsg = {
-        id: `u-${Date.now()}`,
-        role: 'user',
-        content,
-        pillPreviews: pillPreviews.length > 0 ? pillPreviews : undefined,
-        timestamp,
-      }
       const assistantMsg = {
         id: `a-${Date.now()}`,
         role: 'assistant',
@@ -76,12 +63,16 @@ export function useChatStream({
         timestamp,
       }
 
+      const added = userMsg ? [userMsg, assistantMsg] : [assistantMsg]
       const updatedApiMessages = [...apiMessages, { role: 'user', content: apiBody }]
-      setDisplayMessages((prev) => [...prev, userMsg, assistantMsg])
+      setDisplayMessages((prev) => [...prev, ...added])
       setApiMessages(updatedApiMessages)
       setIsStreaming(true)
 
       let fullContent = ''
+      // Held write calls end the turn with no tool result. Record what was
+      // proposed in the model's history, since the card itself isn't text.
+      const proposalNotes = []
       const controller = new AbortController()
       abortRef.current = controller
 
@@ -104,7 +95,7 @@ export function useChatStream({
             toast({ variant: 'destructive', title: 'Rate limit reached', description })
             // Roll back the optimistic user + assistant messages so the thread
             // is clean for retry.
-            setDisplayMessages((prev) => prev.slice(0, -2))
+            setDisplayMessages((prev) => prev.slice(0, -added.length))
             setApiMessages(apiMessages)
             return
           }
@@ -165,6 +156,27 @@ export function useChatStream({
                     return { ...m, toolIndicators: indicators }
                   })
                 )
+              } else if (event.type === 'proposal') {
+                // R7.2: a write call held for the runner. The card replaces the
+                // tool's spinning indicator; nothing has run yet.
+                const proposal = event.proposal
+                proposalNotes.push(proposal.transcript_note)
+                setDisplayMessages((prev) =>
+                  updateLast(prev, (m) => {
+                    const indicators = [...m.toolIndicators]
+                    for (let i = indicators.length - 1; i >= 0; i--) {
+                      if (indicators[i].tool === proposal.tool && indicators[i].status === 'calling') {
+                        indicators.splice(i, 1)
+                        break
+                      }
+                    }
+                    return {
+                      ...m,
+                      toolIndicators: indicators,
+                      proposals: [...(m.proposals ?? []), proposal],
+                    }
+                  })
+                )
               } else if (event.type === 'error') {
                 setDisplayMessages((prev) =>
                   updateLast(prev, (m) => ({
@@ -193,14 +205,62 @@ export function useChatStream({
       } finally {
         abortRef.current = null
         setIsStreaming(false)
-        if (fullContent) {
-          setApiMessages((prev) => [...prev, { role: 'assistant', content: fullContent }])
+        const recorded = [fullContent, ...proposalNotes].filter(Boolean).join('\n\n')
+        if (recorded) {
+          setApiMessages((prev) => [...prev, { role: 'assistant', content: recorded }])
         }
         setDisplayMessages((prev) => updateLast(prev, (m) => ({ ...m, isStreaming: false })))
       }
     },
-    [model, apiMessages, isStreaming, toast]
+    [model, apiMessages, toast]
   )
 
-  return { displayMessages, setDisplayMessages, apiMessages, isStreaming, sendMessage, stop, insertDivider }
+  const sendMessage = useCallback(
+    // apiContent defaults to displayContent when pills are not involved.
+    // pillPreviews is an array of {uri, label, content} for display in the thread.
+    (displayContent, apiContent, pillPreviews = []) => {
+      const content = (typeof displayContent === 'string' ? displayContent : '').trim()
+      if (!content || isStreaming) return
+      const apiBody = typeof apiContent === 'string' && apiContent.trim() ? apiContent.trim() : content
+      const userMsg = {
+        id: `u-${Date.now()}`,
+        role: 'user',
+        content,
+        pillPreviews: pillPreviews.length > 0 ? pillPreviews : undefined,
+        timestamp: new Date().toISOString(),
+      }
+      return runTurn({ userMsg, apiBody })
+    },
+    [isStreaming, runTurn]
+  )
+
+  // A card reached a decision (confirmed, cancelled, edited, expired). Store
+  // the new state on the message that holds it, then tell the model — the
+  // server wrote the follow-up text (chat_proposals.followup_message).
+  const resolveProposal = useCallback(
+    (updated) => {
+      setDisplayMessages((prev) =>
+        prev.map((m) =>
+          m.proposals?.some((p) => p.id === updated.id)
+            ? { ...m, proposals: m.proposals.map((p) => (p.id === updated.id ? { ...p, ...updated } : p)) }
+            : m
+        )
+      )
+      if (updated.followup_message && !isStreaming) {
+        runTurn({ userMsg: null, apiBody: updated.followup_message })
+      }
+    },
+    [isStreaming, runTurn]
+  )
+
+  return {
+    displayMessages,
+    setDisplayMessages,
+    apiMessages,
+    isStreaming,
+    sendMessage,
+    resolveProposal,
+    stop,
+    insertDivider,
+  }
 }

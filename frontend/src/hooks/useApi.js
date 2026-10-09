@@ -17,6 +17,7 @@ import {
   homeApi,
   shoeTypesApi,
   chatHistoryApi,
+  chatProposalsApi,
   checkpointsApi,
   adminApi,
   SCRAPE_STREAM_URL,
@@ -53,6 +54,7 @@ export const queryKeys = {
   home: () => ['home'],
   conversations: () => ['conversations'],
   conversation: (id) => ['conversations', 'detail', id],
+  chatProposal: (id) => ['chat-proposals', id],
   checkpointPrompts: () => ['checkpoint-prompts'],
 }
 
@@ -346,6 +348,37 @@ export function useDeleteConversation() {
   return useMutation({
     mutationFn: (id) => chatHistoryApi.remove(id),
     onSuccess: () => qc.invalidateQueries({ queryKey: queryKeys.conversations() }),
+  })
+}
+
+// ============== CHAT CONFIRMATION CARDS (R7.2) ==============
+// Polls a proposal only while its tool is still running (a confirmed scrape
+// can take many minutes); otherwise the card works from mutation results.
+export function useChatProposal(id, { enabled = false } = {}) {
+  return useQuery({
+    queryKey: queryKeys.chatProposal(id),
+    queryFn: () => chatProposalsApi.get(id),
+    enabled: enabled && !!id,
+    refetchInterval: (query) => (query.state.data?.status === 'executing' ? 3000 : false),
+    retry: false,
+  })
+}
+
+export function useConfirmProposal() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (id) => chatProposalsApi.confirm(id),
+    // A confirmed tool can change any domain (runs, shoes, deals, retailers),
+    // so refresh every cached query rather than guess which ones it touched.
+    onSuccess: (data) => {
+      if (data?.status === 'done') qc.invalidateQueries()
+    },
+  })
+}
+
+export function useCancelProposal() {
+  return useMutation({
+    mutationFn: ({ id, editedValues }) => chatProposalsApi.cancel(id, editedValues),
   })
 }
 

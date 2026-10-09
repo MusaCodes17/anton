@@ -23,8 +23,11 @@ import {
  * After a successful log, if the run crossed an un-prompted 100km
  * checkpoint, switches to a "how are they feeling?" note prompt instead of
  * closing immediately.
+ *
+ * Also opened by a chat confirmation card's Edit (R7.2): `initialValues`
+ * prefills the form and `onLogged(payload, result)` reports the logged run.
  */
-export default function LogRunDialog({ shoe, open, onOpenChange }) {
+export default function LogRunDialog({ shoe, open, onOpenChange, initialValues, onLogged }) {
   const [checkpointKm, setCheckpointKm] = useState(null)
   const [noteBody, setNoteBody] = useState('')
   const logRun = useLogRun()
@@ -52,6 +55,7 @@ export default function LogRunDialog({ shoe, open, onOpenChange }) {
       {
         onSuccess: (data) => {
           toast({ variant: 'success', title: 'Run logged' })
+          onLogged?.(payload, data)
           if (data.checkpoint_reached && !hasPromptedCheckpoint(shoe.id, data.checkpoint_km)) {
             setCheckpointKm(data.checkpoint_km)
           } else {
@@ -95,7 +99,12 @@ export default function LogRunDialog({ shoe, open, onOpenChange }) {
             <DialogHeader>
               <DialogTitle>Log run — {shoe.nickname || shoe.model}</DialogTitle>
             </DialogHeader>
-            <LogRunForm submitting={logRun.isPending} onSubmit={handleLogRun} onCancel={close} />
+            <LogRunForm
+              submitting={logRun.isPending}
+              onSubmit={handleLogRun}
+              onCancel={close}
+              initialValues={initialValues}
+            />
           </>
         ) : (
           <>

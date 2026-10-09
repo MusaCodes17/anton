@@ -8,13 +8,19 @@ import { DialogFooter } from '@/components/ui/dialog'
 const today = () => new Date().toISOString().slice(0, 10)
 const PACE_PATTERN = /^\d{1,2}:\d{2}\/km$/
 
-export default function LogRunForm({ onSubmit, onCancel, submitting }) {
-  const [values, setValues] = useState({
-    distance_km: '',
-    run_date: today(),
-    avg_pace: '',
-    avg_hr: '',
-    notes: '',
+// `initialValues` prefills the form (the chat card's Edit, R7.2); null/absent
+// fields fall back to the blank defaults.
+export default function LogRunForm({ onSubmit, onCancel, submitting, initialValues }) {
+  const [values, setValues] = useState(() => {
+    const init = initialValues ?? {}
+    const str = (v) => (v == null ? '' : String(v))
+    return {
+      distance_km: str(init.distance_km),
+      run_date: init.run_date || today(),
+      avg_pace: str(init.avg_pace),
+      avg_hr: str(init.avg_hr),
+      notes: str(init.notes),
+    }
   })
   const [errors, setErrors] = useState({})
 

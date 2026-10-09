@@ -11,7 +11,7 @@ const DEFAULT_MODEL = 'claude-haiku-4-5-20251001'
 export default function ChatDrawer() {
   const [isOpen, setIsOpen] = useState(false)
 
-  const { displayMessages, apiMessages, isStreaming, sendMessage, stop } = useChatStream({
+  const { displayMessages, apiMessages, isStreaming, sendMessage, resolveProposal, stop } = useChatStream({
     model: DEFAULT_MODEL,
   })
 
@@ -110,7 +110,14 @@ export default function ChatDrawer() {
               {displayMessages.map((msg) => {
                 if (msg.role === 'user') return <UserMessage key={msg.id} content={msg.content} pillPreviews={msg.pillPreviews} />
                 if (msg.role === 'divider') return <ModelDivider key={msg.id} content={msg.content} />
-                return <AssistantMessage key={msg.id} message={msg} />
+                return (
+                  <AssistantMessage
+                    key={msg.id}
+                    message={msg}
+                    onProposalResolved={resolveProposal}
+                    busy={isStreaming}
+                  />
+                )
               })}
             </div>
           )}
