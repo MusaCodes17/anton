@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { Flag, Plus, Pencil, Trash2, Check, Footprints, MapPin } from 'lucide-react'
+import { Flag, Plus, Pencil, Trash2, Check, Footprints, MapPin, Link2, Ban } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -20,6 +20,8 @@ import {
   useCreateRace,
   useUpdateRace,
   useDeleteRace,
+  useLinkRaceActivity,
+  useActivities,
 } from '@/hooks/useApi'
 import { formatDate, formatDuration, parseDuration, cn } from '@/lib/utils'
 
@@ -122,39 +124,101 @@ function ResultDelta({ race }) {
   )
 }
 
-function PastRow({ race }) {
-  const label = race.status === 'skipped' ? 'Skipped' : null
-  const Wrapper = race.activity_id
-    ? ({ children }) => (
-        <Link
-          to={`/activities/${race.activity_id}`}
-          className="focus-ring flex items-center justify-between gap-3 rounded-[10px] border border-border/60 bg-surface/60 px-3.5 py-2.5 text-xs transition-colors hover:border-primary/40 hover:bg-surface"
-          title="Open activity"
-        >
-          {children}
-        </Link>
-      )
-    : ({ children }) => (
-        <div className="flex items-center justify-between gap-3 rounded-[10px] border border-border/60 bg-surface/60 px-3.5 py-2.5 text-xs">
-          {children}
-        </div>
-      )
-  return (
-    <Wrapper>
+/**
+ * A past race. Planned races still open past their date (the prune kept them
+ * because a run exists that day — R8.3) get Link run / Skipped; every real
+ * race row can be deleted. Activity-synthesized rows stay deep-link only.
+ */
+function PastRow({ race, onLink, onSkip, onDelete }) {
+  const unresolved = race.status === 'planned'
+  const label = race.status === 'skipped' ? 'Skipped' : unresolved ? 'Not marked' : null
+  const body = (
+    <>
       <div className="min-w-0">
         <span className="font-semibold text-foreground">{race.name}</span>
         <span className="ml-2 text-faint">{formatDate(race.race_date)}</span>
       </div>
-      <div className="flex items-center gap-3 text-muted-foreground">
+      <div className="flex shrink-0 items-center gap-3 text-muted-foreground">
         {race.result_time_s != null && (
           <span className="font-semibold text-foreground tabular-nums">
             {formatDuration(race.result_time_s)}
           </span>
         )}
         <ResultDelta race={race} />
-        {label && <span className="text-faint">{label}</span>}
+        {label && <span className={unresolved ? 'text-warning' : 'text-faint'}>{label}</span>}
       </div>
-    </Wrapper>
+    </>
+  )
+  const bodyClass = 'flex min-w-0 flex-1 items-center justify-between gap-3 px-3.5 py-2.5'
+  return (
+    <div className="flex items-center rounded-[10px] border border-border/60 bg-surface/60 text-xs">
+      {race.activity_id ? (
+        <Link
+          to={`/activities/${race.activity_id}`}
+          className={cn(bodyClass, 'focus-ring rounded-[10px] transition-colors hover:bg-surface')}
+          title="Open activity"
+        >
+          {body}
+        </Link>
+      ) : (
+        <div className={bodyClass}>{body}</div>
+      )}
+      {!race.from_activity && (
+        <div className="flex shrink-0 items-center pr-1.5">
+          {unresolved && (
+            <>
+              <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => onLink(race)} title="Link the run">
+                <Link2 className="h-4 w-4" />
+              </Button>
+              <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => onSkip(race)} title="Mark skipped">
+                <Ban className="h-4 w-4" />
+              </Button>
+            </>
+          )}
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-8 w-8 text-muted-foreground hover:text-destructive"
+            onClick={() => onDelete(race)}
+            title="Delete"
+          >
+            <Trash2 className="h-4 w-4" />
+          </Button>
+        </div>
+      )}
+    </div>
+  )
+}
+
+/** Runs logged on the race's date — mounted only while the link dialog is open. */
+function RunPicker({ race, onPick, picking }) {
+  const runs = useActivities({ date_from: race.race_date, date_to: race.race_date })
+  if (runs.isLoading) return <div className="h-12 animate-pulse rounded-[10px] bg-muted" />
+  const list = (runs.data || []).filter((a) => a.activity_id != null)
+  if (list.length === 0)
+    return (
+      <p className="text-sm text-muted-foreground">
+        No runs are logged on this date. If you didn't race, mark it skipped instead.
+      </p>
+    )
+  return (
+    <div className="space-y-1.5">
+      {list.map((a) => (
+        <button
+          key={a.activity_id}
+          type="button"
+          disabled={picking}
+          onClick={() => onPick(a.activity_id)}
+          className="focus-ring flex w-full items-center justify-between gap-3 rounded-[10px] border border-border bg-surface px-3.5 py-2.5 text-left text-sm transition-colors hover:border-primary/40 disabled:opacity-60"
+        >
+          <span className="min-w-0 truncate font-semibold text-foreground">{a.name || 'Run'}</span>
+          <span className="flex shrink-0 items-center gap-3 text-xs text-muted-foreground tabular-nums">
+            <span>{a.distance_km} km</span>
+            {a.moving_time_s != null && <span>{formatDuration(a.moving_time_s)}</span>}
+          </span>
+        </button>
+      ))}
+    </div>
   )
 }
 
@@ -182,6 +246,7 @@ export default function PlannedRacesCard() {
   const createRace = useCreateRace()
   const updateRace = useUpdateRace()
   const deleteRace = useDeleteRace()
+  const linkRace = useLinkRaceActivity()
   const { toast } = useToast()
 
   const [formOpen, setFormOpen] = useState(false)
@@ -189,6 +254,7 @@ export default function PlannedRacesCard() {
   const [doneRace, setDoneRace] = useState(null)
   const [resultTime, setResultTime] = useState('')
   const [deleting, setDeleting] = useState(null)
+  const [linking, setLinking] = useState(null)
   const [upcomingAllOpen, setUpcomingAllOpen] = useState(false)
   const [pastAllOpen, setPastAllOpen] = useState(false)
 
@@ -236,6 +302,32 @@ export default function PlannedRacesCard() {
       onError: (e) => toast({ variant: 'destructive', title: 'Could not delete', description: e?.message }),
     })
   }
+
+  const markSkipped = (race) => {
+    updateRace.mutate(
+      { id: race.id, data: { status: 'skipped' } },
+      {
+        onSuccess: () => toast({ title: 'Marked skipped' }),
+        onError: (e) => toast({ variant: 'destructive', title: 'Could not save', description: e?.message }),
+      }
+    )
+  }
+
+  const confirmLink = (activityId) => {
+    linkRace.mutate(
+      { id: linking.id, activityId },
+      {
+        onSuccess: () => { setLinking(null); toast({ variant: 'success', title: 'Race linked to run' }) },
+        onError: (e) => toast({ variant: 'destructive', title: 'Could not link', description: e?.message }),
+      }
+    )
+  }
+
+  const pastHandlers = (closeDialog) => ({
+    onLink: (r) => { closeDialog?.(); setLinking(r) },
+    onSkip: markSkipped,
+    onDelete: (r) => { closeDialog?.(); setDeleting(r) },
+  })
 
   const visibleUpcoming = upcoming.slice(0, VISIBLE_LIMIT)
   const visiblePast = past.slice(0, VISIBLE_LIMIT)
@@ -298,7 +390,7 @@ export default function PlannedRacesCard() {
                     <ViewAllButton count={past.length} onClick={() => setPastAllOpen(true)} />
                   )}
                 </div>
-                {visiblePast.map((race) => <PastRow key={race.id} race={race} />)}
+                {visiblePast.map((race) => <PastRow key={race.id} race={race} {...pastHandlers()} />)}
               </div>
             )}
           </div>
@@ -332,7 +424,9 @@ export default function PlannedRacesCard() {
             <DialogTitle>All past races</DialogTitle>
           </DialogHeader>
           <div className="space-y-1.5">
-            {past.map((race) => <PastRow key={race.id} race={race} />)}
+            {past.map((race) => (
+              <PastRow key={race.id} race={race} {...pastHandlers(() => setPastAllOpen(false))} />
+            ))}
           </div>
         </DialogContent>
       </Dialog>
@@ -380,6 +474,22 @@ export default function PlannedRacesCard() {
           <DialogFooter>
             <Button variant="ghost" onClick={() => setDoneRace(null)}>Cancel</Button>
             <Button onClick={confirmDone} disabled={updateRace.isPending}>Mark complete</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Link a past race to the run that was the race (R8.3) */}
+      <Dialog open={!!linking} onOpenChange={(o) => !o && setLinking(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Link the run</DialogTitle>
+            <DialogDescription>
+              Which run on {linking && formatDate(linking.race_date)} was {linking?.name}? Its time becomes the result.
+            </DialogDescription>
+          </DialogHeader>
+          {linking && <RunPicker race={linking} onPick={confirmLink} picking={linkRace.isPending} />}
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setLinking(null)}>Cancel</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

@@ -242,6 +242,8 @@ export const racesApi = {
   create: (data) => client.post('/api/races', data).then((r) => r.data),
   update: (id, data) => client.patch(`/api/races/${id}`, data).then((r) => r.data),
   remove: (id) => client.delete(`/api/races/${id}`).then((r) => r.data),
+  linkActivity: (id, activityId) =>
+    client.post(`/api/races/${id}/link-activity`, { activity_id: activityId }).then((r) => r.data),
 }
 
 // ============== HOME ==============

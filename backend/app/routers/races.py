@@ -9,6 +9,7 @@ from app.database import get_db
 from app.models.models import PlannedRace
 from app.models.schemas import (
     PlannedRaceCreate,
+    PlannedRaceLinkActivity,
     PlannedRaceResponse,
     PlannedRaceUpdate,
 )
@@ -43,6 +44,18 @@ def update_race(race_id: int, payload: PlannedRaceUpdate, db: Session = Depends(
         setattr(race, field, value)
     db.commit()
     db.refresh(race)
+    return races_svc.attach_derived(race)
+
+
+@router.post("/{race_id}/link-activity", response_model=PlannedRaceResponse)
+def link_activity(race_id: int, payload: PlannedRaceLinkActivity, db: Session = Depends(get_db)):
+    """Resolve a past race as run: link the activity that was the race (R8.3)."""
+    try:
+        race = races_svc.link_activity(db, race_id, payload.activity_id)
+    except LookupError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
     return races_svc.attach_derived(race)
 
 

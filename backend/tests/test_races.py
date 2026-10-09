@@ -4,6 +4,8 @@ nullable handling, and past-race filtering. Exercised at the service level.
 """
 from datetime import date, timedelta
 
+import pytest
+
 from app.models.models import Activity, OwnedShoe, PlannedRace
 from app.services import races as races_svc
 
@@ -210,3 +212,72 @@ def test_prune_never_touches_completed_skipped_or_linked(db):
 
     assert races_svc.prune_unrun_races(db, today) == []
     assert db.query(PlannedRace).count() == 3
+
+
+# ── Resolving a past race by hand (R8.3) ──────────────────────────────────
+
+def _run(db, run_date, km=8.83, moving_s=2700, name=None):
+    a = Activity(source="coros", activity_type="Run", run_date=run_date,
+                 distance_km=km, moving_time_s=moving_s, name=name)
+    db.add(a); db.commit(); db.refresh(a)
+    return a
+
+
+def test_link_activity_completes_the_race_from_the_run(db):
+    # The case the prune can't decide: a run that day might be the race.
+    race = _race(db, "Parkrun", date(2026, 7, 18), distance_km=5.0, target_time_s=959)
+    a = _run(db, date(2026, 7, 18), km=5.0, moving_s=1001)
+    db.commit()
+
+    linked = races_svc.link_activity(db, race.id, a.id)
+    assert linked.status == "completed"
+    assert linked.activity_id == a.id
+    assert linked.result_time_s == 1001
+    assert db.get(Activity, a.id).distance_km == 5.0  # the run itself is untouched
+
+
+def test_linked_race_is_listed_once_and_never_pruned(db):
+    today = date(2026, 10, 9)
+    race = _race(db, "Parkrun", date(2026, 7, 18))
+    a = _run(db, date(2026, 7, 18), name="Parkrun")
+    a.activity_tag = "Parkrun"
+    db.commit()
+    races_svc.link_activity(db, race.id, a.id)
+
+    listed = races_svc.list_races(db, today=today)
+    assert [r.name for r in listed] == ["Parkrun"]  # no synthetic duplicate
+    assert races_svc.prune_unrun_races(db, today) == []
+
+
+def test_link_activity_rejects_a_run_already_used_by_another_race(db):
+    first = _race(db, "Race A", date(2026, 7, 18))
+    second = _race(db, "Race B", date(2026, 7, 18))
+    a = _run(db, date(2026, 7, 18))
+    db.commit()
+    races_svc.link_activity(db, first.id, a.id)
+
+    with pytest.raises(ValueError):
+        races_svc.link_activity(db, second.id, a.id)
+    races_svc.link_activity(db, first.id, a.id)  # re-linking the same race is fine
+
+
+def test_link_activity_missing_race_or_run_is_lookup_error(db):
+    race = _race(db, "Race", date(2026, 7, 18))
+    a = _run(db, date(2026, 7, 18))
+    db.commit()
+    with pytest.raises(LookupError):
+        races_svc.link_activity(db, 999, a.id)
+    with pytest.raises(LookupError):
+        races_svc.link_activity(db, race.id, 999)
+
+
+def test_skipped_race_survives_the_prune(db):
+    # The other resolution: marking it skipped keeps the row as the runner's
+    # record, labelled, and the prune leaves it alone.
+    today = date(2026, 10, 9)
+    race = _race(db, "Parkrun", date(2026, 7, 18))
+    _run(db, date(2026, 7, 18))
+    race.status = "skipped"
+    db.commit()
+    assert races_svc.prune_unrun_races(db, today) == []
+    assert [r.status for r in races_svc.list_races(db, today=today)] == ["skipped"]

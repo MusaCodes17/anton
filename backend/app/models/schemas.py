@@ -463,6 +463,11 @@ class PlannedRaceUpdate(BaseModel):
     result_time_s: Optional[int] = Field(None, gt=0)
 
 
+class PlannedRaceLinkActivity(BaseModel):
+    """Link a past race to the run that was the race (R8.3)."""
+    activity_id: int
+
+
 class PlannedShoeBrief(BaseModel):
     """The planned shoe, inlined so the card needs no second request."""
     id: int
