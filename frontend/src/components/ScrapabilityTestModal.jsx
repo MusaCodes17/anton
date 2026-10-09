@@ -107,10 +107,10 @@ function RetailerRow({ r }) {
           <p className="text-sm font-medium">{r.retailer}</p>
           <p className="text-xs text-muted-foreground">
             {r.products_found} product{r.products_found === 1 ? '' : 's'} found
-            {r.sample_price != null && <> · 💰 {formatCurrency(r.sample_price)}</>}
+            {r.sample_price != null && <> · sample price {formatCurrency(r.sample_price)}</>}
           </p>
           {r.sizes?.length > 0 && (
-            <p className="text-xs text-muted-foreground">📏 Sizes: {r.sizes.join(', ')}</p>
+            <p className="text-xs text-muted-foreground">Sizes: {r.sizes.join(', ')}</p>
           )}
         </div>
       </div>
@@ -124,7 +124,7 @@ function RetailerRow({ r }) {
         <div className="min-w-0 flex-1 space-y-0.5">
           <p className="text-sm font-medium">{r.retailer}</p>
           <p className="text-xs text-muted-foreground">Not found</p>
-          {r.suggestion && <p className="text-xs text-muted-foreground">💡 {r.suggestion}</p>}
+          {r.suggestion && <p className="text-xs text-muted-foreground">{r.suggestion}</p>}
         </div>
       </div>
     )

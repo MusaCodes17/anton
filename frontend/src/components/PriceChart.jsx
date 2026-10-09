@@ -13,9 +13,9 @@ import { formatCurrency, formatDate } from '@/lib/utils'
 import { EmptyState } from '@/components/StatusViews'
 import { LineChart as LineChartIcon } from 'lucide-react'
 
-// Distinct colors per retailer line (the first, primary green, is reserved
-// visually for the "Velocity" accent elsewhere, so retailer lines start at blue).
-const COLORS = ['#3B6FE0', '#E0186E', '#C8F032', '#7c3aed', '#0891b2', '#d97706']
+// Distinct colors per retailer line — the --chart-N tokens in index.css (green
+// is reserved for the "Velocity" accent / Target line, so they start at blue).
+const COLORS = [1, 2, 3, 4, 5, 6].map((n) => `var(--chart-${n})`)
 
 /**
  * Line chart of price over time, one line per retailer.
@@ -61,16 +61,16 @@ export default function PriceChart({ records = [], targetPrice, msrp }) {
   return (
     <ResponsiveContainer width="100%" height={300}>
       <LineChart data={data} margin={{ top: 10, right: 16, left: 0, bottom: 0 }}>
-        <CartesianGrid strokeDasharray="3 3" stroke="#1E2126" />
+        <CartesianGrid strokeDasharray="3 3" stroke="var(--chart-grid)" />
         <XAxis
           dataKey="date"
-          tick={{ fontSize: 11, fill: '#6A6F76' }}
-          stroke="#1E2126"
+          tick={{ fontSize: 11, fill: 'var(--faint)' }}
+          stroke="var(--chart-grid)"
           fontFamily="JetBrains Mono, monospace"
         />
         <YAxis
-          tick={{ fontSize: 11, fill: '#6A6F76' }}
-          stroke="#1E2126"
+          tick={{ fontSize: 11, fill: 'var(--faint)' }}
+          stroke="var(--chart-grid)"
           fontFamily="JetBrains Mono, monospace"
           tickFormatter={(v) => `$${v}`}
           width={56}
@@ -92,7 +92,7 @@ export default function PriceChart({ records = [], targetPrice, msrp }) {
             type="monotone"
             dataKey={() => msrp}
             name="MSRP (sale below)"
-            stroke="#6A6F76"
+            stroke="var(--faint)"
             strokeOpacity={0.6}
             strokeDasharray="2 3"
             dot={false}
@@ -104,7 +104,7 @@ export default function PriceChart({ records = [], targetPrice, msrp }) {
             type="monotone"
             dataKey={() => targetPrice}
             name="Target"
-            stroke="oklch(0.74 0.17 153)"
+            stroke="var(--primary)"
             strokeOpacity={0.5}
             strokeDasharray="6 4"
             dot={false}

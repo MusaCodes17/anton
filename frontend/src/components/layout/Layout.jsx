@@ -219,7 +219,7 @@ export default function Layout() {
           <LogoutButton />
         </div>
         <div className="mt-3 flex items-center gap-[9px] border-t border-border px-2.5 pt-3">
-          <span className="relative flex h-2 w-2 shrink-0 rounded-full bg-primary shadow-[0_0_0_3px_oklch(0.74_0.17_153_/_0.18)]" />
+          <span className="relative flex h-2 w-2 shrink-0 rounded-full bg-primary ring-[3px] ring-primary/[0.18]" />
           <span className="text-xs text-faint">
             {stats.data?.last_scrape
               ? `Last scraped ${formatRelativeTime(stats.data.last_scrape)}`

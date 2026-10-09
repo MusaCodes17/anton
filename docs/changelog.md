@@ -1,7 +1,28 @@
 # Anton — Session Changelog
 
-**Last Updated:** 2026-10-08
+**Last Updated:** 2026-10-09
 **Status / current focus:** see `docs/project_state.md` (the perishable snapshot). This file is the append-only session log — the authoritative record of *what happened*; the `docs/` suite is the reference material.
+
+---
+
+## R7.1 — Design cleanup — 2026-10-09
+
+**[CHANGED] Tailwind opacity modifiers now work on theme tokens (`r7:` commit 1).** The theme colours in `tailwind.config.js` were bare `var(--x)` values, which Tailwind can't split into channels. So every `/N` modifier on a token generated no CSS at all: 54 uses across 25 files, including `bg-primary/90` hovers, `border-primary/40` hover outlines, the tinted error/warning/success boxes and `surface/50–60` panels. Each token is now `color-mix(in oklab, var(--x) calc(<alpha-value> * 100%), transparent)`, and the plain classes compile to the same colour as before. Screens that had been rendering *without* their intended tints now render as written: hovers dim, status boxes tint, faded icons fade. color-mix needs Safari 16.2+, which the installed PWA already requires.
+**[CHANGED] Hard-coded colours → tokens (commit 2).**
+- New tokens in `index.css`: `--chart-grid`, `--chart-1..6` (retailer series, same values), and `--photo` / `--photo-foreground` (the near-white product-photo backdrop, a new `photo` theme colour).
+- `PriceChart` and `VolumeChart` pass `var(--…)` straight to recharts, since SVG presentation attributes resolve `var()`. That covers the duplicated `oklch(primary)` literals too.
+- The status-dot halos in `Layout` and `Retailers` use `ring-N ring-<token>/[α]` instead of `shadow-[…oklch…]` / `rgba()`.
+- No hex, `rgb()` or `oklch()` literals are left in `.jsx`/`.js`.
+
+**[CHANGED] Emoji out of UI copy (commit 3).** The checkpoint dialog title, the "Race completed" toast, and the scrapability result rows (💰/📏/💡 → "sample price", "Sizes:", plain suggestion text). Backend MCP/log strings with emoji (`mcp_server.py` source badges, the orchestrator's "Deal found!" log) are LLM- and log-facing and were left as they are.
+**[CHANGED] `--faint` raised for contrast (commit 4).** `#6a6f76` measured 3.5–3.8:1. `#7c8188` is ≥ 4.5:1 on background, card, surface and sidebar (4.53 on the lightest, surface) and still sits below `--muted-foreground` (5.5:1).
+**[VERIFIED]** Suite unchanged at **595 passing + 1 skipped** (no backend change). `vite build` clean. I checked against a throwaway backend on a **copy** of the local dev DB, with COROS disconnected in the copy, the scrape schedule off and a generated test login. The live DB was untouched (mtime unchanged).
+- Built CSS: `.bg-primary` compiles to `color-mix(… 100% …)`, which resolves to the same oklch as before; `border-border/50` and the other modifiers now emit rules (baseline build: 0).
+- Computed styles in the app: price-chart series resolve to the exact previous hex values; the MSRP line, axis ticks and grid resolve through `--faint`/`--chart-grid`; Target/Volume resolve through `--primary`; the photo backdrop is unchanged; and the Retailers/sidebar halos are identical (4 px / 3 px at 16% / 18%).
+- At 375 px, Home, Training, Shoes, Deals, Settings → Retailers and Settings → Tracking all have zero horizontal overflow (document and `<main>`).
+- Console: only the expected pre-login 401 sign-in probe.
+
+**[NOT DONE]** Only the first two pages got screenshots (Home, Training). The browser pane then went hidden, so the rest was checked through DOM and computed styles. Worth a glance on the phone after deploy at the newly visible tints: hover outlines on Home cards and tag chips, the warning section on `/shoes`, the `surface/60` race rows, and the faded empty-state icons.
 
 ---
 

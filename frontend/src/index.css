@@ -39,11 +39,27 @@
 
     /* Velocity-specific tones not covered by the shadcn set above. */
     --surface: #16181b;
-    --faint: #6a6f76;
+    --faint: #7c8188;         /* ≥ 4.5:1 on background/card/surface/sidebar (was #6a6f76, ~3.5–3.8:1); stays below --muted-foreground */
     --sidebar: #101215;       /* sidebar / topbar background */
     --divider: #1a1d22;       /* subtle row divider, softer than --border */
     --edge: #2e3239;          /* dashed "add card" border */
     --nav-inactive: #3a3e44;  /* inactive nav diamond */
+
+    /* Charts (recharts takes colour strings; SVG attributes accept var()). */
+    --chart-grid: #1e2126;    /* grid lines + axis strokes */
+    /* Retailer series. Green is left out on purpose: it's the primary accent
+       and the price chart's Target line, so retailer lines start at blue. */
+    --chart-1: #3b6fe0;
+    --chart-2: #e0186e;
+    --chart-3: #c8f032;
+    --chart-4: #7c3aed;
+    --chart-5: #0891b2;
+    --chart-6: #d97706;
+
+    /* Product photos are shot on near-white; the card keeps that backdrop so
+       cut-out images don't float on the dark theme. */
+    --photo: #f4f4f2;
+    --photo-foreground: #b8b8ae; /* placeholder icon on --photo */
   }
 }
 

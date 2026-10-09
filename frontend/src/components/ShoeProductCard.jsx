@@ -34,7 +34,7 @@ export default function ShoeProductCard({ group, onViewDetails }) {
       <button
         type="button"
         onClick={() => onViewDetails?.(selected)}
-        className="group relative block aspect-square w-full overflow-hidden bg-[#F4F4F2]"
+        className="group relative block aspect-square w-full overflow-hidden bg-photo"
         title="View details"
       >
         {selected.image_url ? (
@@ -45,7 +45,7 @@ export default function ShoeProductCard({ group, onViewDetails }) {
           />
         ) : (
           <div className="flex h-full w-full items-center justify-center">
-            <Footprints className="h-12 w-12 text-[#B8B8AE]" />
+            <Footprints className="h-12 w-12 text-photo-foreground" />
           </div>
         )}
         {savings != null && (
