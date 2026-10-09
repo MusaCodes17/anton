@@ -59,10 +59,10 @@ That is already a trend worth showing.
   - A missing line is `None`, since COROS omits metrics it can't assess yet.
   - A reworded or garbled present line raises `CorosContractError` (CLAUDE.md §6 trap).
   - Add `CorosMcpClient.fitness_overview()`.
-- **Poller:** after a clean poll, at most once per Toronto calendar day:
-  - Fetch the overview.
-  - Append a snapshot via `fitness.record_snapshot` only when it differs from `fitness.latest`.
-  - A failure is logged and never fails the poll, same as `_scan_best_efforts`.
+- **Sync (runner's call, 2026-10-09):** fitness is pulled inside the same COROS sync as runs — the scheduled poll tick and the manual **Sync now** both go through `coros_poller.run_tick` — and saved without confirmation.
+  - **When to fetch:** COROS recomputes fitness only after it processes a run, and the tick runs every 15 min. So fetch when the tick found a new run, on a manual sync, and once per Toronto calendar day as a fallback — not on every tick.
+  - **When to save:** append a snapshot via `fitness.record_snapshot` only when it differs from `fitness.latest`, so the history's steps are real changes.
+  - **Failures:** a failed fetch is logged and never fails the poll, same as `_scan_best_efforts`.
 - **Gate:** a fitness snapshot is an athlete reading COROS computed, not a run.
   - INV-8 (run confirmation) does not apply, and the ledger is untouched.
   - Record this as a design decision, and fix the stale `services/fitness.py` docstring that says snapshots only arrive from the Claude-Desktop agent (C6 was superseded by C11).
