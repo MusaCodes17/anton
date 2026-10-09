@@ -9,3 +9,6 @@ training-default.png
 .venv/
 
 scripts/spikes/.coros_spike_state.json
+
+# Impeccable per-machine consent state
+.impeccable/config.local.json
