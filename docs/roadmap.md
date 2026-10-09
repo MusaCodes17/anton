@@ -1,6 +1,6 @@
 # Anton — Product Roadmap
 
-**Generated:** 2026-07-04. **Last updated:** 2026-10-08 (**R6 — Daily-use improvements** scoped from a project-state review: docs refresh, retirement forecast → deal radar, my-size deal filter, gated new-run push; and **RA3 — push-to-deploy** scoped in the RA milestone. Neither scheduled; see §R6 and §RA3. Prior update 2026-07-09: **RA — Remote Access & Deployment** added as the next milestone, prioritized ahead of R3 and R4, which are **parked**; RA pulls R5.2 forward and executes it. Plan doc: `REMOTE_ACCESS_PLAN.md`. Prior update 2026-07-08: R2.7.1 Training Depth follow-ups.)
+**Generated:** 2026-07-04. **Last updated:** 2026-10-09 (**R7 — Polish & coverage** added and **scheduled** by the runner: R7.1 design cleanup → R7.2 chat confirmation card → R7.3 scraper coverage (Sport Experts). See §R7. Prior update 2026-10-08: **R6 — Daily-use improvements** scoped from a project-state review: docs refresh, retirement forecast → deal radar, my-size deal filter, gated new-run push; and **RA3 — push-to-deploy** scoped in the RA milestone. Neither scheduled; see §R6 and §RA3. Prior update 2026-07-09: **RA — Remote Access & Deployment** added as the next milestone, prioritized ahead of R3 and R4, which are **parked**; RA pulls R5.2 forward and executes it. Plan doc: `REMOTE_ACCESS_PLAN.md`. Prior update 2026-07-08: R2.7.1 Training Depth follow-ups.)
 **Inputs:** REDESIGN_PLAN Phase-5 backlog, standing wishlist items recorded in `docs/changelog.md`, the ⚠️ verdicts in `docs/design_decisions.md`, `docs/architecture.md` §16, and user feature requests 2026-07-07.
 **Framing:** Anton is evolving from a finished redesign into a long-term personal AI platform. This roadmap sequences that evolution.
 
@@ -370,6 +370,54 @@ push to main ─▶ GitHub Actions
 - **Not in scope:** any other event types (deal alerts, scrape failures) until this one proves its worth; email; auto-confirm (still never without an explicit decision — C9).
 
 **Exit:** a run recorded on the watch produces one notification on the phone within one poll interval; tapping it lands on the inbox; unsubscribing stops them.
+
+---
+
+## R7 — Polish & coverage *(added + scheduled 2026-10-09 — the active milestone)*
+
+*Picked by the runner on 2026-10-09 from the follow-ons left by the mobile UI review (PR #42/#43) and the long-standing coverage gap. Unlike R6, these are **scheduled**, not gated on a felt-need check — the runner's pick is the check. Execute in order; one session per item; one commit per numbered task.*
+
+| # | Item | Description | Why it matters | Dependencies | Complexity |
+|---|---|---|---|---|---|
+| R7.1 | **Design cleanup** | Close the debt the `DESIGN.md` review left open: Tailwind `/opacity` modifiers on `var()` colour tokens, hard-coded hex in charts, emoji in UI copy, `--faint` contrast. Detail in §R7.1. | One of the four is a silent correctness bug (styles that never render); the rest break CLAUDE.md §5's "no hard-coded hex" rule and the design system. Do it first — R7.2 builds new UI on the same tokens. | `DESIGN.md`, `index.css` tokens | Low |
+| R7.2 | **Confirmation card in chat** | When Son of Anton proposes a write (log a run, confirm a COROS run, retire a shoe, save a review…), the chat shows a structured card with Confirm / Edit / Cancel instead of asking for a typed "yes". Detail in §R7.2. | Turns C9's confirmation gate from prose into a control: it can't be confirmed by accident, and what's confirmed is exactly what gets written. It's the main thing the phone mockups had that the build doesn't. | R7.1 (tokens); `chat_service` SSE stream; existing MCP write tools | Medium |
+| R7.3 | **Scraper coverage — Sport Experts** | Bring Sport Experts (FGL / Canadian Tire custom platform) from "future" to scraping or to an honest `mark_unscrapable`. Sporting Life stays declined (Cloudflare; D3). Detail in §R7.3. | Last unbuilt retailer; the deal feed silently excludes it today (project_state §6 quirk 4). | R4.6 onboarding agent (`probe_retailer`), `add-retailer` skill (S05) | Medium (spike-gated) |
+
+**Order within R7:** 7.1 → 7.2 → 7.3. 7.1 is small and clears the token problems before 7.2 adds UI. 7.3 is independent of both and can be swapped forward if the spike is wanted sooner.
+
+### §R7.1 — Design cleanup
+
+Scoped 2026-10-09 with greps over `frontend/src`; re-run them at session start, since counts drift.
+
+1. **`/opacity` modifiers on `var()` tokens (correctness first).** 57 `/N` modifier uses across 25 `.jsx` files. The ones on token colours (`bg-primary/90`, `border-primary/30`, …) generate nothing, because the theme colours are bare `var(--x)` values Tailwind can't split into channels. Ones on literal palette colours (`black/50`) are fine. **Fix the theme, not every call site:** define the tokens so Tailwind can apply alpha (for example, channel-valued variables with `rgb(var(--x-rgb) / <alpha-value>)` in `tailwind.config`, or `color-mix()`), then check each existing use renders as intended. Some were written against the broken behaviour and may look wrong once they start working.
+2. **Hard-coded hex → tokens.** `PriceChart.jsx` (12), `training/VolumeChart.jsx` (5), `ShoeProductCard.jsx` (2). Recharts takes colour strings, so read the CSS variables at render time (a small `lib/` helper over `getComputedStyle`) instead of duplicating values.
+3. **Emoji out of UI copy.** `LogRunDialog.jsx`, `training/PlannedRacesCard.jsx`, `ScrapabilityTestModal.jsx`, and any toast strings. Replace with lucide icons or plain text, per `DESIGN.md`.
+4. **`--faint` contrast.** It's `#6a6f76` today, about 3.7:1. Raise it to ≥ 4.5:1 against both surfaces it's used on, in light and dark, or restrict it to non-text uses.
+
+**Exit:** all four greps come back clean (or every remaining hit is a literal palette colour, listed in the changelog entry). `vite build` clean, 0 console errors, desktop + ~380 px pass on the screens touched. No backend change, so the suite is unchanged.
+
+### §R7.2 — Confirmation card in chat
+
+**Today:** `chat_service` streams `text`, `tool_call`, `error` and `done` SSE events, consumed by `useChatStream`. C9 confirmation happens in prose: the model describes the write, the runner types "yes", and the model calls the write tool.
+
+**Add:**
+- **A `proposal` SSE event.** Emitted when the model is about to call a confirm-gated write tool. It carries the tool name, the exact arguments, and a human summary (the runner-facing fields: shoe, date, distance, pace, and so on). It should piggyback on the existing MCP write tools, not a parallel path (CLAUDE.md §2.2). The design question to settle first is how the proposal is produced: intercept the model's `tool_use` for write tools and hold it pending, or use an explicit `propose_*` step. Record the choice in `design_decisions.md`.
+- **Confirm executes exactly the proposed call.** The card's Confirm executes the held tool call with the proposed arguments, through the same MCP tool and the same sanctioned service path (`rotation.log_run`, `coros.confirm_run`, …). Edit opens the existing dialog prefilled (for example `LogRunDialog`). Cancel sends the decline back to the model. Nothing is written without the tap (INV-8 / C9 unchanged). The SSE event name is a hand-matched string contract on both sides (CLAUDE.md §6).
+- **UI:** a card in the thread, mono details, 44 px targets, matching the PR #42 phone mockups. After the tap it collapses to a one-line result ("Logged 12.4 km to Evo SL").
+- **Online-only writes:** Confirm is a write, so it follows the RA2.2 boundary: disabled with a message when offline, never queued.
+
+**Not in scope:** auto-confirm (never without an explicit decision — C9); proposals for read tools; Claude Desktop / claude.ai (they keep their own client-side confirmation; this is Son of Anton only).
+
+**Exit:** a chat-initiated run log shows a card, and Confirm writes exactly one activity with the right mileage delta (test it). Cancel writes nothing; a double tap doesn't write twice (idempotent). Tests cover the event shape and the gate. `vite build` clean; desktop + ~380 px pass; verify against a live model with keys, not just a keyless backend.
+
+### §R7.3 — Scraper coverage: Sport Experts
+
+- **Step 0 — spike (no committed code).** Run `probe_retailer` (R4.6) on Sport Experts to confirm it isn't Shopify or Algolia. Then look at how the site delivers prices: a JSON/search API behind the product grid (preferred), server-rendered HTML, or JS-only (Playwright). Also check the bot protection, the `/en` locale, and whether a known shoe resolves. Write the findings in the changelog entry.
+- **If scrapable:** a bespoke scraper in its own file, subclassing the right base and registered in `registry.py`, following the S05 `add-retailer` skill. Keep the politeness sleeps and the kids filter (`search_products_filtered`). Verify with the `POST /shoes/test` dry-run and a real `scrape_runs` row; don't write HTML-fixture tests (CLAUDE.md §10).
+- **If not:** `mark_unscrapable` with a specific reason (the Sporting Life precedent), so the watchdog and the onboarding queue stop listing it. That is a valid outcome, not a failure.
+- **Sporting Life:** unchanged. Paid unblocking stays declined (D3); don't fight Cloudflare.
+
+**Exit:** Sport Experts either appears in `scrape_health` with successful runs and real deals in the feed, or is marked unscrapable with a documented reason. Update `architecture.md`'s retailer table either way.
 
 ---
 
