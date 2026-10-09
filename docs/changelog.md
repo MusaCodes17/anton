@@ -5,6 +5,20 @@
 
 ---
 
+## R8.2 spike S1 — best efforts inside longer runs: GO — 2026-10-09
+
+**[SPIKE] No product code.** Report: `docs/spikes/best_efforts.md`; throwaway script: `scripts/spikes/best_efforts.py`.
+- **Strava archive:** all 929 activities link to existing files (896 `.fit.gz`, 33 `.gpx`); all 694 runs yield 1-second streams. A full sweep took 525 s with 0 parse errors.
+- **COROS:** `queryActivityFitFileDownloadUrls` (by `labelId`) returns an unsigned S3 FIT URL, checked with a `HEAD` request only. The URL is public, so never store or log it.
+- **Parser:** `fitdecode` + `gpxpy` are pure Python with no dependencies; the image is Python 3.11, so the A7 pins are unaffected.
+- **Results look right:** a 2:41:40 full inside the Ottawa Marathon, a 1:16:16 half inside the 21k de Montreal, a 34:28 10k and 16:58 5k inside the Longueuil 10K. Only 1 run (a GPX with a GPS jump) gave an implausible effort; a step-speed filter handles it. Most raw outliers were rides, which records never read.
+
+**[CHANGED]** Removed root `DESIGN.md`, `PRODUCT.md` and `.impeccable/` at the runner's request (only history references them). Deleted the merged local and remote branches `r8.3-past-race-actions` and `r8.1-records`.
+
+**[NOT DONE]** The build waits on four runner decisions (report, last section). The COROS FIT file itself was not downloaded or parsed. Suite unchanged (654 + 1 skipped).
+
+---
+
 ## R8.1 — Records: Race PBs + Best efforts, on elapsed time — 2026-10-09
 
 **[CHANGED] `strava_stats.personal_bests` → two lists** (runner chose two lists over race-only):
