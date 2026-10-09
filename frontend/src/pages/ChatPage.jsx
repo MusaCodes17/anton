@@ -236,7 +236,10 @@ function ConversationPanel({
       )}
 
       {/* Conversation list */}
-      <div className="flex-1 space-y-px overflow-y-auto overscroll-contain px-2 py-1 md:px-3">
+      {/* min-h-0: as a flex-1 child the list otherwise grows to its content,
+          so in the max-height sheet it never scrolls and the drag chains to
+          the thread underneath. */}
+      <div className="min-h-0 flex-1 space-y-px overflow-y-auto overscroll-contain px-2 py-1 md:px-3">
         {conversations.length === 0 ? (
           <p className="px-3 py-3 text-sm text-muted-foreground">No conversations yet</p>
         ) : (
@@ -413,8 +416,10 @@ export default function ChatPage() {
     })
   }, [serverConversations])
 
-  // Once the server list has loaded, auto-select the newest conversation (or a
-  // drawer handoff) — exactly once.
+  // Once the server list has loaded, open a fresh conversation (or a drawer
+  // handoff) — exactly once. Landing on the previous thread made every visit
+  // start by scrolling past old context; past conversations are one tap away
+  // in the list. The new one is in-memory only until its first message.
   useEffect(() => {
     if (didAutoSelect.current) return
     if (!serverConversations) return
@@ -446,13 +451,15 @@ export default function ChatPage() {
       }
     }
 
-    if (serverConversations.length > 0) {
-      const first = serverConversations[0]
-      setActiveConversationId(first.id)
-      setModel(first.model ?? DEFAULT_MODEL)
-      loadMessages(first.id)
-    }
-  }, [serverConversations, model, loadMessages, upsertMutation])
+    // Carry over the most recently used model so a new chat doesn't silently
+    // fall back to the default.
+    const lastModel = serverConversations[0]?.model ?? model
+    const conv = createConversation(lastModel)
+    setModel(lastModel)
+    setConversations((prev) => [conv, ...prev])
+    setActiveConversationId(conv.id)
+    setUnsavedId(conv.id)
+  }, [serverConversations, model, upsertMutation])
 
   // Fetch provider/model list
   useEffect(() => {
@@ -613,15 +620,16 @@ export default function ChatPage() {
           picker that the narrow header has no room for. ── */}
       {showConvList && (
         <div className="fixed inset-0 z-50 md:hidden">
+          {/* touch-none: a drag on the backdrop must not scroll the thread behind it. */}
           <div
-            className="absolute inset-0 bg-black/55"
+            className="absolute inset-0 touch-none bg-black/55"
             onClick={() => setShowConvList(false)}
           />
           <section
             role="dialog"
             aria-modal="true"
             aria-label="Conversations"
-            className="absolute inset-x-0 bottom-0 flex max-h-[85dvh] flex-col rounded-t-[20px] border-t border-border bg-sidebar pb-[env(safe-area-inset-bottom)]"
+            className="absolute inset-x-0 bottom-0 flex max-h-[85dvh] flex-col overflow-hidden overscroll-contain rounded-t-[20px] border-t border-border bg-sidebar pb-[env(safe-area-inset-bottom)]"
           >
             <div className="flex justify-center pt-2 pb-1">
               <span className="h-[5px] w-9 rounded-full bg-nav-inactive" />
@@ -657,7 +665,7 @@ export default function ChatPage() {
                 </span>
                 <ChevronDown className="h-4 w-4 text-muted-foreground transition-transform group-open/model:rotate-180" />
               </summary>
-              <div className="max-h-[40dvh] overflow-y-auto px-1 pb-1">
+              <div className="max-h-[40dvh] overflow-y-auto overscroll-contain px-1 pb-1">
                 <ModelOptions providers={providers} model={model} onChange={handleModelChange} />
               </div>
             </details>

@@ -1,10 +1,12 @@
-import { NavLink, Outlet, useLocation } from 'react-router-dom'
-import { Home, Activity, Tag, PersonStanding, Sparkles, Settings as SettingsIcon, LogOut } from 'lucide-react'
+import { useEffect, useRef } from 'react'
+import { Link, NavLink, Outlet, useLocation } from 'react-router-dom'
+import { Home, Activity, Tag, Sparkles, Settings as SettingsIcon, LogOut } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { authApi, UNAUTHENTICATED_EVENT } from '@/services/api'
 import { useDashboardStats } from '@/hooks/useApi'
 import { formatRelativeTime } from '@/lib/utils'
 import BrandMark from '@/components/layout/BrandMark'
+import ShoeIcon from '@/components/icons/ShoeIcon'
 import OfflineIndicator from '@/components/pwa/OfflineIndicator'
 import { useKeyboardViewport } from '@/hooks/useKeyboardViewport'
 
@@ -14,7 +16,7 @@ import { useKeyboardViewport } from '@/hooks/useKeyboardViewport'
 const navItems = [
   { to: '/', label: 'Home', short: 'Home', icon: Home, end: true, also: ['/new-runs'] },
   { to: '/training', label: 'Training', short: 'Training', icon: Activity, also: ['/activities'] },
-  { to: '/shoes', label: 'Shoes', short: 'Shoes', icon: PersonStanding },
+  { to: '/shoes', label: 'Shoes', short: 'Shoes', icon: ShoeIcon },
   { to: '/deals', label: 'Deals', short: 'Deals', icon: Tag },
   { to: '/assistant', label: 'Son of Anton', short: 'Anton', icon: Sparkles },
 ]
@@ -84,7 +86,7 @@ function SettingsLink({ onNavigate }) {
 // child of the shell (not position:fixed), so it can't overlap content and
 // needs no matching padding on every page. Hidden while the iOS keyboard is
 // up (html.keyboard-open) so the chat composer sits directly on the keyboard.
-function MobileTabBar() {
+function MobileTabBar({ onReselect }) {
   const { pathname } = useLocation()
   const isActive = ({ to, end, also = [] }) => {
     const hit = (p) => pathname === p || pathname.startsWith(`${p}/`)
@@ -104,6 +106,8 @@ function MobileTabBar() {
             to={item.to}
             end={item.end}
             aria-current={active ? 'page' : undefined}
+            // Tapping the tab you're already on returns to the top (iOS convention).
+            onClick={() => active && onReselect()}
             className={cn(
               'focus-ring relative flex h-14 flex-col items-center justify-center gap-1 text-2xs transition-colors',
               active ? 'font-bold text-accent-foreground' : 'font-semibold text-muted-foreground hover:text-foreground'
@@ -148,16 +152,23 @@ export function LogoutButton({ onNavigate }) {
   )
 }
 
-function Brand() {
+// The logo is always a way home: it links to "/" and, because <main> (not the
+// document) is the scroll region, also resets that scroll when already there.
+function Brand({ onHome }) {
   return (
-    <div className="flex items-center gap-[11px] px-2">
+    <Link
+      to="/"
+      onClick={onHome}
+      aria-label="Anton — home"
+      className="focus-ring flex items-center gap-[11px] rounded-lg px-2"
+    >
       <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-primary text-background">
         <BrandMark className="h-[19px] w-[19px]" />
       </span>
       <span className="font-heading text-[19px] font-extrabold tracking-tight text-foreground">
         Anton
       </span>
-    </div>
+    </Link>
   )
 }
 
@@ -169,6 +180,15 @@ export default function Layout() {
   // standard padded, naturally-scrolling page wrapper.
   const isFullBleed = location.pathname === '/assistant'
   useKeyboardViewport()
+
+  // <main> is the scroll container, so the browser's own scroll reset on
+  // navigation never happens — without this, opening Home from halfway down
+  // Deals lands halfway down Home.
+  const mainRef = useRef(null)
+  const scrollToTop = () => mainRef.current?.scrollTo({ top: 0 })
+  useEffect(() => {
+    mainRef.current?.scrollTo({ top: 0 })
+  }, [location.pathname])
 
   return (
     // RA2.2 (R5.2) — fixed-height app shell. Header + banner are static shrink-0
@@ -191,7 +211,7 @@ export default function Layout() {
       {/* Desktop sidebar */}
       <aside className="fixed inset-y-0 left-0 z-30 hidden w-[236px] flex-none flex-col bg-sidebar p-4 pt-6 md:flex">
         <div className="pb-[30px]">
-          <Brand />
+          <Brand onHome={scrollToTop} />
         </div>
         <NavLinks />
         <div className="mt-auto border-t border-border pt-3">
@@ -218,7 +238,7 @@ export default function Layout() {
           isFullBleed && 'hidden'
         )}
       >
-        <Brand />
+        <Brand onHome={scrollToTop} />
         <NavLink
           to="/settings"
           aria-label="Settings"
@@ -238,7 +258,7 @@ export default function Layout() {
           overflow-y-auto scrolls the body rather than the shell. Full-bleed
           (chat) just fills this box and ChatPage's own h-full takes over its
           internal scrolling; padded routes scroll here. */}
-      <main className="min-h-0 flex-1 overflow-y-auto md:pl-[236px]">
+      <main ref={mainRef} className="min-h-0 flex-1 overflow-y-auto md:pl-[236px]">
         {isFullBleed ? (
           <Outlet />
         ) : (
@@ -251,7 +271,7 @@ export default function Layout() {
         )}
       </main>
 
-      <MobileTabBar />
+      <MobileTabBar onReselect={scrollToTop} />
     </div>
   )
 }
