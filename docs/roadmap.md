@@ -431,9 +431,9 @@ Scoped 2026-10-09 with greps over `frontend/src`; re-run them at session start, 
 | R8.1 | **Records: who counts, and on what clock** – ✅ **Done (2026-10-09)**: two lists (runner's choice), elapsed clock, ratio guard retired (B18) | Rewrite PB eligibility so the tag means what the runner expects, and time records on **elapsed** time, not moving time. Detail in §R8.1. | Today a run stays a record after its Race tag is changed to anything except Intervals/Track — the rule is "eligible unless excluded", the opposite of what the runner expects. Moving time also flatters stop-heavy runs. | R2.7 T1/T3 (tags, current rule) | Low |
 | R8.2 | **Best efforts inside longer runs (Strava-style)** – ✅ **Done (2026-10-09)**: spike GO → built (segments 1k → full, intervals count, archive backfill + COROS FIT in the poll tick; B19). Prod: run the backfill after deploy | Find the fastest 5k / 10k / half *segment* inside any run (e.g. a 5k PB set during a 10k race) from per-second data, stored per activity. Detail in §R8.2. | Whole-activity bands can never see a 5k inside a 10k. This is how Strava, COROS and Garmin do best efforts. | R8.1 (eligibility + elapsed clock); spike S1 | Medium–High |
 | R8.3 | **Past races with no run attached** – ✅ **Done (2026-10-09)**: build was current; a run that day kept the race; past-race actions added (link the run / mark skipped / delete) | Make sure a plan that didn't happen leaves "Past races": confirm the B17 prune (PR #43) is live in production, then decide whether the rule should be stricter. Detail in §R8.3. | "Parkrun Time Trial" (planned, 2026-07-18, no activity) still shows in production on 2026-10-09, 83 days later. | B17 `races.prune_unrun_races`; RA3 would prevent "merged but not deployed" | Low |
-| R8.4 | **Training dashboards rework** – 📋 **placeholder — plan in its own session** | The charts and cards on the Training page need a broader rework. Not scoped yet; see §R8.4 for what to bring to that session. | Runner: "the dashboards need a lot of work." | R8.1–R8.3 (records and races feed the page) | High (to be sized) |
+| R8.4 | **Training dashboards rework** – 📋 **planned (2026-10-09), not started** — five tasks, see §R8.4 | Answer three questions at the top of the Training page — *am I building or holding?*, *what's my form now?*, *am I ready for my next race?* — and keep every current card below them. Detail in §R8.4. | Runner: "the dashboards need a lot of work." Today the page shows totals and a latest snapshot, but no trend or verdict. | R8.1–R8.3 (records and races feed the page) | Medium–High (5 tasks, 2–3 sessions) |
 
-**Order within R8:** R8.3 step 1 first (a deploy check — minutes). Then R8.1 (small, fixes the visible bug). R8.2 starts with its spike and builds only if the spike shows the data is there. R8.4 is planned after the runner has lived with R8.1–R8.3.
+**Order within R8:** R8.3 step 1 first (a deploy check — minutes). Then R8.1 (small, fixes the visible bug). R8.2 starts with its spike and builds only if the spike shows the data is there. R8.4 was planned 2026-10-09 (§R8.4): five tasks, R8.4.1 spike first.
 
 ### §R8.1 — Records: who counts, and on what clock
 
@@ -488,9 +488,45 @@ Scoped 2026-10-09 with greps over `frontend/src`; re-run them at session start, 
 
 **Exit:** no planned-but-unrun race appears in "Past races" past the grace period in production; the chosen rule is recorded in design_decisions (B17 update).
 
-### §R8.4 — Training dashboards rework *(placeholder)*
+### §R8.4 — Training dashboards rework
 
-Plan in a dedicated session. Bring to it: the three or four questions the page should answer at a glance (e.g. "am I building or holding?", "how does this block compare to my last marathon block?", "what's my form now?"), which current cards earn their place (Volume chart, Fitness, Predictions, Records, Races, recent activity), and what's missing. Inputs already in the data: weekly/monthly volume and pace, HR, elevation, COROS training load/focus, tags, races, and R8.1/R8.2 records. Use the `dataviz` approach for chart forms; mobile-first (the PWA is the main surface).
+**Planned 2026-10-09** with the runner. The runner's choices:
+- **Questions the page answers at a glance:** building or holding, form now, ready for race X.
+- **Not chosen:** a block-vs-block comparison.
+- **Cards kept:** all of them (Volume chart + tiles, Races + Records, Fitness + Predictions, Activities). The rework *adds* answers on top; it doesn't remove cards.
+
+**What the data supports** (local DB, 710 runs):
+
+| Data | Coverage | What it means for the plan |
+|---|---|---|
+| Distance, time, pace | Every run since 2018 | Usable everywhere |
+| Avg HR | 692 runs | Usable for the form trend |
+| Elevation | 704 runs | Usable |
+| R8.2 best efforts | Scanned runs | Usable for the form trend |
+| COROS `training_load` | 10 runs, all since June 2026 | Load is measured in **km/time**, not COROS load |
+| Activity tags | 7 runs | Nothing may *require* a tag; use tags only where present and the runner can fix them |
+| `athlete_metrics` | 1 row; append-only, but only written by the manual `sync_fitness` prompt | No VO₂ max or threshold history to chart until something records snapshots regularly |
+
+**Rules:**
+- Every number and verdict is computed server-side in one place, with REST + MCP parity (CLAUDE.md §2/§4).
+- Nothing new is stored except the fitness snapshots in R8.4.1.
+- Mobile-first: answers go first at 380 px.
+- Chart forms follow the `dataviz` approach.
+
+| # | Task | Detail |
+|---|---|---|
+| R8.4.1 | **Record fitness automatically** | **Spike first:** capture `queryFitnessAssessmentOverview` from the COROS MCP server and check it gives VO₂ max, threshold pace, running level and predictions. If it does: add a fixture-pinned parser to `coros_mcp_client` (prose, anchored regexes — CLAUDE.md §6 trap) and have the poller append a snapshot through `fitness.record_snapshot` at most once a day, and only when a value changed. A snapshot is an athlete reading, not a run, so it is not under the INV-8 confirmation gate; it is the same data `sync_fitness` writes today. If the spike says no, keep the manual prompt and drop the fitness chart from R8.4.3. |
+| R8.4.2 | **"Building or holding?" — load trend** | New service `training_trends.load_trend(db, *, as_of)` returns the last 7 days' km, the average week over the previous 28 days, their ratio, and the longest run in each window. Verdict, labelled a heuristic: **building** if the ratio is above 1.1, **holding** if it is 0.9–1.1, **easing** if it is below 0.9 (taper-aware: easing inside 3 weeks of a planned race reads "taper"). Thresholds are module constants with a why-comment. Endpoint `GET /api/training/trends` plus MCP tool `get_training_trends`, and a 4-week rolling-average line on the weekly Volume chart. |
+| R8.4.3 | **"What's my form now?" — form trend** | Same service, `form_trend`. Plots monthly **efficiency** (speed per heartbeat, m per beat, across steady runs: untagged or Easy/Long Run, ≥ 5 km, HR present, elapsed within 1.2× moving time — a heuristic, labelled), plus a rolling 90-day best 5k and 10k from R8.2 best efforts vs. the all-time best, plus the VO₂ max/threshold line from R8.4.1 snapshots. **Open question for the build session:** pace-at-fixed-HR band vs. m-per-beat — try both on the real archive and keep the one that reads honestly. |
+| R8.4.4 | **"Am I ready for race X?" — readiness** | `race_advisor` already builds race-block context for the MCP prompt; extend that instead of starting a parallel service. For the next planned race: weeks to go; peak week and longest run in the block; long-run count over a distance-relative threshold (e.g. ≥ 28 km for a marathon); recent best efforts vs. target pace when `target_time_s` is set. Shown as a checklist with numbers, not a score. Same data on REST + `get_race_block_context`. |
+| R8.4.5 | **Page layout** | New top strip "Now": three answer cards (Load · Form · Next race), each a verdict line + one small chart, stacked on mobile and in a 3-column row on desktop. Below it, the current page unchanged (tiles, Volume, Races/Records, Fitness/Predictions, Activities). Fitness/Predictions get "as of" freshness, and a sparkline once R8.4.1 has history. `vite build` clean, 0 console errors, desktop + 380 px pass. |
+
+**Order:**
+1. R8.4.1 spike first (minutes, decides R8.4.3's scope).
+2. Then R8.4.2 → R8.4.3 → R8.4.4, backend + tests for each before any UI.
+3. R8.4.5 last, consuming all three.
+
+Commits `r8:` one per task. **Exit:** the three answers render from one endpoint each with tests on the threshold boundaries (exactly 1.1 is building? — decide and test it), taper inside 3 weeks, no-HR runs excluded, no planned race → readiness card hides.
 
 ---
 
