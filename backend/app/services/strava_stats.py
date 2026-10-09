@@ -11,7 +11,7 @@ happens here at the boundary.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import date
+from datetime import date, timedelta
 from typing import Optional
 
 from sqlalchemy.orm import Session
@@ -32,6 +32,8 @@ PB_BANDS = (
     ("full", 42.195, 1.5),
 )
 
+ROLLING_WEEKS = 4   # Volume-chart trend line (R8.4.2): a month of weeks smooths one big or missed week
+
 
 @dataclass
 class PeriodSummary:
@@ -41,6 +43,9 @@ class PeriodSummary:
     avg_pace: Optional[str]
     avg_hr: Optional[int]
     elevation_gain_m: float
+    # Weekly only (R8.4.2): mean km of this calendar week and the 3 before it,
+    # empty weeks counted as 0 — the Volume chart's trend line. None for months.
+    rolling_4wk_km: Optional[float] = None
 
 
 @dataclass
@@ -93,15 +98,31 @@ def training_summary(
     `date_from`/`date_to` (inclusive, R2.7 T4b) restrict the runs aggregated so
     the Training-tab summary card can honour the same date-range picker as the
     volume chart and activities list.
+
+    Weekly buckets also carry `rolling_4wk_km` (R8.4.2). It averages whole
+    calendar weeks, so it reads 3 weeks before `date_from` and ignores the range
+    cut: a range starting mid-week still gets that week's true rolling value.
     """
     if period not in ("weekly", "monthly"):
         raise ValueError("period must be 'weekly' or 'monthly'")
 
-    runs = activities_svc.unified_activities(db, date_from=date_from, date_to=date_to)
+    lookback_from = date_from
+    if period == "weekly" and date_from is not None:
+        lookback_from = date_from - timedelta(days=date_from.weekday() + (ROLLING_WEEKS - 1) * 7)
+    all_runs = activities_svc.unified_activities(db, date_from=lookback_from, date_to=date_to)
+    runs = [r for r in all_runs if date_from is None or r.date >= date_from]
+
+    week_km: dict[date, float] = {}   # Monday → km, over the lookback too
+    if period == "weekly":
+        for r in all_runs:
+            monday = r.date - timedelta(days=r.date.weekday())
+            week_km[monday] = week_km.get(monday, 0.0) + (r.distance_km or 0.0)
+    monday_of: dict[str, date] = {}
 
     buckets: dict[str, dict] = {}
     for r in runs:
         key = _period_key(r.date, period)
+        monday_of.setdefault(key, r.date - timedelta(days=r.date.weekday()))
         b = buckets.setdefault(key, {"km": 0.0, "count": 0, "moving_s": 0.0, "hr_sum": 0, "hr_n": 0, "elev": 0.0})
         b["km"] += r.distance_km or 0.0
         b["count"] += 1
@@ -127,6 +148,11 @@ def training_summary(
             avg_pace=avg_pace,
             avg_hr=avg_hr,
             elevation_gain_m=round(b["elev"], 1),
+            rolling_4wk_km=(
+                round(sum(week_km.get(monday_of[key] - timedelta(weeks=k), 0.0)
+                          for k in range(ROLLING_WEEKS)) / ROLLING_WEEKS, 1)
+                if period == "weekly" else None
+            ),
         ))
     return out
 
