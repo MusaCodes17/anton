@@ -5,6 +5,25 @@
 
 ---
 
+## R7.4 — Boutique Courir scraper — 2026-10-09
+
+**[ADDED] `scrapers/boutique_courir.py`**, registered as bespoke (so it leaves the onboarding queue). Probe findings that shaped it:
+- **Platform:** WordPress + WooCommerce on LiteSpeed, with no bot wall. `probe_retailer` said "custom" only because it recognises just Shopify and Algolia.
+- **The Store API is closed to anonymous callers** (`/wp-json/wc/store/v1/products` → 401 `rest_not_logged_in`). robots.txt allows search, so the scraper reads search-result HTML and product-page JSON-LD.
+- **Search** is WordPress full-text: titles have no brand ("Novablast 5 • H") and numeric terms can return nothing ("Clifton 10" → 0, "Clifton" → both). The scraper searches on the model's word tokens and matches locally on whole tokens, numbers included, in shoe categories only. The brand isn't checkable on the page; this is a labelled heuristic.
+- **Prices are French-formatted.** `BaseScraper.parse_price` reads "189,99 $" as 18999 (pinned by a test), so the scraper has its own `_parse_fr_price`.
+- **No sizes are listed online**, so deals show size "unknown" (R6.3). A WooCommerce variations form is parsed if one ever appears.
+
+**[VERIFIED]**
+- Suite 628 → **649 passing + 1 skipped** (`test_boutique_courir.py`: French prices, whole-word matching, query building, registration/onboarding). Pure rules only, no HTML fixtures (CLAUDE.md §10).
+- **Live no-DB dry run:** Novablast 5 → 4 products (Novablast 6 excluded), Clifton 10 → 1 (the site's own search gives 0), Gel Nimbus 27 → 3 (28 excluded), Pegasus 41 → 0 (not stocked). Product page: $189.99, in stock, absolute image URL.
+- **Full single-retailer scrape** through `ScrapeOrchestrator.scrape_retailer` on a **scratch copy** of the dev DB (scraping enabled only in the copy; live DB untouched): 51 shoes, 25 products, 25 prices, **4 deals**, no errors, `scrape_runs` row `success`.
+
+**[NOTE] Those 4 deals reflect the stored MSRPs, not sales.** Hoka Mach 7 at $169.99 and NB FuelCell Rebel v5 at $179.99 are Boutique Courir's regular prices. Every other retailer lists them at about $170 / $180 at full price, but the watchlist MSRP for both is $190, so B9-v3 counts any full-price listing as 5–10% off. This affects every retailer, not just this one; worth correcting those two MSRPs in the watchlist. Also: 0 of the shop's 131 running shoes were on sale at probe time.
+**[NOT DONE] Production:** after deploy, turn on scraping for retailer #16 (Boutique Courir) in Settings → Retailers. It's disabled in production until then.
+
+---
+
 ## R7.3 — Sport Experts spike → marked unscrapable — 2026-10-09
 
 **[VERIFIED] No code (spike only).** Findings:
