@@ -11,8 +11,12 @@ _get_provider read that one list, so the catalog lives in exactly one place
 
 Each provider implements five abstract methods; BaseLLMProvider.run() owns the
 common agentic loop: turn counting, tool execution, and the event-protocol
-(text / tool_call / tool_result / done / error). See _ToolCall and
+(text / tool_call / tool_result / proposal / done / error). See _ToolCall and
 BaseLLMProvider for the contract.
+
+Write tools never run inside the loop (R7.2, decision C12): a call that
+changes data is held by services/chat_proposals and the stream ends with a
+`proposal` event; the runner's tap runs it later via call_tool_once().
 """
 from __future__ import annotations
 
@@ -20,9 +24,10 @@ import asyncio
 import json
 import os
 from abc import ABC, abstractmethod
+from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from datetime import timedelta
-from typing import Any, AsyncGenerator, Callable
+from typing import Any, AsyncGenerator, AsyncIterator, Callable, Optional
 
 from mcp import types as mcp_types
 from mcp.client.session_group import ClientSessionGroup, StreamableHttpParameters
@@ -58,7 +63,14 @@ Never guess an id from memory.
 5. RESOURCE CONTEXT: Your system prompt contains live shoe rotation and deals data loaded at conversation \
 start. Use this for general rotation and deals questions without calling tools. Only call get_owned_shoes \
 or get_deals tools if you need fresher data than what is in context, or if the user asks about something \
-specific not covered by the pre-loaded context."""
+specific not covered by the pre-loaded context.
+
+6. CONFIRMATION CARDS: In this app, every tool call that changes data (logging or deleting a run, \
+confirming a COROS run, retiring a shoe, adding a note or shoe, etc.) is NOT run when you call it. \
+It is shown to the user as a confirmation card and only runs if they tap Confirm. So don't ask for a \
+typed "yes" first: once you have everything the call needs (the right owned_shoe_id, date, distance…), \
+call the write tool directly — that call IS the proposal. Before calling it, say in one short sentence \
+what you're proposing. Then stop; the user's decision (and the tool result) arrives as the next message."""
 
 MCP_SERVERS: list[dict] = [
     {
@@ -210,9 +222,16 @@ class BaseLLMProvider(ABC):
         queue: asyncio.Queue,
         call_mcp_tool: Callable,
         system_prompt: str = SYSTEM_PROMPT,
+        hold_for_confirmation: Optional[Callable[[str, dict], Optional[dict]]] = None,
     ) -> None:
         """Agentic loop: stream LLM response, call tools, repeat until done.
-        Push SSE event dicts to queue; end with {"type":"done"} or {"type":"error"}."""
+        Push SSE event dicts to queue; end with {"type":"done"} or {"type":"error"}.
+
+        `hold_for_confirmation(name, args)` returns a proposal dict for a call
+        that must wait for the runner (and holds it), or None to run it now.
+        When a turn holds any call, the read calls in that turn still run, a
+        {"type":"proposal"} event is emitted per held call, and the turn ends
+        with "done" — the model resumes only when the decision is sent back."""
         if not await self._check_configured(queue):
             return
         self._system_prompt = system_prompt
@@ -227,10 +246,20 @@ class BaseLLMProvider(ABC):
                 await queue.put({"type": "done"})
                 return
             results: list[str] = []
+            held: list[dict] = []
             for tc in tool_calls:
+                proposal = hold_for_confirmation(tc.name, tc.input) if hold_for_confirmation else None
+                if proposal is not None:
+                    held.append(proposal)
+                    continue
                 result_text, success = await call_mcp_tool(tc.name, tc.input)
                 await queue.put({"type": "tool_result", "tool": tc.name, "success": success})
                 results.append(result_text)
+            if held:
+                for proposal in held:
+                    await queue.put({"type": "proposal", "proposal": proposal})
+                await queue.put({"type": "done"})
+                return
             self._append_tool_results(state, tool_calls, results)
         else:
             # Loop exhausted MAX_AGENTIC_TURNS without the model ever stopping on
@@ -571,10 +600,11 @@ async def _load_context_resources(group) -> str:
         return ""  # fail silently — tools are still available as a fallback
 
 
-async def read_mcp_resource(uri: str) -> str:
-    """Open a brief MCP session, read one resource by URI, and return its text content."""
-    from pydantic import AnyUrl
-
+@asynccontextmanager
+async def _connected_group(sse_read_timeout_s: float) -> AsyncIterator[ClientSessionGroup]:
+    """A ClientSessionGroup connected to every reachable MCP_SERVERS entry.
+    An unreachable server is logged and skipped; callers check group.sessions
+    / group.tools for "nothing connected"."""
     async with ClientSessionGroup() as group:
         for server in MCP_SERVERS:
             url = server.get("url", "")
@@ -586,12 +616,48 @@ async def read_mcp_resource(uri: str) -> str:
                         url=url,
                         headers=_server_headers(server),
                         timeout=timedelta(seconds=10),
-                        sse_read_timeout=timedelta(seconds=30),
+                        sse_read_timeout=timedelta(seconds=sse_read_timeout_s),
                     )
                 )
-            except Exception:
-                continue
+            except Exception as exc:
+                print(f"[chat] MCP server '{server['name']}' unavailable: {exc}")
+        yield group
 
+
+async def call_tool_once(name: str, tool_input: dict) -> tuple[str, bool]:
+    """Run one MCP tool over a fresh loopback session — the executor for a
+    confirmed chat proposal (R7.2). Same tool, same service path as when the
+    assistant calls it; returns (result text, success)."""
+    # Long timeout: a confirmed trigger_scrape is a real 20–30 min scrape.
+    async with _connected_group(sse_read_timeout_s=3600) as group:
+        if name not in group.tools:
+            return json.dumps({"success": False, "error": f"Tool {name} is not available."}), False
+        try:
+            result = await group.call_tool(name, tool_input)
+            return _extract_result_text(result), not result.isError
+        except Exception as exc:
+            return json.dumps({"success": False, "error": str(exc)}), False
+
+
+def _hold_for_confirmation(name: str, tool_input: dict) -> Optional[dict]:
+    """Chat-loop gate: hold a data-changing call as a proposal (C12)."""
+    from app.database import SessionLocal
+    from app.services import chat_proposals
+
+    if not chat_proposals.requires_confirmation(name, tool_input):
+        return None
+    db = SessionLocal()
+    try:
+        return chat_proposals.to_dict(chat_proposals.create(db, name, tool_input))
+    finally:
+        db.close()
+
+
+async def read_mcp_resource(uri: str) -> str:
+    """Open a brief MCP session, read one resource by URI, and return its text content."""
+    from pydantic import AnyUrl
+
+    async with _connected_group(sse_read_timeout_s=30) as group:
         if not group.sessions:
             raise RuntimeError("No MCP server available")
 
@@ -609,23 +675,7 @@ async def _run_chat(messages: list, model: str, queue: asyncio.Queue) -> None:
     provider = _get_provider(model)
 
     try:
-        async with ClientSessionGroup() as group:
-            for server in MCP_SERVERS:
-                url = server.get("url", "")
-                if not url:
-                    continue
-                try:
-                    await group.connect_to_server(
-                        StreamableHttpParameters(
-                            url=url,
-                            headers=_server_headers(server),
-                            timeout=timedelta(seconds=10),
-                            sse_read_timeout=timedelta(seconds=300),
-                        )
-                    )
-                except Exception as exc:
-                    print(f"[chat] MCP server '{server['name']}' unavailable: {exc}")
-
+        async with _connected_group(sse_read_timeout_s=300) as group:
             if not group.tools:
                 await queue.put({"type": "error", "message": "No tools available from any MCP server."})
                 return
@@ -649,6 +699,7 @@ async def _run_chat(messages: list, model: str, queue: asyncio.Queue) -> None:
                 queue=queue,
                 call_mcp_tool=call_mcp_tool,
                 system_prompt=augmented_system_prompt,
+                hold_for_confirmation=_hold_for_confirmation,
             )
 
     except Exception as exc:
@@ -669,6 +720,7 @@ async def stream_chat(messages: list, model: str) -> AsyncGenerator:
       {"type": "tool_call",   "tool": "get_owned_shoes"}
       {"type": "tool_result", "tool": "get_owned_shoes", "success": True}
       {"type": "text",        "content": "token…"}
+      {"type": "proposal",    "proposal": {...}}   # held write call (chat_proposals.to_dict)
       {"type": "done"}
       {"type": "error",       "message": "…"}
     """
