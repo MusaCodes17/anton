@@ -195,6 +195,7 @@
 **Advantages:** no scheduler or new job (CLAUDE.md §4.6); works with COROS disconnected; positive-evidence guard (no run *and* nothing in the inbox) rather than a timer alone; the 3-day grace equals the poller's default lookback, so a late watch sync lands first.
 **Trade-offs:** a write on a read path (GET `/races` can delete). Any activity that day, even an easy jog, keeps the race. A race run with no recording is lost unless marked done within the grace window. `skipped` and `completed` are never touched. Plans are intentions, not history, so this does not breach "history is sacred".
 **Verdict:** 🕐 Keep for now. If a read-path write ever bites, move the call into the scheduled COROS tick.
+**Update (R8.3, 2026-10-09):** the "any activity that day keeps the race" trade-off bit on the case it was named for: a normal run on 2026-07-18 kept the skipped Parkrun Time Trial. Kept the cautious rule (the runner chose it over linked-only pruning or auto-`skipped`) and added the human tiebreaker the rule was missing: past races still `planned` get Link the run / Mark skipped / Delete on the card (`races.link_activity`).
 
 ---
 

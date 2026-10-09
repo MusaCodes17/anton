@@ -5,6 +5,24 @@
 
 ---
 
+## R8.3 — Past-race actions: link the run, mark skipped, delete — 2026-10-09
+
+**[FOUND] Why "Parkrun Time Trial" stayed in production.** It wasn't a stale build. The server runs current code (`prune_unrun_races` present in the container), but production has a COROS run on 2026-07-18 (activity 948, 8.83 km). B17 keeps a race when any run exists that day, in case it was the race. The runner confirmed it was a normal run; the race was skipped. Past races had no buttons, so the app gave no way to say so.
+
+**[ADDED] Resolving a past race by hand** (runner's choice of the three options: keep the cautious rule, add actions):
+- `races.link_activity(db, race_id, activity_id)`: marks the race completed, takes the result from the run (moving time via a shared `_activity_result_s`, which `create_completed_from_activity` now uses too; R8.1 moves both to elapsed), and back-links it (T7). Rejects a run that is already another race's result (`ValueError` → 400); missing race or run → 404. The run itself is untouched.
+- `POST /api/races/{id}/link-activity` (thin adapter). No MCP tool: race edits have never been on MCP; parity gap noted, not widened.
+- `PlannedRacesCard`: a past race still `planned` reads **Not marked** and gets **Link the run** (a picker of that day's runs, from `GET /activities?date_from=&date_to=`) and **Mark skipped** (`PATCH status=skipped`). Every real race row gets **Delete** (the existing confirm dialog). Activity-synthesized rows stay deep-link only. The row's deep link no longer wraps the buttons.
+
+**[VERIFIED]**
+- `test_races.py` +5: link completes from the run, linked race listed once and never pruned, one run can't be two races, missing race/run, skipped survives the prune. Suite **647 → 652 + 1 skipped**. The R7.4 entry's "649" was a miscount; a per-module collect of `main` gives 647 + 1 skipped.
+- `vite build` clean; 0 console errors.
+- Live on a scratch DB copy with the 07-18 run seeded: linked one race (completed, 46:30, deep-links to the run), marked another skipped. Desktop and 375 px both pass. Live DB mtime unchanged.
+
+**[NOT DONE]** In production, after deploy: tap **Mark skipped** on Parkrun Time Trial.
+
+---
+
 ## R8 scoped — Training page: records, races & dashboards — 2026-10-09
 
 **[ADDED] Roadmap only; no code changes.** New milestone **R8** in `roadmap.md` from the runner's Training-page feedback; **not scheduled**.
