@@ -57,6 +57,8 @@ def run(coro):
     ("scrape_health", {}, False),
     ("fetch_unsynced_coros_runs", {"days_back": 7}, False),
     ("probe_retailer", {"retailer_id": 1}, False),
+    ("sync_coros_now", {}, False),          # inbox + fitness only; runs still confirmed (C13)
+    ("record_athlete_metrics", {"vo2max": 59}, True),
     ("log_run_to_shoe", {"owned_shoe_id": 1}, True),
     ("confirm_coros_run", {}, True),
     ("retire_shoe", {"owned_shoe_id": 1}, True),
