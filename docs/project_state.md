@@ -136,7 +136,7 @@ No open *defect* list exists — bugs get fixed in-session and logged in `docs/c
 
 ## 7. Technical Debt
 
-Full ranked treatment: `refactoring/tech_debt.md` — **the ranked authority** (P0–P3 with states); actionable detail in `refactoring/refactor.md`; deletions in `refactoring/dead_code.md`. The short list a new session must know:
+Full ranked treatment: `docs/archive/refactoring/tech_debt.md` — **the ranked authority** (P0–P3 with states); actionable detail in `docs/archive/refactoring/refactor.md`; deletions in `docs/archive/refactoring/dead_code.md`. The short list a new session must know:
 
 - ~~**No auth on three mutation surfaces**~~ resolved (R2.1 → E9/E10; OAuth 2.1 + bearer secret, rate limiting, access log — RA1.1–RA1.3). Note: `MCP_SERVER_URL` loopback must send the bearer (CLAUDE.md §6 trap).
 - ~~**Dual schema authority** (`create_all` + Alembic) and DB + dated `.bak` files in the working tree.~~ resolved (R2.2, Session E, 2026-07-07 — Alembic sole authority, `create_all` test-only, DB + backups moved to `~/anton-data/`; A6 → Superseded).
