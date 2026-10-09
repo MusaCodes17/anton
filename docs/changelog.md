@@ -5,6 +5,26 @@
 
 ---
 
+## R8.4.2 — "Building or holding?" — load trend — 2026-10-09
+
+**[ADDED]**
+- **Service** `services/training_trends.load_trend(db, *, as_of)` (new module, read-only): last 7 days' km (ending `as_of`, inclusive) vs. the average week of the 28 days before.
+  - Verdicts: **building** (ratio > 1.10), **holding** (0.90–1.10), **easing** (< 0.90), **taper** (easing with a still-planned race within 21 days, race day included — names the race), **no_baseline** (no running in the prior 28 days; ratio None).
+  - Boundary decision: ratios are rounded to 2 dp before comparing, so 55/50 is 1.10, not 1.1000000000000001. Exactly **1.10 and 0.90 are holding**.
+  - Thresholds are module constants with a why-comment and ride along in the response with `heuristic: true`, so every surface can label it.
+  - Load is km, not COROS training load (10 runs have it); no tag is required. `as_of` defaults to today in Toronto. The taper race is a direct read of `planned_races`, not `races.list_races`, which prunes as a side effect.
+- **REST + MCP:** `GET /api/training/trends?as_of=` → `{load: {...}}` (R8.4.3 adds `form` to the same envelope); MCP `get_training_trends(as_of)` over the same function (read-only, so no confirmation card).
+- **Volume chart:** weekly buckets of `training_summary` carry `rolling_4wk_km` — the mean of the calendar week and the 3 before it, empty weeks as 0. It looks back 3 weeks past `date_from`, so a range that starts mid-week still gets true values. Weekly `get_training_summary` returns it too. `VolumeChart` draws it as a dashed muted line with a one-line key and a tooltip row; monthly has none.
+
+**[VERIFIED]**
+- `test_training_trends.py` new +21: the five boundary ratios (1.11 / 1.10 / 1.00 / 0.90 / 0.89), window edges (as_of, as_of−6, as_of−7, as_of−34 in; as_of−35 and as_of+1 out), non-runs ignored, no baseline, taper at day 21 and on race day, no taper at day 22 / past / skipped / completed, building near a race stays building, REST == MCP, bad date, rolling line with an empty week and a mid-week range start, monthly has no rolling value. Suite **699 → 720 + 1 skipped**.
+- **Real archive** (a scratch copy of the dev DB; its last run is 2026-07-16): April–mid-May holding at 110–125 km weeks; late May easing after the Ottawa Marathon (not taper — it was never a planned race); late June → July building as volume returned. Over 52 Fridays: 22 building / 16 holding / 14 easing — the ±10% band isn't trigger-happy.
+- `vite build` clean. Preview against the scratch copy: desktop and 375 px — dashed line sits behind the green series, key under the chart, tooltip "4-wk avg 105.8 km", Monthly shows no line or key, no horizontal scroll, 0 console errors. `/api/training/trends?as_of=2026-07-16` → building 1.28 (90.8 vs. 71.1 km).
+
+**[NOT DONE]** The verdict has no card yet — it lands in R8.4.5's "Now" strip with the form and readiness answers. Known, pre-existing: the weekly chart skips weeks with no runs (no zero bucket), so a missed week narrows the x-axis rather than dipping to 0; the rolling line itself counts those weeks as 0.
+
+---
+
 ## R8.4.1 — Fitness recorded automatically by the COROS sync — 2026-10-09
 
 **[ADDED] COROS fitness snapshots without a Claude session (runner's call: same sync as runs, no confirmation).**

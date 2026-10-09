@@ -96,7 +96,7 @@ Everything transitively imports `app.database` and `app.models.models`; those tw
 |---|---|---|---|
 | `home` | services.home | — | ✅ thin adapter |
 | `activities` | services.activities | — | ✅ thin |
-| `training` | services.strava_stats | — | ✅ thin |
+| `training` | services.strava_stats · fitness · training_trends | — | ✅ thin |
 | `races` | services.races | models (query-by-id only) | ✅ thin |
 | `strava` | — | models.Activity (4 aggregate queries) | small read-only |
 | `owned_shoes` | services.rotation | models (CRUD queries, Deal/Shoe for replacement-deals) | mixed; hosts `_attach_computed_fields` |
