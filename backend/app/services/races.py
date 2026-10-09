@@ -27,6 +27,14 @@ logger = logging.getLogger(__name__)
 UNRUN_RACE_GRACE_DAYS = 3
 
 
+def _activity_result_s(a: Activity) -> Optional[int]:
+    """A race result from a run: real moving time, else pace × distance so the
+    result is set. (R8.1 will move race results to elapsed time — change it here.)"""
+    return a.moving_time_s or (
+        round(a.avg_pace_s_per_km * a.distance_km) if a.avg_pace_s_per_km and a.distance_km else None
+    )
+
+
 def create_completed_from_activity(db: Session, activity_id: int) -> PlannedRace:
     """Promote an activity to a *completed* race row (R2.7 T6) — the workflow for
     "I ran a race and want it in the races dashboard". Pre-fills date, distance,
@@ -41,10 +49,7 @@ def create_completed_from_activity(db: Session, activity_id: int) -> PlannedRace
     if not a.distance_km:
         raise ValueError("Activity has no distance to promote to a race")
 
-    # Prefer real moving time; fall back to pace × distance so the result is set.
-    result_s = a.moving_time_s or (
-        round(a.avg_pace_s_per_km * a.distance_km) if a.avg_pace_s_per_km else None
-    )
+    result_s = _activity_result_s(a)
     name = a.name or (f"Race {a.run_date.isoformat()}" if a.run_date else "Race")
     attr = db.query(ShoeRun).filter(ShoeRun.activity_id == activity_id).first()
 
@@ -58,6 +63,38 @@ def create_completed_from_activity(db: Session, activity_id: int) -> PlannedRace
         activity_id=activity_id,   # T7: back-link the race to the run it was
     )
     db.add(race)
+    db.commit()
+    db.refresh(race)
+    return race
+
+
+def link_activity(db: Session, race_id: int, activity_id: int) -> PlannedRace:
+    """Resolve a race as run by linking it to the activity that was the race
+    (R8.3) — e.g. a planned race the prune kept because a run exists that day.
+    Marks it completed, takes the result from the run, and back-links it (T7)
+    so the past-race row deep-links to the run. The run itself is untouched.
+
+    Raises LookupError if the race or activity is missing; ValueError if the
+    activity is already another race's result (one run can't be two races).
+    Owns the commit.
+    """
+    race = db.query(PlannedRace).filter(PlannedRace.id == race_id).first()
+    if race is None:
+        raise LookupError(f"Race {race_id} not found")
+    a = db.query(Activity).filter(Activity.id == activity_id).first()
+    if a is None:
+        raise LookupError(f"Activity {activity_id} not found")
+    other = (
+        db.query(PlannedRace)
+        .filter(PlannedRace.activity_id == activity_id, PlannedRace.id != race_id)
+        .first()
+    )
+    if other is not None:
+        raise ValueError(f"That run is already the result of {other.name!r}")
+
+    race.activity_id = activity_id
+    race.status = "completed"
+    race.result_time_s = _activity_result_s(a)
     db.commit()
     db.refresh(race)
     return race

@@ -465,6 +465,18 @@ export function useUpdateRace() {
   })
 }
 
+// R8.3 — resolve a past race as run by linking the activity that was the race.
+export function useLinkRaceActivity() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ id, activityId }) => racesApi.linkActivity(id, activityId),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: queryKeys.races() })
+      qc.invalidateQueries({ queryKey: ['home'] })
+    },
+  })
+}
+
 export function useDeleteRace() {
   const qc = useQueryClient()
   return useMutation({

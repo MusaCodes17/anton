@@ -1,6 +1,6 @@
 # Anton — Product Roadmap
 
-**Generated:** 2026-07-04. **Last updated:** 2026-10-09 (R7.1–R7.3 all closed the same day — R7.3 as an honest "unscrapable"; **R7 — Polish & coverage** added and **scheduled** by the runner: R7.1 design cleanup → R7.2 chat confirmation card → R7.3 scraper coverage (Sport Experts). See §R7. Prior update 2026-10-08: **R6 — Daily-use improvements** scoped from a project-state review: docs refresh, retirement forecast → deal radar, my-size deal filter, gated new-run push; and **RA3 — push-to-deploy** scoped in the RA milestone. Neither scheduled; see §R6 and §RA3. Prior update 2026-07-09: **RA — Remote Access & Deployment** added as the next milestone, prioritized ahead of R3 and R4, which are **parked**; RA pulls R5.2 forward and executes it. Plan doc: `REMOTE_ACCESS_PLAN.md`. Prior update 2026-07-08: R2.7.1 Training Depth follow-ups.)
+**Generated:** 2026-07-04. **Last updated:** 2026-10-09 (**R8 — Training page: records, races & dashboards** scoped at the runner's request — R8.1 records rules, R8.2 best efforts inside longer runs, R8.3 past-races cleanup, R8.4 dashboards placeholder; not scheduled, see §R8. Earlier the same day: R7.1–R7.3 all closed the same day — R7.3 as an honest "unscrapable"; **R7 — Polish & coverage** added and **scheduled** by the runner: R7.1 design cleanup → R7.2 chat confirmation card → R7.3 scraper coverage (Sport Experts). See §R7. Prior update 2026-10-08: **R6 — Daily-use improvements** scoped from a project-state review: docs refresh, retirement forecast → deal radar, my-size deal filter, gated new-run push; and **RA3 — push-to-deploy** scoped in the RA milestone. Neither scheduled; see §R6 and §RA3. Prior update 2026-07-09: **RA — Remote Access & Deployment** added as the next milestone, prioritized ahead of R3 and R4, which are **parked**; RA pulls R5.2 forward and executes it. Plan doc: `REMOTE_ACCESS_PLAN.md`. Prior update 2026-07-08: R2.7.1 Training Depth follow-ups.)
 **Inputs:** REDESIGN_PLAN Phase-5 backlog, standing wishlist items recorded in `docs/changelog.md`, the ⚠️ verdicts in `docs/design_decisions.md`, `docs/architecture.md` §16, and user feature requests 2026-07-07.
 **Framing:** Anton is evolving from a finished redesign into a long-term personal AI platform. This roadmap sequences that evolution.
 
@@ -419,6 +419,74 @@ Scoped 2026-10-09 with greps over `frontend/src`; re-run them at session start, 
 - **Sporting Life:** unchanged. Paid unblocking stays declined (D3); don't fight Cloudflare.
 
 **Exit:** Sport Experts either appears in `scrape_health` with successful runs and real deals in the feed, or is marked unscrapable with a documented reason. Update `architecture.md`'s retailer table either way.
+
+---
+
+## R8 — Training page: records, races & dashboards *(scoped 2026-10-09 — not scheduled)*
+
+*Raised by the runner on 2026-10-09 from daily use of the Training (fitness) page. Start with records and past races; the dashboards (R8.4) get their own planning session. Grounded in a code read of `services/strava_stats.py`, `utils/activity_tags.py` and `services/races.py` the same day.*
+
+| # | Item | Description | Why it matters | Dependencies | Complexity |
+|---|---|---|---|---|---|
+| R8.1 | **Records: who counts, and on what clock** – 📋 **scoped** | Rewrite PB eligibility so the tag means what the runner expects, and time records on **elapsed** time, not moving time. Detail in §R8.1. | Today a run stays a record after its Race tag is changed to anything except Intervals/Track — the rule is "eligible unless excluded", the opposite of what the runner expects. Moving time also flatters stop-heavy runs. | R2.7 T1/T3 (tags, current rule) | Low |
+| R8.2 | **Best efforts inside longer runs (Strava-style)** – 📋 **scoped, spike first** | Find the fastest 5k / 10k / half *segment* inside any run (e.g. a 5k PB set during a 10k race) from per-second data, stored per activity. Detail in §R8.2. | Whole-activity bands can never see a 5k inside a 10k. This is how Strava, COROS and Garmin do best efforts. | R8.1 (eligibility + elapsed clock); spike S1 | Medium–High |
+| R8.3 | **Past races with no run attached** – ✅ **Done (2026-10-09)**: build was current; a run that day kept the race; past-race actions added (link the run / mark skipped / delete) | Make sure a plan that didn't happen leaves "Past races": confirm the B17 prune (PR #43) is live in production, then decide whether the rule should be stricter. Detail in §R8.3. | "Parkrun Time Trial" (planned, 2026-07-18, no activity) still shows in production on 2026-10-09, 83 days later. | B17 `races.prune_unrun_races`; RA3 would prevent "merged but not deployed" | Low |
+| R8.4 | **Training dashboards rework** – 📋 **placeholder — plan in its own session** | The charts and cards on the Training page need a broader rework. Not scoped yet; see §R8.4 for what to bring to that session. | Runner: "the dashboards need a lot of work." | R8.1–R8.3 (records and races feed the page) | High (to be sized) |
+
+**Order within R8:** R8.3 step 1 first (a deploy check — minutes). Then R8.1 (small, fixes the visible bug). R8.2 starts with its spike and builds only if the spike shows the data is there. R8.4 is planned after the runner has lived with R8.1–R8.3.
+
+### §R8.1 — Records: who counts, and on what clock
+
+**Today (code read 2026-10-09):** `strava_stats.personal_bests` recomputes on every request from `unified_activities`: whole-activity time within a distance band (5k ±0.3 km, 10k ±0.5, half ±1.0, full ±1.5), fastest wins. Eligibility comes from `activity_tags.pb_exclusion_reason`: `Intervals`/`Track` excluded; **every other tag eligible**; untagged runs excluded only if `elapsed > 1.5 × moving`. Time is `_effective_moving_s` — **moving** time. So re-tagging a race from `Race` to `Tempo`/`Easy`/`Workout` leaves the record in place — the reported bug is the rule working as written.
+
+**Change:**
+- **Clock → elapsed time** (gun time; what Strava uses for best efforts and what race results mean). Moving time stays for pace/volume elsewhere. This alone defeats the original T3 false-PB case: a stop-heavy interval session's rests count against it. Falls back to moving time only when elapsed is missing, and says so in the response.
+- **Eligibility — decision for the runner (default proposed):** split into two lists on the card:
+  - **Race PBs** — official results: activities tagged `Race` or `Parkrun` (and races linked via `planned_races.activity_id`). Re-tagging removes the result immediately (records are computed live).
+  - **Best efforts** — fastest efforts from any run except `Intervals`/`Track` (whole-activity until R8.2 lands, then segments).
+  - *Alternative if the runner prefers one list:* race-only (`Race`/`Parkrun`), dropping training runs entirely.
+- **Retire the 1.5× ratio guard** once the elapsed clock is in (it was the moving-time workaround); keep `excluded_count`/`excluded_reason` for whatever exclusions remain.
+- **Same clock for race results:** synthetic past races (`races.list_races`) report `result_time_s = moving_time_s`; switch to elapsed for consistency.
+- **MCP:** update `get_personal_bests` (and its "whole-activity, not segment" docstring caveat once R8.2 ships).
+
+**Exit:** re-tagging a race to a training tag removes it from Race PBs on the next load; an interval session with standing rests can't top a band; tests cover each tag class, missing elapsed time, and the two-list split.
+
+### §R8.2 — Best efforts inside longer runs
+
+**Feasible, with one data question.** Exact best efforts need per-second (or per-record) distance + time streams; laps are only an approximation (fastest N consecutive auto-laps, exact only when laps are whole km).
+
+**Spike S1 (no product code) — answer three questions:**
+1. **COROS runs:** can the backend's COROS MCP client fetch a FIT file? The COROS MCP server exposes `queryActivityFitFileDownloadUrls` / `downloadActivityFitFiles` (and `queryActivityLapData` as a fallback); `coros_mcp_client` currently calls only `querySportRecords` and `getActivityDetail`.
+2. **The 8-year Strava archive:** the runner's Strava bulk export still has an `activities/` folder (`~/Workspace/export_33354574/`), and `Activity.fit_filename` links archive rows to file names. Check the formats (`.fit.gz` / `.gpx` / `.tcx`) and coverage before promising backfill.
+3. **Parser:** a FIT decoder (e.g. `fitdecode`/`fitparse`) + GPX handling inside the A7 pin set; verify it installs in the Docker image.
+
+**If the spike passes:**
+- **New table `activity_best_efforts`** (`activity_id` FK, `distance_label`, `elapsed_s`, `start_offset_m`, `source` = fit|gpx|laps) — one row per standard distance per activity. Additive E4 migration. Derived data: recomputable, never hand-edited.
+- **Pure sliding-window function** in `app/utils/` over the distance/time stream (two pointers; elapsed time for the segment). Tested against hand-built streams and a known race file.
+- **Compute at confirm time** for new COROS runs (inside the single-writer path's caller, after the run lands — the poller stays a non-writer); **one-off backfill script** for the archive. Raw files are not stored in the DB — parse and keep only the efforts.
+- **Records read efforts** for "Best efforts" (R8.1's second list); Race PBs stay whole-activity race results.
+- **GPS honesty:** cap implausible segments (e.g. faster than a sanity pace) and allow excluding an activity from records — GPS drift in a 10k can fake a 5k.
+
+**Exit:** a 5k effort inside a 10k race shows as the 5k best effort with the 10k activity linked; Sunday's marathon (2026-10-11) is the natural test case — it should yield 5k/10k/half efforts.
+
+### §R8.3 — Past races with no run attached
+
+**Outcome (2026-10-09):** step 1 found the build current; production has a COROS run on 2026-07-18 (8.83 km, a normal run), so B17 rightly kept the race. Step 2, the runner's choice: keep the rule, and give past races **Link the run / Mark skipped / Delete** in the app (`POST /races/{id}/link-activity`). "Spring Half" (completed, unlinked) stays as the runner's record. Design decision B17 updated.
+
+**Today:** B17 `races.prune_unrun_races` (PR #43, 2026-10-08) deletes a race only when it is still `planned`, has no linked activity, is ≥ 3 days past, has **no activity of any kind on that date**, and no pending COROS run that date. It runs whenever races are listed. On a DB copy it pruned "Parkrun Time Trial"; in production on 2026-10-09 it is still listed (`planned`, 2026-07-18, `activity_id` null).
+
+**Step 1 — deploy check (minutes):** most likely the server is running a build from before PR #43. On the server: `git log -1 --oneline`, and if it predates #43, `git pull && docker compose up -d --build`. Opening the Training page then prunes it. If the build *is* current, the blocker is an activity on 2026-07-18 (any run that day counts as "might have been the race") — go to step 2.
+
+**Step 2 — decisions for the runner:**
+- **"Any activity that day" vs "linked activity only."** The current rule spares a race if *any* run happened that day (it might have been the race, unlinked). Stricter option: prune whenever nothing is linked, after the grace period — simpler, but deletes a race you ran and forgot to link.
+- **Completed races with no activity.** "Spring Half" (2026-04-19) is `completed` with a typed result and no linked run — it's kept today. Options: keep (it's your record), offer a "link to activity" prompt, or treat it like an unrun plan.
+- **Prefer a status over a delete?** `skipped` already exists; auto-marking `skipped` instead of deleting keeps history visible but out of "Past races".
+
+**Exit:** no planned-but-unrun race appears in "Past races" past the grace period in production; the chosen rule is recorded in design_decisions (B17 update).
+
+### §R8.4 — Training dashboards rework *(placeholder)*
+
+Plan in a dedicated session. Bring to it: the three or four questions the page should answer at a glance (e.g. "am I building or holding?", "how does this block compare to my last marathon block?", "what's my form now?"), which current cards earn their place (Volume chart, Fitness, Predictions, Records, Races, recent activity), and what's missing. Inputs already in the data: weekly/monthly volume and pace, HR, elevation, COROS training load/focus, tags, races, and R8.1/R8.2 records. Use the `dataviz` approach for chart forms; mobile-first (the PWA is the main surface).
 
 ---
 
