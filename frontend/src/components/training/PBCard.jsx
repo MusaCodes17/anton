@@ -21,8 +21,11 @@ export default function PBCard({ record }) {
         <span className="font-heading text-sm font-extrabold uppercase tracking-[0.06em] text-accent-foreground">
           {BAND_LABEL[band] ?? band}
         </span>
-        <span className="text-2xs font-medium text-faint">
-          {segment ? `in a ${run_distance_km.toFixed(1)} km run` : `${distance_km.toFixed(2)} km`}
+        <span
+          className="whitespace-nowrap text-2xs font-medium text-faint"
+          title={segment ? `Inside a ${run_distance_km.toFixed(2)} km run` : undefined}
+        >
+          {segment ? `in ${run_distance_km.toFixed(1)} km` : `${distance_km.toFixed(2)} km`}
         </span>
       </div>
 
