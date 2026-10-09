@@ -60,3 +60,9 @@ pandas>=2.0.0
 pytest>=8.0.0
 # COROS direct sync §2: Fernet encryption of stored OAuth tokens (already a transitive dep of mcp[cli]; pinned explicitly because we import it directly)
 cryptography>=42
+
+# Best efforts (R8.2): per-second streams from FIT (Strava export, COROS) and
+# GPX (old Strava exports). Both pure Python with no dependencies, so the
+# fastapi/starlette/mcp pin triangle above is untouched. See docs/spikes/best_efforts.md.
+fitdecode==0.11.0
+gpxpy==1.6.2
