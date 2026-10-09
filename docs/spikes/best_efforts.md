@@ -7,7 +7,7 @@
 
 | # | Question | Answer |
 |---|---|---|
-| 1 | Can the backend get FIT files for COROS runs? | **Yes.** The COROS MCP server's `queryActivityFitFileDownloadUrls` with `labelId` + `sportType` returns a plain URL (`https://s3.coros.com/fit/<userId>/<labelId>.fit`). A `HEAD` returned `200`, `application/octet-stream`, 134 KB, with **no signature, auth or expiry** — plain `requests.get` works. `PendingCorosRun.label_id` (and `Activity.coros_activity_id`) already hold the id. Wiring: one more `_call_tool` in `coros_mcp_client` plus an anchored URL regex with a fixture (the C11 contract style). Caveats: each URL counts against a **daily FIT limit** of unknown size; a date-range query (no `labelId`) came back with a garbled error once, while the `labelId` form worked. The COROS FIT itself was not downloaded or parsed in this spike (the URL check was headers only). |
+| 1 | Can the backend get FIT files for COROS runs? | **Yes.** The COROS MCP server's `queryActivityFitFileDownloadUrls` with `labelId` + `sportType` returns a plain URL (`https://s3.coros.com/fit/<userId>/<labelId>.fit`). A `HEAD` returned `200`, `application/octet-stream`, 134 KB, with **no signature, auth or expiry** — plain `requests.get` works. `PendingCorosRun.label_id` (and `Activity.coros_activity_id`) already hold the id. Wiring: one more `_call_tool` in `coros_mcp_client` plus an anchored URL regex with a fixture (the C11 contract style). Caveats: each URL counts against a **daily FIT limit** of unknown size; a date-range query (no `labelId`) came back with a garbled error once, while the `labelId` form worked. **Verified end to end** (runner-approved download of one file to scratch, deleted after): the Oct 6 run parsed to 3,161 one-second samples, 12.53 km, 52:40 elapsed (COROS lists it at 52:39). |
 | 2 | Does the Strava export cover the archive? | **Yes, fully.** All 929 `source='strava'` activities have `fit_filename`, and every file exists: 896 `.fit.gz` + 33 `.gpx`. Of the 710 `Run` activities, 694 have a file and all 694 yield a stream with **1-second samples** (median gap 1 s). The 6 files with no distance stream are non-runs. |
 | 3 | Parser inside the A7 pins / Docker image? | **Yes.** `fitdecode` 0.11 (MIT) and `gpxpy` 1.6 (Apache-2.0) are pure Python with **zero dependencies**, so the FastAPI/Starlette/mcp pin triangle is untouched; the image is `python:3.11-slim-bookworm`. `fitdecode` emits harmless "invalid field size" warnings on some files; silence them. |
 
@@ -59,3 +59,10 @@ The watch measures courses a little long (42.66 vs 42.195), so the segment best 
 2. **Which distances?** Today: 5k / 10k / half / full. Strava also shows 400 m, 1k, mile and 2 mile. Recommendation: add **1k and mile**, since the track data is there.
 3. **Where segments show:** the Best efforts list switches to segments, with the parent run named ("5k inside Taper Week Longueuil 10K"); Race PBs stay whole race results. Recommended, and it matches roadmap §R8.2.
 4. **The COROS FIT URL is public.** Anyone with the URL can download that run, GPS track included. The backend should fetch and parse each file, keep only the numbers, and never store or log the URL.
+
+## Runner's decisions (2026-10-09)
+
+1. **Intervals/Track count** for segment best efforts. They stay out of Race PBs.
+2. **Distances:** 1k, mile, 5k, 10k, half, full.
+3. **Segments replace the Best efforts list**, naming the parent run. Race PBs stay whole race results.
+4. **COROS FIT verified** (see question 1). The URL is handled as recommended: parse in memory, keep only the numbers, never store or log it.
