@@ -4,6 +4,7 @@ API routes for imported Strava training analytics.
 Thin router-level adapter over app.services.strava_stats — no aggregation
 logic lives here; it only exposes the service's PeriodSummary results.
 """
+from dataclasses import asdict
 from datetime import date
 from typing import List, Optional
 
@@ -12,7 +13,7 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.services import strava_stats, fitness as fitness_svc
+from app.services import strava_stats, fitness as fitness_svc, training_trends
 from app.utils.pace import seconds_to_pace
 
 router = APIRouter(prefix="/training", tags=["training"])
@@ -26,6 +27,7 @@ class PeriodSummaryResponse(BaseModel):
     avg_pace: Optional[str] = None
     avg_hr: Optional[int] = None
     elevation_gain_m: float
+    rolling_4wk_km: Optional[float] = None   # weekly only (R8.4.2)
 
     class Config:
         from_attributes = True
@@ -119,3 +121,37 @@ def get_training_records(db: Session = Depends(get_db)):
     runs, 5k → full) and Best efforts (the fastest stretch inside any run, 1k →
     full, R8.2). All on elapsed time."""
     return strava_stats.personal_bests(db)
+
+
+class TaperRaceResponse(BaseModel):
+    name: str
+    race_date: str
+    days_to_race: int
+
+
+class LoadTrendResponse(BaseModel):
+    """"Building or holding?" (R8.4.2): last 7 days vs. the prior 28 days'
+    average week. A heuristic — the thresholds ride along so the UI can say so."""
+    as_of: str
+    verdict: str                 # building | holding | easing | taper | no_baseline
+    ratio: Optional[float] = None
+    last7_km: float
+    last7_runs: int
+    last7_longest_km: float
+    prior_avg_week_km: float
+    prior_longest_km: float
+    taper_race: Optional[TaperRaceResponse] = None
+    building_above: float
+    easing_below: float
+    heuristic: bool = True
+
+
+class TrendsResponse(BaseModel):
+    """The Training page's "Now" answers (R8.4). Form (R8.4.3) joins `load` here."""
+    load: LoadTrendResponse
+
+
+@router.get("/trends", response_model=TrendsResponse)
+def get_training_trends(as_of: Optional[date] = None, db: Session = Depends(get_db)):
+    """Trend verdicts for the Training page; `as_of` defaults to today (Toronto)."""
+    return TrendsResponse(load=asdict(training_trends.load_trend(db, as_of=as_of)))

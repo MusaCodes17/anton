@@ -29,7 +29,7 @@ from app.database import SessionLocal
 from app.models.models import Activity, Deal, OwnedShoe, PriceRecord, Retailer, Shoe, ShoeNote, ShoeRun
 from app.scrapers.orchestrator import ScrapeOrchestrator
 from app.scrapers.lock import ScrapeInProgressError, scrape_guard
-from app.services import rotation, coros as coros_svc, settings as settings_svc, strava_stats, races as races_svc, fitness as fitness_svc, scrape_history as scrape_history_svc, deals as deals_svc, weekly_summary as weekly_summary_svc, watchlist as watchlist_svc, deal_alerts as deal_alerts_svc, race_advisor as race_advisor_svc, coupon_hunter as coupon_hunter_svc, onboarding as onboarding_svc, coros_connection as coros_connection_svc, coros_poller as coros_poller_svc, coros_inbox as coros_inbox_svc
+from app.services import rotation, coros as coros_svc, settings as settings_svc, strava_stats, races as races_svc, fitness as fitness_svc, scrape_history as scrape_history_svc, deals as deals_svc, weekly_summary as weekly_summary_svc, watchlist as watchlist_svc, deal_alerts as deal_alerts_svc, race_advisor as race_advisor_svc, coupon_hunter as coupon_hunter_svc, onboarding as onboarding_svc, coros_connection as coros_connection_svc, coros_poller as coros_poller_svc, coros_inbox as coros_inbox_svc, training_trends as training_trends_svc
 from app.utils.activity_tags import ACTIVITY_TAGS, is_valid_tag
 
 # DNS-rebinding protection (mcp SDK): the Streamable HTTP transport validates
@@ -1205,10 +1205,40 @@ def get_training_summary(period: str = "monthly") -> dict:
                     "avg_pace": s.avg_pace,
                     "avg_hr": s.avg_hr,
                     "elevation_gain_m": s.elevation_gain_m,
+                    **({"rolling_4wk_km": s.rolling_4wk_km} if period == "weekly" else {}),
                 }
                 for s in summaries
             ],
         }
+
+
+@mcp.tool()
+def get_training_trends(as_of: Optional[str] = None) -> dict:
+    """
+    Is the runner building, holding or easing their training? Compares the last
+    7 days' km with the average week of the 28 days before (`ratio`), and gives
+    a `verdict`: building (ratio above 1.10), holding (0.90–1.10), easing (below
+    0.90), taper (easing with a planned race within 3 weeks — `taper_race`
+    names it), or no_baseline (no running in the prior 28 days, so nothing to
+    compare). Also returns last-7-day km, run count and longest run, and the
+    prior average week and longest run.
+
+    It's a heuristic on distance, not a physiological load model — say so if
+    you quote the verdict. Use it for "am I building or holding?", "how's my
+    training load?", "am I tapering properly?". Read-only.
+
+    Args:
+        as_of: ISO date the 7-day window ends on (inclusive); defaults to today
+            in Toronto.
+    """
+    from dataclasses import asdict
+    from datetime import date as _date
+    try:
+        day = _date.fromisoformat(as_of) if as_of else None
+    except ValueError:
+        return {"error": "as_of must be an ISO date (YYYY-MM-DD)"}
+    with get_session() as db:
+        return {"load": asdict(training_trends_svc.load_trend(db, as_of=day))}
 
 
 @mcp.tool()
