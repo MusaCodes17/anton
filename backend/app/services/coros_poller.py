@@ -4,8 +4,10 @@ COROS poller — pulls new runs into the pending queue (COROS direct sync §4).
 Job: each tick lists recent COROS runs, drops anything already queued or already
 logged, prefetches detail + a shoe suggestion for the rest, and inserts them as
 `pending_coros_runs`. **It never writes runs, attributions or mileage** (INV-1,
-INV-9, C9): the only tables it writes are `pending_coros_runs` and
-`coros_sync_state`. Logging stays the runner's confirm, through the one writer.
+INV-9, C9): the only tables it writes are `pending_coros_runs`,
+`coros_sync_state`, and — after polling, for runs the runner has already
+confirmed — the derived best-effort tables (R8.2, services/best_efforts).
+Logging stays the runner's confirm, through the one writer.
 
 Dedup (exactly-once across overlapping lookbacks and restarts):
 1. `pending_coros_runs.label_id` is UNIQUE and rows are never deleted by the
@@ -44,6 +46,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.models.models import CorosSyncState, PendingCorosRun
+from app.services import best_efforts as best_efforts_svc
 from app.services import coros as coros_svc
 from app.services import coros_connection as conn
 from app.services.coros_mcp_client import (
@@ -197,6 +200,9 @@ def _tick(db: Session, trigger: str, client: Optional[CorosMcpClient], today: da
         db.rollback()
         result.errors.append(f"not configured: {exc}")
 
+    if not result.errors:
+        _scan_best_efforts(db, client)
+
     st = _state(db)
     st.runs_found = result.queued
     st.last_error = "; ".join(result.errors)[:1000] if result.errors else None
@@ -205,6 +211,22 @@ def _tick(db: Session, trigger: str, client: Optional[CorosMcpClient], today: da
     db.commit()
     logger.info("COROS poll (%s): listed=%d queued=%d errors=%d", trigger, result.found, result.queued, len(result.errors))
     return result
+
+
+def _scan_best_efforts(db: Session, client: CorosMcpClient) -> None:
+    """R8.2: fetch FIT files for a few confirmed COROS runs and store their best
+    efforts. Best-effort in both senses — a failure here is logged and never
+    marks the poll failed (the inbox is what the tick is for)."""
+    try:
+        summary = best_efforts_svc.scan_coros(db, client)
+        if summary.scanned or summary.failed:
+            logger.info("COROS best efforts: scanned=%d failed=%d", summary.scanned, summary.failed)
+    except conn.CorosAuthError as exc:
+        db.rollback()
+        conn.mark_reauth_required(db, str(exc))
+    except Exception as exc:  # never let derived data break the poll
+        db.rollback()
+        logger.warning("COROS best-effort scan skipped: %s", type(exc).__name__)
 
 
 def _handle_run(db: Session, client: CorosMcpClient, run: CorosRun) -> bool:

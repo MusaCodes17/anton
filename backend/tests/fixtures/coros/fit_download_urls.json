@@ -1,0 +1,12 @@
+{
+ "jsonrpc": "2.0",
+ "id": 7,
+ "result": {
+  "content": [
+   {
+    "type": "text",
+    "text": "Activity FIT file download URL(s):\n1. 400000000000000001.fit\n   https://s3.coros.com/fit/100000000000000000/400000000000000001.fit"
+   }
+  ]
+ }
+}
