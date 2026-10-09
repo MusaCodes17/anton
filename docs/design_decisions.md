@@ -205,6 +205,17 @@
 **Trade-offs:** Race PBs depend on tagging or linking — most of the 8-year archive is untagged, so that list starts sparse. Still whole-activity times; segments inside longer runs are R8.2. A typed race result with no linked run is not a Race PB.
 **Verdict:** ✅ Keep for Race PBs. Best efforts moved to segments in R8.2 (B19), and the Intervals/Track exclusion went with it.
 
+### B20. The Training page's "Now" answers are labelled heuristics computed at read time (R8.4, 2026-10-09)
+**Chosen:** three verdicts, each from one service function, served on REST + MCP and shown as the "Now" strip (`NowStrip.jsx`):
+- **Load** (`training_trends.load_trend`): last 7 days' km ÷ the prior 28 days' average week. Above 1.10 building, 0.90–1.10 holding, below 0.90 easing; easing within 21 days of a planned race reads taper. Km, not COROS training load (only ~10 runs carry it).
+- **Form** (`training_trends.form_trend`): median metres per heartbeat over steady runs (untagged / Easy / Long Run, ≥ 5 km, HR present, elapsed ≤ 1.2× moving), last 42 days vs. the 84 before. Above +3% improving, below −3% slipping; fewer than 5 steady runs in either window → not_enough_data. m per beat beat pace-in-an-HR-band on the archive: the same ~2.9% monthly noise, but it keeps every steady run (the band dropped about half) and correlates 0.15 with effort vs. −0.76 for pace. Median because 703 of 710 runs are untagged, so workouts sit among the "steady" ones.
+- **Readiness** (`race_advisor.race_readiness`): a checklist with numbers, never a score. Block = 16 / 12 / 10 / 8 weeks ending in race week (marathon / half / 10k / 5k); long runs ≥ 28 / 16 / 12 / 8 km, 3 needed; longest-run targets 32 / 18 / 15 / 10 km; key effort = the best effort at ~half the race distance in the last 8 weeks vs. target pace.
+
+Exact thresholds read the conservative way (1.10 and 0.90 are holding; ±3.0% is steady; 28.0 km counts). Every response carries its thresholds and `heuristic: true`, so each surface labels the verdict. Nothing is stored (INV-7).
+**Why:** the runner asked for answers, not totals. Read-time verdicts over the canonical feed can't drift from the Records card or the Volume chart; the shared `strava_stats.best_efforts_among` keeps the Records card, the 90-day bests and readiness on one rule.
+**Trade-offs:** all thresholds are judgment calls, tuned on one runner's archive. Heat and hills move HR, so m per beat dips in summer, uncorrected. Where runs aren't scanned yet, the whole-run fallback can put an easy run in as a "recent best" (a 10k at 9:00/km reads 160% off the all-time best); scanning (R8.2) fixes this as the backfill and COROS FITs fill in.
+**Verdict:** ✅ Keep. 🔁 Revisit thresholds after a season of real use; revisit form if COROS exposes a usable training-load or HRV history.
+
 ### B19. Best efforts are segments, stored per run, scanned off the request path (R8.2, 2026-10-09)
 **Chosen:** the Best efforts list is the fastest stretch inside any run at 1k, mile, 5k, 10k, half and full, found by a sliding window over the run's per-second stream (`app/utils/best_efforts`). The results are **stored** in `activity_best_efforts`, one row per (run, distance), with `activity_effort_scans` recording which runs were scanned. Sources:
 - the Strava archive, via a one-off backfill against the bulk export (`scripts/backfill_best_efforts`);

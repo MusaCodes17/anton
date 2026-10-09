@@ -5,6 +5,47 @@
 
 ---
 
+## R8.4.3–R8.4.5 — Form, readiness and the "Now" strip (R8 complete) — 2026-10-09
+
+Built by three subagents (R8.4.3 and R8.4.4 in parallel worktrees, R8.4.5 after both merged), reviewed and merged here.
+
+**[ADDED] R8.4.3 — "What's my form now?"** (`training_trends.form_trend`, on `GET /api/training/trends` as `form` and in `get_training_trends`)
+- Efficiency = **metres per heartbeat** (distance ÷ (avg HR × moving minutes)), median over steady runs: untagged / Easy / Long Run, ≥ 5 km, HR present, elapsed ≤ 1.2× moving. Chosen over pace-in-an-HR-band on 384 steady runs: equal month-to-month noise (~2.9%), but the band dropped about half the runs and moved with the band edges; m per beat correlates 0.15 with avg HR vs. −0.76 for pace.
+- Verdict: last 42 days vs. the 84 before. Above +3% **improving**, below −3% **slipping**, else **steady** (exactly ±3.0 is steady); fewer than 5 steady runs in either window → **not_enough_data**. Also: 12 monthly values (null below 4 steady runs), 90-day vs. all-time 5k/10k bests, and the fitness snapshots as a step series.
+- The Best-efforts rule moved into `strava_stats.best_efforts_among`, shared by the Records card, the 90-day bests and readiness, so the three can't disagree. Records output unchanged.
+
+**[ADDED] R8.4.4 — "Am I ready for race X?"** (`race_advisor.race_readiness`, `GET /api/races/readiness`, and `readiness` in `get_race_block_context`, which also takes `as_of`)
+- Next race = soonest non-skipped race on or after `as_of`; a direct read, so no pruning side effect. No race → `has_race: false` and the card hides.
+- Block: 16 / 12 / 10 / 8 calendar weeks ending in race week (marathon / half / 10k / 5k), read up to the day before the race. Chosen over "since the last race", which would cut a marathon build at its tune-up half.
+- Checklist (met / not_met / info / n/a, each with its rule and numbers; never a score): weeks to go, peak week, longest run (target 32 / 18 / 15 / 10 km), long runs (≥ 28 / 16 / 12 / 8 km, 3 needed; exactly the threshold counts), key effort (best at ~half the race distance in the last 8 weeks vs. target pace; n/a without a target time).
+- `personal_bests` gained `date_from`/`date_to` so recent efforts follow the Records rules. `race_block_context` now defaults to today in Toronto.
+
+**[ADDED] R8.4.5 — the "Now" strip** (`components/training/NowStrip.jsx`, first on the Training page)
+- Three cards — Load, Form, Next race — each an icon + verdict in words, a numbers line, one small chart and a quiet "Heuristic: …" note built from the response's thresholds. Load: 12 weekly bars with the 4-week average. Form: monthly m per beat, with gaps. Next race: the checklist. Stacked at 380 px; three columns on desktop, two when no race is planned.
+- Empty states for no_baseline / not_enough_data, skeletons while loading, inline error with Try again.
+- Predictions shows "as of"; Fitness gets a VO₂ max step sparkline once there are 2+ snapshots.
+- Invalidations: race writes refresh trends (taper window); activity edits and COROS confirm refresh readiness; Sync now refreshes trends. Fixed a pre-existing gap: `useLogRun` and `useDeleteShoeRun` refreshed none of activities / training / readiness.
+
+**[FIXED]** Fitness snapshot dates now read in Toronto everywhere (`fitness.captured_local_date`). Before, `form_trend` used Toronto while `race_advisor` and the `training://fitness` resource used the UTC date, so a 03:20 UTC reading showed on two different days.
+
+**[DECIDED]** B20 — the "Now" answers are labelled heuristics computed at read time, with every threshold and the reason for it. Roadmap R8.4 ✅; **R8 complete**.
+
+**[VERIFIED]**
+- `test_form_trend.py` +35 (13 steady-filter edges, no-HR runs excluded, ±3.0 boundaries, outlier-proof median, 5-run minimum, window edges, months, 90-day edge, Records-card agreement, fitness dates, REST == MCP) and `test_race_readiness.py` +21 (no race hides, race selection incl. skipped / completed / race day, block edges, thresholds at exactly 28.0, key effort met / not met / n/a, no pruning side effect, REST == MCP). Suite **720 → 776 + 1 skipped** in the main checkout. Two oauth tests failed only inside the agents' worktrees (no `backend/.env` there) and pass here.
+- Real archive (scratch copies; the real DB's alembic version `8b9c0d1e2f3a` and mtime unchanged):
+  - **Form**, read on the 15th of each month: 2025 improving Mar–Jun and slipping Sep–Oct; 2026 improving in April before the Spring Half; steady +0.9% as of 2026-07-16.
+  - **Best 10k**: 34:28 inside the Longueuil 10K is both the 90-day and the all-time best.
+  - **Spring Half readiness, as of 2026-04-12**: longest run 34.0 km met, 33 long runs met, key 10k effort not met against a 3:47/km target.
+  - **Beneva readiness**: longest 31.0 km (not met, target 32), 1 of 3 long runs ≥ 28 km. The copy's runs stop in July, so this is not this week's real picture.
+- `vite build` clean. The strip was checked at desktop and 375 px in every reachable state on a date-shifted scratch copy: building, holding/easing, taper, no_baseline, steady, not_enough_data, readiness met / not met / hidden. No horizontal scroll and 0 console errors. Not seen on screen: improving / slipping (the data didn't produce them) and the in-card error state.
+
+**[NOT DONE] / known**
+- Where runs aren't scanned, the whole-run fallback can make an easy run the "recent best" (a 10k at ~9:00/km reads 160% off). Production runs are scanned by the R8.2 backfill and the COROS FIT scans, which removes most of this.
+- `race_block_context.next_race` (through `list_races`) and `readiness.race` can name different races when the soonest one is skipped. Left as is.
+- The readiness thresholds are judgment calls; the runner should look them over (B20).
+
+---
+
 ## R8.4.2 — "Building or holding?" — load trend — 2026-10-09
 
 **[ADDED]**
