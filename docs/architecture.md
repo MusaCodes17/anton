@@ -240,7 +240,7 @@ Two aggregates, one canonical run store, several enforced invariants:
 
 **Conventions worth knowing**
 - Pace now has **one persisted representation**: integer seconds-per-km on `activities`, formatted to `"M:SS/km"` only at boundaries (`rotation.seconds_to_pace`). Residual duplication: the `ShoeRun.avg_pace` property proxy re-implements the formatting inline (models can't import services), and `coros_client` carries a third copy — see §15.
-- "Personal bests" are explicitly *whole-activity* times within a distance band, not segment PBs, and the code insists this be described accurately downstream.
+- Records (R8.1, B18) come as two lists — **Race PBs** (Race/Parkrun-tagged or race-linked runs) and **Best efforts** (any run except Intervals/Track) — both whole-activity *elapsed* times within a distance band, not segments inside a longer run; the code insists this be described accurately downstream.
 - Timezone: America/Toronto is the canonical local zone for run dates (hard-coded in the Strava importer; COROS sync protocol passes it explicitly).
 
 ---

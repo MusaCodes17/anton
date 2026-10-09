@@ -161,7 +161,7 @@ No externally-sourced run is ever auto-logged. The COROS flow (the backend polle
 Cost-per-km, lifetime pace, retirement percentage, race countdowns, required race pace, weekly volume — all computed from primitives at read time, server-side, identically for every client. The two exceptions are deliberate: the mileage counter (§4.5, a ledger with an invariant) and the deal's qualifying-savings snapshot (MSRP-based since B9-v2; the deal's `target_price` column survives as a nullable reference only, refreshed on change).
 
 ### 4.12 Training semantics
-- **Personal bests are whole-activity bests** within distance bands (fastest average pace for a run of ~5 km, ~10 km, …) — *not* segment PBs, and the domain insists this never be misrepresented.
+- **Records are whole-activity bests** within distance bands (fastest elapsed time for a run of ~5 km, ~10 km, …), in two lists since R8.1: **Race PBs** (runs tagged Race/Parkrun or linked to a race) and **Best efforts** (any run except Intervals/Track). Never segment PBs, and the domain insists this never be misrepresented.
 - **Weekly/monthly pace is distance-weighted** (total distance over total moving time), not an average of averages.
 - Pace below 0.5 km of distance is meaningless and left null rather than computed.
 - **America/Toronto is the calendar**: a run's date is its local date, and getting this wrong is known to shift 145 historical evening runs across day boundaries.
@@ -254,7 +254,7 @@ The asymmetry is deliberate and worth stating: **the deal domain forgets on comm
 | **retirement pipeline** | Attention state for shoes ≥ 75% of mileage limit. Not a status. | |
 | **replacement deal** | Active deal on a tracked shoe whose `shoe_type` matches an owned shoe's — the heuristic bridge (4.3). | |
 | **shoe_type** | The runner's category vocabulary — the cross-domain join key. **Backend-owned since R2.4** (`app/utils/shoe_types.py`, served at `GET /api/shoe-types`, validated on write); values enumerated in the §4.3 table. | Was free strings in four unvalidated copies (tech_debt P1-5, the `shoe_type` half now resolved); still treat vocabulary edits as schema-grade — both domains must agree. Owned-shoe `status` remains unvalidated (M2). |
-| **personal best** | Whole-activity best within a distance band (4.12). | Never present as a segment PB. |
+| **personal best** | Whole-activity elapsed-time best within a distance band (4.12): a *Race PB* (race-tagged or race-linked run) or a *Best effort* (any run but Intervals/Track). | Never present as a segment PB. |
 | **Anton** | The platform. **Son of Anton** — the embedded assistant. | In-code strings say "Anton" (R1, 2026-07-14); the **GitHub repo and local folder** were renamed to `anton` (R2/R3, 2026-07-14). Only the `shoe_deals.db` filename still carries the old name (retained deliberately — Litestream replica path keys off it; E6). |
 
 ### 7.2 Conventions in the schema and code

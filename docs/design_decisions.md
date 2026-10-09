@@ -187,7 +187,7 @@
 **Why:** the PB algorithm bands *whole-activity* times, so a stop-heavy interval session could fake a record at its rep distance. The tag is the clean intentional signal; the ratio is the honest fallback for the untagged 8-year archive.
 **Advantages:** removes false records without hiding legitimate fast efforts; transparent (the UI can prompt tagging).
 **Trade-offs:** untagged history relies on a heuristic ratio (1.5× is a judgment call); tagging improves accuracy over time. These are still whole-activity bests, not segment PBs (unchanged).
-**Verdict:** 🕐 Keep for now. Revisit the ratio if it proves too tight/loose once more history is tagged.
+**Verdict:** 🔁 **Superseded by B18 (R8.1, 2026-10-09).** The tag rule held for exclusions but was "eligible unless excluded", so a race re-tagged as training stayed a record; the elapsed clock made the ratio guard unnecessary.
 
 ### B17. Planned races that were never run are pruned at read time (PWA feedback, 2026-10-08)
 **Chosen:** `races.prune_unrun_races`, called from `list_races` (the seam REST, MCP, the weekly summary and the race advisor all read through), deletes a race that is still `planned`, has no linked activity, is ≥ `UNRUN_RACE_GRACE_DAYS` (3) past, and has neither an `Activity` nor a *pending* `pending_coros_runs` row on its date.
@@ -197,6 +197,13 @@
 **Verdict:** 🕐 Keep for now. If a read-path write ever bites, move the call into the scheduled COROS tick.
 **Update (R8.3, 2026-10-09):** the "any activity that day keeps the race" trade-off bit on the case it was named for: a normal run on 2026-07-18 kept the skipped Parkrun Time Trial. Kept the cautious rule (the runner chose it over linked-only pruning or auto-`skipped`) and added the human tiebreaker the rule was missing: past races still `planned` get Link the run / Mark skipped / Delete on the card (`races.link_activity`).
 
+
+### B18. Records: Race PBs + Best efforts, on elapsed time (R8.1, 2026-10-09)
+**Chosen:** `strava_stats.personal_bests` returns two lists per distance band. **Race PBs**: runs tagged Race/Parkrun, or linked to a planned race (`planned_races.activity_id`). **Best efforts**: any run except Intervals/Track, races included. Both are timed on **elapsed** time (moving time only when a run has no elapsed time, flagged `clock="moving"`); pace is derived from that time. Race results taken from runs (`races._activity_result_s`, synthetic past races) use the same clock. T3's untagged `elapsed > 1.5 × moving` guard is retired.
+**Why:** the runner expected a re-tagged race to stop being a record; under B16 every non-interval tag stayed eligible. Elapsed (gun) time is what race results and Strava best efforts mean, and it penalises a stop-heavy session on its own — the job the ratio guard did heuristically.
+**Advantages:** the tag means what the runner expects (computed live, so re-tagging takes effect on the next load); one clock across records and race results; no heuristic constant. Completed races with no run can be linked from the Races card (R8.3 actions) so they count.
+**Trade-offs:** Race PBs depend on tagging or linking — most of the 8-year archive is untagged, so that list starts sparse. Still whole-activity times; segments inside longer runs are R8.2. A typed race result with no linked run is not a Race PB.
+**Verdict:** ✅ Keep. Revisit Best efforts when R8.2 lands (segments replace whole-activity times there; Race PBs stay whole results).
 ---
 
 ## C. AI Layer
@@ -563,6 +570,7 @@ Supporting choices:
 | R5.2 — "Remote access story" as an open long-term-roadmap question | The original framing: private overlay (Tailscale/LAN) vs. hosted, undecided, gated behind R2.1/R2.2 | **Pulled forward and executed as RA1** (2026-07-09 – 2026-08-29). The deciding fact, found at RA1.0 (D0): claude.ai connectors call from Anthropic's cloud infrastructure, not the user's device, so a private overlay cannot satisfy the mobile-sync goal — a public HTTPS endpoint is required. RA1.0–RA1.6 (hosting, auth v2, OAuth 2.1, deployment substrate, hardening, backups, cutover, docs) collectively answer what R5.2 asked; RA1.5's two exit criteria (mobile sync E2E on cellular, DC-IP scrape comparison) both closed 2026-08-29 with no degradation and a fully working connector. R5.2 as a distinct open roadmap item is retired — its content now lives in the RA milestone and `docs/archive/REMOTE_ACCESS_PLAN.md`, not as a future decision to make. | 2026-07-09 (opened) → 2026-08-29 (closed via RA1.5) |
 | COROS sync is connector-mediated (C6: "client-side agent prompt, not a backend integration") | Claude Desktop reads the COROS MCP connector and calls Anton's tools; a human-plus-LLM in the data path | C11 — backend OAuth client + poller + pending queue; the connector becomes optional | 2026-10-07 (R5.7) |
 | Learning: "MCP servers can't be called from app backends; an LLM mediator is required" | True of the Claude-connector setup (desktop-managed OAuth) | C11 — COROS now explicitly supports self-service app backends as MCP clients (open DCR, PKCE, refresh tokens) | 2026-10-07 (R5.7) |
+| B16 — PB eligibility by tag exclusion + untagged 1.5× elapsed/moving guard, timed on moving time | R2.7 T3: "eligible unless excluded" | B18 — Race PBs + Best efforts on elapsed time | 2026-10-09 (R8.1) |
 
 ---
 

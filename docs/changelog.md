@@ -5,6 +5,30 @@
 
 ---
 
+## R8.1 — Records: Race PBs + Best efforts, on elapsed time — 2026-10-09
+
+**[CHANGED] `strava_stats.personal_bests` → two lists** (runner chose two lists over race-only):
+- **Race PBs:** runs tagged Race/Parkrun, or linked to a planned race. Records are computed live, so re-tagging a race removes it on the next load — the reported bug.
+- **Best efforts:** any run except Intervals/Track, races included.
+- **Clock:** elapsed time; moving time only when a run has none (`clock: "moving"`, shown on the card). Pace is derived from the same time. T3's untagged 1.5× ratio guard is gone: `pb_exclusion_reason(tag)` now only excludes Intervals/Track, and `PB_ELAPSED_RATIO` is removed (`RACE_RESULT_TAGS` replaces `PB_ALWAYS_INCLUDED_TAGS`).
+- **Race results** from runs use the same clock: `races._activity_result_s` (promote and link) and synthetic past races now prefer elapsed time.
+- **API:** `GET /training/records` returns `race_pbs` + `best_efforts` (was `records`). The `get_personal_bests` MCP tool matches, and its docstring says how to describe each list.
+
+**[CHANGED] UI:**
+- The Records card gets a Race PBs / Best efforts toggle, keeping the card's height, with an empty state that says how to get a race listed.
+- Past completed races with no run attached get **Link the run**, so a typed-in race like "Spring Half" can count. Linking refreshes the records, and so does deleting a race.
+
+**[DECIDED]** B18 supersedes B16. `architecture.md` and `domain_model.md` wording updated.
+
+**[VERIFIED]**
+- `test_activities_union.py`: 6 PB tests replaced by 8. Covered: elapsed beats moving, re-tag removes a Race PB, Parkrun counts, an untagged race-linked run counts, Intervals/Track excluded, the activity id, and promote uses elapsed. Suite **652 → 654 + 1 skipped**.
+- `vite build` clean; no new console errors.
+- On a scratch DB copy, records are unchanged in value (5k 15:47, 10k 34:55, half 1:17:11, full 2:43:38; these races' elapsed equals moving). Race PBs showed the 10k and the full (the only Race-tagged runs). Linking Spring Half to "21k de Montreal" added the half. Desktop and 375 px both pass. Live DB mtime unchanged.
+
+**[NOT DONE]** Production Race PBs will be sparse until older races are tagged or linked. Candidates: the 5k time trial (2025-09-26), and Spring Half → its run on 2026-04-19.
+
+---
+
 ## Docs review — six docs archived — 2026-10-09
 
 **[FIXED] Restored `docs/archive/` (12 files) and `docs/MAINTENANCE_PLAN.md`.** The R8.3 docs commit (`23b707a`, merged in #48) ran `git add docs`, which staged working-tree deletions of those files. They came back from its parent in their own commit.
