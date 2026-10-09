@@ -330,6 +330,20 @@ Intervals and Track **count** (the runner's call). A stretch is continuous runni
 **Trade-offs:** Every confirmed write costs one extra LLM turn (the follow-up summary). A turn that mixes reads and a write still runs the reads, but their results are discarded with the ended turn. Edit exists only for log-run; other proposals are confirm-or-cancel.
 **Verdict:** ✅ Keep. 🔁 Revisit if MCP clients gain a standard elicitation/confirmation primitive the server could use for every client.
 
+---
+
+### C13. COROS fitness snapshots are saved by the poller without confirmation (R8.4.1, 2026-10-09)
+**Chosen:** The COROS poll tick (`coros_poller.run_tick`, scheduled and **Sync now**) reads `queryFitnessAssessmentOverview` and appends an `athlete_metrics` row through `fitness.record_if_changed` — only when a value differs from the newest snapshot. It reads when the tick queued a new run (COROS recomputes fitness after a run), on a manual sync, and on the first tick of a Toronto day; not every 15 minutes. No confirmation step.
+**Why:** The runner's call: there is nothing to decide about a reading COROS computed. INV-8 / C9 gate *runs* because a run moves the mileage ledger and a wrong one double-counts; a fitness snapshot touches no ledger, no attribution and no run, and the runner can't correct it anyway — COROS is the source of truth. Without automatic capture there is no VO₂ max / threshold history for R8.4.3 (one manual row in three months).
+**Key sub-decisions:**
+- **Only-if-changed** keeps the history's steps real. A metric COROS stops reporting counts as a change and is stored as None — nothing is carried forward.
+- **Never fails the poll:** like the R8.2 best-effort scan, a fetch/parse failure is logged and the tick stays a success; the day counts as checked, so a broken parser logs once a day. An auth failure still marks `reauth_required`.
+- **"Checked today" is in memory** (INV-9, one process): a restart costs at most one extra call — not worth a column.
+- The prose parser follows C11: anchored regexes, fixture-pinned (`fitness_overview.json`); a missing line is None, a garbled present line is a `CorosContractError`.
+**Advantages:** Fitness stays current with no Claude session; the card and the coming trend chart read the same rows.
+**Trade-offs:** One more COROS prose format to track. COROS reports whole numbers, so the history moves in 1-point steps. Supersedes the "written via the Claude-Desktop agent" wording of R2.7 T5 (the manual `record_athlete_metrics` path stays).
+**Verdict:** ✅ Keep. 🔁 Revisit if COROS exposes fitness history (backfill) or if a reading ever needs runner judgement.
+
 ## D. Scraping
 
 ### D1. Platform base classes + bespoke subclasses + DB-driven dynamic registry

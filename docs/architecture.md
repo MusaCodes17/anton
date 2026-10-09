@@ -203,7 +203,7 @@ Single-shoe and single-retailer scrapes remain synchronous request-scoped calls 
 - `shoe_notes` — timestamped, mileage-anchored journal (`mileage_at_note` always captured server-side; `triggered_by` = manual | checkpoint).
 - `strava_gear_mappings` — exact stripped gear string → owned shoe; nullable `owned_shoe_id` encodes "known but deliberately unmapped". (Historical: consumed by the one-time backfill; retained as the record of those decisions.)
 - `planned_races` — races with target time; countdown/target-pace derived at the boundary, never stored.
-- `athlete_metrics` — periodic COROS athlete-level fitness snapshots (R2.7 T5): `vo2max`, `threshold_pace_s_per_km`, `race_predictions` JSON; newest read for the Training fitness card.
+- `athlete_metrics` — COROS athlete-level fitness snapshots (R2.7 T5): `vo2max`, `running_level`, `threshold_pace_s_per_km`, `race_predictions` JSON; newest read for the Training fitness card. Since R8.4.1 the COROS poll tick appends one whenever COROS's reading changes (C13), so the rows are a history; `record_athlete_metrics` remains the manual path.
 - `checkpoint_prompts` — records which 100 km-checkpoint note prompts have been shown per owned shoe (R2.6), unique `(owned_shoe_id, checkpoint_km)`. Moved off browser localStorage so a second device doesn't re-prompt; UI-state, not a mileage fact.
 
 **AI / assistant**
