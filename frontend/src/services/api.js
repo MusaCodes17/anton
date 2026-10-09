@@ -223,6 +223,8 @@ export const trainingApi = {
     }).then((r) => r.data),
   records: () => client.get('/api/training/records').then((r) => r.data),
   fitness: () => client.get('/api/training/fitness').then((r) => r.data),
+  // The "Now" strip's load + form answers (R8.4.2/R8.4.3) — one round trip.
+  trends: () => client.get('/api/training/trends').then((r) => r.data),
 }
 
 // ============== ACTIVITIES (unified run feed) ==============
@@ -242,6 +244,8 @@ export const racesApi = {
   create: (data) => client.post('/api/races', data).then((r) => r.data),
   update: (id, data) => client.patch(`/api/races/${id}`, data).then((r) => r.data),
   remove: (id) => client.delete(`/api/races/${id}`).then((r) => r.data),
+  // "Am I ready for my next race?" checklist (R8.4.4); has_race false → hide the card.
+  readiness: () => client.get('/api/races/readiness').then((r) => r.data),
   linkActivity: (id, activityId) =>
     client.post(`/api/races/${id}/link-activity`, { activity_id: activityId }).then((r) => r.data),
 }

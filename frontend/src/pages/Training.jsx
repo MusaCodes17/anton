@@ -1,8 +1,9 @@
 import { useMemo, useState } from 'react'
-import { Activity, ListOrdered, TrendingUp } from 'lucide-react'
+import { Activity, Compass, ListOrdered, TrendingUp } from 'lucide-react'
 import PageHeader from '@/components/PageHeader'
 import PlannedRacesCard from '@/components/training/PlannedRacesCard'
 import VolumeChart from '@/components/training/VolumeChart'
+import NowStrip from '@/components/training/NowStrip'
 import FitnessCard from '@/components/training/FitnessCard'
 import PredictionsCard from '@/components/training/PredictionsCard'
 import RecordsCard from '@/components/training/RecordsCard'
@@ -23,6 +24,8 @@ import {
   useTrainingSummary,
   useTrainingRecords,
   useTrainingFitness,
+  useTrainingTrends,
+  useRaceReadiness,
   useActivities,
   useOwnedShoes,
 } from '@/hooks/useApi'
@@ -131,6 +134,13 @@ export default function Training() {
   const ranged = useTrainingSummary(period, range)       // the volume chart honours the range
   const records = useTrainingRecords()
   const fitness = useTrainingFitness()
+
+  // "Now" strip (R8.4.5). The Load card's chart is the last 12 ISO weeks of
+  // the weekly summary — fixed at mount, independent of the range picker.
+  const trends = useTrainingTrends()
+  const readiness = useRaceReadiness()
+  const recentWeeksRange = useMemo(() => ({ date_from: isoDaysAgo(7 * 12 + 6), date_to: isoToday() }), [])
+  const recentWeekly = useTrainingSummary('weekly', recentWeeksRange)
   const ownedShoes = useOwnedShoes()
 
   // Activities filters + "load more" (limit grows; offset stays 0 so the list
@@ -203,6 +213,26 @@ export default function Training() {
     return { xTicks: ticks, xTickFormatter: (lab) => map[lab] ?? lab }
   }, [period, chartData])
 
+  // Last 12 ISO weeks, oldest first. The summary omits empty weeks; they're
+  // filled with 0 km here (presentation only — no number is derived).
+  const recentWeeks = useMemo(() => {
+    const byKey = Object.fromEntries((recentWeekly.data || []).map((b) => [b.period, b]))
+    const out = []
+    for (let i = 11; i >= 0; i--) {
+      const d = new Date()
+      d.setDate(d.getDate() - 7 * i)
+      const key = currentWeekKey(d)
+      const b = byKey[key]
+      out.push({
+        period: key,
+        fullLabel: labelWeek(key).fullLabel,
+        total_km: b?.total_km ?? 0,
+        rolling_4wk_km: b?.rolling_4wk_km ?? null,
+      })
+    }
+    return out
+  }, [recentWeekly.data])
+
   const summaryLoading = monthly.isLoading || weekly.isLoading || trailing365.isLoading
 
   // A range edit invalidates the current "load more" depth.
@@ -212,12 +242,19 @@ export default function Training() {
     <div className="space-y-8">
       <PageHeader eyebrow="TRAIN" title="Training">
         <nav className="hidden gap-4 text-sm text-muted-foreground sm:flex">
+          <a href="#now" className="focus-ring rounded hover:text-foreground">Now</a>
           <a href="#trends" className="focus-ring rounded hover:text-foreground">Trends</a>
           <a href="#races" className="focus-ring rounded hover:text-foreground">Races</a>
           <a href="#records" className="focus-ring rounded hover:text-foreground">Records</a>
           <a href="#activities" className="focus-ring rounded hover:text-foreground">Activities</a>
         </nav>
       </PageHeader>
+
+      {/* ── Now: Load · Form · Next race (R8.4.5) — answers first ── */}
+      <section className="space-y-4">
+        <SectionHeading id="now" icon={Compass} title="Now" />
+        <NowStrip trends={trends} readiness={readiness} weeks={recentWeeks} />
+      </section>
 
       {/* ── Trends (volume first) ──────────────────────────────── */}
       <section className="space-y-4">
@@ -321,7 +358,7 @@ export default function Training() {
         <div id="records" className="scroll-mt-20">
           <RecordsCard records={records} />
         </div>
-        <FitnessCard data={fitness.data} />
+        <FitnessCard data={fitness.data} history={trends.data?.form?.fitness} />
         <PredictionsCard data={fitness.data} />
       </section>
 
