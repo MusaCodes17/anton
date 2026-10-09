@@ -3,6 +3,7 @@ Chat API — streaming endpoint that calls Claude (or OpenAI) with access to MCP
 """
 import json
 import os
+from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
@@ -16,8 +17,14 @@ from app.models.schemas import (
     ConversationSummary,
     ConversationUpsert,
 )
-from app.services import chat_history
-from app.services.chat_service import PROVIDERS, get_models, read_mcp_resource, stream_chat
+from app.services import chat_history, chat_proposals
+from app.services.chat_service import (
+    PROVIDERS,
+    call_tool_once,
+    get_models,
+    read_mcp_resource,
+    stream_chat,
+)
 from app.services.rate_limit import chat_limiter
 
 router = APIRouter(prefix="/chat", tags=["chat"])
@@ -182,6 +189,51 @@ def delete_conversation(conversation_id: str, db: Session = Depends(get_db)):
     return {"success": True, "deleted": deleted}
 
 
+# ── Confirmation cards (R7.2, C12) ──────────────────────────────────────────
+# The stream holds write-tool calls as proposals; these run or decline one.
+# The client sends only the id — the held arguments are the ones that run.
+
+class ProposalCancel(BaseModel):
+    # Set when the runner used Edit (the app's own form) instead of Confirm.
+    edited_values: Optional[dict] = None
+
+
+@router.get("/proposals/{proposal_id}")
+def get_proposal(proposal_id: str):
+    """One proposal's current state — polled while a long tool runs."""
+    try:
+        return chat_proposals.to_dict(chat_proposals.get(proposal_id))
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
+
+
+@router.post("/proposals/{proposal_id}/confirm")
+async def confirm_proposal(proposal_id: str):
+    """Run the held call exactly as proposed. Idempotent: repeating it never
+    runs the tool twice. status="executing" means poll GET for the result."""
+    try:
+        proposal = await chat_proposals.confirm(proposal_id, executor=call_tool_once)
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc))
+    return chat_proposals.to_dict(proposal)
+
+
+@router.post("/proposals/{proposal_id}/cancel")
+def cancel_proposal(proposal_id: str, payload: ProposalCancel | None = None):
+    """Decline the held call; nothing runs."""
+    try:
+        proposal = chat_proposals.cancel(
+            proposal_id, edited_values=payload.edited_values if payload else None
+        )
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc))
+    return chat_proposals.to_dict(proposal)
+
+
 @router.post("/message")
 async def chat_message(request: ChatRequest, _rl: None = Depends(enforce_chat_rate_limit)):
     """
@@ -189,6 +241,7 @@ async def chat_message(request: ChatRequest, _rl: None = Depends(enforce_chat_ra
       {"type": "tool_call",   "tool": "..."}
       {"type": "tool_result", "tool": "...", "success": true}
       {"type": "text",        "content": "..."}
+      {"type": "proposal",    "proposal": {...}}   (a held write call — see /proposals)
       {"type": "done"}
       {"type": "error",       "message": "..."}
     """

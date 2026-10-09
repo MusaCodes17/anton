@@ -291,6 +291,21 @@
 **Trade-offs:** Depends on a third party's tool names and *prose* formats (a COROS rewording breaks parsing — caught by contract tests only if fixtures are refreshed; the live smoke test `COROS_LIVE=1` is the early warning). Unattended multi-week refresh was proven by one same-day refresh plus the spike's token lifetimes (access ~30 days; refresh lifetime unadvertised) — the `reauth_required` path is the honest backstop. COROS's revocation endpoint may not accept a public client, so disconnect revokes best-effort and always deletes locally. Two renderings of the suggestion rule exist (module + `sync_coros_runs` prompt text). (The legacy Open-API path — `coros_client.py`, `/owned-shoes/sync-coros/*` — was deleted 2026-10-08, the day after C11 shipped.)
 **Verdict:** ✅ Keep. 🔁 Reversal candidates, deliberately not built under this banner: auto-confirm; "new run waiting" push notification (the natural trigger to revisit R3.5); Partner-API webhooks (only if COROS opens them to single-user apps); FIT/lap-split downloads; health/recovery ingestion.
 
+---
+
+### C12. Son of Anton's write tools are held as proposals and run only from a confirmation card (R7.2, 2026-10-09)
+**Chosen:** In the embedded assistant, a tool call that changes data is not run by the chat loop. `services/chat_proposals` holds the exact tool name and arguments, the SSE stream emits a `proposal` event and ends the turn, and the app renders a card. `POST /api/chat/proposals/{id}/confirm` runs the held call once, through the same MCP tool (a loopback session), so the same sanctioned service path writes. Cancel runs nothing; Edit (log runs only) opens the app's own form prefilled. The decision goes back to the model as a hidden follow-up user turn, written server-side (`followup_message`).
+**Why:** C9's gate was prose: the model asked, the runner typed "yes". Prose can be misread, and what the model then called wasn't guaranteed to match what it described. The card makes the gate a control: the client sends only the proposal id, so what runs is exactly what was shown.
+**Key sub-decisions:**
+- **Hold by ending the stream, not by keeping it open.** An SSE stream waiting minutes for a tap doesn't survive a backgrounded phone PWA. The stream ends at the proposal; the follow-up turn resumes the conversation from text history (the R2.6 stateless-stream design is unchanged).
+- **Default-deny gating.** Every tool not named `get_*` or listed in `READ_ONLY_TOOLS` is held, so a new MCP write tool is gated without anyone remembering to list it. A `confirm=False` call (onboarding preview) runs, since it writes nothing.
+- **In-memory registry, 30-min TTL.** Valid under INV-9 (one worker). A restart or the TTL turns a pending card into "expired — ask again"; nothing runs. No table, no migration.
+- **Idempotent confirm.** Check-and-set on the event loop; a repeat confirm waits on the same execution or returns the stored result. A tool that outlives 20 s (a full scrape) returns `executing` and the card polls.
+- **Scope: Son of Anton only.** Claude Desktop and the claude.ai connector call the same MCP tools directly and keep their own client-side confirmation; the MCP server is unchanged.
+**Advantages:** INV-8 is enforced by structure in the app's own assistant, not by prompt-following; wrong proposals are visible before they land (the live check caught a model-guessed date this way).
+**Trade-offs:** Every confirmed write costs one extra LLM turn (the follow-up summary). A turn that mixes reads and a write still runs the reads, but their results are discarded with the ended turn. Edit exists only for log-run; other proposals are confirm-or-cancel.
+**Verdict:** ✅ Keep. 🔁 Revisit if MCP clients gain a standard elicitation/confirmation primitive the server could use for every client.
+
 ## D. Scraping
 
 ### D1. Platform base classes + bespoke subclasses + DB-driven dynamic registry

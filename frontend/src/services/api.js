@@ -70,7 +70,11 @@ client.interceptors.response.use(
     } else {
       message = error.message || 'An unexpected error occurred'
     }
-    return Promise.reject(new Error(message))
+    const normalized = new Error(message)
+    // Keep the HTTP status for callers that branch on it (the chat card's
+    // 404 = expired / 409 = already decided). Undefined for network errors.
+    normalized.status = error.response?.status
+    return Promise.reject(normalized)
   }
 )
 
@@ -270,6 +274,18 @@ export const chatHistoryApi = {
   upsert: (id, payload) =>
     client.put(`/api/chat/conversations/${id}`, payload).then((r) => r.data),
   remove: (id) => client.delete(`/api/chat/conversations/${id}`).then((r) => r.data),
+}
+
+// ============== CHAT CONFIRMATION CARDS (R7.2) ==============
+// Held write-tool calls from the chat stream. Only the id is ever sent: the
+// server runs the arguments it held, so the card can't confirm something else.
+export const chatProposalsApi = {
+  get: (id) => client.get(`/api/chat/proposals/${id}`).then((r) => r.data),
+  confirm: (id) => client.post(`/api/chat/proposals/${id}/confirm`).then((r) => r.data),
+  cancel: (id, editedValues) =>
+    client
+      .post(`/api/chat/proposals/${id}/cancel`, { edited_values: editedValues ?? null })
+      .then((r) => r.data),
 }
 
 // ============== CHECKPOINT PROMPTS (R2.6) ==============

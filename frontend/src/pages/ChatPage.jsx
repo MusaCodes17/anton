@@ -47,7 +47,7 @@ function ChatArea({
   modelSwitchMessage,
   onModelSwitchApplied,
 }) {
-  const { displayMessages, setDisplayMessages, apiMessages, isStreaming, sendMessage, stop } = useChatStream({
+  const { displayMessages, setDisplayMessages, apiMessages, isStreaming, sendMessage, resolveProposal, stop } = useChatStream({
     model,
     initialDisplayMessages,
     initialApiMessages,
@@ -138,7 +138,14 @@ function ChatArea({
               {displayMessages.map((msg) => {
                 if (msg.role === 'user') return <UserMessage key={msg.id} content={msg.content} pillPreviews={msg.pillPreviews} />
                 if (msg.role === 'divider') return <ModelDivider key={msg.id} content={msg.content} />
-                return <AssistantMessage key={msg.id} message={msg} />
+                return (
+                  <AssistantMessage
+                    key={msg.id}
+                    message={msg}
+                    onProposalResolved={resolveProposal}
+                    busy={isStreaming}
+                  />
+                )
               })}
             </div>
           )}

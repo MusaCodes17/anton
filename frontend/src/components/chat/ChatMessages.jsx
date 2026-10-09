@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { Sparkles, Check, X, ChevronDown, ChevronUp, BarChart3, Gauge, Tag, RefreshCw } from 'lucide-react'
 import Markdown from 'react-markdown'
 import { cn } from '@/lib/utils'
+import ProposalCard from '@/components/chat/ProposalCard'
 
 // Starter prompts for an empty thread. Each carries an icon so the 2×2 grid
 // scans at a glance on a phone; `prompt` is what is actually sent.
@@ -128,7 +129,7 @@ export function UserMessage({ content, pillPreviews }) {
 
 // Replies are unbubbled and full width: lists, tables and numbers need the
 // whole 380px column far more than they need a container.
-export function AssistantMessage({ message }) {
+export function AssistantMessage({ message, onProposalResolved, busy }) {
   return (
     <div className="min-w-0 text-md-plus text-foreground md:text-sm">
       {message.toolIndicators?.length > 0 && (
@@ -147,6 +148,9 @@ export function AssistantMessage({ message }) {
           <span className="h-1.5 w-1.5 rounded-full bg-muted-foreground animate-bounce" />
         </span>
       ) : null}
+      {message.proposals?.map((p) => (
+        <ProposalCard key={p.id} proposal={p} onResolved={onProposalResolved} busy={busy} />
+      ))}
     </div>
   )
 }
