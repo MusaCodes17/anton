@@ -189,6 +189,13 @@
 **Trade-offs:** untagged history relies on a heuristic ratio (1.5× is a judgment call); tagging improves accuracy over time. These are still whole-activity bests, not segment PBs (unchanged).
 **Verdict:** 🕐 Keep for now. Revisit the ratio if it proves too tight/loose once more history is tagged.
 
+### B17. Planned races that were never run are pruned at read time (PWA feedback, 2026-10-08)
+**Chosen:** `races.prune_unrun_races`, called from `list_races` (the seam REST, MCP, the weekly summary and the race advisor all read through), deletes a race that is still `planned`, has no linked activity, is ≥ `UNRUN_RACE_GRACE_DAYS` (3) past, and has neither an `Activity` nor a *pending* `pending_coros_runs` row on its date.
+**Why:** a dropped race (the Parkrun Time Trial on 2026-07-18) otherwise sits in "Past races" as un-done forever. The runner asked for it to disappear when there is nothing to sync for that day.
+**Advantages:** no scheduler or new job (CLAUDE.md §4.6); works with COROS disconnected; positive-evidence guard (no run *and* nothing in the inbox) rather than a timer alone; the 3-day grace equals the poller's default lookback, so a late watch sync lands first.
+**Trade-offs:** a write on a read path (GET `/races` can delete). Any activity that day, even an easy jog, keeps the race. A race run with no recording is lost unless marked done within the grace window. `skipped` and `completed` are never touched. Plans are intentions, not history, so this does not breach "history is sacred".
+**Verdict:** 🕐 Keep for now. If a read-path write ever bites, move the call into the scheduled COROS tick.
+
 ---
 
 ## C. AI Layer
