@@ -1,0 +1,136 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-10-08T00:00:00Z",
+  "title": "Design System: Anton",
+  "extensions": {
+    "colorMeta": {
+      "azure-signal": { "role": "primary", "displayName": "Azure Signal", "canonical": "oklch(0.84 0.12 205)", "tonalRamp": ["oklch(0.15 0.12 205)", "oklch(0.3 0.12 205)", "oklch(0.45 0.12 205)", "oklch(0.6 0.12 205)", "oklch(0.72 0.12 205)", "oklch(0.84 0.12 205)", "oklch(0.9 0.12 205)", "oklch(0.95 0.06 205)"] },
+      "wear-green": { "role": "secondary", "displayName": "Wear Green", "canonical": "oklch(0.78 0.17 155)", "tonalRamp": ["oklch(0.15 0.17 155)", "oklch(0.3 0.17 155)", "oklch(0.45 0.17 155)", "oklch(0.6 0.17 155)", "oklch(0.7 0.17 155)", "oklch(0.78 0.17 155)", "oklch(0.88 0.12 155)", "oklch(0.95 0.06 155)"] },
+      "wear-amber": { "role": "secondary", "displayName": "Wear Amber", "canonical": "oklch(0.83 0.16 82)", "tonalRamp": ["oklch(0.15 0.16 82)", "oklch(0.3 0.16 82)", "oklch(0.45 0.16 82)", "oklch(0.6 0.16 82)", "oklch(0.72 0.16 82)", "oklch(0.83 0.16 82)", "oklch(0.9 0.12 82)", "oklch(0.95 0.06 82)"] },
+      "wear-red": { "role": "secondary", "displayName": "Wear Red", "canonical": "oklch(0.68 0.2 25)", "tonalRamp": ["oklch(0.15 0.2 25)", "oklch(0.3 0.2 25)", "oklch(0.45 0.2 25)", "oklch(0.58 0.2 25)", "oklch(0.68 0.2 25)", "oklch(0.78 0.15 25)", "oklch(0.88 0.09 25)", "oklch(0.95 0.04 25)"] },
+      "strava-orange": { "role": "tertiary", "displayName": "Strava Orange", "canonical": "oklch(0.7 0.19 45)", "tonalRamp": ["oklch(0.15 0.19 45)", "oklch(0.3 0.19 45)", "oklch(0.45 0.19 45)", "oklch(0.58 0.19 45)", "oklch(0.7 0.19 45)", "oklch(0.8 0.15 45)", "oklch(0.9 0.09 45)", "oklch(0.95 0.04 45)"] },
+      "ultramarine-ink": { "role": "neutral", "displayName": "Ultramarine Ink", "canonical": "oklch(0.2 0.06 268)", "tonalRamp": ["oklch(0.15 0.06 268)", "oklch(0.2 0.06 268)", "oklch(0.245 0.07 268)", "oklch(0.285 0.075 268)", "oklch(0.36 0.08 268)", "oklch(0.42 0.09 268)", "oklch(0.7 0.05 268)", "oklch(0.9 0.025 268)"] },
+      "royal-rail": { "role": "neutral", "displayName": "Royal Rail", "canonical": "oklch(0.3 0.15 266)", "tonalRamp": ["oklch(0.15 0.15 266)", "oklch(0.22 0.15 266)", "oklch(0.3 0.15 266)", "oklch(0.42 0.14 266)", "oklch(0.55 0.12 266)", "oklch(0.7 0.1 266)", "oklch(0.84 0.07 266)", "oklch(0.95 0.03 266)"] },
+      "warm-white": { "role": "neutral", "displayName": "Warm White", "canonical": "oklch(0.97 0.012 90)", "tonalRamp": ["oklch(0.15 0.012 90)", "oklch(0.3 0.012 90)", "oklch(0.45 0.012 90)", "oklch(0.6 0.012 90)", "oklch(0.75 0.012 90)", "oklch(0.87 0.012 90)", "oklch(0.93 0.012 90)", "oklch(0.97 0.012 90)"] }
+    },
+    "typographyMeta": {
+      "display": { "displayName": "Display", "purpose": "The weekly distance figure only." },
+      "headline": { "displayName": "Headline", "purpose": "Page title; secondary stat figures at 28px." },
+      "title": { "displayName": "Title", "purpose": "Module titles, banner text, lane percentages." },
+      "body": { "displayName": "Body", "purpose": "Row primary text (700, 15px) and support text." },
+      "label": { "displayName": "Label", "purpose": "Uppercase module captions and status-strip labels." },
+      "data": { "displayName": "Data", "purpose": "Pace and heart-rate telemetry in Spline Sans Mono." }
+    },
+    "shadows": [],
+    "motion": [
+      { "name": "transition-colors", "value": "Tailwind default (150ms, cubic-bezier(0.4, 0, 0.2, 1))", "purpose": "Hover and state color changes on rail items, buttons and links." },
+      { "name": "hover-dim", "value": "opacity 0.9", "purpose": "Inbox banner and primary button hover." }
+    ],
+    "breakpoints": [
+      { "name": "sm", "value": "640px" },
+      { "name": "md", "value": "768px" },
+      { "name": "lg", "value": "1024px" },
+      { "name": "2xl", "value": "1536px" }
+    ]
+  },
+  "components": [
+    {
+      "name": "Primary Button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "Azure fill with ink text; the one primary action per view.",
+      "html": "<button class=\"ds-btn-primary\">Run scan</button>",
+      "css": ".ds-btn-primary { background: var(--primary); color: var(--primary-foreground); height: 40px; padding: 8px 16px; border: 0; border-radius: 10px; font-family: 'Schibsted Grotesk', sans-serif; font-weight: 800; font-size: 14px; cursor: pointer; transition: background-color .15s; } .ds-btn-primary:hover { background: oklch(0.84 0.12 205 / 0.9); } .ds-btn-primary:focus-visible { outline: none; box-shadow: 0 0 0 2px var(--background), 0 0 0 4px var(--ring); }"
+    },
+    {
+      "name": "Outline Button",
+      "kind": "button",
+      "refersTo": "button-outline",
+      "description": "Hairline outline for secondary actions.",
+      "html": "<button class=\"ds-btn-outline\">Cancel</button>",
+      "css": ".ds-btn-outline { background: transparent; color: var(--secondary-foreground); height: 40px; padding: 8px 16px; border: 1px solid var(--input); border-radius: 10px; font-weight: 600; font-size: 14px; cursor: pointer; transition: background-color .15s; } .ds-btn-outline:hover { background: var(--secondary); } .ds-btn-outline:focus-visible { outline: none; box-shadow: 0 0 0 2px var(--background), 0 0 0 4px var(--ring); }"
+    },
+    {
+      "name": "Module",
+      "kind": "card",
+      "refersTo": "module",
+      "description": "Bordered Card Blue section with title row and divided rows.",
+      "html": "<section class=\"ds-module\"><div class=\"ds-module-head\"><h2>Top deals</h2><a href=\"#\" class=\"ds-module-link\">View all &rarr;</a></div><div class=\"ds-module-body\">Rows separate by divider lines.</div></section>",
+      "css": ".ds-module { background: var(--card); color: var(--foreground); border: 1px solid var(--border); border-radius: 8px; } .ds-module-head { display: flex; justify-content: space-between; align-items: center; padding: 16px 20px 12px; } .ds-module h2 { margin: 0; font-size: 17px; font-weight: 800; letter-spacing: -0.025em; } .ds-module-link { color: var(--accent-foreground); font-size: 14px; font-weight: 600; text-decoration: none; padding: 6px 8px; border-radius: 6px; } .ds-module-link:hover { background: var(--accent); } .ds-module-link:focus-visible { outline: none; box-shadow: 0 0 0 2px var(--ring); } .ds-module-body { padding: 0 20px 20px; font-size: 14px; color: var(--muted-foreground); }"
+    },
+    {
+      "name": "Rail Navigation",
+      "kind": "nav",
+      "refersTo": "rail-item",
+      "description": "Royal-blue rail; the active item is a solid warm-white tab.",
+      "html": "<nav class=\"ds-rail\"><a class=\"ds-rail-item ds-rail-active\" href=\"#\">Home</a><a class=\"ds-rail-item\" href=\"#\">Training</a><a class=\"ds-rail-item\" href=\"#\">Shoes</a></nav>",
+      "css": ".ds-rail { display: flex; flex-direction: column; gap: 4px; width: 236px; padding: 16px; background: var(--sidebar); } .ds-rail-item { padding: 10px 12px; border-radius: 6px; font-size: 14px; font-weight: 500; color: var(--sidebar-muted); text-decoration: none; transition: background-color .15s, color .15s; } .ds-rail-item:hover { background: rgba(255,255,255,.1); color: var(--sidebar-foreground); } .ds-rail-item:focus-visible { outline: none; box-shadow: 0 0 0 2px var(--sidebar), 0 0 0 4px var(--ring); } .ds-rail-active, .ds-rail-active:hover { background: var(--foreground); color: var(--background); font-weight: 700; }"
+    },
+    {
+      "name": "Inbox Banner",
+      "kind": "custom",
+      "refersTo": "coros-banner",
+      "description": "Azure full-width link shown only when COROS runs are waiting.",
+      "html": "<a class=\"ds-banner\" href=\"#\"><span class=\"ds-banner-text\">2 new runs from COROS</span><span class=\"ds-banner-go\">Review &rarr;</span></a>",
+      "css": ".ds-banner { display: flex; align-items: center; gap: 12px; padding: 14px 20px; border-radius: 8px; background: var(--primary); color: var(--primary-foreground); text-decoration: none; transition: opacity .15s; } .ds-banner:hover { opacity: .9; } .ds-banner:focus-visible { outline: none; box-shadow: 0 0 0 2px var(--background), 0 0 0 4px var(--ring); } .ds-banner-text { flex: 1; font-size: 17px; font-weight: 800; } .ds-banner-go { font-size: 14px; font-weight: 700; }"
+    },
+    {
+      "name": "Rotation Lane",
+      "kind": "custom",
+      "refersTo": "lane-track",
+      "description": "Signature: a numbered track lane with a 75% curb and a chequered finish at the limit; fill is amber under the limit, red at or over.",
+      "html": "<div class=\"ds-lane\"><div class=\"ds-lane-head\"><span class=\"ds-lane-no\">1</span><span class=\"ds-lane-name\">Nike Vaporfly</span><span class=\"ds-lane-pct\">82%</span></div><div class=\"ds-lane-track\"><div class=\"ds-lane-fill\"></div><div class=\"ds-lane-curb\"></div><div class=\"ds-lane-finish\"></div></div><div class=\"ds-lane-meta\">410 km / 500 km</div></div>",
+      "css": ".ds-lane { color: var(--foreground); padding: 14px 8px; width: 360px; } .ds-lane-head { display: flex; align-items: center; gap: 10px; } .ds-lane-no { width: 24px; height: 24px; display: inline-flex; align-items: center; justify-content: center; border-radius: 4px; background: var(--foreground); color: var(--background); font-weight: 900; font-size: 13px; font-variant-numeric: tabular-nums; } .ds-lane-name { flex: 1; font-size: 15px; font-weight: 700; } .ds-lane-pct { font-size: 17px; font-weight: 800; font-variant-numeric: tabular-nums; } .ds-lane-track { position: relative; height: 28px; margin-top: 10px; background: var(--surface); border-top: 2px solid var(--lane); border-bottom: 2px solid var(--lane); } .ds-lane-fill { height: 100%; width: 82%; background: var(--warning); } .ds-lane-curb { position: absolute; top: 0; bottom: 0; left: 75%; border-left: 2px dashed var(--lane); } .ds-lane-finish { position: absolute; top: 0; bottom: 0; left: calc(100% - 8px); width: 8px; background: repeating-conic-gradient(var(--foreground) 0 25%, var(--background) 0 50%) 0 0 / 8px 8px; } .ds-lane-meta { margin-top: 8px; font-size: 12px; color: var(--muted-foreground); font-variant-numeric: tabular-nums; }"
+    },
+    {
+      "name": "Week Bars",
+      "kind": "custom",
+      "refersTo": "module",
+      "description": "Big weekly distance with this-week and last-week bars on one scale.",
+      "html": "<div class=\"ds-week\"><div class=\"ds-week-label\">THIS WEEK</div><div class=\"ds-week-km\">42.5<span>km</span></div><div class=\"ds-bar\"><i class=\"ds-bar-now\"></i></div><div class=\"ds-bar\"><i class=\"ds-bar-prev\"></i></div></div>",
+      "css": ".ds-week { color: var(--foreground); width: 320px; } .ds-week-label { font-size: 11px; font-weight: 700; letter-spacing: .1em; color: var(--faint); } .ds-week-km { font-size: 64px; font-weight: 900; line-height: .95; letter-spacing: -0.025em; font-variant-numeric: tabular-nums; } .ds-week-km span { margin-left: 6px; font-size: 24px; font-weight: 700; color: var(--faint); } .ds-bar { height: 10px; margin-top: 8px; border-radius: 4px; background: var(--surface); } .ds-bar i { display: block; height: 100%; border-radius: 4px; } .ds-bar-now { width: 100%; background: var(--primary); } .ds-bar-prev { width: 70%; background: var(--edge); }"
+    },
+    {
+      "name": "Deal Row",
+      "kind": "custom",
+      "refersTo": "module",
+      "description": "Image tile, brand and model, retailer, percent off with price and struck MSRP.",
+      "html": "<a class=\"ds-deal\" href=\"#\"><span class=\"ds-deal-img\"></span><span class=\"ds-deal-info\"><b class=\"ds-deal-brand\">ASICS</b><span class=\"ds-deal-model\">Metaspeed Sky</span><small>Running Room</small></span><span class=\"ds-deal-price\"><b>32% OFF</b><span>$189.99 <s>$279.99</s></span></span></a>",
+      "css": ".ds-deal { display: flex; align-items: center; gap: 14px; padding: 12px 8px; width: 420px; border-radius: 6px; color: var(--foreground); text-decoration: none; } .ds-deal:hover { background: var(--surface); } .ds-deal:focus-visible { outline: none; box-shadow: 0 0 0 2px var(--ring); } .ds-deal-img { width: 56px; height: 56px; border-radius: 6px; background: repeating-linear-gradient(135deg, oklch(0.3 0.07 268), oklch(0.3 0.07 268) 6px, oklch(0.33 0.075 268) 6px, oklch(0.33 0.075 268) 12px); } .ds-deal-info { flex: 1; display: flex; flex-direction: column; } .ds-deal-brand { font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: var(--accent-foreground); } .ds-deal-model { font-size: 15px; font-weight: 700; } .ds-deal-info small { font-size: 12px; color: var(--muted-foreground); } .ds-deal-price { text-align: right; font-variant-numeric: tabular-nums; } .ds-deal-price b { display: block; font-size: 17px; font-weight: 900; color: var(--primary); } .ds-deal-price span { font-size: 15px; font-weight: 700; } .ds-deal-price s { font-size: 12px; font-weight: 400; color: var(--faint); }"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Lane Sheet",
+    "overview": "Anton is set like the printed lane sheet of a 1976 Montréal track meet: a deep ultramarine ink ground, a saturated royal-blue rail down the left, warm-white type, and bold grotesque numerals that read at a glance. The identity lends type, palette, density and exactly one move; the product stays a plain working dashboard. There is one fixed dark theme and no light mode.\n\nDensity is moderate. Structure comes from hairline rules and row dividers rather than nested cards: a page is a few bordered modules whose rows are separated by lines. Numbers are the loudest thing on the screen (a 64px weekly distance, a 17px percent on every lane), and the interface around them is quiet. Azure is the single chromatic signal at rest; green, amber and red appear only as wear state, and orange only as Strava provenance.\n\nThe signature is the numbered track lane: each pair near its limit is drawn as a lane with white lane lines top and bottom, a dashed curb at 75% of the limit, and a chequered finish line at the limit.",
+    "keyCharacteristics": [
+      "One fixed dark ultramarine theme; depth by tonal step and hairline, not shadow.",
+      "One typeface family for display and UI (Schibsted Grotesk, weights 700-900 for emphasis), one mono for raw data.",
+      "Tabular numerals wherever numbers are compared.",
+      "Royal-blue rail and mobile top bar frame content; the active nav item is a solid warm-white tab.",
+      "Same components from 380 px phone to wide desktop; PWA safe-area insets honored."
+    ],
+    "rules": [
+      { "name": "The Traffic-Light Rule", "body": "Wear is green under 75% of a shoe's limit, amber from 75% to 100%, red beyond. The thresholds are product rules, not styling. The lane curb sits at 75% of the limit and the finish at 100%.", "section": "colors" },
+      { "name": "The Strava Rule", "body": "Strava Orange marks Strava-sourced runs and nothing else.", "section": "colors" },
+      { "name": "The One Signal Rule", "body": "Azure is the only chromatic voice at rest. Green, amber and red appear only when a wear state earns them.", "section": "colors" },
+      { "name": "The Tabular Rule", "body": "Any number that may be compared across rows or over time uses tabular numerals.", "section": "typography" },
+      { "name": "The Flat-Tonal Rule", "body": "To lift an element, step it up one surface tone or add a hairline; do not add shadow or glow.", "section": "elevation" }
+    ],
+    "dos": [
+      "Do use only the CSS variables through Tailwind tokens; add a token before adding a color.",
+      "Do keep wear state on the Traffic-Light Rule: green under 75%, amber 75-100%, red beyond.",
+      "Do let Strava Orange mark Strava-sourced runs only.",
+      "Do separate rows with Divider lines and hairlines instead of nesting cards.",
+      "Do use tabular numerals for mileage, pace, price and dates.",
+      "Do keep the 2px azure focus ring on every interactive element.",
+      "Do check every screen at desktop and about 380 px, with safe-area insets in the installed PWA."
+    ],
+    "donts": [
+      "Don't add a light theme or a `.dark` toggle; the system is one fixed dark theme.",
+      "Don't use shadows, glows or gradients to create hierarchy; step the surface tone.",
+      "Don't hard-code colors in components; the chequered finish strip and image placeholder stripes read from variables or the shared utility.",
+      "Don't add a second display typeface; weight and size carry hierarchy.",
+      "Don't introduce another chart library or heavy UI dependency; charts stay on recharts."
+    ]
+  }
+}

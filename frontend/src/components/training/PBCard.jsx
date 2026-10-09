@@ -26,7 +26,7 @@ export default function PBCard({ record }) {
         <div className="font-heading text-[26px] font-extrabold tracking-tight text-foreground tabular-nums">
           {formatDuration(total_time_s)}
         </div>
-        <div className="mt-1 flex items-center gap-3 text-xs text-muted-foreground tabular-nums">
+        <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-muted-foreground tabular-nums">
           <span>{avg_pace}</span>
           {avg_hr != null && (
             <span className="inline-flex items-center gap-1">
@@ -37,7 +37,8 @@ export default function PBCard({ record }) {
         </div>
       </div>
 
-      <div className="mt-auto flex items-center justify-between gap-2 text-xs text-muted-foreground">
+      {/* Wraps so the shoe chip drops below the date in the two-up phone grid. */}
+      <div className="mt-auto flex flex-wrap items-center justify-between gap-x-2 gap-y-1.5 text-xs text-muted-foreground">
         {activity_id != null ? (
           <Link
             to={`/activities/${activity_id}`}

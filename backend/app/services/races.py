@@ -7,14 +7,24 @@ boundary and never stored: race_date - today is only meaningful "now".
 """
 from __future__ import annotations
 
-from datetime import date, datetime
+import logging
+from datetime import date, datetime, timedelta
 from types import SimpleNamespace
 from typing import Optional
 
 from sqlalchemy.orm import Session
 
-from app.models.models import Activity, PlannedRace, ShoeRun
+from app.models.models import Activity, PendingCorosRun, PlannedRace, ShoeRun
 from app.services import rotation
+
+logger = logging.getLogger(__name__)
+
+# A planned race this many days past with nothing run that day is treated as
+# not run and removed. 3 = the COROS poller's default lookback
+# (COROS_POLL_LOOKBACK_DAYS), so a watch that syncs late has had its run queued
+# before we conclude there's nothing to sync. It also leaves a few days to mark
+# a race done by hand.
+UNRUN_RACE_GRACE_DAYS = 3
 
 
 def create_completed_from_activity(db: Session, activity_id: int) -> PlannedRace:
@@ -97,8 +107,56 @@ def race_to_dict(race: PlannedRace, today: Optional[date] = None) -> dict:
     }
 
 
+def prune_unrun_races(db: Session, today: Optional[date] = None) -> list[str]:
+    """Delete planned races that evidently didn't happen, so a dropped race
+    (e.g. a parkrun you skipped) stops sitting in "Past races" as un-done.
+
+    A race is pruned only when ALL hold — positive evidence, not absence of a
+    status update (CLAUDE.md §7 interlock):
+      - status is still 'planned' (completed and deliberately 'skipped' rows
+        are the runner's record and are kept) and it has no linked activity;
+      - race_date is at least UNRUN_RACE_GRACE_DAYS before today;
+      - no Activity exists on race_date (any source, any distance);
+      - no unresolved COROS run is waiting in the inbox for race_date — that
+        run may be the race, and confirming it should be possible.
+
+    Deals-domain-style disposal is acceptable here because the row records an
+    intention, not a run (history-is-sacred covers runs, not plans). Returns
+    the deleted race names. Owns the commit (only when something was deleted).
+    """
+    today = today or date.today()
+    cutoff = today - timedelta(days=UNRUN_RACE_GRACE_DAYS)
+    candidates = (
+        db.query(PlannedRace)
+        .filter(
+            PlannedRace.status == "planned",
+            PlannedRace.activity_id.is_(None),
+            PlannedRace.race_date <= cutoff,
+        )
+        .all()
+    )
+    pruned = []
+    for race in candidates:
+        ran = db.query(Activity.id).filter(Activity.run_date == race.race_date).first()
+        waiting = (
+            db.query(PendingCorosRun.id)
+            .filter(PendingCorosRun.run_date == race.race_date, PendingCorosRun.status == "pending")
+            .first()
+        )
+        if ran or waiting:
+            continue
+        logger.info("Pruning unrun race %r (%s): no run logged or waiting to sync", race.name, race.race_date)
+        pruned.append(race.name)
+        db.delete(race)
+    if pruned:
+        db.commit()
+    return pruned
+
+
 def list_races(db: Session, today: Optional[date] = None) -> list:
     """All races, soonest first, with derived fields attached.
+
+    Planned races that were never run are pruned first (prune_unrun_races).
 
     Includes synthetic entries for activities tagged 'Race' or 'Parkrun' whose
     run_date is in the past and that aren't already back-linked to a PlannedRace
@@ -106,6 +164,11 @@ def list_races(db: Session, today: Optional[date] = None) -> list:
     frontend knows they cannot be edited/deleted/marked-done via the races API.
     """
     today = today or date.today()
+
+    # Read-time housekeeping: every races surface (REST, MCP, weekly summary,
+    # race advisor) passes through here, so this is the one place that sees a
+    # stale plan regardless of whether COROS is connected.
+    prune_unrun_races(db, today)
 
     races = db.query(PlannedRace).order_by(PlannedRace.race_date.asc()).all()
     for r in races:

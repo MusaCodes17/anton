@@ -1,7 +1,8 @@
-import { useMemo, useState } from 'react'
+import { forwardRef, useMemo, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { Plus, Pencil, Trash2, Footprints, PlayCircle, ArrowUpRight, RefreshCw, ChevronDown, MoreHorizontal, AlertTriangle, Tag } from 'lucide-react'
+import { Plus, Pencil, Trash2, Footprints, PlayCircle, RefreshCw, ChevronDown, MoreHorizontal, AlertTriangle, Tag } from 'lucide-react'
 import PageHeader from '@/components/PageHeader'
+import FilterDisclosure from '@/components/FilterDisclosure'
 import OwnedShoeForm from '@/components/OwnedShoeForm'
 import LogRunDialog from '@/components/LogRunDialog'
 import MileageProgressBar from '@/components/MileageProgressBar'
@@ -44,6 +45,7 @@ import {
   useShoeTypes,
 } from '@/hooks/useApi'
 import { formatShoeType } from '@/lib/shoeTypes'
+import { cn } from '@/lib/utils'
 import { forecastLabel } from '@/lib/forecast'
 
 const ALL = '__all__'
@@ -88,6 +90,9 @@ export default function MyShoes() {
   const [deleting, setDeleting] = useState(null)
   const [logRunShoe, setLogRunShoe] = useState(null)
   const [retiredCollapsed, setRetiredCollapsed] = useState(true)
+  // Mobile-only: filters collapse behind a toggle (as on Deals) so the
+  // rotation is above the fold; always inline on md+.
+  const [filtersOpen, setFiltersOpen] = useState(false)
 
   const shoes = useOwnedShoes()
   const { data: shoeTypes = [] } = useShoeTypes()
@@ -103,7 +108,8 @@ export default function MyShoes() {
     return [...set].sort()
   }, [shoes.data])
 
-  const hasFilters = brand !== ALL || shoeType !== ALL || mileageBucket !== ALL || sort !== 'name_asc'
+  const activeFilters = [brand !== ALL, shoeType !== ALL, mileageBucket !== ALL, sort !== 'name_asc'].filter(Boolean).length
+  const hasFilters = activeFilters > 0
 
   const resetFilters = () => {
     setBrand(ALL)
@@ -185,31 +191,34 @@ export default function MyShoes() {
   return (
     <div className="space-y-6">
       <PageHeader eyebrow="MY SHOES" title="Shoe rotation" count={shoes.data?.filter((s) => s.status !== 'retired').length}>
-        {/* R5.7: runs arrive via the backend poller; this opens the inbox where the
-            runner confirms them. Never disabled — the inbox explains connection state. */}
-        <Button variant="outline" asChild>
-          <Link
-            to="/new-runs"
-            title={
-              corosStatus.data?.sync?.last_success_at
-                ? `Last synced ${new Date(corosStatus.data.sync.last_success_at).toLocaleString()}`
-                : 'New runs from your COROS watch'
-            }
-          >
-            <RefreshCw className="h-4 w-4" /> New runs
-            {corosStatus.data?.sync?.pending_count > 0 && (
-              <span className="ml-1 rounded-full bg-primary px-1.5 text-xs font-bold text-primary-foreground">
-                {corosStatus.data.sync.pending_count}
-              </span>
-            )}
-          </Link>
-        </Button>
-        <Button onClick={() => setFormState({})}>
-          <Plus className="h-4 w-4" /> Add shoe
-        </Button>
+        {/* md+ only — phones get the same two actions as icon buttons in the
+            filter row below, so the header doesn't eat a whole row. */}
+        <div className="hidden items-center gap-3 md:flex">
+          <Button variant="outline" asChild>
+            <NewRunsLink corosStatus={corosStatus}>New runs</NewRunsLink>
+          </Button>
+          <Button onClick={() => setFormState({})}>
+            <Plus className="h-4 w-4" /> Add shoe
+          </Button>
+        </div>
       </PageHeader>
 
-      <Card>
+      <div className="flex gap-2 md:hidden">
+        <FilterDisclosure
+          className="min-w-0 flex-1"
+          open={filtersOpen}
+          onToggle={() => setFiltersOpen((o) => !o)}
+          count={activeFilters}
+        />
+        <Button variant="outline" asChild className="h-auto w-12 shrink-0 px-0">
+          <NewRunsLink corosStatus={corosStatus} aria-label="New runs" />
+        </Button>
+        <Button onClick={() => setFormState({})} className="h-auto w-12 shrink-0 px-0" aria-label="Add shoe">
+          <Plus className="h-5 w-5" />
+        </Button>
+      </div>
+
+      <Card className={`md:block ${filtersOpen ? '' : 'hidden'}`}>
         <CardContent className="grid grid-cols-1 gap-4 p-4 sm:grid-cols-2 lg:grid-cols-4">
           <div className="space-y-1.5">
             <Label>Brand</Label>
@@ -300,7 +309,7 @@ export default function MyShoes() {
                 <span className="text-edge">·</span>
                 <span className="tabular-nums">{Math.round(group.totalKm)} km</span>
               </div>
-              <div className="grid grid-cols-1 gap-3.5 sm:grid-cols-2 lg:grid-cols-3">
+              <div className="grid grid-cols-2 gap-3 sm:gap-3.5 lg:grid-cols-3">
                 {group.shoes.map((shoe) => (
                   <ShoeCard
                     key={shoe.id}
@@ -336,7 +345,7 @@ export default function MyShoes() {
                 Retired · {retiredShoes.length}
               </button>
               {!retiredCollapsed && (
-                <div className="grid grid-cols-1 gap-3.5 sm:grid-cols-2 lg:grid-cols-3">
+                <div className="grid grid-cols-2 gap-3 sm:gap-3.5 lg:grid-cols-3">
                   {retiredShoes.map((shoe) => (
                     <ShoeCard
                       key={shoe.id}
@@ -500,63 +509,92 @@ function PipelineRow({ entry, onOpenDetail }) {
   )
 }
 
+// R5.7: runs arrive via the backend poller; this opens the inbox where the
+// runner confirms them. Never disabled — the inbox explains connection state.
+// Rendered with a label on md+ and icon-only (count as a corner badge) on phones.
+const NewRunsLink = forwardRef(function NewRunsLink({ corosStatus, children, className, ...props }, ref) {
+  const sync = corosStatus.data?.sync
+  const pending = sync?.pending_count ?? 0
+  return (
+    <Link
+      ref={ref}
+      to="/new-runs"
+      title={sync?.last_success_at ? `Last synced ${new Date(sync.last_success_at).toLocaleString()}` : 'New runs from your COROS watch'}
+      className={cn('relative', className)}
+      {...props}
+    >
+      <RefreshCw className="h-4 w-4" />
+      {children}
+      {pending > 0 && (
+        <span
+          className={cn(
+            'rounded-full bg-primary px-1.5 text-xs font-bold text-primary-foreground',
+            children ? 'ml-1' : 'absolute -right-1.5 -top-1.5'
+          )}
+        >
+          {pending}
+        </span>
+      )}
+    </Link>
+  )
+})
+
+// Vertical tile so the rotation runs two-up on a phone, like the Deals grid
+// (~165px per tile at 380px). The whole upper area opens the shoe; the footer
+// keeps Log run plus an overflow menu (a separate Details button was redundant
+// with the tappable card and doesn't fit at this width).
 function ShoeCard({ shoe, onOpenDetail, onLogRun, onEdit, onDelete }) {
   const image = shoe.image_url || shoe.matched_image_url
 
   return (
-    <div className="flex flex-col overflow-hidden rounded-[14px] border border-border bg-surface">
-      <button type="button" onClick={onOpenDetail} className="focus-ring flex flex-col gap-3.5 p-4 text-left">
-        <div className="flex gap-3.5">
-          <div className="flex h-[74px] w-[74px] shrink-0 items-center justify-center overflow-hidden rounded-[11px] bg-placeholder-stripes">
-            {image ? (
-              <img src={image} alt={shoe.model} className="h-full w-full object-contain" />
-            ) : (
-              <Footprints className="h-6 w-6 text-faint" />
+    <div className="flex min-w-0 flex-col overflow-hidden rounded-[14px] border border-border bg-surface">
+      <button type="button" onClick={onOpenDetail} className="focus-ring flex flex-1 flex-col text-left">
+        <div className="relative flex aspect-[4/3] w-full items-center justify-center overflow-hidden bg-placeholder-stripes">
+          {image ? (
+            <img src={image} alt={shoe.model} className="h-full w-full object-contain p-2" />
+          ) : (
+            <Footprints className="h-8 w-8 text-faint" />
+          )}
+          {/* Active is the default state of a card in the rotation, so only
+              the exceptions (for sale, retired) earn a badge. */}
+          {shoe.status !== 'active' && (
+            <Badge variant={statusVariant[shoe.status] || 'secondary'} className="absolute right-2 top-2">
+              {statusLabel[shoe.status] || shoe.status}
+            </Badge>
+          )}
+        </div>
+        <div className="flex flex-1 flex-col gap-2.5 p-3 sm:p-4">
+          <div className="min-w-0">
+            <div className="truncate text-2xs font-bold uppercase tracking-[0.08em] text-accent-foreground">
+              {shoe.brand}
+            </div>
+            <div className="mt-0.5 line-clamp-2 font-heading text-[15px] font-bold leading-tight text-foreground sm:text-base">
+              {shoe.nickname || shoe.model}
+            </div>
+            {shoe.nickname && <div className="truncate text-xs text-faint">{shoe.model}</div>}
+            {shoe.shoe_type && (
+              <div className="mt-1.5">
+                <ShoeTypeBadge type={shoe.shoe_type} />
+              </div>
             )}
           </div>
-          <div className="min-w-0 flex-1">
-            <div className="flex items-start justify-between gap-2">
-              <div className="min-w-0">
-                <div className="text-2xs font-bold uppercase tracking-[0.08em] text-accent-foreground">
-                  {shoe.brand}
-                </div>
-                <div className="mt-0.5 truncate font-heading text-base font-bold leading-tight text-foreground">
-                  {shoe.nickname || shoe.model}
-                </div>
-                {shoe.nickname && <div className="truncate text-xs text-faint">{shoe.model}</div>}
-                {shoe.shoe_type && (
-                  <div className="mt-1">
-                    <ShoeTypeBadge type={shoe.shoe_type} />
-                  </div>
-                )}
-              </div>
-              <Badge variant={statusVariant[shoe.status] || 'secondary'}>
-                {statusLabel[shoe.status] || shoe.status}
-              </Badge>
-            </div>
+          <div className="mt-auto">
+            <MileageProgressBar mileage={shoe.current_mileage} limit={shoe.mileage_limit ?? 800} compact />
           </div>
         </div>
-        <MileageProgressBar mileage={shoe.current_mileage} limit={shoe.mileage_limit ?? 800} compact />
       </button>
-      <div className="grid grid-cols-[1fr_1fr_auto] border-t border-border text-[12px] font-bold">
-        <button
-          type="button"
-          onClick={onOpenDetail}
-          className="focus-ring flex items-center justify-center gap-1.5 border-r border-border py-2 text-secondary-foreground hover:bg-secondary"
-        >
-          <ArrowUpRight className="h-3.5 w-3.5" /> Details
-        </button>
+      <div className="grid grid-cols-[1fr_auto] border-t border-border text-[12px] font-bold">
         <button
           type="button"
           onClick={onLogRun}
-          className="focus-ring flex items-center justify-center gap-1.5 border-r border-border py-2 text-secondary-foreground hover:bg-secondary"
+          className="focus-ring flex min-h-11 items-center justify-center gap-1.5 border-r border-border py-2 text-secondary-foreground hover:bg-secondary"
         >
           <PlayCircle className="h-3.5 w-3.5" /> Log run
         </button>
         <DropdownMenu>
           <DropdownMenuTrigger
             aria-label="More actions"
-            className="focus-ring flex items-center justify-center px-3 py-2 text-muted-foreground hover:bg-secondary hover:text-foreground"
+            className="focus-ring flex min-h-11 w-11 items-center justify-center text-muted-foreground hover:bg-secondary hover:text-foreground"
           >
             <MoreHorizontal className="h-4 w-4" />
           </DropdownMenuTrigger>
@@ -577,4 +615,3 @@ function ShoeCard({ shoe, onOpenDetail, onLogRun, onEdit, onDelete }) {
     </div>
   )
 }
-

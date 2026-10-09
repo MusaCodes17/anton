@@ -5,6 +5,49 @@
 
 ---
 
+## UI — Son of Anton mobile pass + mobile bottom tab bar — 2026-10-08
+
+**[ADDED]** Design review against `DESIGN.md` ("The Pit Wall") with five phone mockups on a design canvas (claude.ai artifact `4d6BUSk2gmyMFTtzPUdA55`). Two commits on `soa-mobile-chat`, PR #42. Frontend only; no backend, schema, API or MCP changes.
+**[CHANGED] Son of Anton (`9e135f7`).**
+- The composer textarea is 16px below `md`, because iOS zooms into any focused field under 16px. It autofocuses only on `(pointer: fine)`.
+- New `hooks/useKeyboardViewport.js` sets `--app-height` from `visualViewport` and `html.keyboard-open` while the iOS keyboard is up, and pins scroll at 0. `index.html` adds `interactive-widget=resizes-content` for Android.
+- The chat route drops Layout's mobile top bar. Its one 52px header holds conversations, title/model and new chat.
+- Conversations on mobile are a bottom sheet with the model picker. Delete is visible on touch and two-step, and rows are real `<button>`s.
+- Assistant replies are full width with no bubble; user bubbles use Surface, not the green wash. Tool chips are mono, markdown tables scroll in their own box, and starter cards have icons. The emoji and the 9–10px text are gone.
+- `useChatStream.stop()` (AbortController) adds Stop; sse-starlette cancels the generator on disconnect, and partial text is kept. The textarea stays editable while a reply streams.
+- Scrolling sticks to the bottom only while the reader is there, with a "Latest" button.
+- ChatDrawer gets notch and home-indicator insets, 44px buttons and Stop.
+
+**[CHANGED] Mobile tab bar (`d31f678`).**
+- A five-tab bar (Home · Training · Shoes · Deals · Anton) replaces the hamburger + slide-down menu below `md`. It's a static shell child that owns the bottom safe-area inset and hides under `html.keyboard-open`. Child routes light their parent tab (`/activities` → Training, `/new-runs` → Home).
+- The mobile top bar is now brand + Settings gear. Sign out is on Settings for phones.
+- The Son of Anton FAB is desktop-only, and toasts lift above the tab bar on mobile.
+- Recorded as decision **E14**.
+
+**[VERIFIED]** Suite unchanged at **589 passing + 1 skipped** (no backend change). `vite build` clean. Visual pass at 390 px and desktop used a throwaway local backend on a scratch empty DB with a generated test login; the live DB was untouched (mtime checked).
+- Checked: 16px textarea, no autofocus under touch emulation, 44px header targets, app bar hidden on `/assistant`, no horizontal scroll.
+- The sheet's model picker, two-step delete/cancel and Escape work.
+- The tab bar is 57 px with the right active tab on Home, Training, Chat and Settings (none on Settings), and desktop is unchanged.
+- No new console errors. The buffer held only connection-refused errors from the Vite restart, plus 403s from a deliberately keyless chat send.
+
+**[NOT DONE]**
+- iOS keyboard behaviour (shell resize, tab bar hiding, no zoom) can't be emulated in Chromium. It needs a check on the installed iPhone PWA after deploy; remove and re-add the PWA so a stale service worker doesn't mask it.
+- Streaming, tool chips and Stop were not exercised against a live model; the test backend had no API keys.
+- The mockups' structured confirmation card (a proposal event in the chat stream) needs `chat_service` work and isn't built.
+- Still open from the review: hard-coded hex in `PriceChart.jsx`/`VolumeChart.jsx`, emoji in toasts and `ScrapabilityTestModal`, and `--faint` at ~3.7:1 contrast.
+- Also noted: Tailwind opacity modifiers (`bg-primary/90`, `border-primary/30`) don't generate against the `var(--x)` colour tokens, so existing uses are silently no-ops.
+
+---
+
+## PWA feedback pass — shoes, fitness, chat, race pruning — 2026-10-08
+
+**[CHANGED]** Mobile tab bar "Shoes" icon is now a sneaker (`components/icons/ShoeIcon.jsx`, Tabler `shoe`, MIT; lucide 0.395 has no shoe glyph). `/shoes` filters collapse behind a shared `FilterDisclosure` (extracted from Deals; its count chip is now solid because `bg-primary/15` never generated), and on phones New runs / Add shoe become icon buttons in that row. Shoe cards are vertical tiles, two-up on phones like Deals (Details button dropped; the card itself opens the shoe; status badge only for non-active). The compact mileage label is now just "X km". Fitness and Records tiles are two-up at every width, like Predictions; PB card footers wrap.
+**[CHANGED]** The logo links home and resets `<main>` scroll. Every route change also resets it: `<main>` scrolls, not the document, so pages used to open mid-scroll. Re-tapping the active tab scrolls to the top. Son of Anton now opens on a fresh in-memory conversation (last-used model carried over) instead of the newest thread. Conversations sheet scroll fix: the list was a `flex-1` child without `min-h-0`, so it never scrolled and drags chained to the thread behind. It now has `min-h-0`, the backdrop is `touch-none`, and the sheet is `overscroll-contain`.
+**[ADDED]** `races.prune_unrun_races` (B17): `planned` races ≥ 3 days past with no linked activity, no activity that day and no pending COROS run that day are deleted when races are listed.
+**[PR]** #43 (`pwa-feedback`). **[PR]** #43 (`pwa-feedback`).
+**[FIXED]** The PR #42 wrapup docs commit missed the merge (the PR was merged one commit early); cherry-picked here.
+**[VERIFIED]** Suite 589 → **595 passing + 1 skipped** (`tests/test_races.py`: Parkrun case, grace boundary inclusive at 3 days / kept at 2, kept with an activity, kept with a pending inbox run, dismissed inbox run doesn't protect, completed/skipped/linked untouched). `vite build` clean. Checked at 375 px and desktop against a backend on a **copy** of the live DB, with scraping and COROS disabled in the copy: the Parkrun Time Trial was pruned from the copy, and the live DB still has 3 races. Also checked: two-up shoe tiles and Fitness/Records grids, the logo returning to `/` at scroll 0, chat landing on "New conversation", and the sheet list scrolling internally when constrained (142 px client / 235 px content, `overscroll-behavior: contain`, backdrop `touch-action: none`). 0 console errors. **Human step:** on the iPhone, confirm that dragging the Conversations sheet no longer moves the thread.
+
 ## R6.2 — retirement forecast → deal radar — 2026-10-08
 
 **[ADDED]** `rotation.recent_weekly_km` (one grouped query on `Activity` columns, last 6 weeks ÷ 6) + pure `rotation.usage_forecast` → `forecast_status` (`on_track` / `idle` / `overdue`), `weekly_km`, `weeks_to_limit`, `projected_limit_date` on every `PipelineEntry`. Derived at read time, never stored (INV-7). Surfaced on Home shoe alerts, `/shoes` pipeline rows, the ShoeDetail replacement card (also in its collapsed hint), `GET /owned-shoes/rotation-overview`, `…/{id}/replacement-deals`, the weekly-summary and race-block MCP outputs, and the deal-alert digest's `replacement_alerts`.

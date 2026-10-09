@@ -189,6 +189,13 @@
 **Trade-offs:** untagged history relies on a heuristic ratio (1.5× is a judgment call); tagging improves accuracy over time. These are still whole-activity bests, not segment PBs (unchanged).
 **Verdict:** 🕐 Keep for now. Revisit the ratio if it proves too tight/loose once more history is tagged.
 
+### B17. Planned races that were never run are pruned at read time (PWA feedback, 2026-10-08)
+**Chosen:** `races.prune_unrun_races`, called from `list_races` (the seam REST, MCP, the weekly summary and the race advisor all read through), deletes a race that is still `planned`, has no linked activity, is ≥ `UNRUN_RACE_GRACE_DAYS` (3) past, and has neither an `Activity` nor a *pending* `pending_coros_runs` row on its date.
+**Why:** a dropped race (the Parkrun Time Trial on 2026-07-18) otherwise sits in "Past races" as un-done forever. The runner asked for it to disappear when there is nothing to sync for that day.
+**Advantages:** no scheduler or new job (CLAUDE.md §4.6); works with COROS disconnected; positive-evidence guard (no run *and* nothing in the inbox) rather than a timer alone; the 3-day grace equals the poller's default lookback, so a late watch sync lands first.
+**Trade-offs:** a write on a read path (GET `/races` can delete). Any activity that day, even an easy jog, keeps the race. A race run with no recording is lost unless marked done within the grace window. `skipped` and `completed` are never touched. Plans are intentions, not history, so this does not breach "history is sacred".
+**Verdict:** 🕐 Keep for now. If a read-path write ever bites, move the call into the scheduled COROS tick.
+
 ---
 
 ## C. AI Layer
@@ -494,6 +501,29 @@ Supporting choices:
 **Trade-offs:** making `<main>` the scroll container moves where any in-page `position: sticky` resolves (now relative to `main`, not the viewport) — audited: only `Layout.jsx` used `sticky` (grep clean across `pages/`), so nothing depended on viewport-sticky. The mobile slide-down menu is now a static `shrink-0` sibling above `<main>` (was `sticky top-16`); since main scrolls internally the menu is never pushed off or scrolled away.
 **Verification limit:** Chromium (Playwright / the in-app browser) reports `env(safe-area-inset-*)` as 0, so automated tooling can confirm the **fixed-shell structure (1b)**, the 2-up grid, and zero horizontal overflow, but **cannot** confirm the **top-inset (1a)** — that is a by-hand check on the installed iOS home-screen app after deploy (remove + re-add the PWA so a stale service worker / cached shell doesn't mask it).
 **Verdict:** ✅ Keep. Corrects R5.1 (which is now superseded on the header point): the header can no longer scroll off, and content no longer hides under the status bar.
+
+---
+
+### E14. Mobile primary nav is a bottom tab bar; the shell follows the iOS keyboard via `visualViewport` (UI pass 2026-10-08 — extends E13)
+
+**Chosen (2026-10-08):**
+- **Tab bar.** Below `md`, primary navigation is a five-tab bottom bar (Home · Training · Shoes · Deals · Anton). It replaces the hamburger + slide-down menu and the Son of Anton FAB on phones. Settings stays plumbing: a gear in the mobile top bar, Sign out on the Settings page.
+- **Static, not fixed.** The bar is a static `shrink-0` child of E13's fixed shell, below `<main>`, not `position: fixed`. So it owns the bottom safe-area inset and pages need no clearance padding.
+- **Keyboard-aware shell.** While the iOS keyboard is up, `useKeyboardViewport` sets `--app-height` on `<html>` to `visualViewport.height` (the shell is `h-[var(--app-height,100dvh)]`), adds `html.keyboard-open` (the tab bar hides) and pins scroll at 0. Android gets `interactive-widget=resizes-content` instead.
+- **One bar in chat.** The chat route hides the mobile top bar; its own 52px header replaces it.
+
+**Why:**
+- The PWA is used one-handed after runs, and five destinations fit thumb reach better than a top hamburger.
+- iOS doesn't shrink `100dvh` for the keyboard: it pans the page, which pushed E13's fixed header off-screen and floated the chat composer. `visualViewport` is the only API that reports the space actually left.
+- A static bar can't overlap content, unlike the FAB's `pb-24` clearance pattern.
+
+**Trade-offs:**
+- The 150px threshold for "keyboard open" is a heuristic, and pinch-zoom is excluded via `vv.scale`.
+- Five tabs at 380px leave ~76px each, so "Son of Anton" shortens to "Anton".
+- Settings is one tap further on mobile (a gear, not a menu row).
+
+**Verification limit:** as with E13, Chromium can't emulate the iOS keyboard or the safe-area insets. The keyboard path is a by-hand check on the installed iPhone PWA.
+**Verdict:** ✅ Keep.
 
 ---
 

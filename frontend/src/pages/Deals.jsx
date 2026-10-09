@@ -6,6 +6,7 @@ import ShoeProductCard from '@/components/ShoeProductCard'
 import DealDetailModal from '@/components/DealDetailModal'
 import ScrapeButton from '@/components/ScrapeButton'
 import WatchlistRow from '@/components/WatchlistRow'
+import FilterDisclosure from '@/components/FilterDisclosure'
 import { Card, CardContent } from '@/components/ui/card'
 import { Label } from '@/components/ui/label'
 import { Input } from '@/components/ui/input'
@@ -180,25 +181,7 @@ export default function Deals() {
       </PageHeader>
 
       {/* Mobile-only disclosure toggle; hidden on md+ where the deck is inline. */}
-      <button
-        type="button"
-        onClick={() => setFiltersOpen((o) => !o)}
-        className="focus-ring flex w-full items-center gap-2 rounded-[12px] border border-border bg-card px-4 py-3 text-left md:hidden"
-        aria-expanded={filtersOpen}
-      >
-        <SlidersHorizontal className="h-4 w-4 shrink-0 text-muted-foreground" />
-        <span className="font-medium text-foreground">Filters</span>
-        {activeFilters > 0 && (
-          <span className="rounded-full bg-primary/15 px-2 py-0.5 text-xs font-semibold text-primary">
-            {activeFilters}
-          </span>
-        )}
-        <ChevronDown
-          className={`ml-auto h-4 w-4 shrink-0 text-muted-foreground transition-transform duration-200 ${
-            filtersOpen ? '' : '-rotate-90'
-          }`}
-        />
-      </button>
+      <FilterDisclosure open={filtersOpen} onToggle={() => setFiltersOpen((o) => !o)} count={activeFilters} />
 
       <Card className={`md:block ${filtersOpen ? '' : 'hidden'}`}>
         <CardContent className="grid grid-cols-1 gap-4 p-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">

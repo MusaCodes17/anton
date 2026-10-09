@@ -5,7 +5,8 @@ import { Skeleton } from '@/components/ui/skeleton'
 
 /**
  * Card wrapper for the personal-best records grid (F4 — extracted from the
- * inline Training.jsx Records section into the standard card shell).
+ * inline Training.jsx Records section into the standard card shell). Two-up at
+ * every width, matching PredictionsCard.
  */
 export default function RecordsCard({ records }) {
   return (
@@ -19,7 +20,7 @@ export default function RecordsCard({ records }) {
       </div>
       <div className="p-4">
         {records.isLoading ? (
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <div className="grid grid-cols-2 gap-3">
             {Array.from({ length: 4 }).map((_, i) => (
               <Skeleton key={i} className="h-[140px] rounded-[14px]" />
             ))}
@@ -28,7 +29,7 @@ export default function RecordsCard({ records }) {
           <ErrorState error={records.error} onRetry={records.refetch} />
         ) : records.data?.records?.length ? (
           <div className="space-y-3">
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <div className="grid grid-cols-2 gap-3">
               {records.data.records.map((r) => (
                 <PBCard key={r.band} record={r} />
               ))}
