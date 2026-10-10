@@ -15,17 +15,17 @@ const subNav = [
 export default function Settings() {
   return (
     <div>
-      <div className="mb-6">
-        <div className="font-mono text-xs font-semibold tracking-[0.14em] text-accent-foreground">
+      <div className="mb-3 sm:mb-6">
+        <div className="hidden font-mono text-xs font-semibold tracking-[0.14em] text-accent-foreground sm:block">
           SETTINGS
         </div>
-        <h1 className="mt-1.5 font-heading text-[30px] font-extrabold tracking-tight text-foreground">
+        <h1 className="text-2xl font-heading font-extrabold tracking-tight text-foreground sm:mt-1.5 sm:text-[30px]">
           Settings
         </h1>
       </div>
 
       {/* Sub-nav — horizontal scroll on narrow viewports rather than wrapping */}
-      <nav className="mb-7 flex gap-1.5 overflow-x-auto border-b border-border pb-px">
+      <nav className="mb-4 flex sm:mb-7 gap-1.5 overflow-x-auto border-b border-border pb-px">
         {subNav.map(({ to, label, icon: Icon }) => (
           <NavLink
             key={to}
@@ -49,7 +49,7 @@ export default function Settings() {
 
       {/* Phones have no sidebar, so Sign out lives here (desktop keeps it in
           the sidebar footer). */}
-      <div className="mt-10 border-t border-border pt-3 md:hidden">
+      <div className="mt-6 md:mt-10 border-t border-border pt-3 md:hidden">
         <LogoutButton />
       </div>
     </div>

@@ -175,7 +175,7 @@ export default function Deals() {
   const hasFilters = activeFilters > 0
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 sm:space-y-6">
       <PageHeader eyebrow="DEALS" title="Deals" count={groups.length}>
         <ScrapeButton variant="outline" />
       </PageHeader>
@@ -184,7 +184,7 @@ export default function Deals() {
       <FilterDisclosure open={filtersOpen} onToggle={() => setFiltersOpen((o) => !o)} count={activeFilters} />
 
       <Card className={`md:block ${filtersOpen ? '' : 'hidden'}`}>
-        <CardContent className="grid grid-cols-1 gap-4 p-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
+        <CardContent className="grid grid-cols-2 gap-3 sm:gap-4 p-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
           <div className="space-y-1.5">
             <Label>Brand</Label>
             <Select value={brand} onValueChange={setBrand}>
