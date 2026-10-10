@@ -232,3 +232,22 @@ def test_inbox_http_round_trip_and_error_mapping(http):
     assert http("POST", "/api/coros/pending/999/confirm", json={"owned_shoe_id": sid}).status_code == 404
     assert http("POST", "/api/coros/pending/999/dismiss").status_code == 404
     assert http("POST", f"/api/coros/pending/{pid}/dismiss").status_code == 400   # already logged
+
+
+def test_confirm_carries_location_onto_the_activity_and_dict_hides_coordinates(db):
+    shoe = mk_shoe(db, 100.0)
+    p = mk_pending(db, location_label="Montreal Run", start_lat=45.502, start_lng=-73.567)
+    d = inbox.pending_to_dict(p)
+    assert d["location_label"] == "Montreal Run" and "start_lat" not in d and "start_lng" not in d
+    inbox.confirm(db, p.id, owned_shoe_id=shoe.id)
+    act = db.query(Activity).one()
+    assert (act.location_label, act.start_lat, act.start_lng) == ("Montreal Run", 45.502, -73.567)
+
+
+def test_confirm_run_without_location_kwargs_uses_the_pending_row(db):
+    shoe = mk_shoe(db, 100.0)
+    mk_pending(db, location_label="Montreal Run", start_lat=45.502, start_lng=-73.567)
+    coros_svc.confirm_run(db, coros_activity_id="480000000000000001", owned_shoe_id=shoe.id,
+                          run_date=date(2026, 10, 6), distance_km=12.53)
+    act = db.query(Activity).one()
+    assert (act.location_label, act.start_lat, act.start_lng) == ("Montreal Run", 45.502, -73.567)

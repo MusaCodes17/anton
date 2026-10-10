@@ -303,6 +303,10 @@ class Activity(Base):
     # Training depth (R2.7 T1). All nullable — existing rows stay untagged/unscored.
     training_load = Column(Float, nullable=True)  # COROS training-load score; null if unavailable
     training_focus = Column(String(50), nullable=True)  # coaching label, e.g. "Aerobic base"
+    # Start location (R5.4.1): rounded to ~100 m (app/utils/location.py); never a track.
+    start_lat = Column(Float, nullable=True)
+    start_lng = Column(Float, nullable=True)
+    location_label = Column(String(200), nullable=True)  # human label, e.g. "Montreal Run"
     # Controlled vocabulary (app/utils/activity_tags.py, ACTIVITY_TAGS) — the
     # governing input for PB eligibility (R2.7 T3), race promotion (T6), and the
     # weekly-summary agent (R3.1). Indexed: the PB query filters on it.
@@ -704,6 +708,10 @@ class PendingCorosRun(Base):
     avg_cadence = Column(Float, nullable=True)
     training_load = Column(Float, nullable=True)
     training_focus = Column(String(50), nullable=True)
+    # Start location (R5.4.1): rounded to ~100 m (app/utils/location.py); never a track.
+    start_lat = Column(Float, nullable=True)
+    start_lng = Column(Float, nullable=True)
+    location_label = Column(String(200), nullable=True)  # human label, e.g. "Montreal Run"
     start_timestamp = Column(Integer, nullable=False)
     end_timestamp = Column(Integer, nullable=False)
     suggested_shoe_id = Column(Integer, ForeignKey("owned_shoes.id", ondelete="SET NULL"), nullable=True)

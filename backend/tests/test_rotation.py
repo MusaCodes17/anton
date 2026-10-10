@@ -118,3 +118,13 @@ def test_log_run_without_threshold_leaves_fields_none(db):
     result = rotation.log_run(db, shoe.id, distance_km=10.0, run_date=date(2026, 7, 1))
     assert result.threshold_crossed is None
     assert result.threshold_message is None
+
+
+def test_log_run_rounds_start_coordinates(db):
+    shoe = _make_shoe(db, 0.0)
+    result = rotation.log_run(db, shoe.id, distance_km=5.0, run_date=date(2026, 7, 8),
+                              start_lat=45.488998, start_lng=-73.568001, location_label="Montreal Run")
+    act = result.run.activity
+    assert (act.start_lat, act.start_lng, act.location_label) == (45.489, -73.568, "Montreal Run")
+    bare = rotation.log_run(db, shoe.id, distance_km=5.0, run_date=date(2026, 7, 9))
+    assert bare.run.activity.start_lat is None

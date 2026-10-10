@@ -70,6 +70,9 @@ def confirm_run(
     training_load: Optional[float] = None,
     training_focus: Optional[str] = None,
     activity_tag: Optional[str] = None,
+    start_lat: Optional[float] = None,
+    start_lng: Optional[float] = None,
+    location_label: Optional[str] = None,
 ) -> Optional[rotation.RunLogResult]:
     """
     Log a single confirmed COROS run to an owned shoe.
@@ -87,6 +90,10 @@ def confirm_run(
     MCP prompt) is responsible for confirming a suggested tag with the runner
     before it reaches here (C9); this function does not infer.
 
+    `start_lat`/`start_lng`/`location_label` (R5.4.1): explicit kwargs win; when
+    all three are None they are taken from the pending inbox row for this label
+    (any status) when not passed -- never from an LLM client. log_run rounds.
+
     Raises LookupError if the shoe doesn't exist (caller decides whether to
     skip or surface the error).
     """
@@ -98,6 +105,11 @@ def confirm_run(
         resolve_pending(db, coros_activity_id)
         db.commit()
         return None
+
+    if start_lat is None and start_lng is None and location_label is None and coros_activity_id:
+        pend = db.query(PendingCorosRun).filter(PendingCorosRun.label_id == coros_activity_id).first()
+        if pend is not None:
+            start_lat, start_lng, location_label = pend.start_lat, pend.start_lng, pend.location_label
 
     result = rotation.log_run(
         db,
@@ -118,6 +130,9 @@ def confirm_run(
         training_load=training_load,
         training_focus=training_focus,
         activity_tag=activity_tag,
+        start_lat=start_lat,
+        start_lng=start_lng,
+        location_label=location_label,
     )
 
     settings_svc.set_setting(db, "last_coros_sync_at", datetime.now(timezone.utc).isoformat())

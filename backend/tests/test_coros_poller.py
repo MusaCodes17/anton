@@ -411,3 +411,10 @@ def test_sync_endpoint_runs_a_tick_and_status_reports_it(http, monkeypatch):
     st = http("GET", "/api/coros/status").json()
     assert st["sync"]["pending_count"] == 3 and st["sync"]["last_trigger"] == "manual"
     assert st["sync"]["last_error"] is None
+
+
+def test_poll_stores_label_and_rounded_coordinates_on_the_pending_row(connected):
+    tick(connected, FakeClient())
+    row = connected.query(PendingCorosRun).filter_by(label_id="480858305181286402").one()
+    assert row.location_label == "Montreal Run"
+    assert (row.start_lat, row.start_lng) == (45.502, -73.567)   # 45.501689, -73.567256 rounded to 3 dp

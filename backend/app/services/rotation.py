@@ -19,6 +19,7 @@ from app.models.models import (
 # Pace formatting lives in the pure app.utils.pace module (R1.5c). Re-exported
 # so existing callers (rotation.pace_to_seconds / rotation.seconds_to_pace) keep
 # working; prefer importing from app.utils.pace directly in new code.
+from app.utils.location import round_coord
 from app.utils.pace import pace_to_seconds, seconds_to_pace  # noqa: F401
 from app.utils.shoe_types import default_mileage_limit
 
@@ -445,6 +446,9 @@ def log_run(
     training_load: Optional[float] = None,
     training_focus: Optional[str] = None,
     activity_tag: Optional[str] = None,
+    start_lat: Optional[float] = None,
+    start_lng: Optional[float] = None,
+    location_label: Optional[str] = None,
     increment_mileage: bool = True,
     commit: bool = True,
 ) -> RunLogResult:
@@ -464,6 +468,9 @@ def log_run(
             (R2.7 T2) the COROS sync path now captures — all nullable, written
             straight onto the canonical Activity. Manual/Strava callers that
             don't have them simply omit them.
+        start_lat/start_lng/location_label: optional start point (R5.4.1).
+            Coordinates are rounded here via ``round_coord`` (~100 m) so every
+            caller gets the privacy rule; only the rounded value is stored.
         increment_mileage: add ``distance_km`` to the shoe's current_mileage.
             Set False when the caller manages mileage itself (Strava backfill).
         commit: commit the transaction. Set False to flush only (assigning
@@ -497,6 +504,9 @@ def log_run(
         training_load=training_load,
         training_focus=training_focus,
         activity_tag=activity_tag,
+        start_lat=round_coord(start_lat),
+        start_lng=round_coord(start_lng),
+        location_label=location_label,
         coros_activity_id=coros_activity_id,
         strava_activity_id=strava_activity_id,
         description=notes,

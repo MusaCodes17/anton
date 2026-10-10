@@ -317,3 +317,30 @@ def test_fitness_overview_calls_the_tool_with_no_arguments():
     c, s, _ = client(ok(FITNESS_TEXT))
     assert c.fitness_overview().vo2max == 59.0
     assert s.calls[0]["json"]["params"] == {"name": "queryFitnessAssessmentOverview", "arguments": {}}
+
+
+# --- location (R5.4.1) ------------------------------------------------------------
+
+def test_list_fixture_parses_location_label_and_full_precision_coordinates():
+    for r in parse_sport_records(LIST_TEXT):
+        assert r.location_label == "Montreal Run"
+        assert (r.start_lat, r.start_lng) == (45.501689, -73.567256)   # rounding is storage's job
+
+
+_NO_LOC = ('"Sport Records — 2026-10-06 to 2026-10-06 (1 records)\\n\\n'
+           '1. Indoor Run — 2026-10-06\\n'
+           '   Time Window: startTimestamp=1791333579 | endTimestamp=1791336739\\n'
+           '   Duration: 52:39 | Distance: 12.53 km\\n'
+           '   Average Pace: 4:12 /km | Avg HR: 171 bpm | Calories: 710 kcal\\n'
+           '   LabelId: 480858305181286402 | SportType: 100"')
+
+
+def test_record_without_location_lines_gets_none():
+    (r,) = parse_sport_records(_NO_LOC)
+    assert (r.location_label, r.start_lat, r.start_lng) == (None, None, None)
+
+
+def test_garbled_coordinates_line_is_a_loud_contract_error():
+    bad = _NO_LOC.replace("   Time Window", "   Start Coordinates: somewhere north\\n   Time Window", 1)
+    with pytest.raises(CorosContractError):
+        parse_sport_records(bad)
