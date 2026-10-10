@@ -12,7 +12,7 @@ from app.utils.activity_tags import ACTIVITY_TAGS, is_valid_tag
 from app.services import rotation
 from app.mcp_server import _core
 from app.mcp_server._core import mcp
-from app.mcp_server._shared import _SOURCE_BADGES, _format_mileage_bar, _owned_shoe_to_dict, _shoe_note_to_dict, _shoe_run_to_dict
+from app.mcp_server._shared import _SOURCE_BADGES, _format_mileage_bar, _owned_shoe_payload, _owned_shoes_payload, _shoe_note_payload, _shoe_run_payload
 
 
 @mcp.tool()
@@ -31,8 +31,7 @@ def get_owned_shoes(status_filter: Optional[str] = None) -> List[dict]:
         if status_filter:
             query = query.filter(OwnedShoe.status == status_filter)
         shoes = query.order_by(OwnedShoe.created_at.desc()).all()
-        stats = rotation.compute_lifetime_stats_bulk(db, [s.id for s in shoes])
-        return [_owned_shoe_to_dict(s, stats[s.id]) for s in shoes]
+        return _owned_shoes_payload(db, shoes)
 
 
 @mcp.tool()
@@ -56,7 +55,7 @@ def get_shoe_runs(owned_shoe_id: int) -> dict:
         stats = rotation.compute_lifetime_stats(db, owned_shoe_id)
         return {
             "owned_shoe_id": owned_shoe_id,
-            "runs": [_shoe_run_to_dict(r) for r in runs],
+            "runs": [_shoe_run_payload(r) for r in runs],
             "lifetime_avg_pace": stats.lifetime_avg_pace,
             "lifetime_avg_hr": stats.lifetime_avg_hr,
             "total_runs": stats.total_runs,
@@ -204,7 +203,7 @@ def get_shoe_notes(owned_shoe_id: int) -> List[dict]:
             .order_by(desc(ShoeNote.created_at))
             .all()
         )
-        return [_shoe_note_to_dict(n) for n in notes]
+        return [_shoe_note_payload(n) for n in notes]
 
 
 @mcp.tool()
@@ -476,20 +475,21 @@ def shoe_rotation_resource() -> str:
         active = [s for s in shoes if s.status == "active"]
         retired = [s for s in shoes if s.status != "active"]
 
+        # One bulk attach feeds both the JSON block and the markdown stats below
+        # (sets s.lifetime_avg_pace / lifetime_avg_hr / total_runs on each instance).
+        shoe_dicts = _owned_shoes_payload(db, active + retired)
+
         md_lines = ["# My Shoe Rotation", "", "**Active Shoes**"]
-        shoe_dicts = []
         for s in active:
-            stats = rotation.compute_lifetime_stats(db, s.id)
             bar = _format_mileage_bar(s.current_mileage, s.mileage_limit)
             label = s.nickname or ""
             name = f"{s.brand} {s.model}" + (f" ({label})" if label else "")
-            pace = stats.lifetime_avg_pace or "—"
-            hr = f"{stats.lifetime_avg_hr}bpm" if stats.lifetime_avg_hr else "—"
-            runs = stats.total_runs
+            pace = s.lifetime_avg_pace or "—"
+            hr = f"{s.lifetime_avg_hr}bpm" if s.lifetime_avg_hr else "—"
+            runs = s.total_runs
             type_tag = f" [{s.shoe_type}]" if s.shoe_type else ""
             md_lines.append(f"- {name}{type_tag} — {round(s.current_mileage)}km  {bar}")
             md_lines.append(f"  Avg pace: {pace} · Avg HR: {hr} · {runs} runs")
-            shoe_dicts.append(_owned_shoe_to_dict(s, stats))
 
         if not active:
             md_lines.append("_(none)_")
@@ -497,11 +497,9 @@ def shoe_rotation_resource() -> str:
         if retired:
             md_lines += ["", "**Retired Shoes**"]
             for s in retired:
-                stats = rotation.compute_lifetime_stats(db, s.id)
                 label = s.nickname or ""
                 name = f"{s.brand} {s.model}" + (f" ({label})" if label else "")
                 md_lines.append(f"- {name} — {round(s.current_mileage)}km (retired)")
-                shoe_dicts.append(_owned_shoe_to_dict(s, stats))
 
         markdown = "\n".join(md_lines)
         payload = json.dumps({"shoes": shoe_dicts}, default=str)
@@ -585,9 +583,9 @@ def shoe_detail_resource(shoe_id: int) -> str:
         markdown = "\n".join(md_lines)
         payload = json.dumps(
             {
-                "shoe": _owned_shoe_to_dict(shoe, stats),
-                "recent_runs": [_shoe_run_to_dict(r) for r in recent_runs],
-                "recent_notes": [_shoe_note_to_dict(n) for n in recent_notes],
+                "shoe": _owned_shoe_payload(db, shoe),
+                "recent_runs": [_shoe_run_payload(r) for r in recent_runs],
+                "recent_notes": [_shoe_note_payload(n) for n in recent_notes],
             },
             default=str,
         )
@@ -640,7 +638,7 @@ def shoe_runs_resource(shoe_id: int) -> str:
         payload = json.dumps(
             {
                 "shoe_id": shoe_id,
-                "runs": [_shoe_run_to_dict(r) for r in runs],
+                "runs": [_shoe_run_payload(r) for r in runs],
                 "lifetime_avg_pace": stats.lifetime_avg_pace,
                 "lifetime_avg_hr": stats.lifetime_avg_hr,
                 "total_runs": stats.total_runs,
@@ -686,7 +684,7 @@ def shoe_notes_resource(shoe_id: int) -> str:
             md_lines.append("")
 
         markdown = "\n".join(md_lines).rstrip()
-        payload = json.dumps({"shoe_id": shoe_id, "notes": [_shoe_note_to_dict(n) for n in notes]}, default=str)
+        payload = json.dumps({"shoe_id": shoe_id, "notes": [_shoe_note_payload(n) for n in notes]}, default=str)
         return f"{markdown}\n\n```json\n{payload}\n```"
 
 

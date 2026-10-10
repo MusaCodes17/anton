@@ -7,7 +7,7 @@ from app.utils.activity_tags import ACTIVITY_TAGS, is_valid_tag
 from app.services import rotation, coros as coros_svc, settings as settings_svc, fitness as fitness_svc, coros_connection as coros_connection_svc, coros_poller as coros_poller_svc, coros_inbox as coros_inbox_svc
 from app.mcp_server import _core
 from app.mcp_server._core import mcp
-from app.mcp_server._shared import _owned_shoe_to_dict
+from app.mcp_server._shared import _owned_shoe_payload
 
 
 @mcp.tool()
@@ -237,14 +237,13 @@ def confirm_coros_run(
         if result is None:
             return {"success": False, "error": f"Run {coros_activity_id} is already logged"}
 
-        stats = rotation.compute_lifetime_stats(db, result.shoe.id)
         return {
             "success": True,
             "checkpoint_reached": result.checkpoint_reached,
             "checkpoint_km": result.checkpoint_km,
             "threshold_crossed": result.threshold_crossed,
             "threshold_message": result.threshold_message,
-            "shoe": _owned_shoe_to_dict(result.shoe, stats),
+            "shoe": _owned_shoe_payload(db, result.shoe),
         }
 
 

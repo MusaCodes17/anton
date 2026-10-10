@@ -5,12 +5,17 @@ Private to the package: tools/resources import these by name; nothing here is re
 from typing import Optional
 from datetime import datetime, timezone
 
+from sqlalchemy.orm import Session
+
 from app.models.models import Deal, OwnedShoe, ShoeNote, ShoeRun
-from app.utils.shoe_types import default_mileage_limit
+from app.models.schemas import OwnedShoeResponse, ShoeNoteResponse, ShoeRunResponse, WatchlistItem
 from app.services import rotation
 
 
 def _deal_to_dict(deal: Deal) -> dict:
+    """Deliberately hand-written flat projection (brand/model/retailer name inline) for LLM
+    consumers; `DealResponse` nests the full shoe and retailer objects instead. Not a drift
+    bug: when adding a deal field, add it here AND to `DealResponse`."""
     return {
         "id": deal.id,
         "shoe_id": deal.shoe_id,
@@ -32,92 +37,31 @@ def _deal_to_dict(deal: Deal) -> dict:
     }
 
 
-def _watchlist_entry_to_dict(entry) -> dict:
-    return {
-        "shoe_id": entry.shoe_id,
-        "brand": entry.brand,
-        "model": entry.model,
-        "shoe_type": entry.shoe_type,
-        "msrp": entry.msrp,
-        "target_price": entry.target_price,
-        "image_url": entry.image_url,
-        "on_sale": entry.on_sale,
-        "best_deal": (
-            {
-                "deal_id": entry.best_deal.deal_id,
-                "retailer_name": entry.best_deal.retailer_name,
-                "current_price": entry.best_deal.current_price,
-                "savings_percent": entry.best_deal.savings_percent,
-                "savings_amount": entry.best_deal.savings_amount,
-                "product_url": entry.best_deal.product_url,
-                "in_stock": entry.best_deal.in_stock,
-            }
-            if entry.best_deal else None
-        ),
-        "best_ever_price": entry.best_ever_price,
-        "best_ever_at": entry.best_ever_at.isoformat() if entry.best_ever_at else None,
-        "last_seen": [
-            {
-                "retailer_name": ls.retailer_name,
-                "price": ls.price,
-                "in_stock": ls.in_stock,
-                "product_url": ls.product_url,
-                "scraped_at": ls.scraped_at.isoformat() if ls.scraped_at else None,
-            }
-            for ls in entry.last_seen
-        ],
-    }
+def _watchlist_entry_payload(entry) -> dict:
+    """Watchlist row via the REST schema (`WatchlistItem`) so MCP and REST can't drift."""
+    return WatchlistItem.model_validate(entry).model_dump(mode="json")
 
 
-def _owned_shoe_to_dict(shoe: OwnedShoe, lifetime_stats=None) -> dict:
-    pace = lifetime_stats.lifetime_avg_pace if lifetime_stats else None
-    hr = lifetime_stats.lifetime_avg_hr if lifetime_stats else None
-    total = lifetime_stats.total_runs if lifetime_stats else 0
-    return {
-        "id": shoe.id,
-        "brand": shoe.brand,
-        "model": shoe.model,
-        "nickname": shoe.nickname,
-        "shoe_type": shoe.shoe_type,
-        "purchase_date": shoe.purchase_date.isoformat() if shoe.purchase_date else None,
-        "starting_mileage": shoe.starting_mileage,
-        "current_mileage": shoe.current_mileage,
-        "status": shoe.status,
-        "purchase_price": shoe.purchase_price,
-        "mileage_limit": shoe.mileage_limit,
-        "recommended_limit_km": default_mileage_limit(shoe.shoe_type),
-        "cost_per_km": rotation.cost_per_km(shoe),
-        "lifetime_avg_pace": pace,
-        "lifetime_avg_hr": hr,
-        "total_runs": total,
-    }
+def _owned_shoe_payload(db: Session, shoe: OwnedShoe) -> dict:
+    """Owned shoe via `OwnedShoeResponse` after `rotation.attach_computed_fields` (same as REST)."""
+    return OwnedShoeResponse.model_validate(rotation.attach_computed_fields(db, shoe)).model_dump(mode="json")
 
 
-def _shoe_note_to_dict(note: ShoeNote) -> dict:
-    return {
-        "id": note.id,
-        "owned_shoe_id": note.owned_shoe_id,
-        "body": note.body,
-        "mileage_at_note": note.mileage_at_note,
-        "triggered_by": note.triggered_by,
-        "created_at": note.created_at.isoformat() if note.created_at else None,
-    }
+def _owned_shoes_payload(db: Session, shoes: list[OwnedShoe]) -> list[dict]:
+    """List form of `_owned_shoe_payload` using the bulk attach (constant query count)."""
+    rotation.attach_computed_fields_bulk(db, shoes)
+    return [OwnedShoeResponse.model_validate(s).model_dump(mode="json") for s in shoes]
 
 
-def _shoe_run_to_dict(run: ShoeRun) -> dict:
-    """Flatten an attribution row + its canonical activity into the run shape
-    the tools have always returned (run fields now live on the activity)."""
-    a = run.activity
-    return {
-        "id": run.id,
-        "owned_shoe_id": run.owned_shoe_id,
-        "distance_km": a.distance_km if a else None,
-        "run_date": a.run_date.isoformat() if a and a.run_date else None,
-        "source": a.source if a else None,
-        "avg_pace": rotation.seconds_to_pace(a.avg_pace_s_per_km) if a and a.avg_pace_s_per_km else None,
-        "avg_hr": a.avg_hr if a else None,
-        "notes": a.description if a else None,
-    }
+def _shoe_note_payload(note: ShoeNote) -> dict:
+    """Journal entry via `ShoeNoteResponse`."""
+    return ShoeNoteResponse.model_validate(note).model_dump(mode="json")
+
+
+def _shoe_run_payload(run: ShoeRun) -> dict:
+    """Attribution row via `ShoeRunResponse`; run fields come from ShoeRun's property
+    proxies onto the joined Activity, so callers that loop should eager-load `ShoeRun.activity`."""
+    return ShoeRunResponse.model_validate(run).model_dump(mode="json")
 
 
 # ---------------------------------------------------------------------------

@@ -10,7 +10,7 @@ from app.scrapers.lock import ScrapeInProgressError, scrape_guard
 from app.services import settings as settings_svc, scrape_history as scrape_history_svc, deals as deals_svc, watchlist as watchlist_svc, deal_alerts as deal_alerts_svc, coupon_hunter as coupon_hunter_svc
 from app.mcp_server import _core
 from app.mcp_server._core import mcp
-from app.mcp_server._shared import _deal_to_dict, _format_relative_time, _watchlist_entry_to_dict
+from app.mcp_server._shared import _deal_to_dict, _format_relative_time, _watchlist_entry_payload
 
 
 @mcp.tool()
@@ -94,7 +94,7 @@ def get_watchlist() -> List[dict]:
     """
     with _core.get_session() as db:
         entries = watchlist_svc.build_watchlist(db)
-        return [_watchlist_entry_to_dict(e) for e in entries]
+        return [_watchlist_entry_payload(e) for e in entries]
 
 
 @mcp.tool()
@@ -456,7 +456,7 @@ def deals_watchlist_resource() -> str:
             md_lines.append(f"| {name} | {type_tag} | {msrp} | {best_ever} |")
 
     markdown = "\n".join(md_lines)
-    payload = json.dumps({"entries": [_watchlist_entry_to_dict(e) for e in entries]}, default=str)
+    payload = json.dumps({"entries": [_watchlist_entry_payload(e) for e in entries]}, default=str)
     return f"{markdown}\n\n```json\n{payload}\n```"
 
 

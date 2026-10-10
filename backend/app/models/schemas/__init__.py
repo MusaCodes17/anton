@@ -78,3 +78,9 @@ from app.models.schemas.chat import (
 from app.models.schemas.settings import (
     ScheduleUpdate,
 )
+
+from app.models.schemas.watchlist import (
+    LastSeenPrice,
+    WatchlistDeal,
+    WatchlistItem,
+)
