@@ -1,7 +1,34 @@
 # Anton — Session Changelog
 
-**Last Updated:** 2026-10-09
+**Last Updated:** 2026-10-10
 **Status / current focus:** see `docs/project_state.md` (the perishable snapshot). This file is the append-only session log — the authoritative record of *what happened*; the `docs/` suite is the reference material.
+
+---
+
+## P3 debt quick wins + housekeeping — 2026-10-10
+
+**[REMOVED] Dead code** (project_state §7 P3, re-verified first):
+- `backend/test_scraper.py` and `backend/view_db.py` (old manual scripts; `test_scraper.py` made live network calls and pytest collected its 2 functions) and their `.dockerignore` lines.
+- `frontend/src/components/StatCard.jsx` (unreferenced).
+- `GET /api/scrape/test/{the-last-hunt,altitude-sports,jd-sports}` — superseded by `POST /shoes/test`.
+- `POST /api/admin/cleanup-kids-shoes` — the one-off from the D7 kids-filter fix (the base_scraper comment no longer points at it).
+- `GET /api/dashboard/recent-deals|best-deals`, their `services/dashboard` functions and the `api.js` wrappers. Confirmed unused first: no page, hook, MCP tool or test called them. `/api/dashboard/stats` stays (SettingsSync).
+- `deals.expires_at`: never set or read anywhere (645 deals, 0 non-null). Migration `ad1e2f3a4b5c` (batch mode, reversible); `DealResponse` loses the always-null field.
+
+**[CHANGED] Logging and time** (§7 P3):
+- `logging.basicConfig(level=INFO)` moves from an import side effect in `scrapers/base_scraper.py` to `main.py` (app assembly). Uvicorn configures only its own loggers, so removing it without a replacement would have silenced the app's INFO lines.
+- `chat_service`: an unavailable MCP server is logged with `logger.warning`, not `print()`.
+- `scrape_state`, the scraping router and the scraper error strings stamp timezone-aware UTC, matching `scrape_runner`'s `completed_at`. The naive ISO strings were read as local time by the browser (about 4 h off).
+- `deal_alerts` keeps naive UTC on purpose (SQLite returns naive `detected_at`) via `datetime.now(timezone.utc).replace(tzinfo=None)` — same behaviour, no deprecated call.
+
+**[CHANGED] Housekeeping**
+- Pruned 17 merged remote branches (all merged into `main`; `soa-mobile-chat` confirmed patch-identical to PR #42 with `git cherry`) and 16 local ones. `main` is the only remote branch between PRs.
+- `project_state.md` tidied: §1 focus line (the stale "Current Focus"), §2 rows for RA1.3 / RA1.4 / the documentation program (finished human steps, retired review docs), §6 and §7 updated, §10 branch note, and §11 rewritten as a short ordered list (the struck-through history stays in this changelog).
+
+**[VERIFIED]**
+- Suite **806 → 804 passed + 1 skipped**; the difference is exactly the two functions of the deleted `backend/test_scraper.py` (diffed collected test IDs before/after).
+- Migration round-trip `upgrade → downgrade → upgrade` on a scratch copy of the dev DB: 645 deals kept at every step; the `deals` indexes and foreign keys are identical before and after. The real DB was not touched.
+- `vite build` clean. No UI change, so no visual pass.
 
 ---
 
