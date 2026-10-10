@@ -5,6 +5,25 @@
 
 ---
 
+## Heat analysis + one parked list — 2026-10-10
+
+Docs only; no code, no migration. The analysis was read-only on a copy of the July DB. Decision: the external weather lookup stays parked (design_decisions B23 follow-up).
+
+**[ADDED] Heat analysis (roadmap §R5.4.2 gate)**
+- 215 activities carry weather, 172 are runs, 111 are steady runs (form-trend filter).
+- Raw medians dip at ≥ 26 °C (1.329 m/beat vs 1.414–1.426 at 18–26 °C, n = 22), but the dip does not survive controls: hot runs vs cooler runs within ±14 days are −0.3 %; a fit on temperature + time trend + distance gives −0.3 % per 10 °C (inside noise; humidity adds nothing); within-month hot-vs-cool is +0.9 %.
+- The raw dip is fitness, not heat: efficiency rose ~6 %/year, and every ≥ 26 °C run is from Jun/Aug/Sep 2025. Only a faint signal remains at feels-like ≥ 30 °C (1.329 vs ~1.40, n = 10).
+- **Decision:** do not build the external lookup or heat-adjusted efficiency. Reopen only with a real hot-weather sample.
+
+**[CHANGED] Roadmap and decisions**
+- §R5.4.2: the gate is recorded as checked and not met, parked.
+- New §Parked & gated list: 15 rows plus a declined note, indexing everything deliberately not built with its reopen trigger. Confirmed by the runner.
+- B23: 2026-10-10 follow-up added.
+- **[CHANGED]** Stale roadmap labels fixed: R2.2/R2.5/R2.6 marked done, RA2 done, RA3 clarified (CI exists, deploy job not built), R3/R4 headings no longer say parked, R5.6 marked as ongoing practice.
+- project_state §11: the external weather lookup item now reads as parked.
+
+---
+
 ## R5 open items — Bought it, location, archive weather, insights, archive tags — 2026-10-10
 
 Branch `r5-open-items`, ten commits (`3b68edb` scoping through `ee01890` (UI), plus this docs commit). Three additive migrations (`b1c2d3e4f5a6`, `c2d3e4f5a6b7`, `d3e4f5a6b7c8`); the insights service and the archive-tag script add no schema. Decisions: design_decisions B21–B23. The server steps are in roadmap §R5.4.4 and project_state §11.
