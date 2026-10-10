@@ -108,6 +108,12 @@ class PriceRecord(Base):
     colorway = Column(String(200), nullable=True)  # e.g. "Black / White - Grey"
     scraped_at = Column(DateTime(timezone=True), server_default=func.now(), index=True)
 
+    # watchlist window queries (perf 2026-10-10)
+    __table_args__ = (
+        Index("ix_price_records_shoe_price_id", "shoe_id", "price", "id"),
+        Index("ix_price_records_shoe_retailer_scraped_id", "shoe_id", "retailer_id", "scraped_at", "id"),
+    )
+
     # Relationships
     shoe = relationship("Shoe", back_populates="price_records")
     retailer = relationship("Retailer", back_populates="price_records")
