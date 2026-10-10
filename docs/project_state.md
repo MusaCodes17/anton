@@ -188,7 +188,7 @@ Nothing blocks day-to-day development. External blockers, all worked around or a
 
 Last ~10 days, newest first (full record: `docs/design_decisions.md`):
 
--27. **B23 — Strava weather is projected from `raw_json` into typed columns; the outside lookup is gated** (R5.4.2, 2026-10-10 — ✅ Keep). Units checked on real values (°C, humidity 0–1 scaled to percent, wind m/s). The projection copies recorded values, so it is not INV-7 derived data. The Open-Meteo lookup needs a spike and a decision before it is built.
+-27. **B23 — Strava weather is projected from `raw_json` into typed columns; the outside lookup is gated** (R5.4.2, 2026-10-10 — ✅ Keep). Units checked on real values (°C, humidity 0–1 scaled to percent, wind m/s). The projection copies recorded values, so it is not INV-7 derived data. The Open-Meteo lookup needs a spike and a decision before it is built — parked 2026-10-10 after the heat analysis found no effect (roadmap §Parked & gated).
 -26. **B22 — Run location is a rounded start point plus label; coordinates stay out of MCP** (R5.4.1, 2026-10-10 — ✅ Keep). 3 dp (about 100 m), from the COROS run list and the archive's first GPS fix. The best-efforts scan now writes two location columns; it still never writes distance, time, attribution or mileage.
 -25. **B21 — Purchase provenance is a recorded fact, not a relationship** (R5.3, 2026-10-10 — ✅ Keep). Plain strings on owned shoes (B1 holds); no FK, no converted state on deals; stopping a watch is an explicit choice.
 -24. **E16 — Training section layout is a server-side UI preference with no MCP counterpart** (PWA UI pass, 2026-10-09 — ✅ Keep). It's a deliberate exception to REST/MCP parity: presentation state shared by phone and laptop. Strict on write, lenient on read.
@@ -243,7 +243,7 @@ Nothing is on fire. Everything through R8, CI (E15), the PWA UI pass (E16), the 
 1. **R5 open items on the server (human; the code is built, the data steps are not).**
    - Review the archive-tag dry run: `python -m app.scripts.infer_archive_tags` from `backend/`. Expect 181 of 689 untagged runs, including the "Half Marathon on a random Tuesday" false positive. Apply with `--apply` only after review; it never overwrites a tag.
    - Archive location and best efforts: run `import_strava --csv`, then `backfill_best_efforts --export-dir <export> --rescan` (roadmap §R5.4.4 runbook).
-   - External weather lookup: build only if heat analysis on the 215 archive runs shows something worth having for new runs.
+   - External weather lookup parked 2026-10-10 (heat analysis: no effect) — see roadmap §Parked & gated.
 2. **Post-deploy checks (human, if not yet done).**
    - Deploy `main`. Migration `ad1e2f3a4b5c` runs on start; it drops the always-empty `deals.expires_at` (Litestream keeps history).
    - Run the best-efforts backfill on the server: copy the export's `activities/` and run `python -m app.scripts.backfill_best_efforts --export-dir <path>`.

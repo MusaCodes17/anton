@@ -253,6 +253,7 @@ Intervals and Track **count** (the runner's call). A stretch is continuous runni
 **Advantages:** 215 archive runs get weather with no outbound call, no new service and no secret. The reconciliation was exact.
 **Trade-offs:** Only the archive has weather. COROS runs carry none until a lookup exists. The lookup would be Anton's first outbound historical-data call, so it needs a spike and a decision entry before any build. Missing weather stays null.
 **Verdict:** ✅ Keep the projection. 🕐 The lookup waits on a question: build it only if heat analysis on the 215 archive runs shows something worth having for new runs. It depends on R5.4.1's start coordinates.
+**2026-10-10 follow-up:** the heat analysis found no effect once fitness is controlled (roadmap §R5.4.2), so the external lookup stays parked; see roadmap §Parked & gated.
 
 ---
 
