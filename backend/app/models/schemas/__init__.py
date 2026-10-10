@@ -25,6 +25,7 @@ from app.models.schemas.deals import (
     PromoCodeBase,
     PromoCodeCreate,
     PromoCodeResponse,
+    PurchaseDraftResponse,
     RetailerBase,
     RetailerCreate,
     RetailerResponse,

@@ -243,6 +243,8 @@ class OwnedShoe(Base):
     current_mileage = Column(Float, nullable=False, default=0)  # starting_mileage + sum(runs)
     status = Column(String(20), nullable=False, default="active")  # active | retired | for_sale
     purchase_price = Column(Float, nullable=True)  # what was paid; cost-per-km is derived, not stored
+    purchase_retailer = Column(String(100), nullable=True)  # R5.3: where it was bought — a recorded string, never an FK to deals/retailers (B1)
+    purchase_url = Column(Text, nullable=True)  # R5.3: the product page it was bought from — recorded fact, not a link to a tracked deal (B1)
     mileage_limit = Column(Float, nullable=True)   # km at which this shoe should be retired (user-set)
     image_url = Column(Text, nullable=True)  # manually-set product image; overrides any auto-matched image
     # R3.3: runner-authored (or LLM-drafted + runner-edited) review stored alongside the shoe.
@@ -301,6 +303,15 @@ class Activity(Base):
     # Training depth (R2.7 T1). All nullable — existing rows stay untagged/unscored.
     training_load = Column(Float, nullable=True)  # COROS training-load score; null if unavailable
     training_focus = Column(String(50), nullable=True)  # coaching label, e.g. "Aerobic base"
+    # Start location (R5.4.1): rounded to ~100 m (app/utils/location.py); never a track.
+    start_lat = Column(Float, nullable=True)
+    start_lng = Column(Float, nullable=True)
+    location_label = Column(String(200), nullable=True)  # human label, e.g. "Montreal Run"
+    # R5.4.2: from the Strava export's weather (raw_json); null for COROS/manual
+    weather_temp_c = Column(Float, nullable=True)
+    apparent_temp_c = Column(Float, nullable=True)
+    humidity_pct = Column(Float, nullable=True)
+    wind_speed_m_s = Column(Float, nullable=True)
     # Controlled vocabulary (app/utils/activity_tags.py, ACTIVITY_TAGS) — the
     # governing input for PB eligibility (R2.7 T3), race promotion (T6), and the
     # weekly-summary agent (R3.1). Indexed: the PB query filters on it.
@@ -702,6 +713,10 @@ class PendingCorosRun(Base):
     avg_cadence = Column(Float, nullable=True)
     training_load = Column(Float, nullable=True)
     training_focus = Column(String(50), nullable=True)
+    # Start location (R5.4.1): rounded to ~100 m (app/utils/location.py); never a track.
+    start_lat = Column(Float, nullable=True)
+    start_lng = Column(Float, nullable=True)
+    location_label = Column(String(200), nullable=True)  # human label, e.g. "Montreal Run"
     start_timestamp = Column(Integer, nullable=False)
     end_timestamp = Column(Integer, nullable=False)
     suggested_shoe_id = Column(Integer, ForeignKey("owned_shoes.id", ondelete="SET NULL"), nullable=True)

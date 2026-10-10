@@ -103,6 +103,13 @@ class ActivityDetail(BaseModel):
     training_focus: Optional[str] = None
     activity_tag: Optional[str] = None
     strava_activity_id: Optional[int] = None
+    location_label: Optional[str] = None
+    start_lat: Optional[float] = None
+    start_lng: Optional[float] = None
+    weather_temp_c: Optional[float] = None
+    apparent_temp_c: Optional[float] = None
+    humidity_pct: Optional[float] = None
+    wind_speed_m_s: Optional[float] = None
     shoe: Optional[ActivityShoe] = None
 
 

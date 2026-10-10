@@ -23,6 +23,13 @@ class OwnedShoeBase(BaseModel):
     starting_mileage: float = Field(0, ge=0, description="km already on the shoe when added")
     status: str = Field("active", description="active | retired | for_sale")
     purchase_price: Optional[float] = Field(None, gt=0, description="What was paid for the shoe")
+    purchase_retailer: Optional[str] = Field(
+        None, max_length=100,
+        description="R5.3: where the shoe was bought — a recorded string, not a link to a tracked retailer/deal (B1)",
+    )
+    purchase_url: Optional[str] = Field(
+        None, description="R5.3: product page it was bought from — a recorded string (B1)"
+    )
     mileage_limit: Optional[float] = Field(None, gt=0, description="km at which this shoe should be retired (user-set)")
     image_url: Optional[str] = Field(None, description="Manually-set product image URL")
 
@@ -52,6 +59,8 @@ class OwnedShoeUpdate(BaseModel):
     purchase_date: Optional[date] = None
     status: Optional[str] = None
     purchase_price: Optional[float] = Field(None, gt=0)
+    purchase_retailer: Optional[str] = Field(None, max_length=100)
+    purchase_url: Optional[str] = None
     mileage_limit: Optional[float] = Field(None, gt=0)
     image_url: Optional[str] = None
 

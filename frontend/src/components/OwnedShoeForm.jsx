@@ -27,9 +27,14 @@ const empty = {
   image_url: '',
   mileage_limit: '',
   current_mileage: '',
+  purchase_retailer: '',
+  purchase_url: '',
 }
 
-export default function OwnedShoeForm({ initial, onSubmit, onCancel, submitting }) {
+// `prefill` seeds a CREATE form (e.g. "Bought it" from a deal). It is deliberately
+// separate from `initial`, which switches the form into edit mode (disabled starting
+// mileage, mileage-adjust logic). Ignored when `initial` is set.
+export default function OwnedShoeForm({ initial, prefill, onSubmit, onCancel, submitting }) {
   const [values, setValues] = useState(() => ({
     ...empty,
     ...(initial
@@ -46,8 +51,21 @@ export default function OwnedShoeForm({ initial, onSubmit, onCancel, submitting 
           // Blank means "reset to the type default" (sent as null).
           mileage_limit: initial.mileage_limit != null ? String(initial.mileage_limit) : '',
           current_mileage: String(roundMileage(initial.current_mileage)),
+          purchase_retailer: initial.purchase_retailer ?? '',
+          purchase_url: initial.purchase_url ?? '',
         }
-      : {}),
+      : prefill
+        ? {
+            brand: prefill.brand ?? '',
+            model: prefill.model ?? '',
+            shoe_type: prefill.shoe_type ?? '',
+            purchase_date: prefill.purchase_date ?? '',
+            purchase_price: prefill.purchase_price != null ? String(prefill.purchase_price) : '',
+            image_url: prefill.image_url ?? '',
+            purchase_retailer: prefill.purchase_retailer ?? '',
+            purchase_url: prefill.purchase_url ?? '',
+          }
+        : {}),
   }))
   const [errors, setErrors] = useState({})
   const { data: shoeTypes = [] } = useShoeTypes()
@@ -96,6 +114,8 @@ export default function OwnedShoeForm({ initial, onSubmit, onCancel, submitting 
       starting_mileage: values.starting_mileage === '' ? 0 : parseFloat(values.starting_mileage),
       status: values.status,
       image_url: values.image_url.trim() || null,
+      purchase_retailer: values.purchase_retailer.trim() || null,
+      purchase_url: values.purchase_url.trim() || null,
     }
     if (initial) {
       payload.mileage_limit = values.mileage_limit === '' ? null : limitNum
@@ -151,6 +171,22 @@ export default function OwnedShoeForm({ initial, onSubmit, onCancel, submitting 
             value={values.purchase_price}
             onChange={set('purchase_price')}
             placeholder="225.00"
+          />
+        </Field>
+        <Field label="Bought at" hint="Optional — retailer name">
+          <Input
+            value={values.purchase_retailer}
+            onChange={set('purchase_retailer')}
+            maxLength={100}
+            placeholder="Running Room"
+          />
+        </Field>
+        <Field label="Product link" hint="Optional — where you bought it">
+          <Input
+            type="url"
+            value={values.purchase_url}
+            onChange={set('purchase_url')}
+            placeholder="https://…"
           />
         </Field>
         <Field label="Status">

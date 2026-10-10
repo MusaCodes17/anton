@@ -11,6 +11,7 @@ import {
   Trash2,
 } from 'lucide-react'
 import MileageProgressBar from '@/components/MileageProgressBar'
+import HowItRunsCard from '@/components/shoes/HowItRunsCard'
 import OwnedShoeForm from '@/components/OwnedShoeForm'
 import LogRunDialog from '@/components/LogRunDialog'
 import ShoeTypeBadge from '@/components/ShoeTypeBadge'
@@ -153,19 +154,39 @@ export default function ShoeDetail() {
             </div>
           </div>
 
-          {shoe.purchase_price ? (
-            <div className="text-sm text-muted-foreground">
-              Bought for {formatCurrency(shoe.purchase_price)}
-              {shoe.cost_per_km != null && ` · ${formatCurrency(shoe.cost_per_km)}/km`}
-            </div>
-          ) : (
-            <div className="text-sm text-faint">
-              Purchase price not recorded —{' '}
-              <button type="button" onClick={() => setEditing(true)} className="focus-ring rounded text-accent-foreground underline">
-                add it
-              </button>
-            </div>
-          )}
+          {(() => {
+            const retailer = shoe.purchase_url ? (
+              <a
+                href={shoe.purchase_url}
+                target="_blank"
+                rel="noreferrer"
+                className="focus-ring rounded text-accent-foreground underline"
+              >
+                {shoe.purchase_retailer || 'retailer'}
+              </a>
+            ) : (
+              shoe.purchase_retailer
+            )
+            const hasWhere = !!(shoe.purchase_retailer || shoe.purchase_url)
+            if (shoe.purchase_price) {
+              return (
+                <div className="text-sm text-muted-foreground">
+                  Bought for {formatCurrency(shoe.purchase_price)}
+                  {hasWhere && <> at {retailer}</>}
+                  {shoe.cost_per_km != null && ` · ${formatCurrency(shoe.cost_per_km)}/km`}
+                </div>
+              )
+            }
+            return (
+              <div className={hasWhere ? 'text-sm text-muted-foreground' : 'text-sm text-faint'}>
+                {hasWhere && <>Bought at {retailer} · </>}
+                Purchase price not recorded —{' '}
+                <button type="button" onClick={() => setEditing(true)} className="focus-ring rounded text-accent-foreground underline">
+                  add it
+                </button>
+              </div>
+            )
+          })()}
 
           <div className="flex flex-wrap gap-2 pt-1">
             <Button size="sm" onClick={() => setLoggingRun(true)}>
@@ -201,6 +222,8 @@ export default function ShoeDetail() {
           <Stat label="Avg HR" value={shoe.lifetime_avg_hr ? `${shoe.lifetime_avg_hr} bpm` : '—'} />
         </div>
       </div>
+
+      <HowItRunsCard ownedShoeId={shoe.id} />
 
       {/* Replacement deals */}
       <ReplacementDeals

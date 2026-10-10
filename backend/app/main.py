@@ -13,7 +13,7 @@ from app.database import run_migrations, SessionLocal
 from app.mcp_server import mcp
 from app.middleware.access_log import AccessLogMiddleware
 from app.middleware.auth import BearerAuthMiddleware
-from app.routers import shoes, retailers, deals, dashboard, scraping, export, owned_shoes, coros_connect, chat, admin, training, strava, watchlist, activities, races, home, shoe_types, checkpoints, preferences, oauth as oauth_router, session as session_router
+from app.routers import shoes, retailers, deals, dashboard, scraping, export, owned_shoes, coros_connect, chat, admin, training, strava, watchlist, activities, races, home, shoe_types, checkpoints, insights, preferences, oauth as oauth_router, session as session_router
 from app.services import schedule as schedule_svc
 
 # Load environment variables
@@ -126,6 +126,7 @@ app.include_router(races.router, prefix="/api")
 app.include_router(home.router, prefix="/api")
 app.include_router(shoe_types.router, prefix="/api")
 app.include_router(checkpoints.router, prefix="/api")
+app.include_router(insights.router, prefix="/api")
 
 # OAuth 2.1 login page — always registered (needed even when OAuth is not
 # fully configured so the route exists for graceful "not configured" handling).

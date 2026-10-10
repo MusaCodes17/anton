@@ -55,6 +55,7 @@ from app.services.coros_mcp_client import (
     CorosApiError, CorosContractError, CorosMcpClient, CorosRun,
 )
 from app.services.coros_suggestion import suggest_shoe
+from app.utils.location import round_coord
 
 logger = logging.getLogger(__name__)
 
@@ -143,6 +144,9 @@ def _to_pending(run: CorosRun) -> PendingCorosRun:
         avg_cadence=run.avg_cadence, training_load=run.training_load,
         training_focus=run.training_focus, start_timestamp=run.start_timestamp,
         end_timestamp=run.end_timestamp, status="pending",
+        # Rounded at storage (R5.4.1): the inbox never holds full-precision coordinates.
+        location_label=run.location_label,
+        start_lat=round_coord(run.start_lat), start_lng=round_coord(run.start_lng),
     )
 
 

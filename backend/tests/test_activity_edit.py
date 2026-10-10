@@ -85,3 +85,16 @@ def test_promote_requires_distance(db):
     db.add(a); db.commit(); db.refresh(a)
     with pytest.raises(ValueError):
         races_svc.create_completed_from_activity(db, a.id)
+
+
+def test_activity_detail_exposes_location_and_weather(db):
+    """R5.4.2: detail carries label, coords and weather (REST/UI surface)."""
+    a = Activity(source="strava", strava_activity_id=9, run_date=date(2026, 6, 1),
+                 location_label="Montreal Run", start_lat=45.5, start_lng=-73.6,
+                 weather_temp_c=18.0, apparent_temp_c=17.0, humidity_pct=40.0, wind_speed_m_s=2.5)
+    db.add(a); db.commit()
+    d = activities_svc.get_activity_detail(db, a.id)
+    assert d["location_label"] == "Montreal Run" and d["start_lat"] == 45.5 and d["start_lng"] == -73.6
+    assert (d["weather_temp_c"], d["apparent_temp_c"], d["humidity_pct"], d["wind_speed_m_s"]) == (18.0, 17.0, 40.0, 2.5)
+    from app.routers.activities import ActivityDetail
+    assert ActivityDetail(**d).wind_speed_m_s == 2.5

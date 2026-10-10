@@ -42,6 +42,7 @@ def pending_to_dict(row: PendingCorosRun) -> dict:
         "avg_cadence": row.avg_cadence,
         "training_load": row.training_load,
         "training_focus": row.training_focus,
+        "location_label": row.location_label,   # label only; coordinates stay out of API/MCP payloads
         "suggested_shoe_id": row.suggested_shoe_id,
         "suggestion_reason": row.suggestion_reason,
         "first_seen_at": row.first_seen_at.isoformat() if row.first_seen_at else None,
@@ -113,6 +114,9 @@ def confirm(
         training_load=row.training_load,
         training_focus=row.training_focus,
         activity_tag=activity_tag,
+        start_lat=row.start_lat,
+        start_lng=row.start_lng,
+        location_label=row.location_label,
     )
 
     row.status = "confirmed"

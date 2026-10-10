@@ -26,6 +26,7 @@ import pandas as pd
 from sqlalchemy.orm import Session
 
 from app.models.models import Activity
+from app.utils.strava_weather import weather_from_raw
 
 LOCAL_TZ = ZoneInfo("America/Toronto")
 STRAVA_DATE_FORMAT = "%b %d, %Y, %I:%M:%S %p"
@@ -240,6 +241,9 @@ def upsert_strava_activities(rows: list[StravaActivityRow], session: Session) ->
         target.fit_filename = r.fit_filename
         target.grade_adjusted_distance_m = r.grade_adjusted_distance_m
         target.raw_json = r.raw_json
+        # R5.4.2: weather projected from the raw row (idempotent: re-import refreshes it).
+        for col, val in weather_from_raw(r.raw_json).items():
+            setattr(target, col, val)
 
     return stats
 

@@ -134,6 +134,9 @@ export const dealsApi = {
   get: (id) => client.get(`/api/deals/${id}`).then((r) => r.data),
   deactivate: (id) =>
     client.put(`/api/deals/${id}/deactivate`).then((r) => r.data),
+  // R5.3 "Bought it": server-built owned-shoe draft (price/retailer/url) for a deal.
+  purchaseDraft: (id) =>
+    client.get(`/api/deals/${id}/purchase-draft`).then((r) => r.data),
   forShoe: (shoeId, params) =>
     client.get(`/api/deals/shoe/${shoeId}`, { params }).then((r) => r.data),
   forRetailer: (retailerId, params) =>
@@ -205,6 +208,11 @@ export const ownedShoesApi = {
   deleteNote: (noteId) => client.delete(`/api/owned-shoes/notes/${noteId}`).then((r) => r.data),
   replacementDeals: (id) => client.get(`/api/owned-shoes/${id}/replacement-deals`).then((r) => r.data),
   rotationOverview: () => client.get('/api/owned-shoes/rotation-overview').then((r) => r.data),
+}
+
+// ============== INSIGHTS (R5.5) ==============
+export const insightsApi = {
+  shoe: (id) => client.get(`/api/insights/shoes/${id}`).then((r) => r.data),
 }
 
 // ============== TRAINING ==============

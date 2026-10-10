@@ -89,6 +89,11 @@ class CorosRun:
     training_load: Optional[float] = None
     training_focus: Optional[str] = None
     has_detail: bool = False
+    # --- location (list record; absent for e.g. indoor runs). Full precision here:
+    # normalization = parse; rounding happens at storage (utils/location.py).
+    location_label: Optional[str] = None
+    start_lat: Optional[float] = None
+    start_lng: Optional[float] = None
 
 
 @dataclass(frozen=True)
@@ -183,6 +188,14 @@ def parse_sport_records(text: str) -> list[CorosRun]:
         pace = _req(r"Average Pace:\s*([\d:]+)\s*/km", block, "Average Pace", ctx)
         hr = re.search(r"Avg HR:\s*(\d+)\s*bpm", block)
         cal = re.search(r"Calories:\s*([\d.]+)\s*kcal", block)
+        loc = re.search(r"^\s*Location:\s*(.+?)\s*$", block, re.M)
+        coords = re.search(r"^\s*Start Coordinates:\s*(.+?)\s*$", block, re.M)
+        lat = lng = None
+        if coords:   # line present but unparseable = format drift: loud, never silent nulls
+            pair = re.fullmatch(r"(-?\d+(?:\.\d+)?),\s*(-?\d+(?:\.\d+)?)", coords.group(1))
+            if not pair:
+                raise CorosContractError(f"{ctx}: unparseable Start Coordinates line (format change?)")
+            lat, lng = float(pair.group(1)), float(pair.group(2))
         runs.append(CorosRun(
             label_id=ids.group(1),
             sport_type=int(ids.group(2)),
@@ -194,6 +207,9 @@ def parse_sport_records(text: str) -> list[CorosRun]:
             calories=float(cal.group(1)) if cal else None,
             start_timestamp=int(win.group(1)),
             end_timestamp=int(win.group(2)),
+            location_label=loc.group(1) if loc else None,
+            start_lat=lat,
+            start_lng=lng,
         ))
     if len(runs) != expected:
         raise CorosContractError(
