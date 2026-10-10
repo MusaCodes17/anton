@@ -28,7 +28,7 @@ def _session(db, monkeypatch):
     @contextmanager
     def fake_session():
         yield db          # share the test session; the fixture owns closing it
-    monkeypatch.setattr(mcp_server, "get_session", fake_session)
+    monkeypatch.setattr(mcp_server._core, "get_session", fake_session)
     monkeypatch.setenv("COROS_TOKEN_KEY", Fernet.generate_key().decode())
 
 
@@ -193,7 +193,7 @@ def inline_thread(monkeypatch):
     tool's worker-thread body on this thread."""
     async def run_inline(fn, *a, **k):
         return fn(*a, **k)
-    monkeypatch.setattr(mcp_server.asyncio, "to_thread", run_inline)
+    monkeypatch.setattr(asyncio, "to_thread", run_inline)
 
 
 def test_sync_coros_now_runs_the_manual_sync_and_saves_fitness(db, monkeypatch, inline_thread):
@@ -259,3 +259,20 @@ def test_prompt_uses_the_queue_not_the_connector_for_logging():
     assert "querySportRecords" not in text and "Step 1b" not in text
     assert "do NOT call getActivityDetail" in text
     assert "suggested_shoe_id" in text and "confirm_coros_run" in text
+
+
+def test_confirm_reports_threshold_crossed(db):
+    s = shoe(db, 595.0)
+    out = mcp_confirm(s.id)
+    assert out["success"] is True
+    assert out["threshold_crossed"] == 600 and out["threshold_message"]
+
+
+def test_confirm_threshold_key_present_and_none_when_not_crossed(db):
+    s = shoe(db, 100.0)
+    out = mcp_confirm(s.id)
+    assert "threshold_crossed" in out and out["threshold_crossed"] is None
+
+
+def test_prompt_thresholds_generated_from_table():
+    assert "600km, 700km, or 800km" in mcp_server.sync_coros_runs()

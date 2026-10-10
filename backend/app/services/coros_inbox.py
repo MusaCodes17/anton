@@ -22,7 +22,6 @@ from sqlalchemy.orm import Session
 
 from app.models.models import OwnedShoe, PendingCorosRun
 from app.services import coros as coros_svc
-from app.services import rotation
 from app.utils.activity_tags import is_valid_tag
 from app.utils.pace import seconds_to_pace
 
@@ -96,7 +95,6 @@ def confirm(
     shoe = db.get(OwnedShoe, owned_shoe_id)
     if shoe is None:
         raise LookupError(f"Owned shoe {owned_shoe_id} not found")
-    old_mileage = shoe.current_mileage
 
     result = coros_svc.confirm_run(
         db,
@@ -126,7 +124,6 @@ def confirm(
                 "checkpoint_reached": False, "checkpoint_km": None,
                 "threshold_crossed": None, "threshold_message": None}
 
-    crossed = rotation.threshold_crossed_by(old_mileage, result.shoe.current_mileage)
     return {
         "logged": True,
         "already_logged": False,
@@ -134,8 +131,8 @@ def confirm(
                  "new_mileage": round(result.shoe.current_mileage, 2)},
         "checkpoint_reached": result.checkpoint_reached,
         "checkpoint_km": result.checkpoint_km,
-        "threshold_crossed": crossed[0] if crossed else None,
-        "threshold_message": crossed[1] if crossed else None,
+        "threshold_crossed": result.threshold_crossed,
+        "threshold_message": result.threshold_message,
     }
 
 

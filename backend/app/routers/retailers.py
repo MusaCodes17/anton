@@ -11,6 +11,7 @@ from app.models import (
     Retailer, RetailerCreate, RetailerUpdate, RetailerResponse,
     PromoCode, PromoCodeCreate, PromoCodeResponse
 )
+from app.models.schemas import ScraperConfig
 from app.scrapers.platform_detection import determine_platform, PlatformDetectionError
 from app.services import onboarding as onboarding_svc
 
@@ -76,6 +77,9 @@ def create_retailer(retailer: RetailerCreate, db: Session = Depends(get_db)):
     
     data = retailer.model_dump()
     requested_platform = data.pop("platform", None)
+    # model_dump() would expand the typed config into a dict full of None keys;
+    # store only what the caller actually sent.
+    data["scraper_config"] = retailer.scraper_config.as_stored() if retailer.scraper_config else None
 
     try:
         platform, force_scraping_enabled = determine_platform(
@@ -116,6 +120,8 @@ def update_retailer(
     # Update only provided fields
     update_data = retailer_update.model_dump(exclude_unset=True)
     for field, value in update_data.items():
+        if field == "scraper_config":
+            value = retailer_update.scraper_config.as_stored() if retailer_update.scraper_config else None
         setattr(db_retailer, field, value)
     
     db.commit()
@@ -151,7 +157,7 @@ class RetailerProbeRequest(BaseModel):
 
 class RetailerOnboardRequest(BaseModel):
     platform: str
-    scraper_config: Optional[dict] = None
+    scraper_config: Optional[ScraperConfig] = None
 
 
 class RetailerUnscrapableRequest(BaseModel):
@@ -201,7 +207,7 @@ def onboard_retailer(
         return onboarding_svc.apply_onboarding(
             db, retailer_id,
             platform=payload.platform,
-            scraper_config=payload.scraper_config,
+            scraper_config=payload.scraper_config.as_stored() if payload.scraper_config else None,
         )
     except LookupError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))

@@ -10,7 +10,7 @@ New route over existing/new service logic; also when converting a fat-router pat
 ## Required context
 - `CLAUDE.md` §4.1 (thin adapters) and §7 (error translation).
 - Exemplars: `routers/races.py` (thin CRUD) or `routers/home.py` (aggregate-per-page).
-- `models/schemas.py` conventions.
+- `models/schemas/` conventions (one module per domain, re-exported from the package).
 
 ## Workflow
 1. Pick the router file by resource (one file per resource — CLAUDE.md §3).

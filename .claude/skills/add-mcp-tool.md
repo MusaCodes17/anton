@@ -9,14 +9,15 @@ Alongside every S01 capability; or when the assistant "can't see/do" something R
 
 ## Required context
 - `docs/architecture.md` §9 (the AI layer).
-- `mcp_server.py` exemplars: a read tool, a `{"success": ...}` write tool, a templated resource.
+- `mcp_server/` exemplars (domain modules `deals`, `shoes`, `coros`, `training`, `onboarding`): a read tool, a `{"success": ...}` write tool, a templated resource.
 - `CLAUDE.md` §13 — the docstring *is* the LLM-facing contract.
 - `docs/dependency_graph.md` §3 (what the module already imports).
 
 ## Workflow
 1. **Confirm the service function exists** — never put logic in the tool
-   (mcp_server.py's embedded rules are flagged debt, tech_debt P1-6; don't add more).
-2. Tool body uses the `get_session()` context manager — FastAPI DI does **not** work here.
+   (the 600/700/800 km nudge now lives in `rotation.log_run`; don't add adapter-owned rules).
+2. Put the tool in the matching domain module under `backend/app/mcp_server/` and add it to the re-export list in `mcp_server/__init__.py`. Tool body uses `_core.get_session()` (a context manager) — FastAPI DI does **not** work here; tests patch `app.mcp_server._core.get_session`.
+   Render ORM results through the shared Pydantic schemas (`app.models.schemas`) where one exists, not a new hand-written dict.
 3. **Docstring written for the model**: args, semantics, side effects, and whether human
    confirmation is required (design_decisions C9).
 4. Envelope conventions (CLAUDE.md §6): write tools return `{"success": bool, ...}` and never

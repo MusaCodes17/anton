@@ -228,7 +228,7 @@ def test_endpoint_and_mcp_tool_agree(db, monkeypatch):
     @contextmanager
     def fake_session():
         yield db
-    monkeypatch.setattr(mcp_server, "get_session", fake_session)
+    monkeypatch.setattr(mcp_server._core, "get_session", fake_session)
 
     rest = get_race_readiness(as_of=AS_OF, db=db).model_dump()
     mcp = mcp_server.get_race_block_context(as_of=AS_OF.isoformat())["readiness"]

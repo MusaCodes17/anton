@@ -191,6 +191,8 @@ def log_run(owned_shoe_id: int, run: ShoeRunCreate, db: Session = Depends(get_db
     (100, 200, 300...) that the previous mileage hadn't reached yet, so the
     frontend can prompt for a notes-journal entry. Whether that prompt has
     already been shown for a given checkpoint is tracked client-side.
+    Also reports threshold_crossed/threshold_message when the run crosses a
+    600/700/800 km end-of-life advisory (computed by rotation.log_run).
     """
     try:
         result = rotation.log_run(
@@ -207,6 +209,8 @@ def log_run(owned_shoe_id: int, run: ShoeRunCreate, db: Session = Depends(get_db
         updated_mileage=result.shoe.current_mileage,
         checkpoint_reached=result.checkpoint_reached,
         checkpoint_km=result.checkpoint_km,
+        threshold_crossed=result.threshold_crossed,
+        threshold_message=result.threshold_message,
         shoe=rotation.attach_computed_fields(db, result.shoe),
     )
 

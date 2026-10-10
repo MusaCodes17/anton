@@ -169,3 +169,16 @@ def test_defaulted_limit_puts_worn_shoe_in_retirement_pipeline(db):
 
     pipeline = rotation.retirement_pipeline(db)
     assert any(e.shoe.id == created.id for e in pipeline)
+
+
+def test_rest_log_run_reports_threshold_crossed(db):
+    """POST log-run carries the end-of-life advisory computed by rotation.log_run."""
+    from datetime import date
+    from app.models import ShoeRunCreate
+    from app.routers.owned_shoes import log_run as log_run_endpoint
+
+    shoe = _make_shoe(db, 595.0)
+    body = ShoeRunCreate(distance_km=10.0, run_date=date(2026, 7, 1))
+    resp = log_run_endpoint(shoe.id, body, db)
+    assert resp.model_dump(mode="json")["threshold_crossed"] == 600
+    assert resp.threshold_message

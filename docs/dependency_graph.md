@@ -25,7 +25,7 @@ The nominal layering, with what actually occupies each layer in this codebase:
 │ API LAYER (adapters)                                                         │
 │   app/main.py — assembly, CORS, lifespan                                     │
 │   app/routers/* — 17 REST routers                                            │
-│   app/mcp_server.py — MCP tools/resources/prompts (a peer API surface)       │
+│   app/mcp_server/ — MCP tools/resources/prompts (a peer API surface)         │
 │   app/routers/chat.py + services/chat_service.py — SSE/LLM gateway           │
 └───────────────┬─────────────────────────────────────────────────────────────┘
                 ▼
@@ -69,7 +69,7 @@ The honest summary of the layering: **Entry → API → (Service | ORM) → SQLi
 ```
 run.py ──uvicorn──▶ app.main
 app.main → app.database (init_db)
-         → app.mcp_server (mcp instance; mounted at /mcp, lifespan merged)
+         → app.mcp_server (package; mcp instance; mounted at /mcp, lifespan merged)
          → app.routers.{shoes, retailers, deals, dashboard, scraping, export,
                          coros_sync, owned_shoes, chat, admin, training, strava,
                          watchlist, activities, races, home}
@@ -84,7 +84,7 @@ Claude Desktop  ⇢ HTTP /mcp          (mcp-remote)
 ```
 \* inferred from role; import blocks not individually audited this pass.
 
-Everything transitively imports `app.database` and `app.models.models`; those two modules are the correct, intended "everyone depends on them" roots. `app.main` importing `app.mcp_server` at module level means **the entire scraper subsystem loads at boot** (mcp_server → scraper_manager → registry → all 8 bespoke scrapers → Playwright import).
+Everything transitively imports `app.database` and `app.models.models`; those two modules are the correct, intended "everyone depends on them" roots. `app.main` importing `app.mcp_server` at module level means **the entire scraper subsystem loads at boot** (mcp_server.deals → scrapers.orchestrator → registry → all 8 bespoke scrapers → Playwright import).
 
 ---
 
@@ -111,14 +111,15 @@ Everything transitively imports `app.database` and `app.models.models`; those tw
 | `export` | — | models (seed-source generation inline) | utility |
 | `admin` | — | models + **scrapers.base_scraper.BaseScraper** ⚠ (kids-shoe regex as cleanup rule) | one-off |
 
-### MCP server (`mcp_server.py`) — one module, five downstream families
+### MCP server (`mcp_server/`) — a package, five downstream families
 ```
-mcp_server → database.SessionLocal
+mcp_server._core → mcp (FastMCP), get_session → database.SessionLocal
+mcp_server.{deals,shoes,coros,training,onboarding} → _core, _shared
            → models.models (Activity, Deal, OwnedShoe, PriceRecord, Retailer, Shoe, ShoeNote, ShoeRun)
-           → scrapers.scraper_manager (shim ⚠) — trigger_scrape
+           → scrapers.{orchestrator, lock} — trigger_scrape
            → services.{rotation, coros, settings, strava_stats, races}
 ```
-Deal/shoe/retailer/price-history tools query the ORM directly (no service exists for those reads); rotation/training/races tools go through services. The module also carries its own dict serializers (`_deal_to_dict`, `_owned_shoe_to_dict`, …) — a second serialization system parallel to `models/schemas.py` (§9).
+Deal/shoe/retailer/price-history tools query the ORM directly (no service exists for those reads); rotation/training/races tools go through services. Owned shoes, runs, notes and watchlist entries render through the shared Pydantic schemas (`models/schemas/`); only `_deal_to_dict` remains as a deliberate flat projection for LLMs (2026-10-10).
 
 ### Chat gateway
 ```
@@ -206,8 +207,8 @@ There is no shared API-contract artifact (no generated client, no shared types);
 **Hard Python import cycles: none.** The import graph is a DAG. Verified pressure points:
 
 1. ~~**`routers.coros_sync → routers.owned_shoes`**~~ *(resolved 2026-10-08: `coros_sync` deleted)* — the only sibling-router import (it pulls the private `_attach_computed_fields`). Not circular today, but it is one refactor away: if `owned_shoes` ever needs anything from `coros_sync` (plausible — sync status on the shoe response), the cycle appears. This edge is also the last remnant of the refactor's unfinished "Task D" (the `CHECKPOINT_INTERVAL_KM` re-export in `owned_shoes.py` exists solely to serve it).
-2. **`app.models/__init__` aggregates `models.py` + `schemas.py`** — safe because `schemas.py` imports nothing from `models.py`, but the package `__init__` is the sort of aggregation point where a future "schema needs an ORM enum" import would create `models ↔ schemas` circularity through the package.
-3. **Runtime (not import) cycle — the loopback loop:** `chat_service` → HTTP → `/mcp` → `mcp_server` → services → DB, all inside the same process that is currently serving the chat request. The import graph is acyclic *because the cycle was pushed onto the network*. It works (async server, tools on threadpool), but it is a genuine self-dependency: the app cannot answer a chat message unless it can reach itself over TCP at `MCP_SERVER_URL`.
+2. **`app.models/__init__` aggregates `models.py` + `schemas/`** — safe because the `schemas` package imports nothing from `models.py`, but the package `__init__` is the sort of aggregation point where a future "schema needs an ORM enum" import would create `models ↔ schemas` circularity through the package.
+3. **Runtime (not import) cycle — the loopback loop:** `chat_service` → HTTP → `/mcp` → `mcp_server` (package) → services → DB, all inside the same process that is currently serving the chat request. The import graph is acyclic *because the cycle was pushed onto the network*. It works (async server, tools on threadpool), but it is a genuine self-dependency: the app cannot answer a chat message unless it can reach itself over TCP at `MCP_SERVER_URL`.
 4. **Protocol-level cycle:** `draft_shoe_review` uses MCP sampling — server asks the connected client's LLM for a completion, which the client could route back into tool calls. Bounded by the client, not by Anton.
 
 ---
@@ -233,8 +234,8 @@ Dependencies that don't appear in any `import` statement:
 
 1. **`rotation` as the cross-domain knot.** It is simultaneously the run-domain hub (correct) and the only deals-domain client inside services (imports `Deal`, `PriceRecord`, `Shoe`). Every future attempt to treat "training" and "deals" as separable modules hits this one file.
 2. ~~**`coros_sync` ↔ `owned_shoes`**~~ *(resolved 2026-10-08)* — private-helper import between sibling routers; response-shaping logic (`_attach_computed_fields`) trapped inside a router that another router needs.
-3. **`mcp_server.py` as a monolith adapter.** ~20 tools + 7 resources + 1 prompt at the audit (39 tools + 12 resources + 7 prompts by 2026-10-09) + 2 formatting helpers + hand-rolled dict serializers in one module, importing models, scrapers, and five services. It also embeds *business rules* (the 600/700/800 km threshold messages, the review-prompt template) that exist nowhere else — the adapter owns logic, so REST clients can never see those thresholds.
-4. **Two serialization systems for the same aggregates.** Pydantic response models (REST) and `_*_to_dict` functions (MCP) must be kept in agreement by hand; the owned-shoe shape exists in at least three renderings (schema, MCP dict, resource markdown/JSON).
+3. ~~**`mcp_server.py` as a monolith adapter.**~~ *(split and thinned 2026-10-10: now the `mcp_server/` package, per-domain modules; the 600/700/800 km nudge moved to `rotation.log_run`)* Historical description: ~20 tools + 7 resources + 1 prompt at the audit (39 tools + 12 resources + 7 prompts by 2026-10-09) + 2 formatting helpers + hand-rolled dict serializers in one module, importing models, scrapers, and five services. It also embeds *business rules* (the 600/700/800 km threshold messages, the review-prompt template) that exist nowhere else — the adapter owns logic, so REST clients can never see those thresholds.
+4. ~~**Two serialization systems for the same aggregates.**~~ *(resolved 2026-10-10 for owned shoes, runs, notes and watchlist entries; `_deal_to_dict` stays a documented flat projection)* Historical description: Pydantic response models (REST) and `_*_to_dict` functions (MCP) must be kept in agreement by hand; the owned-shoe shape exists in at least three renderings (schema, MCP dict, resource markdown/JSON).
 5. **Everything → `scraper_manager` shim.** Four consumers (scraping router, shoes router, mcp_server, scrape_runner) are coupled to the pre-refactor façade, so the decomposed modules (orchestrator/lock/registry) can't evolve their interfaces independently.
 6. **Provider triplication in `chat_service`.** Three ~100-line agentic loops (Anthropic/OpenAI/Gemini) implement the same contract with copy-adapted control flow; a change to the event protocol (e.g., a new SSE event type) must be made three times.
 7. **Frontend type vocabulary copy** (`lib/shoeTypes.js`) coupled by value to the backend's `shoe_type` strings — which are themselves the load-bearing cross-domain join key.
@@ -250,7 +251,7 @@ Measured against the Entry → API → Services → Repository → DB ideal the 
 | 1 | **API → ORM directly** (skipping services; no repository exists) | `deals`, `dashboard`, `watchlist`, `export`, `shoes`, `retailers` routers; `chat.py` resource picker; MCP deal/shoe/retailer tools | Structural — this is the old pattern the newer endpoints (`home`, `activities`, `training`, `races`) already abandoned. `watchlist` is the largest single instance (~100 lines of domain reduction in a router). |
 | 2 | **Router → Router** | ~~`coros_sync → owned_shoes._attach_computed_fields`~~ (resolved 2026-10-08) | The clearest single violation; also the known "Task D" leftover. |
 | 3 | **API → scraper internals** | `shoes` router → `ScraperManager`; `retailers` router → `platform_detection`; `admin` router → `BaseScraper.is_kids_shoe` | Moderate — scraping has no service façade, so routers reach into the subsystem. `admin` using a scraper's regex as a data-cleanup rule couples data hygiene to scraping internals. |
-| 4 | **Business logic in adapters** | `mcp_server`: mileage-threshold messaging, review-prompt construction; ~~`coros_sync`: skip-on-error confirmation policy~~ (removed) | Logic invisible to the other API surface. |
+| 4 | **Business logic in adapters** | `mcp_server`: review-prompt construction (mileage-threshold messaging moved to `rotation.log_run`, 2026-10-10); ~~`coros_sync`: skip-on-error confirmation policy~~ (removed) | Logic invisible to the other API surface. |
 | 5 | **Presentation in the model layer** | `ShoeRun.avg_pace` property formats a display string inside the ORM class (with duplicated logic) | Small but new (Phase-5); the model layer now owns a formatting rule. |
 | 6 | **Entry-point layer doing schema work** | `init_db()` `create_all` at app startup alongside Alembic | Known issue (architecture.md §15.4); listed here because it is precisely a layer-authority violation. |
 
@@ -267,7 +268,7 @@ Directional, ordered by leverage-per-effort. Several are completions of moves th
 3. **Extract a tiny pure `pace` module** (below both models and services — no app imports). `rotation.pace_to_seconds/seconds_to_pace`, the `ShoeRun.avg_pace` proxy, and `coros_client.seconds_to_pace` (a third copy) all converge on it. This resolves the model-layer duplication without inverting layers, and pace formatting becomes one fact.
 4. **Adopt one import convention for models** — either the `app.models` package façade or `app.models.models`, not both within the same file (currently `shoes.py`, `owned_shoes.py`, and others mix them). While there, fix the package `__init__` to export the current model set (it still lacks `Activity`-era names like `PlannedRace`/`StravaGearMapping`), or drop the façade entirely and import from `models.models` uniformly — the façade only earns its keep if it's complete.
 5. **Promote `watchlist` (and eventually `deals`/`dashboard`) logic into a service**, matching the pattern `home`/`activities` already established. This is less about purity and more about the MCP surface: today MCP cannot expose the watchlist because its logic lives in a router; a `services/watchlist.py` makes REST + MCP parity free — the same argument that motivated every other service extraction here.
-6. **Move adapter-owned business rules down one layer.** The 600/700/800 km thresholds belong next to `RETIREMENT_THRESHOLD` in `rotation`; the review-prompt template could live with rotation/notes logic. MCP tools then match the thin-adapter standard the module's own docstring claims.
+6. ~~**Move adapter-owned business rules down one layer.**~~ *(thresholds done 2026-10-10; the review-prompt template remains in `mcp_server/shoes.py`)* The 600/700/800 km thresholds belong next to `RETIREMENT_THRESHOLD` in `rotation`; the review-prompt template could live with rotation/notes logic. MCP tools then match the thin-adapter standard the module's own docstring claims.
 7. **Make the loopback dependency explicit or remove it.** Cheapest: derive `MCP_SERVER_URL` from the server's own host/port config and log the self-connection at startup so failure is diagnosable. Better long-term: an in-process MCP transport (or direct service invocation behind the same tool interface) so the assistant no longer requires the app to reach itself over TCP — this also removes the hidden ordering constraint between the MCP session manager lifespan and first chat request.
 8. **Eager-load `ShoeRun.activity` at the query seams.** Any list-of-runs read path (`get_shoe_runs`, resources, lifetime stats already migrated) should treat the attribution→activity join as mandatory, or the Phase-5 property proxies quietly reintroduce per-row queries. A single query helper ("runs with activities for shoe X") in `rotation`/`activities` centralizes it. Longer-term, migrating readers to `UnifiedActivity` and shrinking the proxy surface removes the trap entirely.
 9. **Single-source the chat model catalog.** One structure (id, label, provider) consumed by both `/chat/providers` and `_get_provider` turns two-files-must-agree into one list.

@@ -24,7 +24,7 @@ alembic upgrade head
 ## Add a new column (standard workflow)
 
 1. Add the column to the model in `app/models/models.py`
-2. Add the field to the relevant schema in `app/models/schemas.py`
+2. Add the field to the relevant schema in the matching `app/models/schemas/<domain>.py`
 3. Generate a migration:
    ```bash
    alembic revision --autogenerate -m "add_<feature>"
