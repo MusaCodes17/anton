@@ -136,6 +136,17 @@ class RetailerResponse(RetailerBase):
         from_attributes = True
 
 
+class DealRetailerBrief(BaseModel):
+    """Compact retailer embed for deal views: they need only the name and the
+    active promo codes. The full RetailerResponse stays for /retailers."""
+    id: int
+    name: str
+    active_promo_codes: list[PromoCodeResponse] = []
+
+    class Config:
+        from_attributes = True
+
+
 # ============== PRICE RECORD SCHEMAS ==============
 
 class PriceRecordBase(BaseModel):
@@ -146,6 +157,8 @@ class PriceRecordBase(BaseModel):
     price: float = Field(..., gt=0)
     original_price: Optional[float] = Field(None, gt=0)
     in_stock: bool = True
+    # Scraper's "at least one size in stock" flag (written by the orchestrator);
+    # distinct from a deal's `sizes_available` list — not a legacy duplicate.
     size_available: bool = True
     sizes_available: Optional[List[str]] = Field(None, description="Sizes in stock at scrape time")
     image_url: Optional[str] = Field(None, description="Product image URL")
@@ -198,7 +211,7 @@ class DealResponse(DealBase):
     
     # Include related shoe and retailer info
     shoe: Optional[ShoeResponse] = None
-    retailer: Optional[RetailerResponse] = None
+    retailer: Optional[DealRetailerBrief] = None
 
     class Config:
         from_attributes = True

@@ -17,13 +17,23 @@ import logging
 from typing import Optional
 
 from sqlalchemy import desc
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 
-from app.models.models import Deal, Shoe
+from app.models.models import Deal, Retailer, Shoe
 from app.services import settings as settings_svc
 from app.utils.shoe_sizes import parse_size_label, size_fit
 
 logger = logging.getLogger(__name__)
+
+
+def _deal_query(db: Session):
+    """Deal query that eager-loads everything DealResponse serializes (shoe,
+    retailer, retailer.promo_codes). Without it, ``Retailer.active_promo_codes``
+    lazy-loads ``promo_codes`` once per deal row (N+1)."""
+    return db.query(Deal).options(
+        joinedload(Deal.shoe),
+        joinedload(Deal.retailer).selectinload(Retailer.promo_codes),
+    )
 
 
 def attach_size_fit(db: Session, deals: list[Deal]) -> list[Deal]:
@@ -65,7 +75,7 @@ def list_deals(
     "contains" predicate — the query overfetches by 5× limit and filters in
     memory (same approach as the Deals page client-side size filter).
     """
-    query = db.query(Deal)
+    query = _deal_query(db)
     if is_active is not None:
         query = query.filter(Deal.is_active == is_active)
     if min_savings_percent is not None:
@@ -104,7 +114,7 @@ def _has_size(sizes_available, size: str) -> bool:
 
 def get_deal(db: Session, deal_id: int) -> Deal | None:
     """Return a single deal by primary key, or None if not found."""
-    deal = db.query(Deal).filter(Deal.id == deal_id).first()
+    deal = _deal_query(db).filter(Deal.id == deal_id).first()
     if deal:
         attach_size_fit(db, [deal])
     return deal
@@ -133,7 +143,7 @@ def get_deals_for_shoe(
     is_active: bool = True,
 ) -> list[Deal]:
     """All deals for a specific tracked shoe, biggest discount first."""
-    query = db.query(Deal).filter(Deal.shoe_id == shoe_id)
+    query = _deal_query(db).filter(Deal.shoe_id == shoe_id)
     if is_active is not None:
         query = query.filter(Deal.is_active == is_active)
     return attach_size_fit(db, query.order_by(desc(Deal.savings_percent)).all())
@@ -146,7 +156,7 @@ def get_deals_for_retailer(
     is_active: bool = True,
 ) -> list[Deal]:
     """All deals from a specific retailer, biggest discount first."""
-    query = db.query(Deal).filter(Deal.retailer_id == retailer_id)
+    query = _deal_query(db).filter(Deal.retailer_id == retailer_id)
     if is_active is not None:
         query = query.filter(Deal.is_active == is_active)
     return attach_size_fit(db, query.order_by(desc(Deal.savings_percent)).all())
