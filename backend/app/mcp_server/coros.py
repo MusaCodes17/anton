@@ -242,6 +242,8 @@ def confirm_coros_run(
             "success": True,
             "checkpoint_reached": result.checkpoint_reached,
             "checkpoint_km": result.checkpoint_km,
+            "threshold_crossed": result.threshold_crossed,
+            "threshold_message": result.threshold_message,
             "shoe": _owned_shoe_to_dict(result.shoe, stats),
         }
 
@@ -258,6 +260,9 @@ def sync_coros_runs(days_back: int = 2) -> str:
     Suggests shoe assignments based on pace and distance, and logs
     confirmed runs after your review.
     """
+    # Thresholds come from the one table in rotation.py (never hard-coded here).
+    kms = [f"{km}km" for km, _ in rotation.MILEAGE_THRESHOLDS]
+    _thresholds_text = ", ".join(kms[:-1]) + f", or {kms[-1]}" if len(kms) > 1 else kms[0]
     return f"""# COROS Sync Agent
 
 You are acting as a COROS run sync agent for Anton, the user's
@@ -359,8 +364,9 @@ count toward any shoe.
 [Skipped: N runs]"
 
 ## Step 8 — Proactive threshold check
-For any shoe that crossed 600km, 700km, or 800km, flag it and offer
-to check replacement deals or add a note.
+For any shoe that crossed {_thresholds_text}, flag it and offer
+to check replacement deals or add a note. confirm_coros_run reports a
+crossing as `threshold_crossed` (km) with a `threshold_message`.
 
 ## General rules
 - Never log a run without explicit user confirmation

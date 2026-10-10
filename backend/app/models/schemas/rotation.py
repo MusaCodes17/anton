@@ -147,6 +147,10 @@ class LogRunResponse(BaseModel):
     updated_mileage: float
     checkpoint_reached: bool = False
     checkpoint_km: Optional[int] = None
+    threshold_crossed: Optional[int] = Field(
+        None, description="End-of-life advisory km (600/700/800) crossed by this run, else null")
+    threshold_message: Optional[str] = Field(
+        None, description="Advice text for threshold_crossed, else null")
     shoe: OwnedShoeResponse
 
 

@@ -104,3 +104,17 @@ def test_log_run_persists_rich_fields(db):
     assert act.training_load == pytest.approx(87.5)
     assert act.training_focus == "Aerobic base"
     assert act.activity_tag == "Tempo"
+
+
+def test_log_run_crossing_600_sets_threshold_fields(db):
+    shoe = _make_shoe(db, 595.0)
+    result = rotation.log_run(db, shoe.id, distance_km=10.0, run_date=date(2026, 7, 1))
+    assert result.threshold_crossed == 600
+    assert result.threshold_message == dict(rotation.MILEAGE_THRESHOLDS)[600]
+
+
+def test_log_run_without_threshold_leaves_fields_none(db):
+    shoe = _make_shoe(db, 50.0)
+    result = rotation.log_run(db, shoe.id, distance_km=10.0, run_date=date(2026, 7, 1))
+    assert result.threshold_crossed is None
+    assert result.threshold_message is None

@@ -116,7 +116,6 @@ async def log_run_to_shoe(
             shoe = db.query(OwnedShoe).filter(OwnedShoe.id == owned_shoe_id).first()
             if not shoe:
                 return {"success": False, "error": f"Owned shoe with id {owned_shoe_id} not found"}
-            old_mileage = shoe.current_mileage
 
             result = rotation.log_run(
                 db,
@@ -138,8 +137,7 @@ async def log_run_to_shoe(
             )
             shoe = result.shoe
 
-            crossed = rotation.threshold_crossed_by(old_mileage, shoe.current_mileage)
-            threshold_crossed, threshold_message = crossed if crossed else (None, None)
+            threshold_crossed, threshold_message = result.threshold_crossed, result.threshold_message
 
             if threshold_crossed is not None:
                 try:

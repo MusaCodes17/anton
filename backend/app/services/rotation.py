@@ -73,10 +73,14 @@ class RunLogResult:
     shoe: OwnedShoe       # refreshed after commit
     checkpoint_reached: bool
     checkpoint_km: Optional[int]
+    # End-of-life advisory (MILEAGE_THRESHOLDS) crossed by this run, if any.
+    threshold_crossed: Optional[int] = None
+    threshold_message: Optional[str] = None
 
 
-# End-of-life advisories (km). One table for every surface that flags them (the
-# log_run_to_shoe MCP tool, the COROS inbox confirm) so they can't disagree
+# End-of-life advisories (km). One table, computed once in log_run /
+# reassign_attribution and carried on RunLogResult.threshold_crossed/_message to
+# every surface (REST, MCP tools, COROS inbox) so they can't disagree
 # (CLAUDE.md §1: correct numbers, once). Advice only — retirement is never enacted.
 MILEAGE_THRESHOLDS: list[tuple[int, str]] = [
     (600, "approaching end of life — start thinking about replacement"),
@@ -513,12 +517,15 @@ def log_run(
         db.flush()  # assign run.id within the caller's open transaction
 
     cp = crossed_checkpoint(old_mileage, shoe.current_mileage)
+    th = threshold_crossed_by(old_mileage, shoe.current_mileage)
     return RunLogResult(
         run=run,
         activity=activity,
         shoe=shoe,
         checkpoint_reached=cp is not None,
         checkpoint_km=cp,
+        threshold_crossed=th[0] if th else None,
+        threshold_message=th[1] if th else None,
     )
 
 
@@ -644,8 +651,11 @@ def reassign_attribution(db: Session, activity_id: int, new_shoe_id: int) -> Run
     db.refresh(activity)
 
     cp = crossed_checkpoint(old_new_mileage, new_shoe.current_mileage)
+    th = threshold_crossed_by(old_new_mileage, new_shoe.current_mileage)
     return RunLogResult(run=run, activity=activity, shoe=new_shoe,
-                        checkpoint_reached=cp is not None, checkpoint_km=cp)
+                        checkpoint_reached=cp is not None, checkpoint_km=cp,
+                        threshold_crossed=th[0] if th else None,
+                        threshold_message=th[1] if th else None)
 
 
 def set_mileage_limit(db: Session, owned_shoe_id: int, limit_km: Optional[float]) -> OwnedShoe:

@@ -259,3 +259,20 @@ def test_prompt_uses_the_queue_not_the_connector_for_logging():
     assert "querySportRecords" not in text and "Step 1b" not in text
     assert "do NOT call getActivityDetail" in text
     assert "suggested_shoe_id" in text and "confirm_coros_run" in text
+
+
+def test_confirm_reports_threshold_crossed(db):
+    s = shoe(db, 595.0)
+    out = mcp_confirm(s.id)
+    assert out["success"] is True
+    assert out["threshold_crossed"] == 600 and out["threshold_message"]
+
+
+def test_confirm_threshold_key_present_and_none_when_not_crossed(db):
+    s = shoe(db, 100.0)
+    out = mcp_confirm(s.id)
+    assert "threshold_crossed" in out and out["threshold_crossed"] is None
+
+
+def test_prompt_thresholds_generated_from_table():
+    assert "600km, 700km, or 800km" in mcp_server.sync_coros_runs()
