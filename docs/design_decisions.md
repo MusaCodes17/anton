@@ -590,6 +590,26 @@ Supporting choices:
 **Verification limit:** as with E13, Chromium can't emulate the iOS keyboard or the safe-area insets. The keyboard path is a by-hand check on the installed iPhone PWA.
 **Verdict:** ✅ Keep.
 
+
+### E15. CI: GitHub Actions runs the backend suite and `vite build` on every PR and push to `main` (2026-10-09)
+
+**Chosen (2026-10-09):** `.github/workflows/ci.yml`, two parallel jobs:
+- **`backend (pytest)`**: Python 3.11 (the Dockerfile's version, not the laptop venv's 3.10), `pip install -r requirements.txt`, `pytest -q`. No `backend/.env`, no secrets, no `playwright install` (no test launches a browser).
+- **`frontend (vite build)`**: Node 20, `npm ci`, `npm run build`. No `npm run lint`: the script exists, but ESLint isn't installed or configured.
+- **No path filters**, so both jobs can be required status checks without leaving docs-only PRs pending forever. A full run takes about a minute.
+- **Tests are hermetic about import-time env.** `main.py` reads `ANTON_HOST_URL` once, at import, to decide whether the OAuth routes exist. `test_auth` imports the app before `test_oauth` sets the variable, so without a local `.env` two OAuth tests failed. `tests/conftest.py` now sets the OAuth env before anything is imported. The CI workflow carries no env workaround.
+
+**Why:**
+- Until now "the suite is green" was something a session reported about itself. CI makes it a fact attached to each PR, checked on a clean machine.
+- The clean runner immediately found a test-order dependency that every local run had hidden.
+- It is the test half of RA3 (push-to-deploy) and answers RA3's D4 question (does the suite run on a clean `ubuntu-latest` runner?), without committing to automated deploys.
+
+**Trade-offs:**
+- CI covers only what a machine can check. CLAUDE.md §10's "0 console errors + desktop/380 px visual pass" stays manual.
+- No coverage, lint or migration-against-real-DB checks. Add each when it is wanted, not speculatively (§12).
+- Making the checks **required** on `main` is a repository setting (Settings → Branches), not code. It is a human step and isn't enforced by anything in the repo.
+
+**Verdict:** ✅ Keep.
 ---
 
 ## Superseded Decisions (kept as history)

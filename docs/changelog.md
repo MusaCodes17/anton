@@ -5,6 +5,28 @@
 
 ---
 
+## CI — GitHub Actions + a hermetic test env — 2026-10-09
+
+**[ADDED]** `.github/workflows/ci.yml` (PR #57, merged): on every PR and every push to `main`, two parallel jobs.
+- **`backend (pytest)`**: Python 3.11 to match the Dockerfile, `pip install -r requirements.txt`, `pytest -q`. No `.env`, no secrets, no Playwright browser install, since no test launches one.
+- **`frontend (vite build)`**: Node 20, `npm ci`, `npm run build`. Lint is left out because ESLint isn't installed.
+- No path filters, so the jobs can become required checks without leaving docs-only PRs pending.
+
+**[FIXED]** The suite depended on test order and on a local `backend/.env`. `main.py` reads `ANTON_HOST_URL` at import to decide whether the OAuth routes exist, and `test_auth` imports the app before `test_oauth` sets it. Without a `.env`, `test_oauth::test_token_path_is_public` and `test_oauth_public_client::test_metadata_advertises_none_auth_method` failed. This is the "two oauth tests failed only inside the agents' worktrees" noted in the R8.4.3–R8.4.5 entry. `tests/conftest.py` now sets the OAuth env before anything is imported.
+
+**[CHANGED]** Docs: CLAUDE.md §3 (folder map) + §10 + session checklist (CI is the gate; tests must not rely on a local `.env`); `design_decisions.md` **E15**; roadmap §RA3 D4 marked answered; `project_state.md` §2 + §11. Earlier the same evening: `project_state.md` refreshed for R6/R7/R8 (PR #56).
+
+**[VERIFIED]**
+- Copy of `backend/` with no `.env` and `ANTON_HOST_URL` unset: **2 failed, 774 passed** before the conftest fix, **776 passed + 1 skipped** after. Normal checkout with `.env`: **776 + 1 skipped**.
+- First run on GitHub (PR #57): `backend (pytest)` ✅ 1m04s, `frontend (vite build)` ✅ 26s.
+
+**[NOT DONE] / human steps**
+- Make `backend (pytest)` and `frontend (vite build)` required status checks on `main` (Settings → Branches). Optionally re-enable "Allow auto-merge" afterwards; it is currently off for the repo.
+- The `lint` script in `frontend/package.json` points at an ESLint that isn't installed. Either set ESLint up or remove the script.
+- The laptop venv is Python 3.10.6, while production and CI run 3.11.
+
+---
+
 ## R8.4.3–R8.4.5 — Form, readiness and the "Now" strip (R8 complete) — 2026-10-09
 
 Built by three subagents (R8.4.3 and R8.4.4 in parallel worktrees, R8.4.5 after both merged), reviewed and merged here.
