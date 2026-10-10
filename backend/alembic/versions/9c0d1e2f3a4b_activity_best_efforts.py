@@ -7,7 +7,7 @@ Create Date: 2026-10-09
 Additive only: two new tables, nothing existing changes, no data moves (the
 backfill script fills them afterwards and can be re-run). Both are derived
 from activity files and cascade-delete with their activity. See
-docs/spikes/best_efforts.md.
+docs/design_decisions.md B19.
 """
 from typing import Sequence, Union
 

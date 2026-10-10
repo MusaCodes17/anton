@@ -10,7 +10,7 @@ Covers:
   - GET /api/admin/schedule response shape
   - PUT /api/admin/schedule persists, reschedules, validates (422), and auth
 
-Isolation notes (docs/archive/MAINTENANCE_PLAN.md D6 + #7): schedule config now lives in the DB
+Isolation notes (maintenance D6 + #7): schedule config now lives in the DB
 too, so an autouse fixture wipes AppSettings on the shared engine and resets the
 module-level scheduler singleton between tests, and re-asserts the get_db
 override so a sibling test module's override can't bleed in. Env vars are handled

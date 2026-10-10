@@ -3,8 +3,8 @@
 A run's per-second stream is a list of (elapsed_s, distance_m) samples. The
 best effort for a target distance is the fastest stretch of the stream that
 covers it, end to end, on the elapsed clock (stops inside the stretch count),
-as Strava, COROS and Garmin define it. Findings and validation against known
-races: docs/spikes/best_efforts.md.
+as Strava, COROS and Garmin define it. Validated against known races in the
+R8.2 spike (Longueuil 10k: 10k 34:28, 5k 16:58); decision: design_decisions B19.
 
 Streams come from FIT files (the watch's own cumulative distance — preferred)
 or GPX (distance summed from GPS points; noisier). Raw files are never kept:

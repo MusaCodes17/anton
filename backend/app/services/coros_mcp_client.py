@@ -5,7 +5,7 @@ The ONLY place that speaks MCP to COROS. Pure transport + parsing: no DB, no
 OAuth flow — it is handed a `token_provider` (see services/coros_connection.py
 `get_access_token`) and returns normalized `CorosRun`s.
 
-Why this is a parser and not a JSON mapper (spike, docs/spikes/coros_mcp_client.md):
+Why this is a parser and not a JSON mapper (R5.7 spike; design_decisions C11):
 COROS tool results are human-formatted TEXT inside `content[0].text` (itself a
 JSON-encoded string), and no tool declares an outputSchema. So every field is
 pulled out with an anchored regex, and the contract is enforced loudly:
@@ -18,7 +18,7 @@ pulled out with an anchored regex, and the contract is enforced loudly:
 Optional fields (HR, calories, cadence, elevation, training load/focus) become
 None only when their line is absent — treadmill runs legitimately lack some.
 
-Quirks encoded (docs/spikes + plan §0): running = sport codes 100-103; dates are
+Quirks encoded (from the R5.7 spike): running = sport codes 100-103; dates are
 `YYYYMMDD`; the per-record date printed by COROS IS the run date (Toronto local
 for this account) and is used as-is — never re-derived from startTimestamp;
 `labelId` is an 18-digit id kept as a STRING; the list endpoint has no

@@ -91,13 +91,9 @@ anton/
 ├── CLAUDE.md                    # Claude development guide (conventions); the session log is docs/changelog.md
 ├── docs/                        # The documentation suite (this file, domain_model, design_decisions, …)
 │   │                            #   + changelog.md — the session log (authoritative history, formerly root claude.md)
-│   │                            #   + CLAUDE_DESKTOP_SETUP.md (MCP client setup) + spikes/ (spike reports)
-│   └── archive/                 # retired docs (QUICKSTART, TROUBLESHOOTING) + completed execution plans (H2, 2026-07-14):
-│                                #   REDESIGN_PLAN, REFACTOR_PLAN, TRAINING_DEPTH_PLAN, SECURITY_PASS_PLAN, CHAT_PERSISTENCE_PLAN,
-│                                #   UI_REVIEW_TASKS, STRAVA_IMPORT_REVIEW_TASKS, strava-historical-import-plan, documentation_creation;
-│                                #   + 2026-10-09: REMOTE_ACCESS_PLAN, RA2_2_PWA_PLAN, MAINTENANCE_PLAN, documentation_review,
-│                                #   skills_library, ai_context
-│                                #   — the "§N"/"P3.4" references in code comments now resolve under docs/archive/
+│                                #   + CLAUDE_DESKTOP_SETUP.md (MCP client setup)
+│                                #   Completed plans, spike reports and the old READMEs were deleted 2026-10-09;
+│                                #   the "§N"/"P3.4" references in code comments resolve in git (see CLAUDE.md §3)
 ├── .claude/commands/            # Claude Code project commands (/project:migrate etc.)
 ├── .playwright-mcp/             # Browser-testing session artifacts (logs/snapshots; not app code)
 │
@@ -139,7 +135,7 @@ anton/
                                  # conversations, shoeTypes, runSource, utils
 ```
 
-Notable: `docs/changelog.md` (formerly root `claude.md`) functions as an architecture-decision log; many code comments reference "§N" sections of the planning markdown files at the repo root. These documents are part of the system's institutional memory and should be treated as first-class.
+Notable: `docs/changelog.md` (formerly root `claude.md`) functions as an architecture-decision log. Code comments still cite "§N" sections of the retired planning docs; those resolve in git history (CLAUDE.md §3).
 
 ---
 

@@ -1,5 +1,5 @@
 """
-HTTP-layer smoke tests — the second, serialization slice of refactor.md H1.
+HTTP-layer smoke tests — the second, serialization slice of the July 2026 refactor review's H1.
 
 Where test_deal_store / test_orchestrator test the deal *rules* by calling
 services directly, and test_auth exercises the middleware, nothing until now

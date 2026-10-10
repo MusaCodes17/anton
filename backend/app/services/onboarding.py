@@ -1,5 +1,5 @@
 """
-New-Retailer Onboarding service (R4.6, from docs/archive/MAINTENANCE_PLAN.md I1).
+New-Retailer Onboarding service (R4.6).
 
 Takes a retailer from "row in the DB with no working scraper" to either
 "scraping" or "honestly declared unscrapable", reusing the pieces that already

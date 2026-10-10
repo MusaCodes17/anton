@@ -37,7 +37,7 @@ def require_auth_config() -> None:
             "No auth credentials configured. Set ANTON_TOKENS (RA1.1) in backend/.env. "
             "Example: ANTON_TOKENS=\"desktop:$(python3 -c 'import secrets; print(secrets.token_hex(32))')\""
             ",loopback:$(python3 -c 'import secrets; print(secrets.token_hex(32))')\""
-            " — see docs/archive/REMOTE_ACCESS_PLAN.md §6 RA1.1. (The `spa` token was retired in "
+            " — see docs/design_decisions.md E9 (RA1.1). (The `spa` token was retired in "
             "RA2.1; the SPA uses the ANTON_LOGIN_PASSWORD session cookie.)"
         )
 

@@ -9,10 +9,8 @@ the session-wrapup skill.
 1. Read `CLAUDE.md`, `docs/project_state.md` and `docs/roadmap.md` to orient.
 2. Read `docs/roadmap.md`; find the named phase's entry (the `<name>` argument,
    case-insensitive). If it isn't there, stop and say so.
-3. Read any relevant plan doc for that phase — live runbooks at the repo root
-   (e.g. `docs/archive/REMOTE_ACCESS_PLAN.md` for RA) or completed plans under `docs/archive/`
-   (e.g. `docs/archive/SECURITY_PASS_PLAN.md` for R2.1). If none exists, derive
-   the task list from the roadmap entry.
+3. Read the phase's plan doc in `docs/` if one exists (a live multi-session plan).
+   If none exists, derive the task list from the roadmap entry.
 4. Read the skill files the phase's tasks require (`.claude/skills/*.md`).
 5. Execute the phase tasks **in order**, one phase-prefixed commit per numbered
    task (`r2:`, `p5:` — see roadmap Naming note). Suite must stay green.
