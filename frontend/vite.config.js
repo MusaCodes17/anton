@@ -2,9 +2,25 @@ import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import { VitePWA } from 'vite-plugin-pwa'
 import path from 'path'
+import { execSync } from 'child_process'
+
+// Build version for the React Query persister `buster` (queryClient.js). Short
+// git hash so every deploy gets a new value; falls back to a timestamp when git
+// is unavailable (e.g. a source tarball build).
+let APP_VERSION
+try {
+  APP_VERSION = execSync('git rev-parse --short HEAD', { stdio: ['ignore', 'pipe', 'ignore'] })
+    .toString()
+    .trim()
+} catch {
+  APP_VERSION = Date.now().toString()
+}
 
 // https://vitejs.dev/config/
 export default defineConfig({
+  define: {
+    __APP_VERSION__: JSON.stringify(APP_VERSION),
+  },
   plugins: [
     react(),
     // RA2.2 — installable PWA + offline READ. Writes stay online-only (§4),
@@ -68,11 +84,16 @@ export default defineConfig({
             // fresh when online, last-good when offline. Scoped to GET only;
             // the auth session endpoint is explicitly excluded so no
             // credential/session state is ever cached (RA2.2 §0, §3).
+            // Long-lived SSE streams (/api/scrape/stream and any other /stream
+            // endpoint) never finish, so NetworkFirst would hold each response
+            // open until networkTimeoutSeconds and then fall back to cache —
+            // they must bypass the runtime cache entirely.
             urlPattern: ({ url, request, sameOrigin }) =>
               sameOrigin &&
               request.method === 'GET' &&
               url.pathname.startsWith('/api/') &&
-              url.pathname !== '/api/auth/session',
+              url.pathname !== '/api/auth/session' &&
+              !url.pathname.includes('/stream'),
             handler: 'NetworkFirst',
             options: {
               cacheName: 'anton-api-reads',

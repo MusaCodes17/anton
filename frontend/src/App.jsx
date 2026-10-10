@@ -1,6 +1,7 @@
 import { Routes, Route, Navigate, useParams } from 'react-router-dom'
 import Layout from '@/components/layout/Layout'
 import ChatDrawer from '@/components/ChatDrawer'
+import { useMediaQuery } from '@/hooks/useMediaQuery'
 import Home from '@/pages/Home'
 import Deals from '@/pages/Deals'
 import Training from '@/pages/Training'
@@ -22,6 +23,10 @@ function RedirectShoeDetail() {
 }
 
 export default function App() {
+  // ChatDrawer's open button is md+ only, so on phones the drawer is unreachable.
+  // Mount it only at md+ (768px) so its useChatStream and fixed overlay don't run
+  // on phones. Desktop is unchanged.
+  const isDesktop = useMediaQuery('(min-width: 768px)')
   return (
     <>
       <Routes>
@@ -52,7 +57,7 @@ export default function App() {
           <Route path="*" element={<Navigate to="/" replace />} />
         </Route>
       </Routes>
-      <ChatDrawer />
+      {isDesktop && <ChatDrawer />}
     </>
   )
 }

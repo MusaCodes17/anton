@@ -13,6 +13,10 @@ import { get, set, del } from 'idb-keyval'
 // vite.config.js — we clear it by name on logout.
 const API_RUNTIME_CACHE = 'anton-api-reads'
 const PERSIST_KEY = 'anton-rq-cache'
+// Persisted-cache lifetime. 24 h (was 7 days): the cache is rehydrated on every
+// cold launch, and a long-lived snapshot grows large and stale. Kept equal to
+// gcTime and maxAge below so an entry is never persisted past memory GC.
+const CACHE_LIFETIME_MS = 1000 * 60 * 60 * 24
 
 export const queryClient = new QueryClient({
   defaultOptions: {
@@ -21,9 +25,12 @@ export const queryClient = new QueryClient({
       refetchOnWindowFocus: false,
       staleTime: 30_000,
       // gcTime must outlive a session for persistence to be useful — an entry
-      // GC'd from memory is dropped from the persisted snapshot too. One week
-      // matches the SW runtime-cache max-age.
-      gcTime: 1000 * 60 * 60 * 24 * 7,
+      // GC'd from memory is dropped from the persisted snapshot too.
+      gcTime: CACHE_LIFETIME_MS,
+      // iOS flips online/offline on app resume, which would refetch every stale
+      // query at once against the single-worker backend (a reconnect storm).
+      // Stale data is still refetched on mount and on explicit invalidation.
+      refetchOnReconnect: false,
     },
   },
 })
@@ -37,17 +44,28 @@ export const queryPersister = createAsyncStoragePersister({
     setItem: (k, v) => set(k, v),
     removeItem: (k) => del(k),
   },
-  throttleTime: 1000,
+  // Each flush JSON-stringifies the whole cache on the main thread, so flush
+  // at most every 5 s rather than every 1 s.
+  throttleTime: 5000,
 })
 
 // Only persist successful GET query state — never an error/loading snapshot,
 // and (defensively) never anything keyed to auth.
+//
+// `buster` is the build version (vite.config.js __APP_VERSION__). After a deploy
+// the persisted snapshot is discarded if its buster differs, so old-shape cached
+// data is never rehydrated (it could crash a component on a changed payload).
+//
+// Each flush JSON-stringifies the whole cache on the main thread; the large
+// lists opt out via meta.persist = false (see useApi.js) to keep flushes small.
 export const persistOptions = {
   persister: queryPersister,
-  maxAge: 1000 * 60 * 60 * 24 * 7,
+  maxAge: CACHE_LIFETIME_MS,
+  buster: __APP_VERSION__,
   dehydrateOptions: {
     shouldDehydrateQuery: (query) =>
       query.state.status === 'success' &&
+      !(query.meta?.persist === false) &&
       !String(query.queryKey?.[0] ?? '').startsWith('auth'),
   },
 }

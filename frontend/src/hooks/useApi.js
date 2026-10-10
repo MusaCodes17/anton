@@ -76,11 +76,14 @@ export function useShoesSummary() {
   })
 }
 
+// meta.persist = false keeps large lists out of the IndexedDB snapshot (see
+// lib/queryClient.js persistOptions).
 export function useShoePrices(id) {
   return useQuery({
     queryKey: queryKeys.shoePrices(id),
     queryFn: () => shoesApi.priceHistory(id),
     enabled: !!id,
+    meta: { persist: false },
   })
 }
 
@@ -195,6 +198,7 @@ export function useDeals(params) {
   return useQuery({
     queryKey: queryKeys.deals(params),
     queryFn: () => dealsApi.list(params),
+    meta: { persist: false },
   })
 }
 
@@ -283,10 +287,13 @@ export function useHome() {
 }
 
 // ============== TRAINING ==============
+// Toggling weekly/monthly or the range must not swap the chart for a skeleton,
+// so keep the previous data on screen while the new key loads.
 export function useTrainingSummary(period = 'monthly', range) {
   return useQuery({
     queryKey: queryKeys.trainingSummary(period, range),
     queryFn: () => trainingApi.summary(period, range),
+    placeholderData: keepPreviousData,
   })
 }
 
@@ -531,6 +538,7 @@ export function useWatchlist() {
   return useQuery({
     queryKey: queryKeys.watchlist(),
     queryFn: () => watchlistApi.list(),
+    meta: { persist: false },
   })
 }
 
