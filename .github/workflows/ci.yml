@@ -1,0 +1,51 @@
+# CI — the CLAUDE.md §10 bar that a machine can check: backend suite green,
+# `vite build` clean. (0 console errors + desktop/380 px visual pass stay manual.)
+#
+# No path filters on purpose: if these become required checks, a filtered
+# workflow never reports on docs-only PRs and leaves them pending forever.
+# The whole run is short enough to always run both jobs.
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend:
+    name: backend (pytest)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"  # matches backend/Dockerfile (python:3.11-slim-bookworm)
+          cache: pip
+          cache-dependency-path: backend/requirements.txt
+      # No `playwright install`: no test launches a browser.
+      - run: pip install -r requirements.txt
+      - run: python -m pytest -q
+
+  frontend:
+    name: frontend (vite build)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci
+      # No `npm run lint`: package.json declares it, but eslint isn't installed.
+      - run: npm run build
