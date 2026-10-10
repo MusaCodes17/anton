@@ -8,7 +8,7 @@ from typing import List, Dict, Optional
 from datetime import datetime, timezone
 import requests
 from bs4 import BeautifulSoup
-from playwright.sync_api import sync_playwright, Browser, Page
+from playwright.sync_api import sync_playwright
 import re
 
 # Set up logging

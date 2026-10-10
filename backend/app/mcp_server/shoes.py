@@ -528,7 +528,6 @@ def shoe_detail_resource(shoe_id: int) -> str:
         stats = rotation.compute_lifetime_stats(db, shoe.id)
         cost_per_km = rotation.cost_per_km(shoe)
         mileage_limit = shoe.mileage_limit
-        bar = _format_mileage_bar(shoe.current_mileage, mileage_limit)
         label = shoe.nickname or ""
         name = f"{shoe.brand} {shoe.model}" + (f" ({label})" if label else "")
         pct = round(shoe.current_mileage / mileage_limit * 100) if mileage_limit else None

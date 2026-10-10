@@ -5,7 +5,7 @@ tracking) — separate from app/routers/shoes.py, which is for deal tracking.
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import desc, func
 from sqlalchemy.orm import Session, contains_eager
-from typing import List, Optional
+from typing import List
 
 from app.database import get_db
 from app.models import (
