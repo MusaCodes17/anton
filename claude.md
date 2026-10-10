@@ -55,6 +55,7 @@ frontend/src/
   services/api.js  the single axios client, grouped per domain
   lib/             pure helpers (no React, no fetch)
 docs/              the documentation suite + changelog.md
+.github/workflows/ ci.yml — GitHub Actions: backend pytest + frontend `vite build` (E15)
 .claude/skills/    13 workflow skills (S01–S13) — the files are the source of truth (original design: docs/archive/skills_library.md):
                    add-service-capability · add-api-endpoint · add-database-model ·
                    data-migration · add-retailer · add-mcp-tool · ai-agent ·
@@ -168,6 +169,7 @@ Placement rules: new business logic → `services/` (never a router, never an MC
 - **Backend endpoints land with their tests before the consuming UI task starts** (REDESIGN_PLAN §5 — standing rule).
 - Invariants deserve tests when touched: mileage ledger arithmetic (log + delete round-trip), dedup idempotency, checkpoint crossings, deal qualification/retirement.
 - The full suite must be green at session end — 64 passing as of 2026-07-06 (the live count is authoritative in `docs/changelog.md`'s newest entry and `project_state.md` §2); a session that lowers that number isn't done. Removed features take their tests with them (as `strava_backfill` did).
+- **CI is the gate** (`.github/workflows/ci.yml`, E15): every PR and every push to `main` runs the backend suite on Python 3.11 with no `backend/.env`, and `vite build`. A PR merges only with both checks green. Tests must not depend on a local `.env` or on test order: env the app reads at import time is set in `tests/conftest.py`, never assumed from the developer's machine.
 - No frontend test harness exists; the frontend bar is: `vite build` clean, **0 console errors**, desktop + ~380 px visual pass. State the pass in the changelog entry.
 - Scrapers: use the no-DB smoke endpoints / `POST /shoes/test` dry-run for live verification; don't build brittle HTML-fixture tests for retailer DOMs.
 
@@ -207,7 +209,7 @@ Placement rules: new business logic → `services/` (never a router, never an MC
 
 ## Session Checklist (end of every working session)
 
-1. Full pytest suite green; note the count.
+1. Full pytest suite green locally **and** both CI checks green on the PR; note the count.
 2. `vite build` clean; 0 console errors; desktop + ~380 px pass for any UI change.
 3. Migration written for any schema change (reversible + backed up if it moves data).
 4. Changelog entry at top of `docs/changelog.md`.
