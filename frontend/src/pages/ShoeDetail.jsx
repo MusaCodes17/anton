@@ -183,15 +183,16 @@ export default function ShoeDetail() {
         <div className="space-y-1.5">
           <div className="text-2xs font-bold uppercase tracking-[0.08em] text-faint">Mileage</div>
           <MileageProgressBar mileage={shoe.current_mileage} limit={limitKm} />
-          <div className="text-2xs text-faint">
-            Limit {Math.round(limitKm)} km
-            {pastRecommended &&
-              (shoe.current_mileage >= recKm ? (
-                <span className="text-warning"> · Past the recommended {recKm} km</span>
+          {/* Only shown when the limit exceeds the type's recommendation; the bar already states the limit. */}
+          {pastRecommended && (
+            <div className="text-2xs text-faint">
+              {shoe.current_mileage >= recKm ? (
+                <span className="text-warning">Past the recommended {recKm} km</span>
               ) : (
-                <> · Recommended {recKm} km</>
-              ))}
-          </div>
+                <>Recommended {recKm} km</>
+              )}
+            </div>
+          )}
         </div>
         {/* Three columns at every width so the row stays one line on mobile. */}
         <div className="grid grid-cols-3 gap-3">
