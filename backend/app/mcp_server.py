@@ -30,6 +30,7 @@ from app.models.models import Activity, Deal, OwnedShoe, PriceRecord, Retailer, 
 from app.scrapers.orchestrator import ScrapeOrchestrator
 from app.scrapers.lock import ScrapeInProgressError, scrape_guard
 from app.services import rotation, coros as coros_svc, settings as settings_svc, strava_stats, races as races_svc, fitness as fitness_svc, scrape_history as scrape_history_svc, deals as deals_svc, weekly_summary as weekly_summary_svc, watchlist as watchlist_svc, deal_alerts as deal_alerts_svc, race_advisor as race_advisor_svc, coupon_hunter as coupon_hunter_svc, onboarding as onboarding_svc, coros_connection as coros_connection_svc, coros_poller as coros_poller_svc, coros_inbox as coros_inbox_svc, training_trends as training_trends_svc
+from app.utils.shoe_types import default_mileage_limit
 from app.utils.activity_tags import ACTIVITY_TAGS, is_valid_tag
 
 # DNS-rebinding protection (mcp SDK): the Streamable HTTP transport validates
@@ -495,6 +496,7 @@ def _owned_shoe_to_dict(shoe: OwnedShoe, lifetime_stats=None) -> dict:
         "status": shoe.status,
         "purchase_price": shoe.purchase_price,
         "mileage_limit": shoe.mileage_limit,
+        "recommended_limit_km": default_mileage_limit(shoe.shoe_type),
         "cost_per_km": rotation.cost_per_km(shoe),
         "lifetime_avg_pace": pace,
         "lifetime_avg_hr": hr,
@@ -1137,6 +1139,37 @@ def confirm_coros_run(
             "checkpoint_km": result.checkpoint_km,
             "shoe": _owned_shoe_to_dict(result.shoe, stats),
         }
+
+
+@mcp.tool()
+def set_shoe_mileage_limit(owned_shoe_id: int, limit_km: Optional[float] = None) -> dict:
+    """
+    Change the km at which an owned shoe counts as due for replacement. Use this
+    when the runner says a shoe still feels good past its limit (raise it) or
+    wants it retired sooner (lower it). Omit limit_km to reset to the default
+    for the shoe's type.
+
+    The default is a heuristic and the runner's judgment wins, but make the
+    trade-off explicit: the result includes recommended_limit_km, so tell the
+    runner when the new limit is above the recommendation. Does not change
+    current mileage or retire the shoe.
+
+    Args:
+        owned_shoe_id: ID of the owned shoe (from get_owned_shoes).
+        limit_km: New limit in km (> 0), or omit to reset to the type default.
+    """
+    try:
+        with get_session() as db:
+            shoe = rotation.set_mileage_limit(db, owned_shoe_id, limit_km)
+            return {
+                "success": True,
+                "shoe": f"{shoe.brand} {shoe.model}",
+                "mileage_limit": shoe.mileage_limit,
+                "recommended_limit_km": default_mileage_limit(shoe.shoe_type),
+                "current_mileage": round(shoe.current_mileage, 2),
+            }
+    except (LookupError, ValueError) as exc:
+        return {"success": False, "error": str(exc)}
 
 
 @mcp.tool()

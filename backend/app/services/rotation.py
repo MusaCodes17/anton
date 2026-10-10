@@ -20,6 +20,7 @@ from app.models.models import (
 # so existing callers (rotation.pace_to_seconds / rotation.seconds_to_pace) keep
 # working; prefer importing from app.utils.pace directly in new code.
 from app.utils.pace import pace_to_seconds, seconds_to_pace  # noqa: F401
+from app.utils.shoe_types import default_mileage_limit
 
 CHECKPOINT_INTERVAL_KM = 100
 
@@ -294,6 +295,10 @@ def attach_computed_fields(db: Session, shoe: OwnedShoe) -> OwnedShoe:
     shoe.lifetime_avg_hr = stats.lifetime_avg_hr
     shoe.total_runs = stats.total_runs
     shoe.cost_per_km = cost_per_km(shoe)
+    # Derived, never stored (INV-7): the type default the runner's own
+    # mileage_limit is measured against, so the UI can say "recommended N km"
+    # after the limit has been raised past it.
+    shoe.recommended_limit_km = default_mileage_limit(shoe.shoe_type)
     return shoe
 
 
@@ -523,6 +528,30 @@ def reassign_attribution(db: Session, activity_id: int, new_shoe_id: int) -> Run
     cp = crossed_checkpoint(old_new_mileage, new_shoe.current_mileage)
     return RunLogResult(run=run, activity=activity, shoe=new_shoe,
                         checkpoint_reached=cp is not None, checkpoint_km=cp)
+
+
+def set_mileage_limit(db: Session, owned_shoe_id: int, limit_km: Optional[float]) -> OwnedShoe:
+    """
+    Set a shoe's retirement limit (km), or reset it to the shoe_type default
+    when ``limit_km`` is None. Commits.
+
+    The limit is the runner's call, not the app's: the type default is a
+    heuristic, and a shoe that still feels good past it should stop nagging.
+    The default stays visible as the derived ``recommended_limit_km`` so a
+    raised limit never hides that the shoe is past the recommendation. Does not
+    touch the mileage ledger (INV-1).
+
+    Raises LookupError if the shoe doesn't exist; ValueError if limit_km <= 0.
+    """
+    if limit_km is not None and limit_km <= 0:
+        raise ValueError("limit_km must be > 0")
+    shoe = db.query(OwnedShoe).filter(OwnedShoe.id == owned_shoe_id).first()
+    if not shoe:
+        raise LookupError(f"Owned shoe with id {owned_shoe_id} not found")
+    shoe.mileage_limit = limit_km if limit_km is not None else default_mileage_limit(shoe.shoe_type)
+    db.commit()
+    db.refresh(shoe)
+    return shoe
 
 
 def adjust_mileage(db: Session, owned_shoe_id: int, new_mileage: float) -> OwnedShoe:

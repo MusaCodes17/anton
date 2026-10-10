@@ -358,6 +358,9 @@ class OwnedShoeResponse(OwnedShoeBase):
     review_draft: Optional[str] = Field(
         None, description="Runner-authored or LLM-drafted review stored on the shoe (R3.3)"
     )
+    recommended_limit_km: Optional[float] = Field(
+        None, description="Default retirement limit for this shoe_type (derived); mileage_limit is the runner's own call"
+    )
     created_at: datetime
     updated_at: Optional[datetime] = None
 

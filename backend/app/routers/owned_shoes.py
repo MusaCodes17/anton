@@ -117,6 +117,10 @@ def update_owned_shoe(owned_shoe_id: int, shoe_update: OwnedShoeUpdate, db: Sess
     # (C1): the mileage ledger is not writable through this blind setattr loop.
     # current_mileage corrections go through POST /{id}/adjust-mileage below.
     update_data = shoe_update.model_dump(exclude_unset=True)
+    # An explicit null limit means "back to the type default", never "no limit":
+    # a NULL-limit shoe silently drops out of the retirement pipeline.
+    if "mileage_limit" in update_data and update_data["mileage_limit"] is None:
+        update_data["mileage_limit"] = default_mileage_limit(update_data.get("shoe_type", db_shoe.shoe_type))
     for field, value in update_data.items():
         setattr(db_shoe, field, value)
 
