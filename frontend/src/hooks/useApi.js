@@ -202,6 +202,18 @@ export function useDeals(params) {
   })
 }
 
+// Fetched on demand when the "Bought it" dialog opens; never cached across opens
+// (the draft's price/date are "as of now").
+export function usePurchaseDraft(dealId, { enabled = true } = {}) {
+  return useQuery({
+    queryKey: ['deals', dealId, 'purchase-draft'],
+    queryFn: () => dealsApi.purchaseDraft(dealId),
+    enabled: enabled && dealId != null,
+    gcTime: 0,
+    meta: { persist: false },
+  })
+}
+
 export function useDeactivateDeal() {
   const qc = useQueryClient()
   return useMutation({

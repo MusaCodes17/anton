@@ -1,4 +1,6 @@
-import { ExternalLink } from 'lucide-react'
+import { useState } from 'react'
+import { useQueryClient } from '@tanstack/react-query'
+import { ExternalLink, ShoppingBag } from 'lucide-react'
 import {
   Dialog,
   DialogContent,
@@ -11,7 +13,14 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import PriceChart from '@/components/PriceChart'
 import PromoBadge from '@/components/PromoBadge'
-import { useShoePrices, useDeactivateDeal } from '@/hooks/useApi'
+import OwnedShoeForm from '@/components/OwnedShoeForm'
+import {
+  useShoePrices,
+  useDeactivateDeal,
+  usePurchaseDraft,
+  useCreateOwnedShoe,
+  useDeleteShoe,
+} from '@/hooks/useApi'
 import { useToast } from '@/components/ui/toast'
 import {
   formatCurrency,
@@ -32,8 +41,45 @@ export default function DealDetailModal({ deal, open, onOpenChange }) {
   const prices = useShoePrices(open ? deal?.shoe_id : undefined)
   const deactivate = useDeactivateDeal()
   const { toast } = useToast()
+  const qc = useQueryClient()
+
+  // "Bought it" (R5.3): null -> 'form' (prefilled add-shoe dialog) -> 'stop'
+  // (optional "stop watching?" prompt). Nothing is deleted without the explicit click.
+  const [boughtStep, setBoughtStep] = useState(null)
+  const [boughtName, setBoughtName] = useState('')
+  const draft = usePurchaseDraft(deal?.id, { enabled: open && boughtStep === 'form' })
+  const createOwned = useCreateOwnedShoe()
+  const stopWatching = useDeleteShoe()
 
   if (!deal) return null
+
+  const watchlistShoeId = deal.shoe_id ?? shoe.id
+
+  const handleBought = (payload) => {
+    createOwned.mutate(payload, {
+      onSuccess: () => {
+        toast({ variant: 'success', title: 'Added to your rotation' })
+        setBoughtName([payload.brand, payload.model].join(' '))
+        setBoughtStep(watchlistShoeId != null ? 'stop' : null)
+      },
+      onError: (err) =>
+        toast({ variant: 'destructive', title: 'Save failed', description: err.message }),
+    })
+  }
+
+  const handleStopWatching = () => {
+    stopWatching.mutate(watchlistShoeId, {
+      onSuccess: () => {
+        qc.invalidateQueries({ queryKey: ['deals'] })
+        qc.invalidateQueries({ queryKey: ['watchlist'] })
+        toast({ variant: 'success', title: 'Stopped watching' })
+        setBoughtStep(null)
+        onOpenChange(false)
+      },
+      onError: (err) =>
+        toast({ variant: 'destructive', title: 'Failed', description: err.message }),
+    })
+  }
 
   const handleDeactivate = () => {
     deactivate.mutate(deal.id, {
@@ -47,6 +93,7 @@ export default function DealDetailModal({ deal, open, onOpenChange }) {
   }
 
   return (
+    <>
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-2xl">
         <DialogHeader>
@@ -144,6 +191,9 @@ export default function DealDetailModal({ deal, open, onOpenChange }) {
           >
             {deactivate.isPending ? 'Archiving…' : 'Archive deal'}
           </Button>
+          <Button variant="outline" onClick={() => setBoughtStep('form')}>
+            <ShoppingBag className="h-4 w-4" /> Bought it
+          </Button>
           {deal.product_url && (
             <Button asChild>
               <a href={deal.product_url} target="_blank" rel="noreferrer">
@@ -154,6 +204,62 @@ export default function DealDetailModal({ deal, open, onOpenChange }) {
         </DialogFooter>
       </DialogContent>
     </Dialog>
+
+    {/* Bought it: prefilled add-shoe form */}
+    <Dialog open={boughtStep === 'form'} onOpenChange={(o) => !o && setBoughtStep(null)}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Add to your rotation</DialogTitle>
+          <DialogDescription>
+            Prefilled from this deal. Adjust anything before saving.
+          </DialogDescription>
+        </DialogHeader>
+        {draft.isError ? (
+          <div className="space-y-3">
+            <p className="text-sm text-destructive">
+              Couldn't load purchase details{draft.error?.message ? `: ${draft.error.message}` : ''}
+            </p>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setBoughtStep(null)}>
+                Close
+              </Button>
+              <Button onClick={() => draft.refetch()}>Retry</Button>
+            </DialogFooter>
+          </div>
+        ) : draft.isLoading || !draft.data ? (
+          <div className="h-48 animate-pulse rounded-md bg-muted" />
+        ) : (
+          <OwnedShoeForm
+            prefill={draft.data}
+            submitting={createOwned.isPending}
+            onSubmit={handleBought}
+            onCancel={() => setBoughtStep(null)}
+          />
+        )}
+      </DialogContent>
+    </Dialog>
+
+    {/* Bought it: optional follow-up. Only the explicit button deletes. */}
+    <Dialog open={boughtStep === 'stop'} onOpenChange={(o) => !o && setBoughtStep(null)}>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle>Stop watching {boughtName}?</DialogTitle>
+          <DialogDescription>
+            It's in your rotation now. Stopping removes it from your watchlist along with its
+            price history and deals.
+          </DialogDescription>
+        </DialogHeader>
+        <DialogFooter className="gap-2 sm:gap-2">
+          <Button variant="outline" onClick={handleStopWatching} disabled={stopWatching.isPending}>
+            {stopWatching.isPending ? 'Removing…' : 'Stop watching'}
+          </Button>
+          <Button autoFocus onClick={() => setBoughtStep(null)}>
+            Keep watching
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+    </>
   )
 }
 
