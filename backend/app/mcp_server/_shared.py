@@ -59,9 +59,9 @@ def _shoe_note_payload(note: ShoeNote) -> dict:
 
 
 def _shoe_run_payload(run: ShoeRun) -> dict:
-    """Attribution row via `ShoeRunResponse`; run fields come from ShoeRun's property
-    proxies onto the joined Activity, so callers that loop should eager-load `ShoeRun.activity`."""
-    return ShoeRunResponse.model_validate(run).model_dump(mode="json")
+    """Attribution row via `ShoeRunResponse`, projected by `rotation.shoe_run_payload`
+    from the joined Activity, so callers that loop should eager-load `ShoeRun.activity`."""
+    return ShoeRunResponse.model_validate(rotation.shoe_run_payload(run)).model_dump(mode="json")
 
 
 # ---------------------------------------------------------------------------

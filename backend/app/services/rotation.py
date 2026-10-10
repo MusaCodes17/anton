@@ -668,6 +668,30 @@ def reassign_attribution(db: Session, activity_id: int, new_shoe_id: int) -> Run
                         threshold_message=th[1] if th else None)
 
 
+def shoe_run_payload(sr: ShoeRun) -> dict:
+    """
+    Project an attribution row + its joined Activity into the `ShoeRunResponse`
+    shape (the one place run fields are read off `sr.activity`; the old
+    ShoeRun property proxies were retired 2026-10-10). Values are raw (dates,
+    datetimes) -- validate through `ShoeRunResponse` to serialize. Callers that
+    loop should eager-load `ShoeRun.activity` (N+1 otherwise).
+    """
+    a = sr.activity
+    s = a.avg_pace_s_per_km if a else None
+    return {
+        "id": sr.id,
+        "owned_shoe_id": sr.owned_shoe_id,
+        "created_at": sr.created_at,
+        "distance_km": a.distance_km if a else None,
+        "run_date": a.run_date if a else None,
+        "source": a.source if a else None,
+        "avg_hr": a.avg_hr if a else None,
+        "coros_activity_id": a.coros_activity_id if a else None,
+        "notes": a.description if a else None,   # per-run notes live in activities.description
+        "avg_pace": seconds_to_pace(s) if s is not None else None,
+    }
+
+
 def set_mileage_limit(db: Session, owned_shoe_id: int, limit_km: Optional[float]) -> OwnedShoe:
     """
     Set a shoe's retirement limit (km), or reset it to the shoe_type default

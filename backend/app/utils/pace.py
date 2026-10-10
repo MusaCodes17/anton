@@ -4,7 +4,7 @@ from models, services, and client modules alike.
 Running pace is persisted as integer seconds-per-km (CLAUDE.md §6); the
 "M:SS/km" strings these produce are presentation only. This module is the
 single home for that conversion — previously duplicated in rotation,
-the (since-removed Open-API) coros_client, and the ShoeRun.avg_pace proxy (R1.5c, dependency_graph §11.3).
+the (since-removed Open-API) coros_client, and the (since-retired) ShoeRun.avg_pace proxy (R1.5c, dependency_graph §11.3).
 """
 from __future__ import annotations
 

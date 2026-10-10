@@ -40,8 +40,9 @@ def test_log_run_creates_activity_and_attribution(db):
     assert attr.owned_shoe_id == shoe.id
     assert result.activity.id == act.id
     assert result.shoe.current_mileage == pytest.approx(10.0)
-    # Proxy properties still expose run fields for response serialization.
-    assert attr.distance_km == 10.0 and attr.avg_pace == "5:00/km" and attr.source == "manual"
+    # Run fields live on the joined activity (ShoeRun proxies retired 2026-10-10).
+    assert attr.activity.distance_km == 10.0 and attr.activity.source == "manual"
+    assert rotation.shoe_run_payload(attr)["avg_pace"] == "5:00/km"
 
 
 def test_union_reads_one_row_per_run(db):
@@ -145,3 +146,40 @@ def test_lifetime_stats_read_through_join(db):
     assert stats.total_runs == 2
     assert stats.lifetime_avg_pace == "4:30/km"   # mean of 240s and 300s
     assert stats.lifetime_avg_hr == 150
+
+
+def test_shoe_run_has_no_run_field_proxies():
+    # Proxies retired 2026-10-10: misuse (e.g. .filter(ShoeRun.distance_km)) must
+    # fail loudly instead of silently doing nothing.
+    for name in ("distance_km", "run_date", "source", "avg_hr",
+                 "coros_activity_id", "notes", "avg_pace"):
+        assert not hasattr(ShoeRun, name), name
+
+
+def test_run_list_query_is_bounded_and_payload_matches_activity(db):
+    from sqlalchemy import event
+    from sqlalchemy.orm import contains_eager
+
+    shoe = _shoe(db)
+    for d in range(1, 6):
+        rotation.log_run(db, shoe.id, distance_km=5.0 + d, run_date=date(2026, 7, d),
+                         source="manual", avg_pace="5:00/km", avg_hr=150, notes=f"n{d}")
+    shoe_id = shoe.id
+    db.expire_all()
+
+    stmts = []
+    engine = db.get_bind()
+    hook = lambda conn, cur, stmt, *a: stmts.append(stmt)
+    event.listen(engine, "before_cursor_execute", hook)
+    try:
+        runs = (db.query(ShoeRun).join(Activity, ShoeRun.activity_id == Activity.id)
+                .options(contains_eager(ShoeRun.activity))
+                .filter(ShoeRun.owned_shoe_id == shoe_id).all())
+        payloads = [rotation.shoe_run_payload(r) for r in runs]
+    finally:
+        event.remove(engine, "before_cursor_execute", hook)
+
+    assert len(stmts) == 1, stmts      # eager-loaded: no per-row lazy loads
+    assert len(payloads) == 5
+    p = sorted(payloads, key=lambda x: x["run_date"])[0]
+    assert (p["distance_km"], p["avg_pace"], p["avg_hr"], p["source"], p["notes"]) == (6.0, "5:00/km", 150, "manual", "n1")
