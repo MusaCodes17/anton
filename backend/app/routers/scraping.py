@@ -19,7 +19,7 @@ from app.scrapers.lock import (
     scrape_guard,
     try_acquire_scrape_lock,
 )
-from datetime import datetime
+from datetime import datetime, timezone
 
 router = APIRouter(prefix="/scrape", tags=["scraping"])
 
@@ -52,7 +52,7 @@ def scrape_shoe(
             "success": True,
             "message": f"Scraping completed for shoe ID {shoe_id}",
             "results": results,
-            "scraped_at": datetime.utcnow().isoformat()
+            "scraped_at": datetime.now(timezone.utc).isoformat()
         }
 
     except ScrapeInProgressError as e:
@@ -202,7 +202,7 @@ def scrape_retailer(
         "success": True,
         "message": f"Scraping completed for retailer ID {retailer_id}",
         "results": aggregated_results,
-        "scraped_at": datetime.utcnow().isoformat()
+        "scraped_at": datetime.now(timezone.utc).isoformat()
     }
 
 
@@ -218,7 +218,7 @@ def detect_all_promos(db: Session = Depends(get_db)):
             "success": True,
             "message": "Promo code detection completed",
             "results": results,
-            "scraped_at": datetime.utcnow().isoformat(),
+            "scraped_at": datetime.now(timezone.utc).isoformat(),
         }
     except Exception as e:
         raise HTTPException(
@@ -248,7 +248,7 @@ def detect_retailer_promos(retailer_id: int, db: Session = Depends(get_db)):
             "success": True,
             "message": f"Promo detection completed for {retailer.name}",
             "results": results,
-            "scraped_at": datetime.utcnow().isoformat(),
+            "scraped_at": datetime.now(timezone.utc).isoformat(),
         }
     except Exception as e:
         raise HTTPException(
