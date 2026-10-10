@@ -16,7 +16,13 @@ Two sources:
 
 Efforts are derived data: a scan replaces the run's rows. Raw files are never
 stored, and the COROS FIT URL (an unsigned S3 link) is never stored or logged.
-None of this touches runs, attributions or mileage (INV-1/INV-2).
+
+Location (R5.4.1): an archive scan also reads the run's first GPS fix and
+writes it to the activity row as `start_lat`/`start_lng`, rounded to ~100 m
+(utils/location.round_coord). That makes the scan write exactly two columns on
+the activity row. It never writes distance, time, attribution or mileage
+(INV-1/INV-2 unchanged). COROS runs get their location from the run list, so
+`scan_coros` does not pass a start point.
 """
 from __future__ import annotations
 
@@ -30,6 +36,7 @@ from sqlalchemy.orm import Session
 
 from app.models.models import Activity, ActivityBestEffort, ActivityEffortScan, PendingCorosRun
 from app.utils import best_efforts as engine
+from app.utils.location import round_coord
 
 logger = logging.getLogger(__name__)
 
@@ -47,8 +54,11 @@ class ScanSummary:
     errors: list[str] = field(default_factory=list)
 
 
-def store_scan(db: Session, activity_id: int, stream: engine.Stream, *, source: str) -> int:
+def store_scan(db: Session, activity_id: int, stream: engine.Stream, *, source: str,
+               start: Optional[tuple[float, float]] = None) -> int:
     """Replace one run's best efforts from its stream and record the scan.
+    When `start` (lat, lon in degrees) is given, also stamp the activity's
+    start point, rounded to ~100 m; that is the only activity column touched.
     Returns the number of effort rows written. Caller owns the commit."""
     db.query(ActivityBestEffort).filter(ActivityBestEffort.activity_id == activity_id).delete()
     efforts = engine.best_efforts(stream, source=source) if stream else {}
@@ -57,6 +67,10 @@ def store_scan(db: Session, activity_id: int, stream: engine.Stream, *, source: 
             activity_id=activity_id, distance_label=label,
             elapsed_s=elapsed_s, start_offset_m=start_m, source=source,
         ))
+    if start is not None:
+        activity = db.get(Activity, activity_id)
+        activity.start_lat = round_coord(start[0])
+        activity.start_lng = round_coord(start[1])
     _mark_scan(db, activity_id, status="ok" if stream else "no_stream", source=source)
     return len(efforts)
 
@@ -100,12 +114,16 @@ def scan_archive(db: Session, export_dir: Path, *, rescan: bool = False,
         path = export_dir / a.fit_filename
         source = "gpx" if a.fit_filename.endswith(".gpx") else "fit"
         try:
+            # Read the file once; the stream parser and the start-point reader share it.
             if source == "fit":
-                stream = engine.fit_stream(path.read_bytes())
+                raw = path.read_bytes()
+                stream = engine.fit_stream(raw)
+                start = engine.fit_start(raw)
             else:
-                with path.open("rb") as fh:
-                    stream = engine.gpx_stream(fh)
-            n = store_scan(db, a.id, stream, source=source)
+                text = path.read_bytes().decode("utf-8", "replace")
+                stream = engine.gpx_stream(text)
+                start = engine.gpx_start(text)
+            n = store_scan(db, a.id, stream, source=source, start=start)
             out.efforts += n
             if stream:
                 out.scanned += 1

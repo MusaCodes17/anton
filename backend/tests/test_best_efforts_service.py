@@ -18,10 +18,13 @@ from pathlib import Path
 import pytest
 from sqlalchemy import text
 
-from app.models.models import Activity, ActivityBestEffort, ActivityEffortScan, CorosConnection
+from app.models.models import (
+    Activity, ActivityBestEffort, ActivityEffortScan, CorosConnection, OwnedShoe, ShoeRun,
+)
 from app.services import best_efforts as svc
 from app.services import coros_poller as poller
 from app.services.coros_mcp_client import CorosContractError, parse_fit_url
+from tests.test_best_efforts import T0, fit_bytes, semicircles
 
 FIX = Path(__file__).parent / "fixtures" / "coros" / "fit_download_urls.json"
 URL_TEXT = json.loads(FIX.read_text())["result"]["content"][0]["text"]
@@ -173,3 +176,64 @@ def test_poll_tick_scans_after_polling_and_a_scan_failure_never_fails_the_poll(d
     result = poller.run_tick(db, client=Client(), today=date(2026, 10, 7))
     assert result.ok                                         # the poll itself succeeded
     assert db.query(ActivityEffortScan).one().status == "failed"
+
+
+# ── Start location on archive scans (R5.4.1) ─────────────────────────────────
+
+def _gpx_with_start(lat, lon, pace_s_per_km=300):
+    """_gpx's track, but its first point is at (lat, lon)."""
+    from datetime import datetime, timedelta
+    t0 = datetime(2020, 1, 1, 10, 0, 0)
+    pts = "".join(
+        f'<trkpt lat="{lat + i * 0.0001:.6f}" lon="{lon}"><time>{(t0 + timedelta(seconds=10 * i)).isoformat()}Z</time></trkpt>'
+        for i in range(400)  # ~4.4 km: long enough for a 1k effort
+    )
+    return f'<?xml version="1.0"?><gpx version="1.1" creator="t" xmlns="http://www.topografix.com/GPX/1/1"><trk><trkseg>{pts}</trkseg></trk></gpx>'
+
+
+def test_archive_scan_stamps_rounded_start_and_touches_nothing_else(db, tmp_path):
+    (tmp_path / "activities").mkdir()
+    (tmp_path / "activities" / "1.gpx").write_text(_gpx_with_start(45.501689, -73.576))
+    a = _run(db, fit_filename="activities/1.gpx")
+    a.moving_time_s = 1500
+    shoe = OwnedShoe(brand="Brooks", model="Hyperion", starting_mileage=100.0, current_mileage=105.0)
+    db.add(shoe)
+    db.commit()
+    db.add(ShoeRun(activity_id=a.id, owned_shoe_id=shoe.id))
+    db.commit()
+
+    svc.scan_archive(db, tmp_path)
+
+    db.refresh(a)
+    assert (a.start_lat, a.start_lng) == (45.502, -73.576)     # rounded to 3 decimals (~100 m)
+    assert a.distance_km == 5.0 and a.moving_time_s == 1500    # not rewritten by the scan
+    assert db.get(OwnedShoe, shoe.id).current_mileage == 105.0 # INV-1: the ledger is untouched
+    run = db.query(ShoeRun).filter_by(activity_id=a.id).one()  # INV-2: attribution untouched
+    assert run.owned_shoe_id == shoe.id
+    assert _efforts(db, a.id)                                  # the efforts still landed
+
+
+def test_archive_fit_gz_scan_stamps_start_from_semicircles(db, tmp_path):
+    import gzip
+    (tmp_path / "activities").mkdir()
+    records = [(T0 + s, semicircles(45.501689), semicircles(-73.576), s * 3.0) for s in range(0, 400)]
+    (tmp_path / "activities" / "1.fit.gz").write_bytes(gzip.compress(fit_bytes(records)))
+    a = _run(db, fit_filename="activities/1.fit.gz")
+
+    s = svc.scan_archive(db, tmp_path)
+    assert (s.scanned, s.failed) == (1, 0)
+    db.refresh(a)
+    assert (a.start_lat, a.start_lng) == (45.502, -73.576)
+
+
+def test_file_without_position_leaves_start_none_and_scan_succeeds(db, tmp_path):
+    (tmp_path / "activities").mkdir()
+    records = [(T0 + s, None, None, s * 3.0) for s in range(0, 400)]   # treadmill-style: no GPS
+    (tmp_path / "activities" / "1.fit").write_bytes(fit_bytes(records))
+    a = _run(db, fit_filename="activities/1.fit")
+
+    s = svc.scan_archive(db, tmp_path)
+    assert (s.scanned, s.failed) == (1, 0)
+    db.refresh(a)
+    assert a.start_lat is None and a.start_lng is None
+    assert _efforts(db, a.id)                                  # distance still gives efforts

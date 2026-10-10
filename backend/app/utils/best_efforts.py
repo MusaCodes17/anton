@@ -8,7 +8,9 @@ R8.2 spike (Longueuil 10k: 10k 34:28, 5k 16:58); decision: design_decisions B19.
 
 Streams come from FIT files (the watch's own cumulative distance — preferred)
 or GPX (distance summed from GPS points; noisier). Raw files are never kept:
-callers parse, compute, and store only the efforts.
+callers parse, compute, and store only the efforts. The one other thing read is
+the run's start point (the first GPS fix, `fit_start` / `gpx_start`), which the
+scan stores rounded to ~100 m (R5.4.1, utils/location.py) — never a track.
 """
 from __future__ import annotations
 
@@ -59,6 +61,57 @@ def fit_stream(data: bytes) -> Stream:
                 t0 = t0 or ts
                 out.append(((ts - t0).total_seconds(), float(dist)))
     return out
+
+
+SEMICIRCLE_TO_DEG = 180.0 / 2 ** 31
+
+
+def fit_start(data: bytes) -> Optional[tuple[float, float]]:
+    """(lat, lon) in degrees of the first `record` with a valid GPS fix, or None.
+    Full precision: rounding for storage is the caller's job (utils/location).
+
+    FIT stores positions as semicircles (sint32). The default fitdecode reader
+    returns those raw ints and does not convert them; a `StandardUnitsDataProcessor`
+    reader returns degrees as floats. Both are handled: a float already within
+    ±180 is taken as degrees, anything else as semicircles. Semicircle ints are
+    never small in practice (a Montreal fix is ~5.4e8 / -8.8e8 semicircles), so
+    this split is unambiguous for real files.
+    """
+    import fitdecode
+
+    if data[:2] == b"\x1f\x8b":
+        data = gzip.decompress(data)
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        with fitdecode.FitReader(io.BytesIO(data)) as reader:
+            for frame in reader:
+                if frame.frame_type != fitdecode.FIT_FRAME_DATA or frame.name != "record":
+                    continue
+                if not (frame.has_field("position_lat") and frame.has_field("position_long")):
+                    continue
+                lat, lon = frame.get_value("position_lat"), frame.get_value("position_long")
+                if lat is None or lon is None:
+                    continue
+                return (_fit_degrees(lat), _fit_degrees(lon))
+    return None
+
+
+def _fit_degrees(value) -> float:
+    if isinstance(value, float) and abs(value) <= 180.0:
+        return float(value)          # already degrees (StandardUnitsDataProcessor)
+    return float(value) * SEMICIRCLE_TO_DEG
+
+
+def gpx_start(text: str) -> Optional[tuple[float, float]]:
+    """(lat, lon) of the first track point in a GPX document, or None."""
+    import gpxpy
+
+    g = gpxpy.parse(text)
+    for t in g.tracks:
+        for s in t.segments:
+            for p in s.points:
+                return (p.latitude, p.longitude)
+    return None
 
 
 def gpx_stream(fh: BinaryIO | str) -> Stream:
