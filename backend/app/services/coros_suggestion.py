@@ -2,7 +2,7 @@
 Shoe suggestion for a pending COROS run (COROS direct sync §5).
 
 Job: a deterministic, no-model port of the heuristic in the `sync_coros_runs` MCP
-prompt (mcp_server.py, "Step 3 — Suggest shoe assignment"), so the app's inbox and
+prompt (mcp_server/coros.py, "Step 3 — Suggest shoe assignment"), so the app's inbox and
 Claude propose the same shoe for the same run. If you change a band here, change
 that prompt text too (and vice-versa) — they are two renderings of one rule.
 

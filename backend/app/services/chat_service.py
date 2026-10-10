@@ -2,7 +2,7 @@
 Streaming chat service — supports Anthropic, OpenAI, and Google Gemini providers.
 
 Tool discovery is fully automatic via MCP (Streamable HTTP transport).
-Adding a new @mcp.tool() in mcp_server.py is sufficient — no registry updates needed here.
+Adding a new @mcp.tool() in the matching app/mcp_server/ domain module is sufficient — no registry updates needed here.
 
 Provider routing is by explicit catalog lookup (MODELS below), not name
 prefix: every model id names its provider. Both /chat/providers and

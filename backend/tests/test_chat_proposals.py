@@ -273,7 +273,7 @@ def in_process_mcp(db, monkeypatch):
     @contextmanager
     def fake_session():
         yield db
-    monkeypatch.setattr(mcp_server, "get_session", fake_session)
+    monkeypatch.setattr(mcp_server._core, "get_session", fake_session)
 
     async def executor(name, args):
         out = await mcp_server.mcp.call_tool(name, args)

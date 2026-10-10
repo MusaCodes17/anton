@@ -28,7 +28,7 @@ def _session(db, monkeypatch):
     @contextmanager
     def fake_session():
         yield db          # share the test session; the fixture owns closing it
-    monkeypatch.setattr(mcp_server, "get_session", fake_session)
+    monkeypatch.setattr(mcp_server._core, "get_session", fake_session)
     monkeypatch.setenv("COROS_TOKEN_KEY", Fernet.generate_key().decode())
 
 
@@ -193,7 +193,7 @@ def inline_thread(monkeypatch):
     tool's worker-thread body on this thread."""
     async def run_inline(fn, *a, **k):
         return fn(*a, **k)
-    monkeypatch.setattr(mcp_server.asyncio, "to_thread", run_inline)
+    monkeypatch.setattr(asyncio, "to_thread", run_inline)
 
 
 def test_sync_coros_now_runs_the_manual_sync_and_saves_fitness(db, monkeypatch, inline_thread):

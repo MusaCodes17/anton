@@ -2,7 +2,7 @@
 Deal query service — the canonical home for deal-retrieval business logic.
 
 Extracted from routers/deals.py (fat adapter) and from the inline queries
-duplicated in mcp_server.py's get_deals / get_shoe_deals tools.  REST
+duplicated in mcp_server/deals.py's get_deals / get_shoe_deals tools.  REST
 endpoints and MCP tools are now thin adapters over these functions — one
 source of truth for how deals are filtered and ordered (REST/MCP parity,
 architecture principle §4.2).
