@@ -50,8 +50,9 @@ backend/alembic/   migrations — every schema change gets one (see §9)
 frontend/src/
   pages/           route components; page-local sub-components inline in the page file
   components/      shared components; ui/ = shadcn-style primitives; feature
-                   subfolders (chat/, training/, layout/) for cohesive sets
-  hooks/useApi.js  ALL React Query hooks, grouped per API family
+                   subfolders (chat/, training/, shoes/, layout/, …) for cohesive sets
+  hooks/useApi.js  ALL React Query hooks, grouped per API family (the other
+                   hooks/ files are browser-state hooks: useMediaQuery, useOnline, …)
   services/api.js  the single axios client, grouped per domain
   lib/             pure helpers (no React, no fetch)
 docs/              the documentation suite + changelog.md
