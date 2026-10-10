@@ -96,7 +96,7 @@
 **Why (recorded):** Zero frontend/MCP churn during a deep storage restructure; continuity of meaning over naming purity.
 **Advantages:** The migration shipped in one day with no consumer changes; API stability honored.
 **Trade-offs:** Hidden N+1 on un-eager-loaded run loops; proxied attributes silently unusable in `filter()`; pace formatting duplicated into the ORM class.
-**Verdict:** 🕐 Keep **as a bridge, not a permanent API** (architecture.md §16.4): eager-load at list seams now, migrate readers over time, shrink the proxy surface.
+**Verdict:** 🔁 **Superseded 2026-10-10.** The proxies are retired: readers use `shoe_run.activity.<field>` (eager-loaded at list seams), and the run payload comes from one projection, `rotation.shoe_run_payload`. Parity on a DB copy for REST, MCP and resource output was exact. The text above is kept as the history of the bridge.
 
 ### B6. Mileage as a maintained counter, not a derived sum
 **Chosen:** `current_mileage = starting_mileage + Σ attributed distances`, updated on every write/delete, never recomputed on read.
@@ -264,7 +264,7 @@ Intervals and Track **count** (the runner's call). A stretch is continuous runni
 **Why (recorded):** One tool registry for Claude Desktop *and* the embedded chat; a new `@mcp.tool()` becomes a chat capability with zero further wiring; an earlier direct-import coupling was deliberately removed in favor of discovery.
 **Advantages:** Perfect capability parity across AI surfaces; the assistant can never do what the platform can't; dogfoods the MCP server continuously.
 **Trade-offs:** A runtime self-dependency over TCP (`MCP_SERVER_URL` must reach the app itself — the hidden loop in `dependency_graph.md` §7.3); per-conversation connection overhead.
-**Verdict:** ✅ Keep the architecture; make the loopback explicit or in-process per architecture.md §16 / dependency_graph.md §11.7.
+**Verdict:** ✅ Keep the architecture. The transport part is settled by C14 (2026-10-10): the assistant reaches the MCP server in-process by default, and HTTP loopback is an opt-in.
 
 ### C2. Multi-provider chat via strategy pattern, routed by model-name prefix
 **Chosen:** Anthropic/OpenAI/Gemini providers implementing one streaming agentic-loop contract; availability driven by which API keys exist.
@@ -379,6 +379,15 @@ Intervals and Track **count** (the runner's call). A stretch is continuous runni
 **Advantages:** Fitness stays current with no Claude session; the card and the coming trend chart read the same rows.
 **Trade-offs:** One more COROS prose format to track. COROS reports whole numbers, so the history moves in 1-point steps. Supersedes the "written via the Claude-Desktop agent" wording of R2.7 T5 (the manual `record_athlete_metrics` path stays).
 **Verdict:** ✅ Keep. 🔁 Revisit if COROS exposes fitness history (backfill) or if a reading ever needs runner judgement.
+
+### C14. Son of Anton reaches Anton's MCP server in-process, not over HTTP loopback (2026-10-10)
+**Chosen:** `chat_service` connects to the app's own FastMCP server through an in-memory session (`mcp.shared.memory.create_connected_server_and_client_session`, joined to a `ClientSessionGroup` with `connect_with_session`). Tool discovery is unchanged (`list_tools`). `ANTON_MCP_TRANSPORT=http` restores the old path: Streamable HTTP to `MCP_SERVER_URL` with the `loopback` bearer from `chat_service._server_headers`.
+**Why:** The loopback made the assistant's whole toolset depend on three things nobody checks at startup: the bind address, the port in `MCP_SERVER_URL`, and the bearer. Changing any one of them, or dropping the bearer, stripped every tool with a "No tools available" message and no error. The app also depended on reaching itself over TCP to answer a chat message. An in-process session removes all three. No tool reads HTTP request or auth context, so the in-memory path behaves the same.
+**Advantages:** No port, bind or bearer on the chat path. The C1 capability promise (one registry, automatic discovery) is kept. Tool-level failures are logged and skipped per server, as before.
+**Trade-offs:** No transport-level test of the real `/mcp` HTTP path from chat (the HTTP mount is still exercised by Claude Desktop and claude.ai, and the http mode keeps its own test). Errors raised inside the session block surface wrapped in an anyio `ExceptionGroup`; this predates the change. Each conversation still opens its own session (cheaper in memory, same per-request cost shape).
+**Verdict:** ✅ Keep. 🔁 Revisit if the in-process session starts diverging from the HTTP surface (for example, a tool that needs request context). The HTTP mode is the escape hatch, kept on purpose until that happens.
+
+---
 
 ## D. Scraping
 
@@ -684,6 +693,8 @@ Supporting choices:
 | COROS sync is connector-mediated (C6: "client-side agent prompt, not a backend integration") | Claude Desktop reads the COROS MCP connector and calls Anton's tools; a human-plus-LLM in the data path | C11 — backend OAuth client + poller + pending queue; the connector becomes optional | 2026-10-07 (R5.7) |
 | Learning: "MCP servers can't be called from app backends; an LLM mediator is required" | True of the Claude-connector setup (desktop-managed OAuth) | C11 — COROS now explicitly supports self-service app backends as MCP clients (open DCR, PKCE, refresh tokens) | 2026-10-07 (R5.7) |
 | B16 — PB eligibility by tag exclusion + untagged 1.5× elapsed/moving guard, timed on moving time | R2.7 T3: "eligible unless excluded" | B18 — Race PBs + Best efforts on elapsed time | 2026-10-09 (R8.1) |
+| B5 — `ShoeRun` property proxies as the compatibility bridge after the canonical-activities migration | Read-only properties resolving through `shoe_run.activity`, so response shapes and consumers survived the migration | Readers use `shoe_run.activity`; one projection `rotation.shoe_run_payload` (B5's "shrink the surface" verdict, done) | 2026-10-10 (perf + debt batch) |
+| C1 transport — Son of Anton reaches the MCP server over HTTP loopback (`MCP_SERVER_URL`, bearer) | Streamable-HTTP client to the app's own `/mcp` | C14 — in-process memory session by default; HTTP kept behind `ANTON_MCP_TRANSPORT=http` | 2026-10-10 (perf + debt batch) |
 
 ---
 

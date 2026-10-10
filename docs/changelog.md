@@ -5,6 +5,47 @@
 
 ---
 
+## Phone performance batch + debt (ShoeRun proxies, MCP loopback, lint) — 2026-10-10
+
+Branch `perf-debt`, eight commits (`542b2d0` through `60214f1`). One additive migration (`e4f5a6b7c8d9`, indexes only). Suite 878 → 892 passed + 1 skipped, stable across two runs. `vite build` clean. Decisions: design_decisions B5 superseded, C14 added.
+
+**[PERF] Phone performance (roadmap follow-ups from the PWA UI pass)**
+- **Watchlist in SQL:** `services/watchlist.build_watchlist` reduces price history with row_number windows, selecting columns only, then joins back for the payload. Migration `e4f5a6b7c8d9` adds `ix_price_records_shoe_price_id` (shoe_id, price, id) and `ix_price_records_shoe_retailer_scraped_id` (shoe_id, retailer_id, scraped_at, id). Parity on a copy of the live DB: 0 mismatches over 51 entries. Service time ~2.4 s → ~0.16 s warm; 211 ms browser round trip. Four tie-rule tests. The "labelled O(N)" in-Python pass is gone.
+- **Lazy routes:** route pages are lazy-loaded (Home stays eager). `Layout.jsx` wraps `<Outlet />` in Suspense. `components/lazyPage.js` reloads once on a stale chunk after a deploy (sessionStorage guard, no loop). Entry chunk 1,193 kB → 534 kB (gzip 345 → 168 kB).
+- **Caddy compression:** `deploy/Caddyfile` adds `encode zstd gzip` with an explicit content-type matcher that excludes `text/event-stream`, so chat SSE is never buffered.
+- **Refresh on resume:** `hooks/useResumeRefresh.js` refetches active stale queries after 5+ min hidden and online. Deliberately not `refetchOnWindowFocus` (the iOS request storm).
+- **Phone scroll S5/S11/S15:** retailer health collapsed on phones unless a retailer needs attention (always open md+); Now-strip charts 64 px on phones, footers kept (B20 labels); Home alerts one row.
+- **Shoes page:** single-shoe type groups take one column of an outer grid, so they pack side by side instead of leaving half-empty rows.
+
+**[REMOVED] ShoeRun property proxies (B5 superseded)**
+- The `ShoeRun` run-field proxies are deleted. Readers use `shoe_run.activity.<field>`, and the run payload comes from one projection, `rotation.shoe_run_payload`.
+- Parity on a DB copy for REST, MCP and resource run output: 0 mismatches. Tests assert no proxies remain and that the run list is one statement.
+- The silent `filter()` trap and the N+1 risk are gone from the model. Eager-loading still matters for list seams (CLAUDE.md §6 updated).
+
+**[CHANGED] Son of Anton reaches Anton's MCP server in-process (C14)**
+- By default, chat connects to the app's own MCP server through an in-memory session (`mcp.shared.memory.create_connected_server_and_client_session` + `ClientSessionGroup.connect_with_session`). No port, no bind address, no bearer on the path.
+- `ANTON_MCP_TRANSPORT=http` keeps the old loopback (`MCP_SERVER_URL` + the `loopback` bearer). The HTTP `/mcp` still serves Claude Desktop and claude.ai.
+- Why: with HTTP loopback, a bind or port change, or a dropped bearer, silently stripped every assistant tool. In-process removes that failure mode.
+- No tool reads HTTP request or auth context, so in-process behaves the same.
+- Eight new tests: connects with no secret and no port; a real tool call; the http path still sends the bearer; a connection failure is logged and skipped; no leaked tasks on exit, exception or cancel. Known pre-existing: errors raised inside the block surface wrapped in an anyio `ExceptionGroup`.
+
+**[CHANGED] Lint**
+- pyflakes is clean except one deliberate `noqa` (`OAuthAuthorizationServerProvider` documents the protocol). Dead `bar` line removed from the shoe detail resource.
+
+**Still accepted debt:** long synchronous scrape requests hold a request and a DB session for minutes (named in project_state §7).
+
+**[VERIFIED]**
+- Backend suite: 892 passed, 1 skipped (twice).
+- `vite build` clean.
+- Browser pass at 375 px and desktop on a DB copy: Shoes packing, Home alerts, Settings Sync collapse with aria, Now charts at 64 px, no horizontal scroll, 0 console errors. Runs REST shape unchanged.
+
+**Server steps (human):**
+1. Deploy `main` (or this branch once merged). The migration `e4f5a6b7c8d9` runs on start and only adds indexes.
+2. Caddy is live at `/etc/caddy/Caddyfile`, not the repo copy. Run `caddy validate --config /etc/caddy/Caddyfile`, then `caddy reload --config /etc/caddy/Caddyfile`. Confirm chat still streams on the installed iPhone PWA (no buffering).
+3. Check the Settings Sync card collapse and the Now charts on a real phone.
+
+---
+
 ## Heat analysis + one parked list — 2026-10-10
 
 Docs only; no code, no migration. The analysis was read-only on a copy of the July DB. Decision: the external weather lookup stays parked (design_decisions B23 follow-up).
