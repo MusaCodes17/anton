@@ -5,6 +5,23 @@
 
 ---
 
+## Docs pruning — archive, spikes and READMEs removed — 2026-10-09
+
+The runner asked for fewer, more important docs.
+
+**[REMOVED]** `docs/archive/` (completed plans, the retired QUICKSTART/TROUBLESHOOTING, and the July `refactoring/` reviews), `docs/spikes/` (three spike reports), `frontend/README.md` and `backend/README.md` (both from Phase 2/3 and wrong about pages, endpoints and setup). All recoverable with `git show bce3c53:<path>`.
+
+**[CHANGED] Kept what was still live before deleting:**
+- `project_state.md` §7 is now the debt list. Every open item from the July `tech_debt`/`refactor`/`dead_code` reviews was re-checked against the code; still open: `mcp_server.py` size + second serializer set, `ShoeRun` proxies, the MCP loopback, `schemas.py` hygiene, untyped `scraper_config`, long sync scrapes, logging/`utcnow` strays, and a dead-code list. Six items turned out already fixed and are recorded as resolved.
+- `design_decisions.md` E11 now carries the offline write-queue requirements that lived in the PWA plan's §6.
+- Spike findings were already in `design_decisions.md` (B19, C11, C13) and the code docstrings; code comments now cite those instead of the report files.
+- `CLAUDE.md` §3: new **Run locally** block (replaces the READMEs); new rule that plan docs and spike reports are deleted once they ship, with findings moved into `design_decisions.md`. Skills `debugging` and `add-frontend-page` and the `phase` command no longer point at archived files.
+- History entries in `roadmap.md`, `design_decisions.md` and `project_state.md` name retired plans as "(retired)" instead of a path. This changelog's older entries are left as written.
+
+Verified: no remaining reference to a deleted path outside this changelog; comment-only code edits, suite and build checked by CI.
+
+---
+
 ## PWA UI pass — Training order, Shoes cleanup, responsiveness — 2026-10-09
 
 The runner's 7-point list, orchestrated as 13 small tasks. Implementation was done by subagents (haiku/sonnet), and every diff was reviewed here before it was committed.

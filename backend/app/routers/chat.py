@@ -35,7 +35,7 @@ DEFAULT_MODEL = "claude-haiku-4-5-20251001"
 def enforce_chat_rate_limit(request: Request) -> None:
     """FastAPI dependency: throttle `POST /chat/message` per client so an
     authenticated-but-looping caller can't burn paid LLM credits (R2, the
-    R2.1-adjacent throttle — SECURITY_PASS_PLAN §6). Keyed by client IP; on
+    R2.1-adjacent throttle — design_decisions E8). Keyed by client IP; on
     exceed it raises 429 with `Retry-After` before the stream starts. Auth is
     still the security boundary — this only bounds spend/loops."""
     client = request.client

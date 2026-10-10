@@ -1,6 +1,6 @@
 """
 COROS connection — Anton as an OAuth 2.1 client of the COROS MCP server
-(COROS direct sync §2, roadmap R5.7; spike findings in docs/spikes/coros_mcp_client.md).
+(COROS direct sync §2, roadmap R5.7; decision: docs/design_decisions.md C11).
 
 Job: own the OAuth connect flow (Dynamic Client Registration + PKCE), encrypted
 token storage, and lazy/locked token refresh. It speaks OAuth only — MCP calls

@@ -2,7 +2,7 @@
 Best efforts inside runs (R8.2) — scanning runs' per-second streams into
 `activity_best_efforts`. The engine (stream parsing, sliding window) is pure
 and lives in app/utils/best_efforts; this module owns where streams come from
-and what gets stored. Findings: docs/spikes/best_efforts.md.
+and what gets stored. Decision: docs/design_decisions.md B19.
 
 Two sources:
 - **The Strava archive:** each `source='strava'` activity carries `fit_filename`

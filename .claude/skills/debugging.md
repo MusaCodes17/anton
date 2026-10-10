@@ -9,8 +9,8 @@ Any "why is this number/behavior wrong" moment.
 ## Required context
 - `docs/dependency_graph.md` §8 (hidden dependencies — most bugs live here).
 - `CLAUDE.md` §6 (known traps) and §14 (invariants — which identity may have broken).
-- `TROUBLESHOOTING.md` for env-level issues (note: predates the redesign; verify against
-  `docs/` if it disagrees — docs/archive/documentation_review.md §3.4).
+- `docs/architecture.md` §11 (auth, Caddy, proxy headers) and `docs/CLAUDE_DESKTOP_SETUP.md`
+  (connector troubleshooting) for env-level issues.
 
 ## Decision map (not steps)
 - **Wrong number on screen** → every number is computed server-side exactly once; find the

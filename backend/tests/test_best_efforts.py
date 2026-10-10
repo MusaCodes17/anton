@@ -6,7 +6,7 @@ run (a 5k inside a 10k), timed on the elapsed clock (a stop inside the stretch
 counts), interpolated to the exact distance, and GPS jumps don't fake records.
 Streams are synthetic: real FIT/GPX files carry the runner's GPS track, so the
 engine was validated against real races in the spike instead
-(docs/spikes/best_efforts.md: Longueuil 10k → 10k 34:28, 5k 16:58).
+(R8.2 spike: Longueuil 10k → 10k 34:28, 5k 16:58).
 """
 import pytest
 

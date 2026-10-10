@@ -7,7 +7,7 @@ math already pinned in test_deals.py:
   empty response must never mass-extinguish deals);
 - promo-code manual-beats-scraped protection (design_decisions D6).
 
-These are the "rules, not plumbing" gaps refactor.md H1 called out.
+These are the "rules, not plumbing" gaps the July 2026 refactor review (H1) called out.
 """
 from app.models.models import Deal, PromoCode, Retailer, Shoe
 from app.scrapers.deal_store import DealStore

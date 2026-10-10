@@ -2,7 +2,7 @@
 
 Needs `pip install fitdecode gpxpy` in a scratch venv. Usage:
     python scripts/spikes/best_efforts.py <export_dir> activities/<id>.fit.gz ...
-Findings: docs/spikes/best_efforts.md.
+Decision: docs/design_decisions.md B19.
 """
 import gzip, math, sys, time
 import fitdecode, gpxpy

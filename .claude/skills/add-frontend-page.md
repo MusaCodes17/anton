@@ -10,7 +10,7 @@ New route, new page-level feature, significant component work.
 - `CLAUDE.md` §5 (JavaScript/React standards) — tokens only, React Query only, no TypeScript.
 - Exemplars: `pages/Home.jsx` (inline page-local sub-components), `hooks/useApi.js`,
   `services/api.js`.
-- `docs/archive/REDESIGN_PLAN.md` §5 — no heavy dependencies, design tokens only, mobile pass is part of done.
+- The standing redesign rules (CLAUDE.md §5) — no heavy dependencies, design tokens only, mobile pass is part of done.
 
 ## Workflow
 1. **api-client function** in `services/api.js`, grouped per domain.
