@@ -210,6 +210,11 @@ export const ownedShoesApi = {
   rotationOverview: () => client.get('/api/owned-shoes/rotation-overview').then((r) => r.data),
 }
 
+// ============== INSIGHTS (R5.5) ==============
+export const insightsApi = {
+  shoe: (id) => client.get(`/api/insights/shoes/${id}`).then((r) => r.data),
+}
+
 // ============== TRAINING ==============
 export const trainingApi = {
   summary: (period = 'monthly', range = {}) =>

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useParams, useNavigate, Link } from 'react-router-dom'
-import { ArrowLeft, Flag, Footprints, Save } from 'lucide-react'
+import { ArrowLeft, Flag, Footprints, MapPin, Save, Thermometer } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
@@ -108,6 +108,28 @@ export default function ActivityDetail() {
         {d.activity_tag && <Badge variant="secondary" className="text-[10px]">{d.activity_tag}</Badge>}
         <span className="text-sm text-muted-foreground">{d.run_date ? formatDate(d.run_date) : '—'}</span>
       </div>
+
+      {(() => {
+        const place = d.location_label
+          || (d.start_lat != null && d.start_lng != null ? `${d.start_lat}, ${d.start_lng}` : null)
+        const wx = []
+        if (d.weather_temp_c != null) {
+          wx.push(`${d.weather_temp_c} °C${d.apparent_temp_c != null ? ` (feels ${d.apparent_temp_c} °C)` : ''}`)
+        }
+        if (d.humidity_pct != null) wx.push(`${d.humidity_pct}% humidity`)
+        if (d.wind_speed_m_s != null) wx.push(`${d.wind_speed_m_s} m/s wind`)
+        if (!place && !wx.length) return null
+        return (
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-muted-foreground">
+            {place && (
+              <span className="inline-flex items-center gap-1.5"><MapPin className="h-4 w-4" /> {place}</span>
+            )}
+            {wx.length > 0 && (
+              <span className="inline-flex items-center gap-1.5"><Thermometer className="h-4 w-4" /> {wx.join(' · ')}</span>
+            )}
+          </div>
+        )
+      })()}
 
       {/* Stats */}
       <div className="grid grid-cols-3 gap-2 sm:gap-3 sm:grid-cols-3 lg:grid-cols-4">

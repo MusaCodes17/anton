@@ -8,6 +8,7 @@ import {
   dashboardApi,
   scrapeApi,
   ownedShoesApi,
+  insightsApi,
   corosApi,
   trainingApi,
   stravaApi,
@@ -602,6 +603,14 @@ export function useOwnedShoe(id) {
   })
 }
 
+export function useShoeInsights(id) {
+  return useQuery({
+    queryKey: ['insights', 'shoe', id],
+    queryFn: () => insightsApi.shoe(id),
+    enabled: !!id,
+  })
+}
+
 export function useShoeRuns(id) {
   return useQuery({
     queryKey: queryKeys.shoeRuns(id),
@@ -687,6 +696,7 @@ export function useLogRun() {
     onSuccess: (_data, { id }) => {
       qc.invalidateQueries({ queryKey: ['owned-shoes'] })
       qc.invalidateQueries({ queryKey: queryKeys.shoeRuns(id) })
+      qc.invalidateQueries({ queryKey: ['insights'] })
       // A new run moves every run-derived surface (R8.4.5 "Now" strip included).
       qc.invalidateQueries({ queryKey: ['activities'] })
       qc.invalidateQueries({ queryKey: ['training'] })
@@ -723,6 +733,7 @@ export function useDeleteShoeRun() {
       // on success, or quietly corrects it if the delete failed.
       qc.invalidateQueries({ queryKey: ['owned-shoes'] })
       qc.invalidateQueries({ queryKey: queryKeys.shoeRuns(run.owned_shoe_id) })
+      qc.invalidateQueries({ queryKey: ['insights'] })
       // A manual run's activity goes with it, so run-derived surfaces refresh.
       qc.invalidateQueries({ queryKey: ['activities'] })
       qc.invalidateQueries({ queryKey: ['training'] })

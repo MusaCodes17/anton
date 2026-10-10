@@ -11,6 +11,7 @@ import {
   Trash2,
 } from 'lucide-react'
 import MileageProgressBar from '@/components/MileageProgressBar'
+import HowItRunsCard from '@/components/shoes/HowItRunsCard'
 import OwnedShoeForm from '@/components/OwnedShoeForm'
 import LogRunDialog from '@/components/LogRunDialog'
 import ShoeTypeBadge from '@/components/ShoeTypeBadge'
@@ -221,6 +222,8 @@ export default function ShoeDetail() {
           <Stat label="Avg HR" value={shoe.lifetime_avg_hr ? `${shoe.lifetime_avg_hr} bpm` : '—'} />
         </div>
       </div>
+
+      <HowItRunsCard ownedShoeId={shoe.id} />
 
       {/* Replacement deals */}
       <ReplacementDeals
