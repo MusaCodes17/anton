@@ -626,6 +626,19 @@ Supporting choices:
 **Verdict:** ✅ Keep.
 ---
 
+### E17. MCP payloads render through the REST response schemas; deals keep a flat MCP projection (§7 debt phase, 2026-10-10)
+
+**Chosen:**
+- MCP owned shoes, runs, notes and watchlist entries are `OwnedShoeResponse` (after `rotation.attach_computed_fields[_bulk]`), `ShoeRunResponse`, `ShoeNoteResponse` and `WatchlistItem`, dumped with `model_dump(mode="json")` by the helpers in `mcp_server/_shared.py`. `tests/test_mcp_parity.py` pins MCP == REST.
+- `_deal_to_dict` stays hand-written: a flat brand/model/retailer-name row reads better for an LLM than `DealResponse`'s nested shoe and retailer.
+- `mcp_server/` and `models/schemas/` are packages split by domain; `app.mcp_server` and `app.models.schemas` re-export everything.
+
+**Why:** the hand-written MCP dicts were a second rendering of the same aggregates, kept in step by hand (CLAUDE.md §2.1 "correct numbers, once").
+
+**Trade-offs:** MCP payloads grew (superset keys such as `created_at`, `review_draft`). The deal projection is still two renderings; its docstring says to add new deal fields in both places.
+**Verdict:** ✅ Keep.
+---
+
 ## Superseded Decisions (kept as history)
 
 | Decision | Was | Superseded by | When |

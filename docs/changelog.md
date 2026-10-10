@@ -7,7 +7,7 @@
 
 ## §7 debt phase — mcp_server/schemas split, one serialization system, typed scraper_config — 2026-10-10
 
-Branch `debt-p1-p2`, eight commits (seven tasks + docs). No migration; two API shape changes (`LogRunResponse` gains `threshold_crossed`/`threshold_message`; `DealResponse.retailer` is the compact brief — the frontend reads only `name` and `active_promo_codes`).
+Branch `debt-p1-p2`, eight commits (seven tasks + docs), merged as PR #64 (`4c73adb`) with both CI checks green. Decision recorded as design_decisions E17. No migration; two API shape changes (`LogRunResponse` gains `threshold_crossed`/`threshold_message`; `DealResponse.retailer` is the compact brief — the frontend reads only `name` and `active_promo_codes`).
 
 **[CHANGED] `mcp_server.py` (3,063 lines) is now the package `backend/app/mcp_server/`**
 - `_core.py` (FastMCP instance, allowed hosts, `get_session`), `_shared.py` (payload helpers and formatters), then `deals.py`, `shoes.py`, `coros.py`, `training.py`, `onboarding.py`. `__init__.py` re-exports `mcp` and every tool, resource and prompt, so `app.mcp_server.mcp` and all tool names are unchanged.
@@ -40,7 +40,7 @@ Branch `debt-p1-p2`, eight commits (seven tasks + docs). No migration; two API s
 - MCP inventory unchanged by the split: 39 tools, 12 resources, 7 prompts.
 - Deal list of 6 deals: 8 → 3 SQL statements (`tests/test_deal_queries.py`).
 - All 13 live retailers' `scraper_config` values validate against `ScraperConfig`.
-- `vite build` clean. No migration. The only UI change is the toast description, so no layout pass was needed.
+- `vite build` clean. No migration. The only UI change is a description line on the existing log-run success toast; it was not visually checked in a browser (desktop / 380 px) this session.
 
 ---
 
