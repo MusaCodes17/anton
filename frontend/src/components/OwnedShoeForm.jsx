@@ -7,6 +7,14 @@ import { DialogFooter } from '@/components/ui/dialog'
 import { useShoeTypes } from '@/hooks/useApi'
 import { formatShoeType } from '@/lib/shoeTypes'
 
+// Mileage changes below 0.05 km are treated as "no change" (float noise from the
+// number input round-trip), so an untouched field never fires an adjust-mileage call.
+const MILEAGE_EPSILON_KM = 0.05
+
+// The API returns current_mileage as a raw float (e.g. 620.3000000004). Show and compare
+// it at 1 decimal so an untouched field never counts as changed and the text stays clean.
+const roundMileage = (km) => Math.round((km ?? 0) * 10) / 10
+
 const empty = {
   brand: '',
   model: '',
@@ -17,6 +25,8 @@ const empty = {
   starting_mileage: '0',
   status: 'active',
   image_url: '',
+  mileage_limit: '',
+  current_mileage: '',
 }
 
 export default function OwnedShoeForm({ initial, onSubmit, onCancel, submitting }) {
@@ -33,6 +43,9 @@ export default function OwnedShoeForm({ initial, onSubmit, onCancel, submitting 
           starting_mileage: String(initial.starting_mileage ?? 0),
           status: initial.status ?? 'active',
           image_url: initial.image_url ?? '',
+          // Blank means "reset to the type default" (sent as null).
+          mileage_limit: initial.mileage_limit != null ? String(initial.mileage_limit) : '',
+          current_mileage: String(roundMileage(initial.current_mileage)),
         }
       : {}),
   }))
@@ -40,6 +53,17 @@ export default function OwnedShoeForm({ initial, onSubmit, onCancel, submitting 
   const { data: shoeTypes = [] } = useShoeTypes()
 
   const set = (key) => (e) => setValues((v) => ({ ...v, [key]: e.target.value }))
+
+  // Edit-mode mileage helpers. recKm is the type-default limit, rounded for display
+  // everywhere (hint, reset button and the reset value itself).
+  const recKm = initial?.recommended_limit_km != null ? Math.round(initial.recommended_limit_km) : null
+  const limitNum = parseFloat(values.mileage_limit)
+  const mileageNum = parseFloat(values.current_mileage)
+  const originalMileage = roundMileage(initial?.current_mileage)
+  const mileageChanged =
+    !!initial && !Number.isNaN(mileageNum) && Math.abs(mileageNum - originalMileage) > MILEAGE_EPSILON_KM
+  const limitAbove = recKm != null && !Number.isNaN(limitNum) && limitNum > recKm
+  const limitDiffers = recKm != null && limitNum !== recKm
 
   const validate = () => {
     const next = {}
@@ -51,6 +75,11 @@ export default function OwnedShoeForm({ initial, onSubmit, onCancel, submitting 
     if (values.purchase_price !== '') {
       const price = parseFloat(values.purchase_price)
       if (Number.isNaN(price) || price <= 0) next.purchase_price = 'Enter a price greater than 0'
+    }
+    if (initial) {
+      if (values.mileage_limit !== '' && (Number.isNaN(limitNum) || limitNum <= 0))
+        next.mileage_limit = 'Enter a limit greater than 0'
+      if (Number.isNaN(mileageNum) || mileageNum < 0) next.current_mileage = 'Enter a mileage of 0 or more'
     }
     setErrors(next)
     return Object.keys(next).length === 0
@@ -68,13 +97,19 @@ export default function OwnedShoeForm({ initial, onSubmit, onCancel, submitting 
       status: values.status,
       image_url: values.image_url.trim() || null,
     }
+    if (initial) {
+      payload.mileage_limit = values.mileage_limit === '' ? null : limitNum
+      // current_mileage is deliberately NOT in this payload: PUT ignores it, and the
+      // ledger (INV-1 / C1) only changes through adjust-mileage. The parent gets the
+      // requested value via the second onSubmit argument and makes that call itself.
+    }
     return payload
   }
 
   const handleSubmit = (e) => {
     e.preventDefault()
     if (!validate()) return
-    onSubmit(buildPayload())
+    onSubmit(buildPayload(), { newMileage: initial && mileageChanged ? mileageNum : null })
   }
 
   return (
@@ -145,6 +180,66 @@ export default function OwnedShoeForm({ initial, onSubmit, onCancel, submitting 
           />
         </Field>
       </div>
+
+      {initial && (
+        <div className="space-y-3">
+          <div className="text-2xs font-bold uppercase tracking-[0.08em] text-faint">Mileage</div>
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-1.5">
+              <Label>Retirement limit (km)</Label>
+              <Input
+                type="number"
+                step="10"
+                min="0"
+                value={values.mileage_limit}
+                onChange={set('mileage_limit')}
+              />
+              {errors.mileage_limit ? (
+                <p className="text-xs text-destructive">{errors.mileage_limit}</p>
+              ) : (
+                recKm != null && (
+                  <div className="flex flex-wrap items-center gap-x-2 text-xs">
+                    <span className={limitAbove ? 'text-warning' : 'text-muted-foreground'}>
+                      {limitAbove
+                        ? `Above the recommended ${recKm} km`
+                        : `Recommended for this type: ${recKm} km`}
+                    </span>
+                    {limitDiffers && (
+                      <button
+                        type="button"
+                        onClick={() => setValues((v) => ({ ...v, mileage_limit: String(recKm) }))}
+                        className="focus-ring rounded text-accent-foreground underline"
+                      >
+                        Reset to {recKm} km
+                      </button>
+                    )}
+                  </div>
+                )
+              )}
+            </div>
+            <div className="space-y-1.5">
+              <Label>Current mileage (km)</Label>
+              <Input
+                type="number"
+                step="0.1"
+                min="0"
+                value={values.current_mileage}
+                onChange={set('current_mileage')}
+              />
+              {errors.current_mileage ? (
+                <p className="text-xs text-destructive">{errors.current_mileage}</p>
+              ) : (
+                mileageChanged && (
+                  <p className="text-xs text-warning">
+                    Saving sets mileage from {originalMileage} to {mileageNum} km. This is a manual
+                    correction, noted in the shoe's journal; it doesn't log a run.
+                  </p>
+                )
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       <Field
         label="Image URL"
