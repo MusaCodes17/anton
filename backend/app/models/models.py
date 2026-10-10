@@ -140,7 +140,6 @@ class Deal(Base):
     colorway = Column(String(200), nullable=True)  # e.g. "Black / White - Grey"
     is_active = Column(Boolean, default=True, index=True)  # Whether deal is still valid
     detected_at = Column(DateTime(timezone=True), server_default=func.now())
-    expires_at = Column(DateTime(timezone=True), nullable=True)  # Optional expiry
 
     # Relationships
     shoe = relationship("Shoe", back_populates="deals")
