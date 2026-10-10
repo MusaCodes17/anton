@@ -78,7 +78,7 @@ The system is also **self-referential by design**: the embedded assistant (Son o
 | Styling / UI | Tailwind 3.4, shadcn-style components over Radix primitives (`components/ui/`), lucide-react icons; custom `BrandMark` logo component |
 | Charts | recharts |
 | Chat rendering | react-markdown; manual `fetch` + SSE frame parsing in `useChatStream.js` |
-| Persistence | `localStorage` for chat conversations (`lib/conversations.js`, capped at 50) and checkpoint-prompt dedup (`lib/checkpoints.js`) |
+| Persistence | Server-side for anything shared between devices: chat conversations and checkpoint prompts (R2.6), the Training section layout (E16). The React Query cache is persisted to IndexedDB for offline reads (RA2.2, `lib/queryClient.js`): GETs only, busted on every build (`__APP_VERSION__` = git hash), 24 h max age, writes throttled to 5 s; deals, prices and watchlist queries opt out (`meta: { persist: false }`). Nothing uses `localStorage`; `sessionStorage` only carries the chat drawer → full-page handoff. |
 
 Dev-time coupling: the Vite dev server proxies `/api` to `127.0.0.1:8000` (explicitly IPv4 to dodge Node 18's `localhost` → `::1` resolution). Production expects `VITE_API_URL` to be set; there is no production deployment configuration in the repo.
 
@@ -112,13 +112,13 @@ anton/
 │   └── app/
 │       ├── main.py              # App assembly, CORS, router includes, /mcp mount, lifespan
 │       ├── database.py          # Engine, SessionLocal, get_db, init_db
-│       ├── mcp_server.py        # FastMCP server: ~20 tools, 7 resources, 1 prompt
+│       ├── mcp_server.py        # FastMCP server: 39 tools, 12 resources, 7 prompts (2026-10-09)
 │       ├── scrape_runner.py     # Background concurrent scrape job
 │       ├── scrape_state.py      # In-memory pub/sub for scrape SSE
 │       ├── models/
 │       │   ├── models.py        # 12 SQLAlchemy models
 │       │   └── schemas.py       # Pydantic request/response schemas
-│       ├── routers/             # 17 thin REST routers (see §8)
+│       ├── routers/             # 21 thin REST router modules (see §8)
 │       ├── services/            # Domain logic (see §7)
 │       ├── scrapers/            # Scraper subsystem (see §10)
 │       └── scripts/             # CLI wrappers: import_strava, seed_gear_mappings
@@ -127,13 +127,16 @@ anton/
 └── frontend/
     └── src/
         ├── App.jsx              # Route table incl. legacy-bookmark redirects
-        ├── pages/               # Home, Training, Deals, MyShoes, ShoeDetail, ChatPage,
-        │                        # Settings (nested: tracking / retailers / sync)
-        ├── components/          # Feature components + chat/, training/, layout/, ui/ subfolders
-        ├── hooks/useApi.js      # React Query hooks per API family
-        ├── hooks/useChatStream.js
+        ├── pages/               # Home, Training, Deals, MyShoes, ShoeDetail, ShoePipeline,
+        │                        # ActivityDetail, NewRuns, ChatPage, Shoes, Retailers,
+        │                        # Settings + SettingsSync
+        ├── components/          # Feature components + auth/, chat/, icons/, layout/, pwa/,
+        │                        # shoes/, training/, ui/ subfolders
+        ├── hooks/useApi.js      # ALL React Query hooks, per API family
+        ├── hooks/               # + useChatStream, useKeyboardViewport, useMediaQuery, useOnline
         ├── services/api.js      # Single axios API client, grouped per domain
-        └── lib/                 # conversations, checkpoints, shoeTypes, runSource, utils
+        └── lib/                 # pure helpers: queryClient, trainingLayout, pipeline, forecast,
+                                 # conversations, shoeTypes, runSource, utils
 ```
 
 Notable: `docs/changelog.md` (formerly root `claude.md`) functions as an architecture-decision log; many code comments reference "§N" sections of the planning markdown files at the repo root. These documents are part of the system's institutional memory and should be treated as first-class.
@@ -212,7 +215,7 @@ Single-shoe and single-retailer scrapes remain synchronous request-scoped calls 
 **Removed in Phase 5:** the `strava_activities` table and `StravaActivity` model (contents migrated into `activities` with `source='strava'`), and the `strava_backfill` service — the two-store reconciliation it performed is exactly what the migration made permanent.
 
 **Infrastructure**
-- `app_settings` — generic key/value store; currently only `last_coros_sync_at`.
+- `app_settings` — generic key/value store: `last_coros_sync_at`, the scrape schedule (`scrape_schedule_enabled`/`_cron`), the size preference (`preferred_shoe_size`, `hide_other_sizes`), and the Training section layout (`training_layout`, a JSON list — E16).
 - `coros_connection` (R5.7) — single row: Fernet-encrypted OAuth tokens, expiry, scopes, DCR `client_id`, `status` (`connected`/`reauth_required`/`disconnected`). `coros_oauth_states` — single-use `state` + encrypted PKCE verifier (10-min TTL) for the callback. `pending_coros_runs` — the inbox: normalized COROS run + detail, `label_id` UNIQUE, `suggested_shoe_id`, `status` (`pending`/`confirmed`/`dismissed`); **not a run record**. `coros_sync_state` — single row: last attempt/success/error for the UI and MCP status tool.
 - `activity_best_efforts` (R8.2, B19) — the fastest stretch of each run at 1k/mile/5k/10k/half/full (`elapsed_s`, `start_offset_m`, `source` fit|gpx), UNIQUE (activity, distance); derived from FIT/GPX streams, cascade-deleted with the run. `activity_effort_scans` — one row per scanned run (`ok`/`no_stream`/`failed`, attempts) so scans aren't repeated.
 
@@ -252,8 +255,8 @@ Extracted during the 2026 refactor; the stated rule is that routers and MCP tool
 
 | Service | Responsibility |
 |---|---|
-| `rotation.py` | The rotation domain's core: `log_run` — the only run-record writer, which now creates the canonical `Activity` (pace converted to seconds, notes onto `description`) then the `ShoeRun` attribution, with `increment_mileage`/`commit` escape hatches for batch callers; `delete_run` (with the strava archive-preservation rule); `add_note`; checkpoint detection; lifetime stats — now a plain mean over `Activity.avg_pace_s_per_km` via the attribution join, no string parsing; `cost_per_km`; `retirement_pipeline`; `active_deal_counts_by_type` (the cross-domain bridge); image matching heuristic; pace conversion helpers. |
-| `activities.py` | The canonical run feed (see §6): one query over `activities` runs + attribution join, with year/month/shoe/min-distance filters and stable pagination (deterministic tiebreak key). Still computed fully in Python over all rows. |
+| `rotation.py` | The rotation domain's core: `log_run` — the only run-record writer, which now creates the canonical `Activity` (pace converted to seconds, notes onto `description`) then the `ShoeRun` attribution, with `increment_mileage`/`commit` escape hatches for batch callers; `delete_run` (with the strava archive-preservation rule); `add_note`; `adjust_mileage` (the one manual ledger override) and `set_mileage_limit` (a number, or `None` = reset to the type default; never touches the ledger); checkpoint detection; lifetime stats — now a plain mean over `Activity.avg_pace_s_per_km` via the attribution join, no string parsing — with bulk variants (`compute_lifetime_stats_bulk`, `find_matched_images_bulk`, `attach_computed_fields_bulk`) for list seams, parity-checked against the per-shoe functions; `cost_per_km`; `retirement_pipeline`; `active_deal_counts_by_type` (the cross-domain bridge); image matching heuristic; pace conversion helpers. |
+| `activities.py` | The canonical run feed (see §6): one query over `activities` runs + attribution join, with year/month/shoe/min-distance filters and stable pagination (deterministic tiebreak key). Selects columns, not ORM entities (2026-10-09: ~65 → ~17 ms over the live DB); still filtered and sorted in Python over all rows. |
 | `strava_import.py` | CSV → **`activities` (source='strava')** upsert. Encodes hard-won export facts as executable assumptions: duplicate `Distance` headers (km vs meters) with a self-check assertion, UTC→Toronto conversion (145 evening runs shift days), gear-string stripping. Idempotent on `strava_activity_id`. |
 | `strava_gear.py` | Pure-function gear→shoe auto-matcher; deliberately conservative (exact normalized match only; ambiguous/unmatched left for a human). Its one-time consumer (backfill) has retired; retained for any future re-import. |
 | *(removed)* `strava_backfill.py` | The two-store MATCH/BACKFILL reconciliation, its CLI, and its tests were deleted in Phase 5 — the migration made its work permanent. Its design (plan-then-execute, per-shoe mileage policies, human-gated ambiguity) remains documented in `docs/changelog.md` and the planning docs as precedent. |
@@ -265,7 +268,7 @@ Extracted during the 2026 refactor; the stated rule is that routers and MCP tool
 | `coros.py` | The shared COROS confirm path: `confirm_run` → `rotation.log_run(source="coros")` (idempotent on `coros_activity_id`, stamps `last_coros_sync_at`, and resolves the matching `pending_coros_runs` row — used by the app inbox and the `confirm_coros_run` MCP tool), plus the two-tier `is_already_logged` dedup the poller uses. (The legacy Open-API fetch and `coros_client.py` were removed 2026-10-08.) |
 | `home.py` | Assembles the four Home attention modules (training pulse, shoe alerts, top deals, activity strip) in one pass; explicitly budgeted (< 200 ms target) as the future mobile launch screen. |
 | `races.py` | Derived race fields (countdown, target pace) attached at the boundary; shared by router and MCP so both report identical numbers. |
-| `settings.py` | Thin key/value accessor over `app_settings`; `set_setting` deliberately does not commit (caller owns the transaction). |
+| `settings.py` | Thin key/value accessor over `app_settings`, plus the runner preferences built on it: size preference, and the Training section layout (`get_training_layout` is lenient and normalizes stale or partial values; `set_training_layout` is strict and raises `ValueError`). Setters deliberately do not commit (caller owns the transaction). |
 | `chat_service.py` | The AI layer (see §9). |
 
 Transaction ownership is heterogeneous by design: `rotation` functions commit themselves (with opt-outs), `DealStore` methods each own commit/rollback, `set_setting` never commits.
@@ -274,7 +277,7 @@ Transaction ownership is heterogeneous by design: `rotation` functions commit th
 
 ## 8. API Layer (REST)
 
-Seventeen routers under `/api`, all behind the shared bearer token (R2.1 — see §11). Grouped by maturity/pattern:
+Twenty-one router modules: nineteen under `/api`, all behind the shared bearer token (R2.1 — see §11), plus the OAuth and session-login routers mounted at the root. Grouped by maturity/pattern:
 
 **Newer, service-backed, aggregate-per-page endpoints** (the "API-first" pattern):
 - `GET /api/home` — all four Home modules in one round trip.
@@ -282,8 +285,9 @@ Seventeen routers under `/api`, all behind the shared bearer token (R2.1 — see
 - `GET /api/activities` — canonical run feed with filters/pagination.
 - `GET /api/training/summary|records|trends`, `GET /api/races` (+ CRUD, `GET /api/races/readiness`), `GET /api/owned-shoes/rotation-overview` (id-keyed, lightweight — the page merges it with full shoe rows client-side).
 - `GET /api/strava/status` — import health for Settings; post-Phase-5 it reports over `activities` filtered to `source='strava'`.
+- `GET /api/preferences` (size preference + `training_layout`), `PUT /api/preferences` (size only), `PUT /api/preferences/training-layout` (the Training page's section order and visibility, E16 — REST-only by design, no MCP tool).
 
-**Domain CRUD**: `shoes` (incl. scrapability dry-run test), `retailers` (incl. promo CRUD), `deals` (list/deactivate), `owned-shoes` (CRUD + log-run + runs + notes + replacement-deals); COROS connection, sync and inbox under `/api/coros/*` (`routers/coros_connect.py`).
+**Domain CRUD**: `shoes` (incl. scrapability dry-run test), `retailers` (incl. promo CRUD), `deals` (list/deactivate), `owned-shoes` (CRUD + log-run + runs + notes + replacement-deals + `adjust-mileage`; `PUT` with `mileage_limit: null` resets the limit to the type default, and every shoe response carries the derived `recommended_limit_km`; the list endpoint attaches lifetime stats and images in bulk — 4 queries, not 1 + 11 per shoe); COROS connection, sync and inbox under `/api/coros/*` (`routers/coros_connect.py`).
 
 **Operations**: `scraping` (sync per-shoe/per-retailer, background `/all` + `/stream` SSE, promo detection, three no-DB scraper smoke-test endpoints), `admin` (one-off kids-shoe cleanup), `export` (regenerates `seed_data.py` from the live DB — a code-as-backup mechanism), `dashboard` (legacy stats still used by Layout/Settings).
 
@@ -299,7 +303,7 @@ Two complementary AI surfaces share the MCP server as their common substrate:
 
 ### The MCP server (`app/mcp_server.py`)
 All four MCP primitives are implemented:
-- **Tools (~20):** deals (get/get-by-shoe), tracked shoes (list/add/delete), retailers, `trigger_scrape` (real synchronous scrape, lock-aware, refuses concurrency rather than queueing), dashboard stats, price history, full rotation suite (owned shoes, runs, log/confirm/delete, notes, retire), COROS sync pair (`fetch_unsynced_coros_runs` / `confirm_coros_run`), training analytics (`get_training_summary`, `get_personal_bests`, `get_planned_races`), and `draft_shoe_review` — which uses **MCP sampling** (server → client `create_message`) to have the *client's* LLM draft a review from journal notes, degrading gracefully when the client doesn't support sampling.
+- **Tools (39 as of 2026-10-09; the list below is by family, not exhaustive):** deals (get/get-by-shoe), tracked shoes (list/add/delete), retailers, `trigger_scrape` (real synchronous scrape, lock-aware, refuses concurrency rather than queueing), dashboard stats, price history, full rotation suite (owned shoes, runs, log/confirm/delete, notes, retire, `set_shoe_mileage_limit`), COROS sync pair (`fetch_unsynced_coros_runs` / `confirm_coros_run`), training analytics (`get_training_summary`, `get_personal_bests`, `get_planned_races`), and `draft_shoe_review` — which uses **MCP sampling** (server → client `create_message`) to have the *client's* LLM draft a review from journal notes, degrading gracefully when the client doesn't support sampling.
 - **Resources (7):** static (`shoes://rotation`, `shoes://deals/active`, `shoes://retailers`) and templated (`shoes://owned/{id}`, `/{id}/runs`, `/{id}/notes`, `shoes://deals/{brand}`, `strava://runs/{year}/{month}` — the last designed so a chat can pull one month without flooding context; post-Phase-5 these read the canonical `activities` rows). Each resource returns **markdown + embedded JSON payload** — human-readable and machine-parseable in one body.
 - **Prompt (1):** `sync_coros_runs` — an agent protocol that reads the shared "New runs" queue (`fetch_unsynced_coros_runs`, populated by the backend COROS poller — see C11), presents the server-side shoe suggestion (pace-primary/distance-secondary, same rule as `services/coros_suggestion.py`), waits for confirmation, logs via `confirm_coros_run`, summarizes, and checks the 600/700/800 km thresholds. The COROS connector is no longer part of the logging path. `get_coros_sync_status` reports poller/connection state.
 - **Logging/Context:** tools use `ctx.log` to push advisory notifications (scrape completion, mileage thresholds) through the protocol.

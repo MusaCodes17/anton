@@ -188,10 +188,15 @@ This is the cleanest internal decomposition in the codebase — one-directional,
 pages/* → hooks/useApi.js (React Query) → services/api.js ⇢ /api/* path strings ⚠
 ChatPage/ChatDrawer → hooks/useChatStream.js ⇢ POST /api/chat/message (manual SSE parse)
 ScrapeButton et al. ⇢ GET /api/scrape/stream (EventSource)
-lib/conversations.js ⇢ localStorage (chat history lives client-side only)
-lib/shoeTypes.js ⚠ duplicates the backend's shoe-type vocabulary as a second copy
-vite.config.js ⇢ dev proxy /api → 127.0.0.1:8000
+hooks/useApi.js ⇢ /api/chat/conversations (server-side since R2.6; lib/conversations.js only builds objects)
+lib/shoeTypes.js — presentation only since R2.4 (vocabulary served by GET /api/shoe-types)
+lib/queryClient.js ⇢ IndexedDB (persisted GET cache, RA2.2; busted by the build hash)
+pages/Training → lib/trainingLayout.js ⇢ PUT /api/preferences/training-layout (section ids are
+                 a hand-matched list with services/settings.TRAINING_SECTIONS ⚠)
+vite.config.js ⇢ dev proxy /api → 127.0.0.1:8000; Workbox runtime cache for /api GETs,
+                 excluding /stream (SSE)
 ```
+*Updated 2026-10-09: the conversations and shoeTypes edges above were stale since R2.6 / R2.4.*
 There is no shared API-contract artifact (no generated client, no shared types); the frontend↔backend contract exists only as matching string literals and response-shape knowledge on both sides.
 
 ---
@@ -228,7 +233,7 @@ Dependencies that don't appear in any `import` statement:
 
 1. **`rotation` as the cross-domain knot.** It is simultaneously the run-domain hub (correct) and the only deals-domain client inside services (imports `Deal`, `PriceRecord`, `Shoe`). Every future attempt to treat "training" and "deals" as separable modules hits this one file.
 2. ~~**`coros_sync` ↔ `owned_shoes`**~~ *(resolved 2026-10-08)* — private-helper import between sibling routers; response-shaping logic (`_attach_computed_fields`) trapped inside a router that another router needs.
-3. **`mcp_server.py` as a monolith adapter.** ~20 tools + 7 resources + 1 prompt + 2 formatting helpers + hand-rolled dict serializers in one module, importing models, scrapers, and five services. It also embeds *business rules* (the 600/700/800 km threshold messages, the review-prompt template) that exist nowhere else — the adapter owns logic, so REST clients can never see those thresholds.
+3. **`mcp_server.py` as a monolith adapter.** ~20 tools + 7 resources + 1 prompt at the audit (39 tools + 12 resources + 7 prompts by 2026-10-09) + 2 formatting helpers + hand-rolled dict serializers in one module, importing models, scrapers, and five services. It also embeds *business rules* (the 600/700/800 km threshold messages, the review-prompt template) that exist nowhere else — the adapter owns logic, so REST clients can never see those thresholds.
 4. **Two serialization systems for the same aggregates.** Pydantic response models (REST) and `_*_to_dict` functions (MCP) must be kept in agreement by hand; the owned-shoe shape exists in at least three renderings (schema, MCP dict, resource markdown/JSON).
 5. **Everything → `scraper_manager` shim.** Four consumers (scraping router, shoes router, mcp_server, scrape_runner) are coupled to the pre-refactor façade, so the decomposed modules (orchestrator/lock/registry) can't evolve their interfaces independently.
 6. **Provider triplication in `chat_service`.** Three ~100-line agentic loops (Anthropic/OpenAI/Gemini) implement the same contract with copy-adapted control flow; a change to the event protocol (e.g., a new SSE event type) must be made three times.
