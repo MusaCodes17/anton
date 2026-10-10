@@ -182,3 +182,78 @@ def test_rest_log_run_reports_threshold_crossed(db):
     resp = log_run_endpoint(shoe.id, body, db)
     assert resp.model_dump(mode="json")["threshold_crossed"] == 600
     assert resp.threshold_message
+
+
+# --- R5.3 step 1: purchase provenance (purchase_retailer / purchase_url) ---
+
+def test_create_stores_and_returns_purchase_provenance(db):
+    """POST with purchase_retailer + purchase_url persists them and echoes them back."""
+    from app.models import OwnedShoeCreate
+    from app.routers.owned_shoes import create_owned_shoe
+
+    created = create_owned_shoe(
+        OwnedShoeCreate.model_validate(
+            {"brand": "Saucony", "model": "Endorphin Speed 4",
+             "purchase_retailer": "Running Room",
+             "purchase_url": "https://example.com/endorphin-speed-4"}
+        ),
+        db,
+    )
+    assert created.purchase_retailer == "Running Room"
+    assert created.purchase_url == "https://example.com/endorphin-speed-4"
+
+    row = db.get(OwnedShoe, created.id)
+    assert row.purchase_retailer == "Running Room"
+    assert row.purchase_url == "https://example.com/endorphin-speed-4"
+
+
+def test_create_without_purchase_provenance_leaves_both_null(db):
+    """Omitting the new fields is unchanged behaviour: both stay NULL."""
+    from app.models import OwnedShoeCreate
+    from app.routers.owned_shoes import create_owned_shoe
+
+    created = create_owned_shoe(
+        OwnedShoeCreate.model_validate({"brand": "Asics", "model": "Novablast"}),
+        db,
+    )
+    assert created.purchase_retailer is None
+    assert created.purchase_url is None
+
+
+def test_put_sets_and_changes_purchase_provenance(db):
+    """PUT can set the provenance fields on an existing shoe and later change them."""
+    shoe = _make_shoe(db, 50.0)
+    update_owned_shoe(shoe.id, OwnedShoeUpdate.model_validate(
+        {"purchase_retailer": "Sport Chek", "purchase_url": "https://example.com/a"}
+    ), db)
+    db.refresh(shoe)
+    assert shoe.purchase_retailer == "Sport Chek"
+    assert shoe.purchase_url == "https://example.com/a"
+
+    update_owned_shoe(shoe.id, OwnedShoeUpdate.model_validate(
+        {"purchase_retailer": "Running Room", "purchase_url": "https://example.com/b"}
+    ), db)
+    db.refresh(shoe)
+    assert shoe.purchase_retailer == "Running Room"
+    assert shoe.purchase_url == "https://example.com/b"
+
+
+def test_put_without_provenance_fields_leaves_them_untouched(db):
+    """exclude_unset: a PUT that omits the provenance fields must not blank them."""
+    shoe = _make_shoe(db, 50.0)
+    shoe.purchase_retailer = "Running Room"
+    db.commit()
+
+    update_owned_shoe(shoe.id, OwnedShoeUpdate.model_validate({"nickname": "Daily"}), db)
+    db.refresh(shoe)
+    assert shoe.purchase_retailer == "Running Room"
+
+
+def test_create_rejects_overlong_purchase_retailer():
+    """purchase_retailer is capped at 100 chars, like the other short string fields."""
+    import pytest
+    from pydantic import ValidationError
+    from app.models import OwnedShoeCreate
+    with pytest.raises(ValidationError):
+        OwnedShoeCreate.model_validate({"brand": "Nike", "model": "Pegasus",
+                                        "purchase_retailer": "x" * 101})

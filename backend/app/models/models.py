@@ -243,6 +243,8 @@ class OwnedShoe(Base):
     current_mileage = Column(Float, nullable=False, default=0)  # starting_mileage + sum(runs)
     status = Column(String(20), nullable=False, default="active")  # active | retired | for_sale
     purchase_price = Column(Float, nullable=True)  # what was paid; cost-per-km is derived, not stored
+    purchase_retailer = Column(String(100), nullable=True)  # R5.3: where it was bought — a recorded string, never an FK to deals/retailers (B1)
+    purchase_url = Column(Text, nullable=True)  # R5.3: the product page it was bought from — recorded fact, not a link to a tracked deal (B1)
     mileage_limit = Column(Float, nullable=True)   # km at which this shoe should be retired (user-set)
     image_url = Column(Text, nullable=True)  # manually-set product image; overrides any auto-matched image
     # R3.3: runner-authored (or LLM-drafted + runner-edited) review stored alongside the shoe.
