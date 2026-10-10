@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 import os
 from abc import ABC, abstractmethod
 from contextlib import asynccontextmanager
@@ -32,6 +33,8 @@ from zoneinfo import ZoneInfo
 
 from mcp import types as mcp_types
 from mcp.client.session_group import ClientSessionGroup, StreamableHttpParameters
+
+logger = logging.getLogger(__name__)
 
 SYSTEM_PROMPT = """You are a personal running assistant called Son of Anton, built into Anton (the user's personal running platform). \
 You help the user manage their shoe rotation, track mileage, find deals, and make smart decisions about their running gear. \
@@ -632,7 +635,7 @@ async def _connected_group(sse_read_timeout_s: float) -> AsyncIterator[ClientSes
                     )
                 )
             except Exception as exc:
-                print(f"[chat] MCP server '{server['name']}' unavailable: {exc}")
+                logger.warning("chat: MCP server %r unavailable: %s", server["name"], exc)
         yield group
 
 

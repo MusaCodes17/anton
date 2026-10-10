@@ -5,6 +5,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+import logging
 import os
 from dotenv import load_dotenv
 
@@ -17,6 +18,11 @@ from app.services import schedule as schedule_svc
 
 # Load environment variables
 load_dotenv()
+
+# Root logging is configured once, here at app assembly (CLAUDE.md §8). It used
+# to happen as a side effect of importing scrapers/base_scraper.py; uvicorn only
+# configures its own loggers, so without this the app's INFO lines vanish.
+logging.basicConfig(level=logging.INFO)
 
 
 def require_auth_config() -> None:

@@ -19,7 +19,7 @@ from app.scrapers.lock import (
     scrape_guard,
     try_acquire_scrape_lock,
 )
-from datetime import datetime
+from datetime import datetime, timezone
 
 router = APIRouter(prefix="/scrape", tags=["scraping"])
 
@@ -52,7 +52,7 @@ def scrape_shoe(
             "success": True,
             "message": f"Scraping completed for shoe ID {shoe_id}",
             "results": results,
-            "scraped_at": datetime.utcnow().isoformat()
+            "scraped_at": datetime.now(timezone.utc).isoformat()
         }
 
     except ScrapeInProgressError as e:
@@ -202,7 +202,7 @@ def scrape_retailer(
         "success": True,
         "message": f"Scraping completed for retailer ID {retailer_id}",
         "results": aggregated_results,
-        "scraped_at": datetime.utcnow().isoformat()
+        "scraped_at": datetime.now(timezone.utc).isoformat()
     }
 
 
@@ -218,7 +218,7 @@ def detect_all_promos(db: Session = Depends(get_db)):
             "success": True,
             "message": "Promo code detection completed",
             "results": results,
-            "scraped_at": datetime.utcnow().isoformat(),
+            "scraped_at": datetime.now(timezone.utc).isoformat(),
         }
     except Exception as e:
         raise HTTPException(
@@ -248,129 +248,10 @@ def detect_retailer_promos(retailer_id: int, db: Session = Depends(get_db)):
             "success": True,
             "message": f"Promo detection completed for {retailer.name}",
             "results": results,
-            "scraped_at": datetime.utcnow().isoformat(),
+            "scraped_at": datetime.now(timezone.utc).isoformat(),
         }
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Promo detection failed: {str(e)}"
-        )
-
-
-@router.get("/test/the-last-hunt")
-def test_the_last_hunt_scraper(
-    brand: str = "Nike",
-    model: str = "Vaporfly"
-):
-    """
-    Test The Last Hunt scraper without database
-    
-    Quick test to verify scraper is working
-    
-    - **brand**: Shoe brand to search for
-    - **model**: Shoe model to search for
-    """
-    from app.scrapers.the_last_hunt import TheLastHuntScraper
-    
-    scraper = TheLastHuntScraper()
-    
-    try:
-        # Search for products
-        products = scraper.search_products(brand, model)
-        
-        # Get details for first product if found
-        product_details = []
-        for product in products[:3]:  # Limit to first 3 to avoid long wait
-            details = scraper.get_product_details(product['product_url'])
-            if details:
-                product_details.append(details)
-        
-        return {
-            "success": True,
-            "search_query": f"{brand} {model}",
-            "products_found": len(products),
-            "products": products,
-            "detailed_results": product_details,
-            "tested_at": datetime.utcnow().isoformat()
-        }
-        
-    except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Test failed: {str(e)}"
-        )
-
-
-@router.get("/test/altitude-sports")
-def test_altitude_sports_scraper(
-    brand: str = "Saucony",
-    model: str = "Endorphin"
-):
-    """
-    Test the Altitude Sports (Algolia) scraper without touching the database.
-    """
-    from app.scrapers.altitude_sports import AltitudeSportsScraper
-
-    scraper = AltitudeSportsScraper()
-
-    try:
-        products = scraper.search_products(brand, model)
-        product_details = []
-        for product in products[:3]:
-            details = scraper.get_product_details(product['product_url'])
-            if details:
-                product_details.append(details)
-
-        return {
-            "success": True,
-            "search_query": f"{brand} {model}",
-            "products_found": len(products),
-            "products": products,
-            "detailed_results": product_details,
-            "tested_at": datetime.utcnow().isoformat()
-        }
-    except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Test failed: {str(e)}"
-        )
-
-
-@router.get("/test/jd-sports")
-def test_jd_sports_scraper(
-    brand: str = "Adidas",
-    model: str = "Adizero Boston 13"
-):
-    """
-    Test the JD Sports (Shopify) scraper without touching the database.
-
-    Defaults to the Adidas Adizero Boston 13 — the product the old scraper
-    couldn't find.
-    """
-    from app.scrapers.jd_sports import JDSportsScraper
-
-    scraper = JDSportsScraper()
-
-    try:
-        products = scraper.search_products(brand, model)
-
-        product_details = []
-        for product in products[:3]:
-            details = scraper.get_product_details(product['product_url'])
-            if details:
-                product_details.append(details)
-
-        return {
-            "success": True,
-            "search_query": f"{brand} {model}",
-            "products_found": len(products),
-            "products": products,
-            "detailed_results": product_details,
-            "tested_at": datetime.utcnow().isoformat()
-        }
-
-    except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Test failed: {str(e)}"
         )

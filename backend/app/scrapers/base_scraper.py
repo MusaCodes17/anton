@@ -5,14 +5,13 @@ import time
 import logging
 from abc import ABC, abstractmethod
 from typing import List, Dict, Optional
-from datetime import datetime
+from datetime import datetime, timezone
 import requests
 from bs4 import BeautifulSoup
 from playwright.sync_api import sync_playwright, Browser, Page
 import re
 
 # Set up logging
-logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 
@@ -41,8 +40,7 @@ class BaseScraper(ABC):
     # their plural/possessive form — JD Sports slugs read "adidas-juniors-..."
     # and "nike-juniors-pegasus-42-...", and a bare \bjunior\b never matched
     # "juniors" (the trailing s blocks the boundary), so those listings slipped
-    # through both the scrape-time filter AND /admin/cleanup-kids-shoes (D7 gap,
-    # 2026-07-14). The optional s is harmless on tokens that are never pluralised.
+    # through the scrape-time filter (D7 gap, 2026-07-14). The optional s is harmless on tokens that are never pluralised.
     _KIDS_SHOE_RE = re.compile(
         r'\b(?:' + '|'.join(re.escape(k) for k in _KIDS_SHOE_KEYWORDS) + r')s?\b',
         re.IGNORECASE,
@@ -431,21 +429,21 @@ class BaseScraper(ABC):
         except Exception as e:
             logger.error(
                 f"[{self.retailer_name}] Algolia rediscovery error at "
-                f"{datetime.utcnow().isoformat()}: {e}"
+                f"{datetime.now(timezone.utc).isoformat()}: {e}"
             )
             return None
 
         if creds.get('app_id') and creds.get('api_key'):
             logger.info(
                 f"[{self.retailer_name}] Algolia credential rediscovery succeeded at "
-                f"{datetime.utcnow().isoformat()}: app_id={creds['app_id']} "
+                f"{datetime.now(timezone.utc).isoformat()}: app_id={creds['app_id']} "
                 f"index={creds.get('index')}"
             )
             return creds
 
         logger.warning(
             f"[{self.retailer_name}] Algolia rediscovery found no credentials at "
-            f"{datetime.utcnow().isoformat()}"
+            f"{datetime.now(timezone.utc).isoformat()}"
         )
         return None
 

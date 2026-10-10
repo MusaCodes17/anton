@@ -21,7 +21,7 @@ the same join the home service uses for shoe alerts (CLAUDE.md §1).
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 from sqlalchemy import desc
@@ -119,7 +119,8 @@ def deal_alerts(
     All datetime comparisons are against naive UTC values because SQLite
     stores server-default timestamps without timezone information.
     """
-    now = _now or datetime.utcnow()
+    # Naive UTC on purpose: SQLite hands back detected_at without a tzinfo.
+    now = _now or datetime.now(timezone.utc).replace(tzinfo=None)
 
     if since is None:
         effective_since = now - timedelta(days=FIRST_RUN_DAYS)

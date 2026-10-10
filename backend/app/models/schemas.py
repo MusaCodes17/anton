@@ -226,7 +226,6 @@ class DealResponse(DealBase):
     """Schema for deal response with related data"""
     id: int
     detected_at: datetime
-    expires_at: Optional[datetime] = None
     # R6.3 — derived per request from the size preference; None = no preference set.
     size_fit: Optional[str] = Field(None, description='"in" | "out" | "unknown" vs the preferred size')
     

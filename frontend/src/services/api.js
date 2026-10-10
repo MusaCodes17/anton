@@ -143,10 +143,6 @@ export const dealsApi = {
 // ============== DASHBOARD ==============
 export const dashboardApi = {
   stats: () => client.get('/api/dashboard/stats').then((r) => r.data),
-  recentDeals: (limit = 10) =>
-    client.get('/api/dashboard/recent-deals', { params: { limit } }).then((r) => r.data),
-  bestDeals: (limit = 10) =>
-    client.get('/api/dashboard/best-deals', { params: { limit } }).then((r) => r.data),
 }
 
 // ============== SCRAPING ==============

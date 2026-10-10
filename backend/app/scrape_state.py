@@ -6,7 +6,7 @@ is fine since it only describes "what's happening with the current/last
 scrape run," not anything that needs to survive a restart.
 """
 import asyncio
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import List, Optional
 
 
@@ -24,13 +24,13 @@ class ScrapeStateManager:
 
     def start(self) -> None:
         self.is_running = True
-        self.started_at = datetime.utcnow().isoformat()
+        self.started_at = datetime.now(timezone.utc).isoformat()
         self.completed_at = None
         self.history = []
 
     def finish(self, completed_at: Optional[str] = None) -> None:
         self.is_running = False
-        self.completed_at = completed_at or datetime.utcnow().isoformat()
+        self.completed_at = completed_at or datetime.now(timezone.utc).isoformat()
 
     def subscribe(self) -> asyncio.Queue:
         """
