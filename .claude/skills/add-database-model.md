@@ -16,7 +16,7 @@ this skill is not enough — use S04 (`data-migration.md`).
 ## Workflow
 1. **Model change** — docstring states the *domain meaning*, not the columns; units in names;
    server-side stamps (`server_default=func.now()`), never client-supplied.
-2. **Schema change** in `models/schemas.py` (Pydantic only at the boundary).
+2. **Schema change** in the matching `models/schemas/<domain>.py` (Pydantic only at the boundary).
 3. `alembic revision --autogenerate` → **prune autogenerate noise** (SQLite type-mapping
    artifacts) → review the batch-mode output (`render_as_batch=True`).
 4. Apply the migration to the live DB. Never rely on `create_all` to apply it (A6: it only

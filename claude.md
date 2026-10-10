@@ -37,8 +37,11 @@ The two business domains are **deliberately independent** (no FK between `shoes`
 backend/app/
   main.py          app assembly only — routers, CORS, /mcp mount, lifespan
   database.py      engine/session/get_db/init_db — don't add logic here
-  mcp_server.py    MCP tools/resources/prompts — THIN adapters, like routers
-  models/models.py ORM (12 models)   models/schemas.py Pydantic
+  mcp_server/      MCP tools/resources/prompts — THIN adapters, like routers; a package:
+                   _core (FastMCP instance, get_session) · _shared (payload helpers) ·
+                   deals · shoes · coros · training · onboarding; __init__ re-exports all
+  models/models.py ORM (12 models)   models/schemas/ Pydantic, per domain
+                   (_common, deals, rotation, training, chat, settings, watchlist)
   routers/         one file per resource; thin; HTTP concerns only
   services/        business logic — the only home for domain rules
   scrapers/        base + platform bases + one file per bespoke retailer;
@@ -77,7 +80,7 @@ docs/              the documentation suite + changelog.md
 - Frontend: `cd frontend && npm ci && npm run dev` (port 5173, proxies `/api` to `127.0.0.1:8000`); `npm run build` is the CI check.
 - Production runs from `docker-compose.yml` + `deploy/` on the Hetzner host (architecture.md §11); Claude Desktop / claude.ai connector setup is `docs/CLAUDE_DESKTOP_SETUP.md`.
 
-Placement rules: new business logic → `services/` (never a router, never an MCP tool, never a React component). New endpoint → thin function in the matching router. New scraper → subclass in its own file, registered in `registry.py`. New query hook → `useApi.js`, calling a function added to `api.js`. Planned work lives in `docs/roadmap.md` §-sections. A multi-session plan doc or a spike report may sit in `docs/` while its work is in flight; when it ships, move its lasting findings into `design_decisions.md` (and the code's docstrings) and **delete the file** — the changelog records what happened. Retired docs, including the completed plans and spike reports removed on 2026-10-09 (`REDESIGN_PLAN`, `REMOTE_ACCESS_PLAN`, `TRAINING_DEPTH_PLAN`, …), stay readable in git: `git show bce3c53:docs/archive/<NAME>.md` or `git show bce3c53:docs/spikes/<name>.md`. Code comments and history entries that cite them (`REDESIGN_PLAN §5`, `P3.4`) refer to those versions.
+Placement rules: new business logic → `services/` (never a router, never an MCP tool, never a React component). New endpoint → thin function in the matching router. New MCP tool → the matching `mcp_server/<domain>.py` module. New scraper → subclass in its own file, registered in `registry.py`. New query hook → `useApi.js`, calling a function added to `api.js`. Planned work lives in `docs/roadmap.md` §-sections. A multi-session plan doc or a spike report may sit in `docs/` while its work is in flight; when it ships, move its lasting findings into `design_decisions.md` (and the code's docstrings) and **delete the file** — the changelog records what happened. Retired docs, including the completed plans and spike reports removed on 2026-10-09 (`REDESIGN_PLAN`, `REMOTE_ACCESS_PLAN`, `TRAINING_DEPTH_PLAN`, …), stay readable in git: `git show bce3c53:docs/archive/<NAME>.md` or `git show bce3c53:docs/spikes/<name>.md`. Code comments and history entries that cite them (`REDESIGN_PLAN §5`, `P3.4`) refer to those versions.
 
 ---
 
@@ -129,6 +132,7 @@ Placement rules: new business logic → `services/` (never a router, never an MC
 - "Shoe" is ambiguous: `Shoe` = watchlist entry, `OwnedShoe` = physical pair. Name variables accordingly.
 - Timezone: run dates are **America/Toronto local dates**; converting from UTC first is mandatory.
 - The Starlette/FastAPI/sse-starlette pins resolve an `mcp[cli]` conflict — don't bump them independently.
+- MCP tools open sessions via `app.mcp_server._core.get_session()`: tests must patch `app.mcp_server._core.get_session` — patching `app.mcp_server.get_session` silently does nothing. New tools go in the matching domain module and are re-exported from `mcp_server/__init__.py`.
 - `MCP_SERVER_URL` points the chat service back at *this same app*; changing bind/port affects Son of Anton. Since R2.1 the loopback must also send `Authorization: Bearer <ANTON_SECRET>` (injected by `chat_service._server_headers`) — drop it and the assistant *silently* loses all tools with no error.
 - `strava_stats` imports the private-by-convention `activities._effective_moving_s` — renaming it "safely" inside `activities.py` breaks stats with no import-level signal.
 - COROS tool results are **prose, not JSON**: `coros_mcp_client` parses them with anchored regexes pinned by fixture tests (`tests/fixtures/coros/`). A COROS rewording shows up as a loud `CorosContractError`, never nulls — refresh the fixtures from a live capture (`COROS_LIVE=1`, `scripts/spikes/`) rather than loosening the parser. `COROS_TOKEN_KEY` must be set in the production `.env`; changing it makes stored tokens unreadable (the UI then says "reconnect needed").

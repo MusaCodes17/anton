@@ -108,12 +108,17 @@ anton/
 │   └── app/
 │       ├── main.py              # App assembly, CORS, router includes, /mcp mount, lifespan
 │       ├── database.py          # Engine, SessionLocal, get_db, init_db
-│       ├── mcp_server.py        # FastMCP server: 39 tools, 12 resources, 7 prompts (2026-10-09)
+│       ├── mcp_server/          # FastMCP server package: 39 tools, 12 resources, 7 prompts
+│       │   ├── _core.py         # FastMCP instance, allowed hosts, get_session
+│       │   ├── _shared.py       # payload helpers + formatters
+│       │   ├── deals.py shoes.py coros.py training.py onboarding.py   # tools by domain
+│       │   └── __init__.py      # re-exports mcp and every tool/resource/prompt
 │       ├── scrape_runner.py     # Background concurrent scrape job
 │       ├── scrape_state.py      # In-memory pub/sub for scrape SSE
 │       ├── models/
 │       │   ├── models.py        # 12 SQLAlchemy models
-│       │   └── schemas.py       # Pydantic request/response schemas
+│       │   └── schemas/         # Pydantic request/response schemas, per domain
+│       │                        # (_common, deals, rotation, training, chat, settings, watchlist)
 │       ├── routers/             # 21 thin REST router modules (see §8)
 │       ├── services/            # Domain logic (see §7)
 │       ├── scrapers/            # Scraper subsystem (see §10)
@@ -233,7 +238,7 @@ Two aggregates, one canonical run store, several enforced invariants:
 - *Mileage invariant*: `current_mileage = starting_mileage + Σ(attributed activity distances)`, maintained as a stored counter. All mutations flow through `rotation.log_run` (creates the Activity, then the attribution, in one flow) and `rotation.delete_run`.
 - *Archive-preservation rule (new)*: `delete_run` removes the attribution and decrements mileage, and deletes the underlying activity too — **except** `source='strava'`, whose activities are the frozen bulk-export archive; deleting the attribution merely un-attributes that historical run.
 - *Checkpoint semantics*: crossing each 100 km boundary flags `checkpoint_reached` so the UI can prompt a journal entry (prompt-shown state is client-side only, in localStorage).
-- *Retirement pipeline*: active shoes at ≥ 75% of `mileage_limit`, worst first — one shared computation (`rotation.retirement_pipeline`) backing both Home alerts and the Shoes page. MCP additionally emits 600/700/800 km advisory thresholds on `log_run_to_shoe`.
+- *Retirement pipeline*: active shoes at ≥ 75% of `mileage_limit`, worst first — one shared computation (`rotation.retirement_pipeline`) backing both Home alerts and the Shoes page. The 600/700/800 km end-of-life advisory is computed once in `rotation.log_run` / `reassign_attribution` (`RunLogResult.threshold_crossed/threshold_message`) and surfaced by REST `log-run`, MCP `log_run_to_shoe`, `confirm_coros_run` and the COROS inbox confirm.
 - *Dedup invariants*: `activities.strava_activity_id` unique (import idempotency); COROS dedup on `activities.coros_activity_id` with a date+distance-within-0.1 km fallback for pre-feature manual logs.
 
 **Unified activity feed** (`services/activities.py`) — still the single read seam the whole app (web + MCP + future mobile) goes through, and the Phase-5 payoff is visible here: `_build` is now **one pass over `activities` (runs only) LEFT-joined to its optional attribution** for shoe info. No union, no double-count risk by construction. `UnifiedActivity` kept its shape, so `strava_stats`, `home`, and the routers were unchanged by the migration — exactly the seam working as designed.
@@ -289,7 +294,7 @@ Twenty-one router modules: nineteen under `/api`, all behind the shared bearer t
 
 **Chat**: `/api/chat/providers` (availability driven by API-key presence; model catalogs hard-coded here), `/chat/resources` (@-mention picker data), `/chat/resource/read` (proxy to MCP resource read), `/chat/message` (SSE stream).
 
-Response-shape conventions: Pydantic response models on most endpoints; a few newer ones (`rotation-overview`, `replacement-deals`) return shaped dicts. Run-shaped responses (`ShoeRunResponse`) survived the Phase-5 restructure unchanged because they now read through `ShoeRun`'s activity proxies. One documented breaking change remains on the books: `POST /{id}/log-run` returns a `LogRunResponse` envelope rather than the bare shoe.
+Response-shape conventions: Pydantic response models on most endpoints; a few newer ones (`rotation-overview`, `replacement-deals`) return shaped dicts. Run-shaped responses (`ShoeRunResponse`) survived the Phase-5 restructure unchanged because they now read through `ShoeRun`'s activity proxies. One documented breaking change remains on the books: `POST /{id}/log-run` returns a `LogRunResponse` envelope rather than the bare shoe (it now also carries `threshold_crossed` / `threshold_message`). Deal responses embed a compact `DealRetailerBrief` (id, name, active promo codes), not the full `RetailerResponse`; `services/deals._deal_query` eager-loads shoe, retailer and promo codes. `Retailer.scraper_config` input is validated by the typed `ScraperConfig` schema (422 on bad config).
 
 ---
 
@@ -297,7 +302,8 @@ Response-shape conventions: Pydantic response models on most endpoints; a few ne
 
 Two complementary AI surfaces share the MCP server as their common substrate:
 
-### The MCP server (`app/mcp_server.py`)
+### The MCP server (`app/mcp_server/`)
+A package (split from one 3,063-line module, 2026-10-10): domain modules register tools on the shared FastMCP instance in `_core.py`; `__init__.py` re-exports everything, so `app.mcp_server.mcp` and the tool names are unchanged. Owned shoes, runs, notes and watchlist entries render through the same Pydantic schemas as REST (`OwnedShoeResponse`, `ShoeRunResponse`, `ShoeNoteResponse`, `WatchlistItem`); `_deal_to_dict` stays a deliberate flat projection for LLMs.
 All four MCP primitives are implemented:
 - **Tools (39 as of 2026-10-09; the list below is by family, not exhaustive):** deals (get/get-by-shoe), tracked shoes (list/add/delete), retailers, `trigger_scrape` (real synchronous scrape, lock-aware, refuses concurrency rather than queueing), dashboard stats, price history, full rotation suite (owned shoes, runs, log/confirm/delete, notes, retire, `set_shoe_mileage_limit`), COROS sync pair (`fetch_unsynced_coros_runs` / `confirm_coros_run`), training analytics (`get_training_summary`, `get_personal_bests`, `get_planned_races`), and `draft_shoe_review` — which uses **MCP sampling** (server → client `create_message`) to have the *client's* LLM draft a review from journal notes, degrading gracefully when the client doesn't support sampling.
 - **Resources (7):** static (`shoes://rotation`, `shoes://deals/active`, `shoes://retailers`) and templated (`shoes://owned/{id}`, `/{id}/runs`, `/{id}/notes`, `shoes://deals/{brand}`, `strava://runs/{year}/{month}` — the last designed so a chat can pull one month without flooding context; post-Phase-5 these read the canonical `activities` rows). Each resource returns **markdown + embedded JSON payload** — human-readable and machine-parseable in one body.
@@ -463,7 +469,7 @@ Ordered roughly by how much they constrain the "long-term platform" ambition. (I
 6. **Stringly-typed cross-domain bridge.** `shoe_type` free strings link owned shoes to replacement deals; brand/model substring heuristics link images. Both are honestly labeled, but as the platform grows they're the classic silent-mismatch surface (a typo'd type yields zero replacement hints with no error). The vocabulary also exists in three places (backend strings, frontend `lib/shoeTypes.js`, MCP docstrings).
 7. **Client-held state that arguably belongs to the platform.** Chat conversations (localStorage, device-bound, 50-cap, quota-trimmed) and checkpoint-prompt history live only in one browser — at odds with the multi-client trajectory everything else is designed for.
 8. **Scraper fragility is structural, not incidental.** The highest-value data source depends on eight third-party frontends, sync Playwright inside request threads, and regex promo heuristics. The architecture mitigates well (isolation, rediscovery, dry-runs) but there is no scrape-run history table or failure-trend observability — degradation is only visible in logs and `last_scraped_at`.
-9. **Drift-prone duplications at the edges.** Hard-coded model catalogs in `chat.py` vs. prefix routing in `chat_service`; MCP threshold messages (600/700/800) separate from the retirement-pipeline threshold; the `scraper_manager` compat shim and the `coros_sync → owned_shoes` router-to-router import lingering past their refactors ("Task D"); APScheduler declared but unused. Individually trivial, collectively the tax of a fast-moving solo project.
+9. **Drift-prone duplications at the edges.** Hard-coded model catalogs in `chat.py` vs. prefix routing in `chat_service`; the `scraper_manager` compat shim and the `coros_sync → owned_shoes` router-to-router import lingering past their refactors ("Task D"); APScheduler declared but unused. Individually trivial, collectively the tax of a fast-moving solo project.
 10. **Mixed transaction-ownership conventions.** Per-method commits (DealStore), self-committing service calls with opt-out flags (rotation), caller-owned commits (settings, import) coexist. Each is locally reasoned, but a scrape is not atomic (partial results persist on failure — arguably desirable, but it's implicit), and the conventions must be held in the head.
 
 Uncertainty note: this audit read all services, the MCP/chat layer, the scraper framework and orchestration, models, representative routers, and the frontend shell in full (re-verifying every module the Phase-5 migration touched); individual retailer subclass internals, every page component, `schemas.py`, and the test bodies were reviewed structurally rather than line-by-line. Nothing observed suggests those areas deviate from the patterns described.

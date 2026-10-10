@@ -5,6 +5,45 @@
 
 ---
 
+## §7 debt phase — mcp_server/schemas split, one serialization system, typed scraper_config — 2026-10-10
+
+Branch `debt-p1-p2`, eight commits (seven tasks + docs). No migration; two API shape changes (`LogRunResponse` gains `threshold_crossed`/`threshold_message`; `DealResponse.retailer` is the compact brief — the frontend reads only `name` and `active_promo_codes`).
+
+**[CHANGED] `mcp_server.py` (3,063 lines) is now the package `backend/app/mcp_server/`**
+- `_core.py` (FastMCP instance, allowed hosts, `get_session`), `_shared.py` (payload helpers and formatters), then `deals.py`, `shoes.py`, `coros.py`, `training.py`, `onboarding.py`. `__init__.py` re-exports `mcp` and every tool, resource and prompt, so `app.mcp_server.mcp` and all tool names are unchanged.
+- Trap recorded in CLAUDE.md §6: tools open sessions through `_core.get_session()`, so tests must patch `app.mcp_server._core.get_session`; patching `app.mcp_server.get_session` silently does nothing. New tools go in the matching domain module.
+
+**[CHANGED] `models/schemas.py` is now the package `backend/app/models/schemas/`**
+- `_common`, `deals`, `rotation`, `training`, `chat`, `settings`, `watchlist`. `from app.models.schemas import X` still works. The watchlist schemas (`WatchlistItem`, `WatchlistDeal`, `LastSeenPrice`) moved out of `routers/watchlist.py` into `schemas/watchlist.py`.
+
+**[CHANGED] One serialization system for the shared aggregates (§7 P1)**
+- MCP owned shoes, runs, notes and watchlist entries render through `OwnedShoeResponse` (after `rotation.attach_computed_fields[_bulk]`), `ShoeRunResponse`, `ShoeNoteResponse` and `WatchlistItem`. MCP payloads are a superset of the old keys. `_deal_to_dict` stays a deliberate flat projection for LLMs (documented in the code).
+- `PriceRecord.size_available` is documented as the scraper's in-stock flag, not legacy.
+
+**[CHANGED] The 600/700/800 km nudge is computed once**
+- `RunLogResult.threshold_crossed` / `threshold_message` come from `rotation.log_run` and `reassign_attribution`. REST `POST /api/owned-shoes/{id}/log-run` (`LogRunResponse`) now returns them, as do MCP `log_run_to_shoe`, `confirm_coros_run` and the COROS inbox confirm. The `sync_coros_runs` prompt renders the thresholds from `MILEAGE_THRESHOLDS`. The app's log-run toast shows the advisory.
+
+**[CHANGED] Deal views embed a compact retailer brief, eager-loaded (§7 P2)**
+- `DealResponse.retailer` is `DealRetailerBrief` (id, name, active_promo_codes) instead of the full `RetailerResponse`. `services/deals._deal_query` eager-loads shoe, retailer and promo codes.
+
+**[ADDED] Typed `ScraperConfig` input schema (§7 P2)**
+- Known keys typed, Algolia credentials all-or-nothing, extra keys allowed, stored as a plain dict via `as_stored()`. REST create/update/onboard return 422 on a bad config; MCP `onboard_retailer` returns `success: False`.
+
+**[ADDED] Tests:** `tests/test_mcp_parity.py`, `tests/test_deal_queries.py`, `tests/test_scraper_config.py`.
+
+**[CHANGED] Docs:** CLAUDE.md §3 tree and §6 trap; skills `add-mcp-tool`, `ai-agent`, `add-api-endpoint`, `add-database-model` and the `migrate` command point at the new module paths; `architecture.md`, `dependency_graph.md` and `domain_model.md` updated (the dependency_graph debt items 3, 4 and 6 are struck with a date); `project_state.md` §2, §7, §9, §11 refreshed.
+
+**[BLOCKED / still open]** `ShoeRun` proxies (accepted bridge B5); the `MCP_SERVER_URL` loopback (needs a transport redesign, stays P2); long sync scrapes (accepted). New P3: one pre-existing pyflakes nit (unused `bar` in `mcp_server/shoes.py` `shoe_detail_resource`).
+
+**[VERIFIED]**
+- Suite **804 → 825 passed + 1 skipped**.
+- MCP inventory unchanged by the split: 39 tools, 12 resources, 7 prompts.
+- Deal list of 6 deals: 8 → 3 SQL statements (`tests/test_deal_queries.py`).
+- All 13 live retailers' `scraper_config` values validate against `ScraperConfig`.
+- `vite build` clean. No migration. The only UI change is the toast description, so no layout pass was needed.
+
+---
+
 ## P3 debt quick wins + housekeeping — 2026-10-10
 
 **[REMOVED] Dead code** (project_state §7 P3, re-verified first):

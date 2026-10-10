@@ -154,7 +154,7 @@ No externally-sourced run is ever auto-logged. The COROS flow (the backend polle
 
 ### 4.10 Wear milestones
 - **Checkpoints**: every 100 km crossing flags a moment to journal ("how does it feel at 300?"). The prompt is an invitation, shown once; the note is optional.
-- **Retirement pipeline**: an active shoe at ≥ 75% of its mileage limit enters the attention list, worst first — the shared definition behind both Home alerts and the Shoes page, so they cannot disagree. Advisory nudges also fire at 600/700/800 km absolute.
+- **Retirement pipeline**: an active shoe at ≥ 75% of its mileage limit enters the attention list, worst first — the shared definition behind both Home alerts and the Shoes page, so they cannot disagree. Advisory nudges also fire at 600/700/800 km absolute, computed once in `rotation.log_run` and shown by REST, MCP and the log-run toast alike.
 - Retirement is a **status change, never a deletion**: a retired shoe keeps its full run, note, and cost history. (`for_sale` is a parallel terminal status.) Deleting an owned shoe outright destroys its attributions and is treated as a destructive last resort.
 
 ### 4.11 Derived numbers are never stored
