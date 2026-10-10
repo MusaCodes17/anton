@@ -19,9 +19,7 @@ env
 tests/
 
 # Dev-only scripts
-view_db.py
 seed_data.py
-test_scraper.py
 
 # Secrets — injected at runtime via env_file or the host's secret store
 .env

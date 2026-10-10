@@ -41,8 +41,7 @@ class BaseScraper(ABC):
     # their plural/possessive form — JD Sports slugs read "adidas-juniors-..."
     # and "nike-juniors-pegasus-42-...", and a bare \bjunior\b never matched
     # "juniors" (the trailing s blocks the boundary), so those listings slipped
-    # through both the scrape-time filter AND /admin/cleanup-kids-shoes (D7 gap,
-    # 2026-07-14). The optional s is harmless on tokens that are never pluralised.
+    # through the scrape-time filter (D7 gap, 2026-07-14). The optional s is harmless on tokens that are never pluralised.
     _KIDS_SHOE_RE = re.compile(
         r'\b(?:' + '|'.join(re.escape(k) for k in _KIDS_SHOE_KEYWORDS) + r')s?\b',
         re.IGNORECASE,

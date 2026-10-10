@@ -2,10 +2,9 @@
 Dashboard aggregate queries.
 
 Extracted from routers/dashboard.py (fat adapter, 2026-07-10).
-The /api/dashboard/* endpoints are legacy surfaces from the pre-redesign
-era; SettingsSync.jsx uses /dashboard/stats; the other two endpoints are
-available for tools that may need them.  routers/dashboard.py is now a
-thin adapter over these functions.
+Only /api/dashboard/stats remains (SettingsSync.jsx reads it); the
+pre-redesign recent-deals / best-deals endpoints were removed 2026-10-10 —
+nothing called them. routers/dashboard.py is a thin adapter over this.
 """
 from __future__ import annotations
 
@@ -53,26 +52,4 @@ def get_stats(db: Session) -> DashboardStats:
         total_price_records=total_price_records,
         last_scrape=last_scrape,
         average_savings=float(avg_savings) if avg_savings else None,
-    )
-
-
-def get_recent_deals(db: Session, *, limit: int = 10) -> list[Deal]:
-    """Most recently detected active deals."""
-    return (
-        db.query(Deal)
-        .filter(Deal.is_active == True)  # noqa: E712
-        .order_by(desc(Deal.detected_at))
-        .limit(limit)
-        .all()
-    )
-
-
-def get_best_deals(db: Session, *, limit: int = 10) -> list[Deal]:
-    """Active deals ordered by savings percentage, best first."""
-    return (
-        db.query(Deal)
-        .filter(Deal.is_active == True)  # noqa: E712
-        .order_by(desc(Deal.savings_percent))
-        .limit(limit)
-        .all()
     )
