@@ -24,12 +24,14 @@ function Figure({ value, unit, caption }) {
  */
 export default function ActivityRow({ activity }) {
   const { date, name, distance_km, avg_pace, avg_hr, source, shoe, activity_id, activity_tag } = activity
+  // Phones: two grid rows, [date + name | source + shoe] then [figures].
+  // sm+: the original single flex row, unchanged.
   return (
-    <div className="flex flex-col gap-3 rounded-[14px] border border-border bg-surface p-4 sm:flex-row sm:items-center sm:gap-6">
+    <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-2 gap-y-2 rounded-[14px] border border-border bg-surface p-3 sm:flex sm:flex-row sm:gap-6 sm:p-4">
       {/* Date + name → activity detail (T6) */}
       <Link
         to={activity_id != null ? `/activities/${activity_id}` : '#'}
-        className="focus-ring min-w-0 flex-1 rounded-md hover:opacity-80"
+        className="focus-ring col-start-1 row-start-1 min-w-0 flex-1 rounded-md hover:opacity-80 sm:col-auto sm:row-auto"
       >
         <div className="flex items-center gap-2">
           <span className="text-sm font-bold text-foreground">{formatDate(date)}</span>
@@ -39,7 +41,7 @@ export default function ActivityRow({ activity }) {
       </Link>
 
       {/* Figures */}
-      <div className="flex items-start gap-5">
+      <div className="col-span-2 row-start-2 flex items-start gap-5 sm:col-auto sm:row-auto">
         <Figure value={distance_km != null ? distance_km.toFixed(2) : null} unit="km" caption="Dist" />
         <Figure value={avg_pace || null} caption="Pace" />
         <Figure
@@ -50,8 +52,8 @@ export default function ActivityRow({ activity }) {
       </div>
 
       {/* Source + shoe */}
-      <div className="flex items-center gap-2 sm:w-[190px] sm:justify-end">
-        <Badge variant={runSourceVariant(source)} className="text-[10px]">
+      <div className="col-start-2 row-start-1 flex min-w-0 max-w-[60%] items-center justify-end gap-2 sm:col-auto sm:row-auto sm:max-w-none sm:w-[190px]">
+        <Badge variant={runSourceVariant(source)} className="shrink-0 text-[10px]">
           {runSourceLabel(source)}
         </Badge>
         {shoe ? (

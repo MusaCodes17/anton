@@ -43,9 +43,9 @@ export default function PredictionsCard({ data }) {
       ) : (
         <div className="grid grid-cols-2 gap-3 p-4">
           {preds.map((p) => (
-            <div key={p.label} className="rounded-[14px] border border-border bg-surface p-4">
+            <div key={p.label} className="rounded-[14px] border border-border bg-surface p-3 sm:p-4">
               <div className="text-2xs font-medium uppercase tracking-[0.06em] text-faint">{p.label}</div>
-              <div className="mt-1 font-heading text-[26px] font-extrabold tracking-tight text-foreground tabular-nums">
+              <div className="mt-1 font-heading text-xl font-extrabold tracking-tight text-foreground tabular-nums sm:text-[26px] sm:leading-[inherit]">
                 {formatDuration(p.s)}
               </div>
             </div>

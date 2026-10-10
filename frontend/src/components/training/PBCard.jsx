@@ -16,7 +16,7 @@ const BAND_LABEL = { '1k': '1K', mile: 'Mile', '5k': '5K', '10k': '10K', half: '
 export default function PBCard({ record }) {
   const { band, total_time_s, avg_pace, avg_hr, run_date, distance_km, shoe, activity_id, clock, segment, run_distance_km, name } = record
   return (
-    <div className="flex flex-col gap-3 rounded-[14px] border border-border bg-surface p-4">
+    <div className="flex flex-col gap-3 rounded-[14px] border border-border bg-surface p-3 sm:p-4">
       <div className="flex items-center justify-between">
         <span className="font-heading text-sm font-extrabold uppercase tracking-[0.06em] text-accent-foreground">
           {BAND_LABEL[band] ?? band}
