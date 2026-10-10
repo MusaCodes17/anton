@@ -278,6 +278,28 @@ export function useUpdatePreferences() {
   })
 }
 
+// Training page section order/visibility. Same optimistic pattern as the other
+// optimistic hooks in this file (snapshot -> patch cache -> roll back on error ->
+// settle with the server response), so reordering feels instant.
+export function useUpdateTrainingLayout() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (body) => preferencesApi.updateTrainingLayout(body),
+    onMutate: async (body) => {
+      await qc.cancelQueries({ queryKey: queryKeys.preferences() })
+      const previous = qc.getQueryData(queryKeys.preferences())
+      qc.setQueryData(queryKeys.preferences(), (p) => p && ({ ...p, training_layout: body }))
+      return { previous }
+    },
+    onError: (_err, _body, ctx) => {
+      if (ctx?.previous !== undefined) qc.setQueryData(queryKeys.preferences(), ctx.previous)
+    },
+    onSuccess: (data) => {
+      qc.setQueryData(queryKeys.preferences(), data)
+    },
+  })
+}
+
 // ============== HOME ==============
 export function useHome() {
   return useQuery({

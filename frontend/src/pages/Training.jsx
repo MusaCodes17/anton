@@ -1,5 +1,5 @@
-import { useMemo, useState } from 'react'
-import { Activity, Compass, ListOrdered, TrendingUp } from 'lucide-react'
+import { useEffect, useMemo, useState } from 'react'
+import { Activity, Compass, ListOrdered, SlidersHorizontal, TrendingUp } from 'lucide-react'
 import PageHeader from '@/components/PageHeader'
 import PlannedRacesCard from '@/components/training/PlannedRacesCard'
 import VolumeChart from '@/components/training/VolumeChart'
@@ -8,6 +8,9 @@ import FitnessCard from '@/components/training/FitnessCard'
 import PredictionsCard from '@/components/training/PredictionsCard'
 import RecordsCard from '@/components/training/RecordsCard'
 import ActivityRow from '@/components/training/ActivityRow'
+import CustomizeSectionsDialog from '@/components/training/CustomizeSectionsDialog'
+import { useToast } from '@/components/ui/toast'
+import { SECTION_LABELS, layoutBlocks, normalizeLayout } from '@/lib/trainingLayout'
 import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
 import { Input } from '@/components/ui/input'
@@ -28,6 +31,8 @@ import {
   useRaceReadiness,
   useActivities,
   useOwnedShoes,
+  usePreferences,
+  useUpdateTrainingLayout,
 } from '@/hooks/useApi'
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
@@ -119,6 +124,11 @@ export default function Training() {
   // activities list. Default: last 90 days. React state only (resets on nav).
   const [dateFrom, setDateFrom] = useState(() => isoDaysAgo(90))
   const [dateTo, setDateTo] = useState(() => isoToday())
+  // Drafts are bound to the date inputs; they commit to dateFrom/dateTo 400 ms
+  // after the last change. Committing per change fired 2 requests each time
+  // (iOS date wheels fire onChange repeatedly while spinning).
+  const [draftFrom, setDraftFrom] = useState(dateFrom)
+  const [draftTo, setDraftTo] = useState(dateTo)
   const range = useMemo(() => ({
     ...(dateFrom ? { date_from: dateFrom } : {}),
     ...(dateTo ? { date_to: dateTo } : {}),
@@ -128,8 +138,6 @@ export default function Training() {
   // once at mount so the tile matches the Volume header total when 1y is selected.
   const trailing365Range = useMemo(() => ({ date_from: isoDaysAgo(365), date_to: isoToday() }), [])
 
-  const monthly = useTrainingSummary('monthly')          // unranged — thisMonth tile only
-  const weekly = useTrainingSummary('weekly')            // unranged — this-week tile
   const trailing365 = useTrainingSummary('monthly', trailing365Range) // fixed 365-day window for 12-mo tile
   const ranged = useTrainingSummary(period, range)       // the volume chart honours the range
   const records = useTrainingRecords()
@@ -147,6 +155,13 @@ export default function Training() {
   // is one coherent page — cheap at personal scale and avoids client accumulation).
   const [shoeId, setShoeId] = useState(ALL)
   const [minKm, setMinKm] = useState('')
+  // Debounced copy of minKm feeds the query key: every keystroke used to create
+  // a new key (and a request).
+  const [debouncedMinKm, setDebouncedMinKm] = useState('')
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedMinKm(minKm), 400)
+    return () => clearTimeout(t)
+  }, [minKm])
   const [pages, setPages] = useState(1)
 
   const activityParams = useMemo(() => {
@@ -154,10 +169,10 @@ export default function Training() {
     if (dateFrom) p.date_from = dateFrom
     if (dateTo) p.date_to = dateTo
     if (shoeId !== ALL) p.shoe_id = Number(shoeId)
-    const min = parseFloat(minKm)
+    const min = parseFloat(debouncedMinKm)
     if (!Number.isNaN(min) && min > 0) p.min_distance_km = min
     return p
-  }, [dateFrom, dateTo, shoeId, minKm, pages])
+  }, [dateFrom, dateTo, shoeId, debouncedMinKm, pages])
 
   const activities = useActivities(activityParams)
   const hasMore = activities.data && activities.data.length === pages * PAGE
@@ -167,15 +182,17 @@ export default function Training() {
   // Stat strip — "Last 12 mo" sums the fixed trailing-365-day window so it
   // equals the Volume header total when the 1y preset is selected.
   const stats = useMemo(() => {
-    const m = monthly.data || []
-    const w = weekly.data || []
+    // thisMonth comes from the 365-day monthly buckets and thisWeek from the
+    // 12-week weekly buckets: both windows contain the current bucket, so the
+    // two extra unranged summary requests are unnecessary.
     const t = trailing365.data || []
+    const w = recentWeekly.data || []
     const total12 = t.reduce((s, b) => s + b.total_km, 0)
     const runs12 = t.reduce((s, b) => s + b.run_count, 0)
-    const thisMonth = m.find((b) => b.period === currentMonthKey())?.total_km ?? 0
+    const thisMonth = t.find((b) => b.period === currentMonthKey())?.total_km ?? 0
     const thisWeek = w.find((b) => b.period === currentWeekKey())?.total_km ?? 0
     return { thisWeek, thisMonth, total12, runs12 }
-  }, [monthly.data, trailing365.data, weekly.data])
+  }, [trailing365.data, recentWeekly.data])
 
   // Chart data (chronological). Shows every period inside the selected range —
   // no fixed 12-bar cap, so widening the range visibly extends the weekly chart
@@ -233,56 +250,63 @@ export default function Training() {
     return out
   }, [recentWeekly.data])
 
-  const summaryLoading = monthly.isLoading || weekly.isLoading || trailing365.isLoading
+  const summaryLoading = trailing365.isLoading || recentWeekly.isLoading
+  const summaryError = trailing365.isError ? trailing365 : recentWeekly.isError ? recentWeekly : null
 
   // A range edit invalidates the current "load more" depth.
   const setRange = (from, to) => { setDateFrom(from); setDateTo(to); resetPages() }
+  useEffect(() => {
+    if (draftFrom === dateFrom && draftTo === dateTo) return
+    const t = setTimeout(() => setRange(draftFrom, draftTo), 400)
+    return () => clearTimeout(t)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [draftFrom, draftTo])
+  // Presets set draft and committed values together, immediately.
+  const applyPreset = (from, to) => { setDraftFrom(from); setDraftTo(to); setRange(from, to) }
 
-  return (
-    <div className="space-y-8">
-      <PageHeader eyebrow="TRAIN" title="Training">
-        <nav className="hidden gap-4 text-sm text-muted-foreground sm:flex">
-          <a href="#now" className="focus-ring rounded hover:text-foreground">Now</a>
-          <a href="#trends" className="focus-ring rounded hover:text-foreground">Trends</a>
-          <a href="#races" className="focus-ring rounded hover:text-foreground">Races</a>
-          <a href="#records" className="focus-ring rounded hover:text-foreground">Records</a>
-          <a href="#activities" className="focus-ring rounded hover:text-foreground">Activities</a>
-        </nav>
-      </PageHeader>
+  // Section order/visibility is a server-side preference (same on phone and laptop).
+  const prefs = usePreferences()
+  const layout = normalizeLayout(prefs.data?.training_layout)
+  const saveLayout = useUpdateTrainingLayout()
+  const { toast } = useToast()
+  const [customizing, setCustomizing] = useState(false)
+  const blocks = layoutBlocks(layout.order, layout.hidden)
+  const visibleIds = layout.order.filter((id) => !layout.hidden.includes(id))
 
-      {/* ── Now: Load · Form · Next race (R8.4.5) — answers first ── */}
+  const sectionContent = {
+    now: (
       <section className="space-y-4">
         <SectionHeading id="now" icon={Compass} title="Now" />
         <NowStrip trends={trends} readiness={readiness} weeks={recentWeeks} />
       </section>
-
-      {/* ── Trends (volume first) ──────────────────────────────── */}
+    ),
+    trends: (
       <section className="space-y-4">
         <div className="flex flex-wrap items-baseline justify-between gap-3">
           <SectionHeading id="trends" icon={TrendingUp} title="Trends" />
           <div className="flex flex-wrap items-center gap-2 text-xs">
             <Input
               type="date"
-              value={dateFrom}
-              max={dateTo || undefined}
-              onChange={(e) => setRange(e.target.value, dateTo)}
-              className="h-8 w-[9.5rem] px-2 py-1"
+              value={draftFrom}
+              max={draftTo || undefined}
+              onChange={(e) => setDraftFrom(e.target.value)}
+              className="h-8 w-[7.5rem] sm:w-[9.5rem] px-2 py-1"
               aria-label="From date"
             />
             <span className="text-muted-foreground">→</span>
             <Input
               type="date"
-              value={dateTo}
-              min={dateFrom || undefined}
-              onChange={(e) => setRange(dateFrom, e.target.value)}
-              className="h-8 w-[9.5rem] px-2 py-1"
+              value={draftTo}
+              min={draftFrom || undefined}
+              onChange={(e) => setDraftTo(e.target.value)}
+              className="h-8 w-[7.5rem] sm:w-[9.5rem] px-2 py-1"
               aria-label="To date"
             />
             {[['90d', 90], ['6mo', 182], ['1y', 365]].map(([label, days]) => (
               <button
                 key={label}
                 type="button"
-                onClick={() => setRange(isoDaysAgo(days), isoToday())}
+                onClick={() => applyPreset(isoDaysAgo(days), isoToday())}
                 className="focus-ring rounded-md border border-border px-2 py-1 font-medium text-muted-foreground hover:text-foreground"
               >
                 {label}
@@ -292,9 +316,15 @@ export default function Training() {
         </div>
 
         {summaryLoading ? (
-          <Skeleton className="h-[88px] w-full rounded-[12px]" />
-        ) : monthly.isError ? (
-          <ErrorState error={monthly.error} onRetry={monthly.refetch} />
+          <div className="space-y-4">
+            <Skeleton className="h-[168px] w-full rounded-[12px] sm:h-[88px]" />
+            <Skeleton className="h-[160px] w-full rounded-[12px] sm:h-[220px]" />
+          </div>
+        ) : summaryError ? (
+          <ErrorState
+            error={summaryError.error}
+            onRetry={() => { trailing365.refetch(); recentWeekly.refetch() }}
+          />
         ) : (
           <>
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
@@ -334,7 +364,7 @@ export default function Training() {
               </div>
               <div className="p-4">
                 {ranged.isLoading ? (
-                  <Skeleton className="h-[220px] w-full rounded-[12px]" />
+                  <Skeleton className="h-[160px] w-full rounded-[12px] sm:h-[220px]" />
                 ) : chartData.length ? (
                   <VolumeChart data={chartData} {...xAxis} />
                 ) : (
@@ -349,20 +379,28 @@ export default function Training() {
           </>
         )}
       </section>
-
-      {/* ── 2×2 card grid: Races · Records · Fitness · Predictions ── */}
-      <section className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-        <div id="races" className="scroll-mt-20">
-          <PlannedRacesCard />
-        </div>
-        <div id="records" className="scroll-mt-20">
-          <RecordsCard records={records} />
-        </div>
+    ),
+    races: (
+      <div id="races" className="scroll-mt-20">
+        <PlannedRacesCard />
+      </div>
+    ),
+    records: (
+      <div id="records" className="scroll-mt-20">
+        <RecordsCard records={records} />
+      </div>
+    ),
+    fitness: (
+      <div id="fitness" className="scroll-mt-20">
         <FitnessCard data={fitness.data} history={trends.data?.form?.fitness} />
+      </div>
+    ),
+    predictions: (
+      <div id="predictions" className="scroll-mt-20">
         <PredictionsCard data={fitness.data} />
-      </section>
-
-      {/* ── Activities ─────────────────────────────────────────── */}
+      </div>
+    ),
+    activities: (
       <section className="space-y-4">
         <SectionHeading id="activities" icon={ListOrdered} title="Activities" hint="within the selected date range" />
 
@@ -403,7 +441,7 @@ export default function Training() {
           <ErrorState error={activities.error} onRetry={activities.refetch} />
         ) : activities.data?.length ? (
           <>
-            <div className="space-y-3">
+            <div className="space-y-2 sm:space-y-3">
               {activities.data.map((a) => (
                 <ActivityRow key={a.strava_activity_id ?? `run-${a.shoe_run_id}`} activity={a} />
               ))}
@@ -424,6 +462,51 @@ export default function Training() {
           />
         )}
       </section>
+    ),
+  }
+
+  const onSaveLayout = (next) =>
+    saveLayout.mutate(next, {
+      onSuccess: () => setCustomizing(false),
+      onError: (err) =>
+        toast({ variant: 'destructive', title: "Couldn't save layout", description: err.message }),
+    })
+
+  return (
+    <div className="space-y-5 md:space-y-8">
+      <PageHeader eyebrow="TRAIN" title="Training">
+        <nav className="hidden gap-4 text-sm text-muted-foreground sm:flex">
+          {visibleIds.map((id) => (
+            <a key={id} href={`#${id}`} className="focus-ring rounded hover:text-foreground">
+              {SECTION_LABELS[id]}
+            </a>
+          ))}
+        </nav>
+        <Button
+          variant="outline" size="icon" aria-label="Customize sections"
+          onClick={() => setCustomizing(true)}
+        >
+          <SlidersHorizontal />
+        </Button>
+      </PageHeader>
+
+      {blocks.map((b) =>
+        b.kind === 'cards' ? (
+          <section key={b.ids.join('-')} className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+            {b.ids.map((id) => <div key={id} className="contents">{sectionContent[id]}</div>)}
+          </section>
+        ) : (
+          <div key={b.id}>{sectionContent[b.id]}</div>
+        )
+      )}
+
+      <CustomizeSectionsDialog
+        open={customizing}
+        onOpenChange={setCustomizing}
+        layout={layout}
+        onSave={onSaveLayout}
+        saving={saveLayout.isPending}
+      />
     </div>
   )
 }
