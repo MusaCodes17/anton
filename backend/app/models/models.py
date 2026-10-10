@@ -307,6 +307,11 @@ class Activity(Base):
     start_lat = Column(Float, nullable=True)
     start_lng = Column(Float, nullable=True)
     location_label = Column(String(200), nullable=True)  # human label, e.g. "Montreal Run"
+    # R5.4.2: from the Strava export's weather (raw_json); null for COROS/manual
+    weather_temp_c = Column(Float, nullable=True)
+    apparent_temp_c = Column(Float, nullable=True)
+    humidity_pct = Column(Float, nullable=True)
+    wind_speed_m_s = Column(Float, nullable=True)
     # Controlled vocabulary (app/utils/activity_tags.py, ACTIVITY_TAGS) — the
     # governing input for PB eligibility (R2.7 T3), race promotion (T6), and the
     # weekly-summary agent (R3.1). Indexed: the PB query filters on it.

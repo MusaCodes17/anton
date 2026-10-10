@@ -206,6 +206,14 @@ def get_activity_detail(db: Session, activity_id: int) -> dict:
         "training_focus": a.training_focus,
         "activity_tag": a.activity_tag,
         "strava_activity_id": a.strava_activity_id,
+        # R5.4.1/R5.4.2 -- REST/UI surface only; MCP must expose the label, never coordinates.
+        "location_label": a.location_label,
+        "start_lat": a.start_lat,
+        "start_lng": a.start_lng,
+        "weather_temp_c": a.weather_temp_c,
+        "apparent_temp_c": a.apparent_temp_c,
+        "humidity_pct": a.humidity_pct,
+        "wind_speed_m_s": a.wind_speed_m_s,
         "shoe": {"id": shoe.id, "brand": shoe.brand, "model": shoe.model, "nickname": shoe.nickname} if shoe else None,
     }
 

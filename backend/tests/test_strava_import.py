@@ -109,3 +109,23 @@ def test_upsert_is_idempotent(tmp_path, db):
     assert s2.inserted == 0 and s2.updated == 5
     from app.models.models import Activity
     assert db.query(Activity).filter(Activity.source == "strava").count() == 5  # no duplicates
+
+
+def test_weather_set_on_import_and_refreshed_on_reimport(tmp_path, db):
+    """R5.4.2: weather columns come from the raw row; re-import updates in place."""
+    from app.models.models import Activity
+    header = _HEADER + ",Weather Temperature,Apparent Temperature,Humidity,Wind Speed"
+    row = ('2001,"Jun 10, 2026, 01:00:00 PM",Wx,Run,,2000,8.00,150,,activities/3.fit.gz,'
+           '1900,8000,150,140,20.0,89.0,400.0,8080.0,%s')
+    p = tmp_path / "activities.csv"
+    p.write_text("\n".join([header, row % "18.04,16.5,0.37,3.14"]) + "\n")
+    strava_import.import_from_csv(str(p), db)
+    a = db.query(Activity).filter(Activity.strava_activity_id == 2001).one()
+    assert (a.weather_temp_c, a.apparent_temp_c, a.humidity_pct, a.wind_speed_m_s) == (18.0, 16.5, 37.0, 3.1)
+
+    p.write_text("\n".join([header, row % "20.0,,0.5,"]) + "\n")
+    strava_import.import_from_csv(str(p), db)
+    db.expire_all()
+    assert db.query(Activity).filter(Activity.strava_activity_id == 2001).count() == 1
+    a = db.query(Activity).filter(Activity.strava_activity_id == 2001).one()
+    assert (a.weather_temp_c, a.apparent_temp_c, a.humidity_pct, a.wind_speed_m_s) == (20.0, None, 50.0, None)
