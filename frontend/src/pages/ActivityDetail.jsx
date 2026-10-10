@@ -23,9 +23,9 @@ const NO_TAG = '__none__'
 
 function Figure({ label, value, unit }) {
   return (
-    <div className="rounded-[14px] border border-border bg-surface p-4">
+    <div className="min-w-0 rounded-[14px] border border-border bg-surface p-3 sm:p-4">
       <div className="text-2xs uppercase tracking-[0.08em] text-faint">{label}</div>
-      <div className="mt-1 font-heading text-xl font-extrabold tabular-nums text-foreground">
+      <div className="mt-1 truncate font-heading text-xl font-extrabold tabular-nums text-foreground">
         {value ?? '—'}
         {value != null && unit ? <span className="ml-0.5 text-xs font-normal text-faint">{unit}</span> : null}
       </div>
@@ -95,7 +95,7 @@ export default function ActivityDetail() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 sm:space-y-6">
       <Link to="/training#activities" className="focus-ring inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground">
         <ArrowLeft className="h-4 w-4" /> Activities
       </Link>
@@ -110,7 +110,7 @@ export default function ActivityDetail() {
       </div>
 
       {/* Stats */}
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
+      <div className="grid grid-cols-3 gap-2 sm:gap-3 sm:grid-cols-3 lg:grid-cols-4">
         <Figure label="Distance" value={d.distance_km != null ? d.distance_km.toFixed(2) : null} unit="km" />
         <Figure label="Pace" value={d.avg_pace} />
         <Figure label="Moving" value={d.moving_time_s != null ? formatDuration(d.moving_time_s) : null} />
@@ -124,10 +124,10 @@ export default function ActivityDetail() {
       </div>
 
       {/* Edit */}
-      <div className="space-y-4 rounded-2xl border border-border bg-card p-5">
+      <div className="space-y-4 rounded-2xl border border-border bg-card p-4 sm:p-5">
         <h2 className="font-heading text-md-plus font-bold text-foreground">Edit</h2>
-        <div className="grid gap-4 sm:grid-cols-2">
-          <div className="space-y-1.5">
+        <div className="grid grid-cols-2 gap-3">
+          <div className="min-w-0 space-y-1.5">
             <Label>Tag</Label>
             <Select value={tag} onValueChange={setTag}>
               <SelectTrigger><SelectValue placeholder="No tag" /></SelectTrigger>
@@ -137,7 +137,7 @@ export default function ActivityDetail() {
               </SelectContent>
             </Select>
           </div>
-          <div className="space-y-1.5">
+          <div className="min-w-0 space-y-1.5">
             <Label>Shoe</Label>
             <Select value={d.shoe ? String(d.shoe.id) : undefined} onValueChange={onReassign} disabled={reassign.isPending}>
               <SelectTrigger><SelectValue placeholder="No shoe — pick one" /></SelectTrigger>
