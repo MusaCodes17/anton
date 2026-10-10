@@ -231,6 +231,29 @@ Intervals and Track **count** (the runner's call). A stretch is continuous runni
 - The COROS FIT URL is an unsigned link to the GPS track, so it's parsed in memory and never stored or logged; scan errors keep only the exception type.
 - GPX streams (33 old runs) get a jump filter (8 m/s); FIT distance is trusted as recorded.
 **Verdict:** ✅ Keep. Revisit storage if a source of streams appears that can be read at request time.
+### B21. Purchase provenance is a recorded fact, not a relationship (R5.3, 2026-10-10)
+**Chosen:** `owned_shoes.purchase_retailer` and `purchase_url` are plain strings, written once when the owned shoe is saved. No FK to deals or retailers, no "converted" state on a deal, and no link from the owned shoe to the watchlist entry. The purchase draft (`services/purchase_draft`) is read-only; saving goes through the existing owned-shoe create path. "Stop watching" is an explicit prompt that defaults to no and calls the existing watchlist delete.
+**Why:** B1 (wanting ≠ owning) forbids entangling the two domains. A purchase is a historical fact about a pair, so it should survive the deal or watchlist entry being deleted. The watchlist dies with the interest; the owned shoe is a record.
+**Advantages:** Deleting a deal or a watchlist entry can never touch an owned shoe. No state change on deals. Cost per km is available from the first run.
+**Trade-offs:** The retailer name and URL are copied, so they can drift from the live deal. Price paid is typed by the runner, not linked to the deal's price, which is intended (coupons, sizes, in-store prices differ). Saving is app-only: no MCP tool creates an owned shoe, so Son of Anton can draft a purchase but cannot save it.
+**Verdict:** ✅ Keep. 🔁 Revisit only if a purchase needs a structured order (several pairs, receipts).
+
+### B22. Run location is a rounded start point and label; coordinates stay out of MCP (R5.4.1, 2026-10-10)
+**Chosen:** `start_lat` and `start_lng` rounded to 3 decimals (about 100 m), plus `location_label`, on `activities` and `pending_coros_runs`. Two sources: the COROS run list (`Location:` and `Start Coordinates:`, parsed with anchored regexes) and the archive's first GPS fix, read from the FIT or GPX file by the R8.2 best-efforts scan. Never a track or a polyline.
+**Why:** Most runs start at home, and 100 m is enough for "where I run" and for weather, but not for an address. The data lives on a VPS and is readable by LLM clients, so the stored value is the least precise useful one. MCP outputs expose the label only.
+**The scan exception:** R8.2 said the scan never touches runs. Location is the one exception: the scan writes its effort rows and, for location, exactly two columns on the activity row. It still never writes distance, time, attribution or mileage (INV-1, INV-2).
+**Advantages:** Archive and COROS runs get a start point with no new service and no outbound call. Coordinates reach the app's detail page, not the LLM surfaces.
+**Trade-offs:** Rounding to 3 decimals can merge two starts about 100 m apart. Runs with no GPS have no location, which is absence, not an error. A COROS coordinates line that doesn't parse is a contract error, so a COROS format change shows up loudly until the fixtures are refreshed.
+**Verdict:** ✅ Keep. Runner-named places (clustering start points) are the later step, not reverse geocoding. 🔁 Revisit the precision if rounding ever misplaces a home loop.
+
+### B23. Strava weather is projected from `raw_json` into typed columns; the outside lookup is gated (R5.4.2, 2026-10-10)
+**Chosen:** `weather_temp_c`, `apparent_temp_c`, `humidity_pct` and `wind_speed_m_s` are projected from the Strava export's `raw_json`. The migration backfills archive rows, and the importer fills the columns on re-import. The external historical lookup (Open-Meteo, keyed on start coordinates and time) is not built.
+**Why:** The data was already in the database, unused, inside `raw_json`. The units were checked on real values rather than assumed: °C; humidity as a 0–1 fraction, stored ×100; wind in m/s.
+**Not INV-7 derived data:** the projection copies the run's own recorded values into typed columns. Nothing is recomputed from other rows, so no exception to INV-7 is needed (CLAUDE.md §14).
+**Advantages:** 215 archive runs get weather with no outbound call, no new service and no secret. The reconciliation was exact.
+**Trade-offs:** Only the archive has weather. COROS runs carry none until a lookup exists. The lookup would be Anton's first outbound historical-data call, so it needs a spike and a decision entry before any build. Missing weather stays null.
+**Verdict:** ✅ Keep the projection. 🕐 The lookup waits on a question: build it only if heat analysis on the 215 archive runs shows something worth having for new runs. It depends on R5.4.1's start coordinates.
+
 ---
 
 ## C. AI Layer

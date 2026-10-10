@@ -5,6 +5,51 @@
 
 ---
 
+## R5 open items — Bought it, location, archive weather, insights, archive tags — 2026-10-10
+
+Branch `r5-open-items`, ten commits (`3b68edb` scoping through `ee01890` (UI), plus this docs commit). Three additive migrations (`b1c2d3e4f5a6`, `c2d3e4f5a6b7`, `d3e4f5a6b7c8`); the insights service and the archive-tag script add no schema. Decisions: design_decisions B21–B23. The server steps are in roadmap §R5.4.4 and project_state §11.
+
+**[ADDED] R5.3 "Bought it" — purchase provenance (B21)**
+- `owned_shoes.purchase_retailer` (String(100)) and `purchase_url` (Text): plain strings, no FK (B1 holds). Migration `b1c2d3e4f5a6`, no data movement.
+- `services/purchase_draft.purchase_draft_from_deal` is read-only. `GET /api/deals/{id}/purchase-draft` and the MCP read tool `draft_purchase_from_deal` are both thin over it (REST == MCP).
+- The deal sheet's "Bought it" opens the add-shoe form prefilled; every field stays editable. Then an optional "Stop watching?" prompt that defaults to keep. Only the explicit button calls the watchlist delete.
+- Shoe detail reads "Bought for $X at <retailer>" with the link.
+- **Roadmap correction:** no MCP tool creates an owned shoe (`add_shoe` is the watchlist), so the roadmap's "`add_shoe` accepts the new fields" was wrong. Saving happens in the app; Son of Anton can draft a purchase but cannot save one.
+
+**[ADDED] R5.4.1 — run location (B22)**
+- `start_lat`, `start_lng` rounded to 3 decimals (about 100 m, `utils/location.round_coord`) and `location_label` on `activities` and `pending_coros_runs`. Migration `c2d3e4f5a6b7`.
+- COROS: the run list's `Location:` and `Start Coordinates:` lines are parsed with anchored regexes. An unparseable coordinates line is a `CorosContractError`, not a null. The rounded value is stored on the inbox row, and every confirm path carries it: the REST inbox confirm, and `coros.confirm_run`, which falls back to the pending row so MCP confirms get it too. No coordinate arguments were added to MCP tools.
+- Archive: the R8.2 best-efforts scan reads the first valid fix from FIT (semicircles converted to degrees) or GPX and writes only `start_lat`/`start_lng` on the activity. It never writes distance, time, attribution or mileage (INV-1/INV-2 unchanged). Backfill: `python -m app.scripts.backfill_best_efforts --export-dir <export> --rescan`.
+- Checked on real export files: starts in Montreal, Medellín and Abidjan.
+- Privacy: nothing tracks a route. MCP outputs expose the label only. REST activity detail carries the coordinates for the UI.
+
+**[ADDED] R5.4.2 — archive weather, free half (B23)**
+- `weather_temp_c`, `apparent_temp_c`, `humidity_pct`, `wind_speed_m_s` on `activities`. Migration `d3e4f5a6b7c8` backfills strava rows from `raw_json`; the importer fills them on (re)import. Weather and location show on activity detail.
+- Units checked on real values, not assumed: °C (−5.1 to 33.9), humidity a 0–1 fraction (stored ×100 as a percent), wind in m/s (max 8.6). The roadmap said km/h; the export is m/s, so the column is named to match.
+- Reconciliation on a copy of the live DB: 215 rows with raw weather became 215 rows with typed weather (the July snapshot said 172). Downgrade and upgrade both clean.
+- The external (Open-Meteo) lookup is still gated and not built.
+
+**[ADDED] R5.5.1–R5.5.2 — shoe insights (read-only, no schema)**
+- `services/insights.py`: steady-run performance per shoe and per model (reusing `training_trends.m_per_beat`; medians are None under `MIN_SHOE_STEADY_RUNS = 10`); wear curves (weekly and cumulative km); wear by type for retired shoes. The advisory `suggested_limit_km` appears once there are at least 3 retired pairs and is never written.
+- `GET /api/insights/shoes/{id}`, `GET /api/insights/rotation`; MCP `get_shoe_insights`, `get_rotation_insights` over the same functions.
+- Shoe page "How it runs" card. Real-data note: the daily trainers' 4 retired pairs have a median of 313 km against the 700 km default. That is probably incomplete mileage on old pairs, which is why the suggestion stays advisory. Pace by shoe mostly measures use, and the card says so.
+
+**[ADDED] R5.5.3 — archive tags (dry run; not applied)**
+- `services/archive_tags.py` and `python -m app.scripts.infer_archive_tags`. Dry run by default: per-tag counts, the race-PB impact computed inside a rolled-back savepoint, the steady-pool note, and every suggestion. `--apply` writes exactly the planned tags and never overwrites an existing tag.
+- Dry run on a copy of the live DB: 181 of 689 untagged archive runs would get a tag (Easy 76, Long Run 67, Track 13, Race 12, Tempo 8, Intervals 5). It adds one race PB (half marathon 1:21:06, Two Oceans Half Marathon, 2025-04-06). 38 runs would leave the steady pool.
+- The plan has a known false positive: "Half Marathon on a random Tuesday" is suggested as Race. The review step exists for this.
+- **Not applied.** The runner applies it on the server after reviewing the output.
+
+**[CHANGED] Docs:** roadmap R5 table and §R5.3–§R5.5 (status, the MCP correction, the R5.4.4 runbook); project_state §2, §3, §9, §11; design_decisions B21–B23; CLAUDE.md §14 (INV-1 sentence on the scan's write boundary; INV-7 clarification that location and weather are projections, not derived values).
+
+**[VERIFIED]**
+- Suite **825 → 878 passed + 1 skipped**.
+- `vite build` clean.
+- Desktop + 375 px browser pass of the Bought-it flow on a copy of the DB.
+- Insights card (shoe 1, 12 steady runs; wear chart with limit line; type-wear suggestion) and activity location/weather line (activity 312): desktop + 375 px browser pass on a copy of the DB, no horizontal scroll, no new console errors.
+
+---
+
 ## §7 debt phase — mcp_server/schemas split, one serialization system, typed scraper_config — 2026-10-10
 
 Branch `debt-p1-p2`, eight commits (seven tasks + docs), merged as PR #64 (`4c73adb`) with both CI checks green. Decision recorded as design_decisions E17. No migration; two API shape changes (`LogRunResponse` gains `threshold_crossed`/`threshold_message`; `DealResponse.retailer` is the compact brief — the frontend reads only `name` and `active_promo_codes`).
