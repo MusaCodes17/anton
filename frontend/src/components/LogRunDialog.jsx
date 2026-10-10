@@ -54,7 +54,17 @@ export default function LogRunDialog({ shoe, open, onOpenChange, initialValues, 
       { id: shoe.id, data: payload },
       {
         onSuccess: (data) => {
-          toast({ variant: 'success', title: 'Run logged' })
+          // No 'warning' toast variant exists (ui/toast.jsx has default|success|destructive),
+          // so a threshold advisory reuses 'success' with a description.
+          toast(
+            data.threshold_crossed != null
+              ? {
+                  variant: 'success',
+                  title: 'Run logged',
+                  description: `${shoe.brand} ${shoe.model} passed ${data.threshold_crossed} km — ${data.threshold_message}.`,
+                }
+              : { variant: 'success', title: 'Run logged' }
+          )
           onLogged?.(payload, data)
           if (data.checkpoint_reached && !hasPromptedCheckpoint(shoe.id, data.checkpoint_km)) {
             setCheckpointKm(data.checkpoint_km)
