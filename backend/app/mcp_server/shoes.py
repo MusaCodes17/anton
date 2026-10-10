@@ -786,3 +786,62 @@ Else: "No upcoming races scheduled."]
 - Keep the tone informative and direct; no cheerleading ("Great job!" etc.)
 - Do not add observations not grounded in the data (no invented training advice)
 """
+
+
+@mcp.tool()
+def get_shoe_insights(owned_shoe_id: int) -> dict:
+    """
+    Longitudinal analytics for one owned shoe: how it performs and how it wears.
+    Use for "how does this shoe run compared to others", "how worn is it", or
+    "when do shoes like this usually get retired".
+
+    Returns `performance` (this pair), `model` (the same numbers pooled across
+    every pair of this shoe model), `wear` (weekly km and cumulative km since
+    purchase, plus current mileage, limit and pct_of_limit) and `type_wear`
+    (where retired shoes of this type actually ended; null if none retired).
+
+    Performance is a comparison of STEADY runs only (untagged or Easy / Long
+    Run, 5 km+, with heart rate, no long stops): median metres per heartbeat,
+    pace (s/km) and avg HR. It is a heuristic. Pace by shoe mostly reflects what
+    the shoe was used for, so ALWAYS state the run counts (`runs`, `steady_runs`)
+    and the `caveat` when answering, and do not call a shoe faster or better
+    from small gaps. A null median means not enough data (`enough_data` false:
+    fewer than `min_steady_runs` steady runs) — say so rather than guessing.
+    `suggested_limit_km` in type_wear is advisory only; changing a limit is a
+    separate step via set_shoe_mileage_limit that the runner must confirm.
+    Read-only.
+
+    Args:
+        owned_shoe_id: id of the owned shoe (see get_owned_shoes).
+    """
+    from dataclasses import asdict
+    from app.models.schemas.insights import ShoeInsightsResponse
+    from app.services import insights
+    with _core.get_session() as db:
+        try:
+            return ShoeInsightsResponse(**asdict(insights.shoe_insights(db, owned_shoe_id))).model_dump()
+        except LookupError as e:
+            return {"error": str(e)}
+
+
+@mcp.tool()
+def get_rotation_insights() -> dict:
+    """
+    Rotation-wide analytics: `models` compares shoe models by their steady-run
+    medians (metres per heartbeat, pace s/km, avg HR) pooled across pairs, and
+    `wear_by_type` shows the mileage at which retired shoes of each type ended,
+    against the default limit, with an advisory `suggested_limit_km`.
+
+    Steady runs only (untagged or Easy / Long Run, 5 km+, with heart rate, no
+    long stops); a heuristic. Pace by shoe mostly reflects what the shoe was
+    used for, so ALWAYS give the run counts (`runs`, `steady_runs`) and the
+    `caveat` when answering. A null median means not enough data
+    (`enough_data` false) — say so. The suggested limit is advisory: never
+    apply it without the runner's confirmation (set_shoe_mileage_limit).
+    Read-only.
+    """
+    from dataclasses import asdict
+    from app.models.schemas.insights import RotationInsightsResponse
+    from app.services import insights
+    with _core.get_session() as db:
+        return RotationInsightsResponse(**asdict(insights.rotation_insights(db))).model_dump()

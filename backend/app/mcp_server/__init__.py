@@ -42,6 +42,8 @@ from app.mcp_server.deals import (
 from app.mcp_server.shoes import (
     get_owned_shoes,
     get_shoe_runs,
+    get_shoe_insights,
+    get_rotation_insights,
     log_run_to_shoe,
     delete_shoe_run,
     get_shoe_notes,
