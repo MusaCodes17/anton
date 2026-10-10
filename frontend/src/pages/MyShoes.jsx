@@ -279,22 +279,31 @@ export default function MyShoes() {
             />
           )}
 
-          {activeGroups.map((group) => (
-            <section key={group.type}>
-              <div className="mb-3.5 flex items-center gap-2 text-2xs font-bold uppercase tracking-[0.08em] text-faint">
-                <span>{group.label}</span>
-                <span className="text-edge">·</span>
-                <span>{group.shoes.length}</span>
-                <span className="text-edge">·</span>
-                <span className="tabular-nums">{Math.round(group.totalKm)} km</span>
-              </div>
-              <div className="grid grid-cols-2 gap-3 sm:gap-3.5 lg:grid-cols-3">
-                {group.shoes.map((shoe) => (
-                  <ShoeCard key={shoe.id} shoe={shoe} />
-                ))}
-              </div>
-            </section>
-          ))}
+          {/* One outer grid (same column tracks as the inner grids) so single-shoe
+              groups pack side by side instead of leaving half-empty rows. Group order
+              is untouched; multi-shoe groups span the full row with their own grid. */}
+          <div className="grid grid-cols-2 gap-x-3 gap-y-8 sm:gap-x-3.5 lg:grid-cols-3">
+            {activeGroups.map((group) => {
+              const single = group.shoes.length === 1
+              return (
+                <section key={group.type} className={single ? 'min-w-0' : 'col-span-full'}>
+                  <div className="mb-3.5 flex min-w-0 items-center gap-2 text-2xs font-bold uppercase tracking-[0.08em] text-faint">
+                    <span className="min-w-0 truncate">{group.label}</span>
+                    <span className="text-edge">·</span>
+                    <span>{group.shoes.length}</span>
+                    <span className="text-edge">·</span>
+                    <span className="shrink-0 whitespace-nowrap tabular-nums">{Math.round(group.totalKm)} km</span>
+                  </div>
+                  {/* A singleton's cell is one track wide, so its card fills it (grid-cols-1). */}
+                  <div className={single ? 'grid grid-cols-1' : 'grid grid-cols-2 gap-3 sm:gap-3.5 lg:grid-cols-3'}>
+                    {group.shoes.map((shoe) => (
+                      <ShoeCard key={shoe.id} shoe={shoe} />
+                    ))}
+                  </div>
+                </section>
+              )
+            })}
+          </div>
 
           <button
             type="button"

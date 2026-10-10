@@ -176,10 +176,11 @@ def describe(db: Session, tool: str, args: dict) -> tuple[str, list[dict], Optio
             pass
         if run is None:
             return "Delete run", _fields(("Run", f"#{args.get('run_id')} (not found)")), None
+        act = run.activity
         return "Delete run", _fields(
             ("Shoe", _shoe_label(run.owned_shoe) if run.owned_shoe else None),
-            ("Date", run.run_date),
-            ("Distance", _km(run.distance_km) if run.distance_km is not None else None),
+            ("Date", act.run_date if act else None),
+            ("Distance", _km(act.distance_km) if act and act.distance_km is not None else None),
         ), None
 
     if tool in ("add_shoe_note", "save_shoe_review"):

@@ -25,7 +25,7 @@ import json
 import logging
 import os
 from abc import ABC, abstractmethod
-from contextlib import asynccontextmanager
+from contextlib import AsyncExitStack, asynccontextmanager
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import Any, AsyncGenerator, AsyncIterator, Callable, Optional
@@ -76,16 +76,29 @@ typed "yes" first: once you have everything the call needs (the right owned_shoe
 call the write tool directly — that call IS the proposal. Before calling it, say in one short sentence \
 what you're proposing. Then stop; the user's decision (and the tool result) arrives as the next message."""
 
+# How Son of Anton reaches Anton's own MCP server (debt P2). Read at *connect
+# time* in _connected_group — not here — for the same import-ordering reason
+# _server_headers documents (chat_service is imported before load_dotenv()).
+#   "memory" (default): an in-process, in-memory MCP session against the same
+#       FastMCP instance. No network hop, no bearer token, no port coupling —
+#       changing bind/port or dropping ANTON_SECRET can no longer silently strip
+#       the assistant's tools.
+#   "http": the original loopback over Streamable HTTP to MCP_SERVER_URL with the
+#       bearer from _server_headers. Kept as an escape hatch (e.g. to debug the
+#       real transport/auth path); behavior unchanged.
+ANTON_MCP_TRANSPORT = os.getenv("ANTON_MCP_TRANSPORT", "memory")
+
 MCP_SERVERS: list[dict] = [
     {
         "name": "anton",
+        # The anton entry is *this same process's* MCP server. With the default
+        # "memory" transport it is connected in-process and `url` / `auth_loopback`
+        # are unused; they only apply when ANTON_MCP_TRANSPORT=http, where `url`
+        # loops back to our own /mcp (dependency_graph §8.1) and, once R2.1 auth is
+        # active, must carry the bearer token (attached per-connection by
+        # _server_headers()) or the assistant degrades to "no tools available".
+        "in_process": True,
         "url": os.getenv("MCP_SERVER_URL", "http://localhost:8000/mcp"),
-        # This is the loopback self-connection: `url` points back at *this same*
-        # process's /mcp (dependency_graph §8.1). Once R2.1 auth is active, /mcp
-        # requires the bearer token, so this client must send it too — otherwise
-        # Son of Anton silently degrades to "no tools available". The token is
-        # attached per-connection by _server_headers() so it's read at connect
-        # time (robust to import ordering) and scoped to this loopback entry.
         "auth_loopback": True,
     },
 ]
@@ -95,8 +108,10 @@ def _server_headers(server: dict) -> dict | None:
     """
     Build the request headers for one MCP server connection.
 
-    Merges any static `headers` on the entry with the R2.1 bearer token for the
-    loopback self-connection (`auth_loopback`). Read from the environment *here*
+    Only used by the ANTON_MCP_TRANSPORT=http path — the default in-memory
+    transport sends no headers at all. Merges any static `headers` on the entry
+    with the R2.1 bearer token for the loopback self-connection
+    (`auth_loopback`). Read from the environment *here*
     (not at MCP_SERVERS definition time) because chat_service is imported before
     main.py's load_dotenv() runs — reading ANTON_SECRET at import could capture an
     empty value and silently 401 the loopback. Scoped to the flagged entry so the
@@ -615,25 +630,57 @@ async def _load_context_resources(group) -> str:
         return ""  # fail silently — tools are still available as a fallback
 
 
+async def _connect_in_process(group: ClientSessionGroup, stack: AsyncExitStack,
+                              server: dict, sse_read_timeout_s: float) -> None:
+    """Attach the in-process Anton MCP server to `group` over an in-memory session.
+
+    The session (and the server task group behind it) is entered on `stack`, so it
+    lives exactly as long as the caller's `async with _connected_group(...)` block
+    and is torn down on the same asyncio Task that opened it — anyio cancel scopes
+    never cross a task boundary (see _run_chat). No sampling / elicitation /
+    roots callbacks are passed: the HTTP client passed none either, so a tool that
+    asks for sampling degrades identically on both transports.
+    """
+    from mcp.shared.memory import create_connected_server_and_client_session
+
+    from app.mcp_server import mcp as anton_mcp  # lazy: avoids an import cycle
+
+    session = await stack.enter_async_context(
+        create_connected_server_and_client_session(
+            anton_mcp, read_timeout_seconds=timedelta(seconds=sse_read_timeout_s)
+        )
+    )
+    await group.connect_with_session(
+        mcp_types.Implementation(name=server["name"], version="in-process"), session
+    )
+
+
 @asynccontextmanager
 async def _connected_group(sse_read_timeout_s: float) -> AsyncIterator[ClientSessionGroup]:
     """A ClientSessionGroup connected to every reachable MCP_SERVERS entry.
     An unreachable server is logged and skipped; callers check group.sessions
     / group.tools for "nothing connected"."""
-    async with ClientSessionGroup() as group:
+    # `stack` holds the in-memory session(s); it is entered *inside* the group so
+    # it unwinds first (server task cancelled, then the group closes).
+    async with ClientSessionGroup() as group, AsyncExitStack() as stack:
+        transport = os.getenv("ANTON_MCP_TRANSPORT", ANTON_MCP_TRANSPORT)
         for server in MCP_SERVERS:
+            in_memory = server.get("in_process") and transport == "memory"
             url = server.get("url", "")
-            if not url:
+            if not url and not in_memory:
                 continue
             try:
-                await group.connect_to_server(
-                    StreamableHttpParameters(
-                        url=url,
-                        headers=_server_headers(server),
-                        timeout=timedelta(seconds=10),
-                        sse_read_timeout=timedelta(seconds=sse_read_timeout_s),
+                if in_memory:
+                    await _connect_in_process(group, stack, server, sse_read_timeout_s)
+                else:
+                    await group.connect_to_server(
+                        StreamableHttpParameters(
+                            url=url,
+                            headers=_server_headers(server),
+                            timeout=timedelta(seconds=10),
+                            sse_read_timeout=timedelta(seconds=sse_read_timeout_s),
+                        )
                     )
-                )
             except Exception as exc:
                 logger.warning("chat: MCP server %r unavailable: %s", server["name"], exc)
         yield group

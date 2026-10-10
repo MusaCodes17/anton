@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
-import { RefreshCw, Watch, Import, Activity, Clock } from 'lucide-react'
+import { RefreshCw, Watch, Import, Activity, Clock, ChevronDown } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Switch } from '@/components/ui/switch'
 import { Input } from '@/components/ui/input'
@@ -11,6 +11,7 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter,
 } from '@/components/ui/dialog'
 import { useOnline } from '@/hooks/useOnline'
+import { useMediaQuery } from '@/hooks/useMediaQuery'
 import { useToast } from '@/components/ui/toast'
 import ScrapeButton from '@/components/ScrapeButton'
 import {
@@ -441,6 +442,12 @@ export default function SettingsSync() {
   const needsAttention = retailers.filter(
     (r) => r.health === 'warning' || r.health === 'error'
   ).length
+  // Phone-only collapse: closed by default below md unless a retailer needs a
+  // look; md+ is always open (the toggle is inert there). null = untouched.
+  const isMd = useMediaQuery('(min-width: 768px)')
+  const [healthToggled, setHealthToggled] = useState(null)
+  const healthOpen = isMd || (healthToggled ?? needsAttention > 0)
+  const healthSummary = `${retailers.length} retailer${retailers.length === 1 ? '' : 's'} · ${needsAttention} ${needsAttention === 1 ? 'needs' : 'need'} attention`
 
   return (
     <div className="space-y-5">
@@ -500,17 +507,33 @@ export default function SettingsSync() {
           retailer a green "Last scan" timestamp would otherwise hide. */}
       <Card>
         <CardHeader>
-          <CardTitle className="flex items-center gap-2 text-base">
-            <Activity className="h-4 w-4 text-accent-foreground" />
-            Retailer health
+          <CardTitle className="text-base">
+            <button
+              type="button"
+              aria-expanded={healthOpen}
+              aria-controls="retailer-health-body"
+              onClick={() => setHealthToggled(!healthOpen)}
+              className="focus-ring flex w-full items-center justify-between gap-2 rounded-md text-left md:pointer-events-none"
+            >
+              <span className="flex items-center gap-2">
+                <Activity className="h-4 w-4 text-accent-foreground" />
+                Retailer health
+              </span>
+              <ChevronDown
+                aria-hidden="true"
+                className={`h-4 w-4 shrink-0 text-muted-foreground transition-transform md:hidden ${healthOpen ? 'rotate-180' : ''}`}
+              />
+            </button>
           </CardTitle>
           <CardDescription>
-            {needsAttention > 0
-              ? `${needsAttention} retailer${needsAttention > 1 ? 's' : ''} need${needsAttention > 1 ? '' : 's'} a look — check its scraper.`
-              : 'Per-retailer results from the most recent scrape of each.'}
+            {!healthOpen && !isMd && retailers.length > 0
+              ? healthSummary
+              : needsAttention > 0
+                ? `${needsAttention} retailer${needsAttention > 1 ? 's' : ''} need${needsAttention > 1 ? '' : 's'} a look — check its scraper.`
+                : 'Per-retailer results from the most recent scrape of each.'}
           </CardDescription>
         </CardHeader>
-        <CardContent>
+        <CardContent id="retailer-health-body" hidden={!healthOpen}>
           {retailers.length === 0 ? (
             <p className="py-2 text-sm text-faint">
               {history.isLoading ? 'Loading…' : 'No retailers configured.'}

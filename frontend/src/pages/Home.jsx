@@ -286,7 +286,7 @@ function ShoeAlertRow({ alert }) {
   return (
     <Link
       to={`/shoes/${alert.id}`}
-      className="focus-ring flex flex-col gap-2 rounded-[12px] border border-border bg-surface p-3.5 hover:border-primary/40 sm:flex-row sm:items-center sm:gap-4"
+      className="focus-ring flex flex-row items-center gap-3 rounded-[12px] border border-border bg-surface p-3.5 hover:border-primary/40 sm:gap-4"
     >
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-2">
@@ -307,7 +307,7 @@ function ShoeAlertRow({ alert }) {
           )}
         </div>
       </div>
-      <div className="flex items-center gap-3 sm:w-48">
+      <div className="flex w-20 shrink-0 items-center gap-2 sm:w-48 sm:gap-3">
         <div className="h-2 flex-1 overflow-hidden rounded-full bg-secondary">
           <div className={cn('h-full rounded-full', barColor)} style={{ width: `${Math.min(100, pct)}%` }} />
         </div>

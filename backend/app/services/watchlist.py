@@ -9,9 +9,10 @@ R2.3: extracted out of `routers/watchlist.py` so the reduction is a service
 (the router is now a thin adapter, CLAUDE.md §4.1) and the same computation can
 back an MCP watchlist tool/resource (R3.4 parity) without re-deriving it.
 
-Personal scale (dozens of shoes, a few thousand price records) makes reducing
-in Python cheaper and clearer than several correlated aggregate subqueries —
-this is a labelled O(N) whole-table pass, not an oversight (CLAUDE.md §12).
+Performance: the price-history reduction (best-ever per shoe, latest per
+shoe+retailer) is done in SQL with window functions (SQLite >= 3.25) and
+selects columns only — loading ~28k PriceRecord ORM objects used to dominate
+the request. Python now only shapes ~N shoes x retailers rows (CLAUDE.md §12).
 """
 from __future__ import annotations
 
@@ -19,6 +20,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Optional
 
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.models.models import Deal, PriceRecord, Retailer, Shoe
@@ -65,15 +67,6 @@ class WatchlistEntry:
     last_seen: list[WatchlistLastSeen] = field(default_factory=list)
 
 
-def _scraped_key(rec: PriceRecord):
-    """Sort key for 'latest' that tolerates a null scraped_at (falls back to id).
-
-    The leading has-timestamp flag keeps a naive fallback from ever being
-    compared against a (possibly tz-aware) real scraped_at.
-    """
-    return (rec.scraped_at is not None, rec.scraped_at or datetime.min, rec.id)
-
-
 def build_watchlist(db: Session) -> list[WatchlistEntry]:
     """
     Every actively-tracked shoe with its best deal, best-ever price, and
@@ -97,22 +90,69 @@ def build_watchlist(db: Session) -> list[WatchlistEntry]:
     ):
         deals_by_shoe.setdefault(deal.shoe_id, []).append(deal)
 
-    # One pass over every relevant price record → best-ever + latest-per-retailer.
-    best_ever: dict[int, PriceRecord] = {}
-    latest_per_retailer: dict[tuple[int, int], PriceRecord] = {}
-    for rec in (
-        db.query(PriceRecord)
-        .filter(PriceRecord.shoe_id.in_(shoe_ids))
-        .all()
-    ):
-        prev_best = best_ever.get(rec.shoe_id)
-        if prev_best is None or rec.price < prev_best.price:
-            best_ever[rec.shoe_id] = rec
+    # Best-ever per shoe, reduced in SQL. Tie rule: lowest price, then lowest id
+    # (the old Python loop used strict `<` in id order, i.e. first record wins).
+    best_rn = (
+        func.row_number()
+        .over(
+            partition_by=PriceRecord.shoe_id,
+            order_by=(PriceRecord.price.asc(), PriceRecord.id.asc()),
+        )
+        .label("rn")
+    )
+    best_sq = (
+        select(PriceRecord.shoe_id, PriceRecord.price, PriceRecord.scraped_at, best_rn)
+        .where(PriceRecord.shoe_id.in_(shoe_ids))
+        .subquery()
+    )
+    best_ever: dict[int, tuple] = {
+        row.shoe_id: (row.price, row.scraped_at)
+        for row in db.execute(
+            select(best_sq.c.shoe_id, best_sq.c.price, best_sq.c.scraped_at).where(best_sq.c.rn == 1)
+        )
+    }
 
-        key = (rec.shoe_id, rec.retailer_id)
-        prev_latest = latest_per_retailer.get(key)
-        if prev_latest is None or _scraped_key(rec) > _scraped_key(prev_latest):
-            latest_per_retailer[key] = rec
+    # Latest record per (shoe, retailer): non-null scraped_at beats null, then
+    # newest scraped_at, then highest id. first_id (min id of the pair) preserves
+    # the old dict-insertion order, which the image fallback below depends on.
+    latest_rn = (
+        func.row_number()
+        .over(
+            partition_by=(PriceRecord.shoe_id, PriceRecord.retailer_id),
+            order_by=(
+                PriceRecord.scraped_at.is_not(None).desc(),
+                PriceRecord.scraped_at.desc(),
+                PriceRecord.id.desc(),
+            ),
+        )
+        .label("rn")
+    )
+    first_id = (
+        func.min(PriceRecord.id)
+        .over(partition_by=(PriceRecord.shoe_id, PriceRecord.retailer_id))
+        .label("first_id")
+    )
+    # Window over narrow columns only (ids), then join back for the payload —
+    # carrying product_url/image_url Text through the window sort was the bulk
+    # of the remaining cost.
+    latest_sq = (
+        select(PriceRecord.id, PriceRecord.shoe_id, PriceRecord.retailer_id, latest_rn, first_id)
+        .where(PriceRecord.shoe_id.in_(shoe_ids))
+        .subquery()
+    )
+    latest_stmt = (
+        select(
+            PriceRecord.shoe_id, PriceRecord.retailer_id, PriceRecord.price,
+            PriceRecord.in_stock, PriceRecord.product_url, PriceRecord.scraped_at,
+            PriceRecord.image_url,
+        )
+        .join(latest_sq, latest_sq.c.id == PriceRecord.id)
+        .where(latest_sq.c.rn == 1)
+        .order_by(latest_sq.c.first_id)
+    )
+    latest_by_shoe: dict[int, list] = {}
+    for row in db.execute(latest_stmt):
+        latest_by_shoe.setdefault(row.shoe_id, []).append(row)
 
     entries: list[WatchlistEntry] = []
     for shoe in shoes:
@@ -134,7 +174,8 @@ def build_watchlist(db: Session) -> list[WatchlistEntry]:
             )
             image_url = best_deal_row.image_url
 
-        best_rec = best_ever.get(shoe.id)
+        best_rec = best_ever.get(shoe.id)  # (price, scraped_at) or None
+        latest_rows = latest_by_shoe.get(shoe.id, [])
 
         last_seen = [
             WatchlistLastSeen(
@@ -145,14 +186,13 @@ def build_watchlist(db: Session) -> list[WatchlistEntry]:
                 product_url=rec.product_url,
                 scraped_at=rec.scraped_at,
             )
-            for (sid, _rid), rec in latest_per_retailer.items()
-            if sid == shoe.id
+            for rec in latest_rows
         ]
         last_seen.sort(key=lambda ls: ls.price)
 
         # Image fallback: best deal's image → any recent price-record image.
         if image_url is None:
-            for rec in (r for (sid, _), r in latest_per_retailer.items() if sid == shoe.id):
+            for rec in latest_rows:
                 if rec.image_url:
                     image_url = rec.image_url
                     break
@@ -168,8 +208,8 @@ def build_watchlist(db: Session) -> list[WatchlistEntry]:
                 image_url=image_url,
                 on_sale=bool(active_deals),
                 best_deal=best_deal,
-                best_ever_price=best_rec.price if best_rec else None,
-                best_ever_at=best_rec.scraped_at if best_rec else None,
+                best_ever_price=best_rec[0] if best_rec else None,
+                best_ever_at=best_rec[1] if best_rec else None,
                 last_seen=last_seen,
             )
         )

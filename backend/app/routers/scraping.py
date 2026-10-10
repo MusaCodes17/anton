@@ -9,7 +9,6 @@ from sse_starlette.sse import EventSourceResponse
 from typing import Optional, List
 
 from app.database import get_db
-from app.models import ScrapeRequest, ScrapeResult
 from app.scrape_runner import run_scrape_job
 from app.scrape_state import scrape_state
 from app.scrapers.orchestrator import ScrapeOrchestrator

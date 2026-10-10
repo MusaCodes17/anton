@@ -20,6 +20,7 @@ import {
   XAxis,
   YAxis,
 } from 'recharts'
+import { useMediaQuery } from '@/hooks/useMediaQuery'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { formatDate, formatDuration } from '@/lib/utils'
@@ -38,6 +39,9 @@ const MUTED = 'var(--muted-foreground)'
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
 
+// Phone chart height (px); sm+ keeps 88. Footers are never hidden (B20).
+const chartHeight = (isSm) => (isSm ? 88 : 64)
+
 const km = (v) => (v == null ? '—' : `${Number(v).toFixed(1)} km`)
 const pace = (s) => (s == null ? '—' : `${formatDuration(s)}/km`)
 
@@ -48,7 +52,7 @@ function NowCard({ eyebrow, children, footer }) {
     <div className="flex min-w-0 flex-col rounded-2xl border border-border bg-card p-4">
       <div className="text-2xs font-bold uppercase tracking-[0.08em] text-faint">{eyebrow}</div>
       <div className="mt-1.5 flex flex-1 flex-col">{children}</div>
-      {footer && <p className="mt-3 text-2xs leading-snug text-faint">{footer}</p>}
+      {footer && <p className="mt-2 text-2xs leading-snug text-faint sm:mt-3">{footer}</p>}
     </div>
   )
 }
@@ -73,7 +77,7 @@ function CardSkeleton() {
       <Skeleton className="h-3 w-16" />
       <Skeleton className="h-5 w-4/5" />
       <Skeleton className="h-3 w-3/5" />
-      <Skeleton className="h-[88px] w-full rounded-[10px]" />
+      <Skeleton className="h-16 w-full sm:h-[88px] rounded-[10px]" />
     </div>
   )
 }
@@ -113,9 +117,10 @@ const LOAD_VERDICT = {
 }
 
 function LoadChart({ weeks }) {
+  const isSm = useMediaQuery('(min-width: 640px)')
   const last = weeks.length - 1
   return (
-    <ResponsiveContainer width="100%" height={88}>
+    <ResponsiveContainer width="100%" height={chartHeight(isSm)}>
       <ComposedChart data={weeks} margin={{ top: 4, right: 0, left: 0, bottom: 0 }} barCategoryGap={2}>
         <XAxis dataKey="period" hide />
         <YAxis hide domain={[0, 'dataMax']} />
@@ -224,13 +229,14 @@ function formVerdictText(form) {
 }
 
 function FormChart({ months }) {
+  const isSm = useMediaQuery('(min-width: 640px)')
   const data = months.map((m) => {
     const [y, mm] = m.month.split('-')
     const mon = MONTHS[parseInt(mm, 10) - 1]
     return { ...m, label: mon, fullLabel: `${mon} ${y}` }
   })
   return (
-    <ResponsiveContainer width="100%" height={88}>
+    <ResponsiveContainer width="100%" height={chartHeight(isSm)}>
       <LineChart data={data} margin={{ top: 6, right: 6, left: 6, bottom: 0 }}>
         <XAxis
           dataKey="label"

@@ -6,7 +6,6 @@ from sqlalchemy import BigInteger, Column, Index, Integer, String, Float, Boolea
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from app.database import Base
-from app.utils.pace import seconds_to_pace  # pure util (R1.5c) — no layer inversion
 
 
 class Shoe(Base):
@@ -107,6 +106,12 @@ class PriceRecord(Base):
     image_url = Column(Text, nullable=True)  # Product image (direct CDN URL)
     colorway = Column(String(200), nullable=True)  # e.g. "Black / White - Grey"
     scraped_at = Column(DateTime(timezone=True), server_default=func.now(), index=True)
+
+    # watchlist window queries (perf 2026-10-10)
+    __table_args__ = (
+        Index("ix_price_records_shoe_price_id", "shoe_id", "price", "id"),
+        Index("ix_price_records_shoe_retailer_scraped_id", "shoe_id", "retailer_id", "scraped_at", "id"),
+    )
 
     # Relationships
     shoe = relationship("Shoe", back_populates="price_records")
@@ -357,43 +362,8 @@ class ShoeRun(Base):
     owned_shoe = relationship("OwnedShoe", back_populates="runs")
     activity = relationship("Activity", back_populates="attribution")
 
-    # Read-only proxies to the canonical activity — so response schemas
-    # (ShoeRunResponse via from_attributes) and any run-field reader keep
-    # working now that run data lives on `activities` (§3 Phase-5).
-    #
-    # WARNING: distance_km, run_date, source, avg_pace, avg_hr, notes,
-    # coros_activity_id are property proxies onto self.activity.
-    # They trigger a lazy load per row if activity is not eager-loaded.
-    # Use joinedload/contains_eager(ShoeRun.activity) at every list query seam.
-    # They also CANNOT be used in .filter() — query Activity columns instead.
-    @property
-    def distance_km(self):
-        return self.activity.distance_km if self.activity else None
-
-    @property
-    def run_date(self):
-        return self.activity.run_date if self.activity else None
-
-    @property
-    def source(self):
-        return self.activity.source if self.activity else None
-
-    @property
-    def avg_hr(self):
-        return self.activity.avg_hr if self.activity else None
-
-    @property
-    def coros_activity_id(self):
-        return self.activity.coros_activity_id if self.activity else None
-
-    @property
-    def notes(self):
-        return self.activity.description if self.activity else None
-
-    @property
-    def avg_pace(self):
-        s = self.activity.avg_pace_s_per_km if self.activity else None
-        return seconds_to_pace(s) if s is not None else None
+    # Run data lives on `activity`; read `shoe_run.activity.<field>` (proxies retired 2026-10-10, B5 superseded).
+    # Eager-load `ShoeRun.activity` (contains_eager) at every list seam; filter on `Activity` columns.
 
     def __repr__(self):
         return f"<ShoeRun activity={self.activity_id} shoe={self.owned_shoe_id}>"

@@ -30,7 +30,6 @@ import hashlib
 import os
 import secrets
 import time
-from typing import TYPE_CHECKING
 from urllib.parse import urlencode
 
 from pydantic import AnyUrl
@@ -42,7 +41,7 @@ from mcp.server.auth.provider import (
     AccessToken,
     AuthorizationCode,
     AuthorizationParams,
-    OAuthAuthorizationServerProvider,
+    OAuthAuthorizationServerProvider,  # noqa: F401  # documents the protocol this class implements
     RefreshToken,
     TokenError,
 )

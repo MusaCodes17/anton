@@ -127,13 +127,13 @@ Placement rules: new business logic → `services/` (never a router, never an MC
 - **Frontend data flow:** `api.js` function → `useApi.js` hook → page. Deep links carry state (`/deals?deal=id`), not globals.
 
 **Known traps (do not rediscover these):**
-- `ShoeRun`'s run fields (`distance_km`, `avg_pace`, …) are **property proxies** onto the joined `Activity`: they trigger lazy loads (N+1 in loops — eager-load the `activity` relationship at list seams) and they **silently do not work in `.filter()`** — query `Activity` columns instead.
+- `ShoeRun` is attribution only: run data lives on `shoe_run.activity` (the property proxies were retired 2026-10-10). Eager-load `ShoeRun.activity` at list seams, and filter on `Activity` columns.
 - Pace: persisted as int seconds/km; `"M:SS/km"` strings are presentation only (`rotation.pace_to_seconds`/`seconds_to_pace`).
 - "Shoe" is ambiguous: `Shoe` = watchlist entry, `OwnedShoe` = physical pair. Name variables accordingly.
 - Timezone: run dates are **America/Toronto local dates**; converting from UTC first is mandatory.
 - The Starlette/FastAPI/sse-starlette pins resolve an `mcp[cli]` conflict — don't bump them independently.
 - MCP tools open sessions via `app.mcp_server._core.get_session()`: tests must patch `app.mcp_server._core.get_session` — patching `app.mcp_server.get_session` silently does nothing. New tools go in the matching domain module and are re-exported from `mcp_server/__init__.py`.
-- `MCP_SERVER_URL` points the chat service back at *this same app*; changing bind/port affects Son of Anton. Since R2.1 the loopback must also send `Authorization: Bearer <ANTON_SECRET>` (injected by `chat_service._server_headers`) — drop it and the assistant *silently* loses all tools with no error.
+- Son of Anton connects to this app's MCP server **in-process** by default (`ANTON_MCP_TRANSPORT=memory`, design_decisions C14), so bind, port and `MCP_SERVER_URL` don't matter. Only `ANTON_MCP_TRANSPORT=http` uses the loopback: there `MCP_SERVER_URL` must reach the app itself and the request must send the `loopback` bearer (`chat_service._server_headers`). Dropping the bearer in http mode *silently* strips every assistant tool, with no error.
 - `strava_stats` imports the private-by-convention `activities._effective_moving_s` — renaming it "safely" inside `activities.py` breaks stats with no import-level signal.
 - COROS tool results are **prose, not JSON**: `coros_mcp_client` parses them with anchored regexes pinned by fixture tests (`tests/fixtures/coros/`). A COROS rewording shows up as a loud `CorosContractError`, never nulls — refresh the fixtures from a live capture (`COROS_LIVE=1`, `scripts/spikes/`) rather than loosening the parser. `COROS_TOKEN_KEY` must be set in the production `.env`; changing it makes stored tokens unreadable (the UI then says "reconnect needed").
 - Router prefixes ↔ `api.js` paths (and the SSE event names on both sides of `useChatStream` / the scrape stream) are hand-matched string contracts — change one side, grep for the other.
@@ -189,7 +189,7 @@ Placement rules: new business logic → `services/` (never a router, never an MC
 
 - **One phase per session; one commit per numbered task.** Plan in a root doc with §-numbered items first if the work spans sessions; cite those §s from code comments.
 - **Seam first, swap later:** isolate the read/write path behind one function, migrate callers to it, then change the internals invisibly (the `activities` seam is the proof).
-- **Compatibility shims are allowed with an expiry:** proxies/re-exports that keep consumers stable during a restructure are good engineering (`ShoeRun` proxies, `scraper_manager`) — but they go on the debt list (`docs/design_decisions.md` verdict ⚠️) and get a removal sweep, not immortality.
+- **Compatibility shims are allowed with an expiry:** proxies/re-exports that keep consumers stable during a restructure are good engineering (`ShoeRun` proxies, retired 2026-10-10; `scraper_manager`, deleted) — but they go on the debt list (`docs/design_decisions.md` verdict ⚠️) and get a removal sweep, not immortality.
 - **Never refactor storage and behavior in the same change.** Phase 5 restructured storage under a "response shapes identical, counters untouched" contract — preserve observable behavior, prove it (reconciliation), then evolve behavior separately.
 - Don't drive-by-fix debt outside the session's phase; note it in the changelog/backlog instead. Exception: correctness bugs.
 - When reversing a documented decision, update `docs/design_decisions.md` (move to Superseded, name the successor) in the same session.
@@ -200,7 +200,7 @@ Placement rules: new business logic → `services/` (never a router, never an MC
 
 - **Budgets that exist:** `GET /api/home` < 200 ms locally (it's the future mobile launch screen). Scrape-all is expected to take 20–30+ min — that's politeness, not slowness; never "optimize" it by removing sleeps.
 - In-Python whole-table passes are **acceptable and labeled** at current scale (~933 activities); if you add one, say so in a comment like the existing ones. The sanctioned path off them is indexed queries against `activities` — take it when a budget is threatened, not before.
-- Watch the real hazards: N+1 via `ShoeRun` proxies (eager-load at list seams); per-request MCP reconnect in chat (known cost); Playwright startup in scrapers (reuse sessions per scraper instance, as `BaseScraper` does).
+- Watch the real hazards: N+1 if `ShoeRun.activity` isn't eager-loaded in a run loop (eager-load at list seams); per-request MCP session in chat (now in-memory, cheaper); Playwright startup in scrapers (reuse sessions per scraper instance, as `BaseScraper` does).
 - Frontend: React Query caching is the performance strategy — correct query keys and invalidations matter more than memoization. Aggregate endpoints exist so pages make one round trip; don't fan out.
 - No premature infrastructure: no caching layers, no task queues, no worker pools without a named budget being missed and a design-decision entry.
 
