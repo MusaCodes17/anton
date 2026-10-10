@@ -16,7 +16,6 @@ import LogRunDialog from '@/components/LogRunDialog'
 import ShoeTypeBadge from '@/components/ShoeTypeBadge'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import {
   Dialog,
@@ -33,6 +32,7 @@ import {
   useOwnedShoe,
   useUpdateOwnedShoe,
   useAdjustMileage,
+  useDeleteOwnedShoe,
   useShoeRuns,
   useDeleteShoeRun,
   useShoeNotes,
@@ -50,7 +50,8 @@ const statusLabel = { active: 'Active', retired: 'Retired', for_sale: 'For sale'
 // Mirrors backend _SOURCE_BADGES: coros → primary, strava → orange, manual → grey.
 const sourceBadgeVariant = { coros: 'default', strava: 'strava', manual: 'secondary' }
 
-const RUN_PAGE_SIZE = 15
+// Kept short to limit phone scrolling; the existing "Show all" control reveals the rest.
+const RUN_PAGE_SIZE = 8
 
 export default function ShoeDetail() {
   const { id } = useParams()
@@ -60,9 +61,11 @@ export default function ShoeDetail() {
   const shoe = shoeQuery.data
 
   const [editing, setEditing] = useState(false)
-  const [adjustingMileage, setAdjustingMileage] = useState(false)
+  const [confirmingDelete, setConfirmingDelete] = useState(false)
   const [loggingRun, setLoggingRun] = useState(false)
   const update = useUpdateOwnedShoe()
+  const adjust = useAdjustMileage()
+  const remove = useDeleteOwnedShoe()
   const { toast } = useToast()
 
   if (shoeQuery.isLoading) {
@@ -73,32 +76,64 @@ export default function ShoeDetail() {
   }
 
   const image = shoe.image_url || shoe.matched_image_url
-  const handleEditSubmit = (payload) => {
+  const limitKm = shoe.mileage_limit ?? 800
+  const recKm = shoe.recommended_limit_km != null ? Math.round(shoe.recommended_limit_km) : null
+  const pastRecommended = recKm != null && limitKm > recKm
+
+  // Saves the PUT first; a mileage correction (newMileage != null) is a separate
+  // sanctioned call because PUT never touches the ledger. The dialog stays open on any
+  // failure so the runner can retry without re-entering everything.
+  const handleEditSubmit = (payload, { newMileage }) => {
     update.mutate(
       { id: shoe.id, data: payload },
       {
         onSuccess: () => {
-          toast({ variant: 'success', title: 'Shoe updated' })
-          setEditing(false)
+          const finish = () => {
+            toast({ variant: 'success', title: 'Shoe updated' })
+            setEditing(false)
+          }
+          if (newMileage != null) {
+            adjust.mutate(
+              { id: shoe.id, newMileage },
+              {
+                onSuccess: finish,
+                onError: (err) => toast({ variant: 'destructive', title: 'Save failed', description: err.message }),
+              }
+            )
+          } else {
+            finish()
+          }
         },
         onError: (err) => toast({ variant: 'destructive', title: 'Save failed', description: err.message }),
       }
     )
   }
 
+  const confirmDelete = () => {
+    remove.mutate(shoe.id, {
+      onSuccess: () => {
+        setConfirmingDelete(false)
+        setEditing(false)
+        navigate('/shoes', { replace: true })
+        toast({ variant: 'success', title: 'Shoe deleted' })
+      },
+      onError: (err) => toast({ variant: 'destructive', title: 'Delete failed', description: err.message }),
+    })
+  }
+
   return (
-    <div className="space-y-8">
+    <div className="space-y-5 sm:space-y-8">
       <Link to="/shoes" className="focus-ring rounded inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground">
         <ArrowLeft className="h-4 w-4" /> Back to Shoes
       </Link>
 
       {/* Header */}
-      <div className="flex flex-col gap-5 sm:flex-row">
-        <div className="flex h-[120px] w-[120px] shrink-0 items-center justify-center overflow-hidden rounded-[14px] bg-placeholder-stripes">
+      <div className="flex flex-row gap-3 sm:gap-5">
+        <div className="flex h-[72px] w-[72px] shrink-0 items-center justify-center overflow-hidden rounded-[14px] bg-placeholder-stripes sm:h-[120px] sm:w-[120px]">
           {image ? (
             <img src={image} alt={shoe.model} className="h-full w-full object-contain" />
           ) : (
-            <Footprints className="h-10 w-10 text-faint" />
+            <Footprints className="h-7 w-7 text-faint sm:h-10 sm:w-10" />
           )}
         </div>
         <div className="min-w-0 flex-1 space-y-2">
@@ -139,23 +174,31 @@ export default function ShoeDetail() {
             <Button size="sm" variant="outline" onClick={() => setEditing(true)}>
               <Pencil className="h-3.5 w-3.5" /> Edit
             </Button>
-            <Button size="sm" variant="outline" onClick={() => setAdjustingMileage(true)}>
-              Adjust mileage
-            </Button>
           </div>
         </div>
       </div>
 
       {/* Stats row */}
-      <div className="grid grid-cols-1 gap-4 rounded-[14px] border border-border bg-surface p-4 sm:grid-cols-3">
+      <div className="space-y-4 rounded-[14px] border border-border bg-surface p-4">
         <div className="space-y-1.5">
           <div className="text-2xs font-bold uppercase tracking-[0.08em] text-faint">Mileage</div>
-          <MileageProgressBar mileage={shoe.current_mileage} limit={shoe.mileage_limit ?? 800} />
+          <MileageProgressBar mileage={shoe.current_mileage} limit={limitKm} />
+          {/* Only shown when the limit exceeds the type's recommendation; the bar already states the limit. */}
+          {pastRecommended && (
+            <div className="text-2xs text-faint">
+              {shoe.current_mileage >= recKm ? (
+                <span className="text-warning">Past the recommended {recKm} km</span>
+              ) : (
+                <>Recommended {recKm} km</>
+              )}
+            </div>
+          )}
         </div>
-        <Stat label="Total runs" value={shoe.total_runs ?? 0} />
-        <div className="flex flex-col gap-1">
-          {shoe.lifetime_avg_pace && <Stat label="Avg pace" value={shoe.lifetime_avg_pace} />}
-          {shoe.lifetime_avg_hr && <Stat label="Avg HR" value={`${shoe.lifetime_avg_hr} bpm`} />}
+        {/* Three columns at every width so the row stays one line on mobile. */}
+        <div className="grid grid-cols-3 gap-3">
+          <Stat label="Total runs" value={shoe.total_runs ?? 0} />
+          <Stat label="Avg pace" value={shoe.lifetime_avg_pace || '—'} />
+          <Stat label="Avg HR" value={shoe.lifetime_avg_hr ? `${shoe.lifetime_avg_hr} bpm` : '—'} />
         </div>
       </div>
 
@@ -173,28 +216,55 @@ export default function ShoeDetail() {
       {/* Run history */}
       <RunHistory ownedShoeId={shoe.id} />
 
-      {/* Edit dialog */}
+      {/* Edit dialog (DialogContent already caps height at 90vh and scrolls) */}
       <Dialog open={editing} onOpenChange={setEditing}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Edit shoe</DialogTitle>
-            <DialogDescription>Update mileage, purchase price, or status for this shoe.</DialogDescription>
+            <DialogDescription>Details, retirement limit and mileage for this shoe.</DialogDescription>
           </DialogHeader>
           <OwnedShoeForm
             initial={shoe}
-            submitting={update.isPending}
+            submitting={update.isPending || adjust.isPending}
             onSubmit={handleEditSubmit}
             onCancel={() => setEditing(false)}
           />
+          <div className="border-t border-border pt-4">
+            <Button
+              type="button"
+              variant="ghost"
+              className="text-destructive hover:text-destructive"
+              onClick={() => setConfirmingDelete(true)}
+            >
+              <Trash2 className="h-3.5 w-3.5" /> Delete shoe
+            </Button>
+          </div>
         </DialogContent>
       </Dialog>
 
-      {/* Adjust mileage */}
-      <AdjustMileageDialog
-        shoe={shoe}
-        open={adjustingMileage}
-        onOpenChange={setAdjustingMileage}
-      />
+      {/* Delete confirmation (wording mirrors MyShoes.jsx) */}
+      <Dialog open={confirmingDelete} onOpenChange={(o) => !o && setConfirmingDelete(false)}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Delete shoe?</DialogTitle>
+            <DialogDescription>
+              {`This removes "${shoe.brand} ${shoe.model}"${
+                shoe.total_runs
+                  ? ` and its ${shoe.total_runs} logged run${shoe.total_runs === 1 ? '' : 's'}`
+                  : ' and its run history'
+              }. This cannot be undone.`}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setConfirmingDelete(false)}>
+              Cancel
+            </Button>
+            <Button variant="destructive" onClick={confirmDelete} disabled={remove.isPending}>
+              {remove.isPending ? 'Deleting…' : 'Delete'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Log run */}
       <LogRunDialog shoe={shoe} open={loggingRun} onOpenChange={setLoggingRun} />
@@ -350,89 +420,8 @@ function Stat({ label, value }) {
   return (
     <div className="space-y-1">
       <div className="text-2xs font-bold uppercase tracking-[0.08em] text-faint">{label}</div>
-      <div className="font-heading text-lg font-bold tabular-nums text-foreground">{value}</div>
+      <div className="font-heading text-base font-bold tabular-nums text-foreground sm:text-lg">{value}</div>
     </div>
-  )
-}
-
-function AdjustMileageDialog({ shoe, open, onOpenChange }) {
-  const [value, setValue] = useState('')
-  const [confirming, setConfirming] = useState(false)
-  const update = useAdjustMileage()
-  const { toast } = useToast()
-
-  const reset = () => {
-    setValue('')
-    setConfirming(false)
-    onOpenChange(false)
-  }
-
-  const parsed = parseFloat(value)
-  const valid = value !== '' && !Number.isNaN(parsed) && parsed >= 0
-
-  const handleConfirm = () => {
-    update.mutate(
-      { id: shoe.id, newMileage: parsed },
-      {
-        onSuccess: () => {
-          toast({ variant: 'success', title: 'Mileage updated' })
-          reset()
-        },
-        onError: (err) => toast({ variant: 'destructive', title: 'Update failed', description: err.message }),
-      }
-    )
-  }
-
-  return (
-    <Dialog open={open} onOpenChange={(o) => !o && reset()}>
-      <DialogContent className="max-w-md">
-        <DialogHeader>
-          <DialogTitle>Adjust mileage</DialogTitle>
-          <DialogDescription>
-            Directly correct this shoe's current mileage. This doesn't log a run.
-          </DialogDescription>
-        </DialogHeader>
-        {!confirming ? (
-          <>
-            <Input
-              type="number"
-              step="0.1"
-              min="0"
-              value={value}
-              onChange={(e) => setValue(e.target.value)}
-              placeholder={String(shoe.current_mileage)}
-              autoFocus
-            />
-            <p className="text-xs text-faint">
-              Mileage is normally derived from your logged runs plus the starting offset. A manual
-              override here creates a discrepancy the next COROS/Strava reconciliation will surface.
-            </p>
-            <DialogFooter>
-              <Button type="button" variant="outline" onClick={reset}>
-                Cancel
-              </Button>
-              <Button type="button" onClick={() => valid && setConfirming(true)} disabled={!valid}>
-                Continue
-              </Button>
-            </DialogFooter>
-          </>
-        ) : (
-          <>
-            <p className="text-sm text-foreground">
-              Set mileage to {parsed} km? This will override the current value of {shoe.current_mileage} km.
-            </p>
-            <DialogFooter>
-              <Button type="button" variant="outline" onClick={() => setConfirming(false)}>
-                Back
-              </Button>
-              <Button type="button" onClick={handleConfirm} disabled={update.isPending}>
-                {update.isPending ? 'Saving…' : 'Confirm'}
-              </Button>
-            </DialogFooter>
-          </>
-        )}
-      </DialogContent>
-    </Dialog>
   )
 }
 

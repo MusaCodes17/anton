@@ -76,11 +76,14 @@ export function useShoesSummary() {
   })
 }
 
+// meta.persist = false keeps large lists out of the IndexedDB snapshot (see
+// lib/queryClient.js persistOptions).
 export function useShoePrices(id) {
   return useQuery({
     queryKey: queryKeys.shoePrices(id),
     queryFn: () => shoesApi.priceHistory(id),
     enabled: !!id,
+    meta: { persist: false },
   })
 }
 
@@ -195,6 +198,7 @@ export function useDeals(params) {
   return useQuery({
     queryKey: queryKeys.deals(params),
     queryFn: () => dealsApi.list(params),
+    meta: { persist: false },
   })
 }
 
@@ -274,6 +278,28 @@ export function useUpdatePreferences() {
   })
 }
 
+// Training page section order/visibility. Same optimistic pattern as the other
+// optimistic hooks in this file (snapshot -> patch cache -> roll back on error ->
+// settle with the server response), so reordering feels instant.
+export function useUpdateTrainingLayout() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (body) => preferencesApi.updateTrainingLayout(body),
+    onMutate: async (body) => {
+      await qc.cancelQueries({ queryKey: queryKeys.preferences() })
+      const previous = qc.getQueryData(queryKeys.preferences())
+      qc.setQueryData(queryKeys.preferences(), (p) => p && ({ ...p, training_layout: body }))
+      return { previous }
+    },
+    onError: (_err, _body, ctx) => {
+      if (ctx?.previous !== undefined) qc.setQueryData(queryKeys.preferences(), ctx.previous)
+    },
+    onSuccess: (data) => {
+      qc.setQueryData(queryKeys.preferences(), data)
+    },
+  })
+}
+
 // ============== HOME ==============
 export function useHome() {
   return useQuery({
@@ -283,10 +309,13 @@ export function useHome() {
 }
 
 // ============== TRAINING ==============
+// Toggling weekly/monthly or the range must not swap the chart for a skeleton,
+// so keep the previous data on screen while the new key loads.
 export function useTrainingSummary(period = 'monthly', range) {
   return useQuery({
     queryKey: queryKeys.trainingSummary(period, range),
     queryFn: () => trainingApi.summary(period, range),
+    placeholderData: keepPreviousData,
   })
 }
 
@@ -531,6 +560,7 @@ export function useWatchlist() {
   return useQuery({
     queryKey: queryKeys.watchlist(),
     queryFn: () => watchlistApi.list(),
+    meta: { persist: false },
   })
 }
 

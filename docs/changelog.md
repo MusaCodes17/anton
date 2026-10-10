@@ -5,6 +5,64 @@
 
 ---
 
+## PWA UI pass — Training order, Shoes cleanup, responsiveness — 2026-10-09
+
+The runner's 7-point list, orchestrated as 13 small tasks. Implementation was done by subagents (haiku/sonnet), and every diff was reviewed here before it was committed.
+
+**[ADDED] Training sections are sortable and hideable; Trends is first** (`lib/trainingLayout.js`, `components/training/CustomizeSectionsDialog.jsx`)
+- A header button opens "Customize Training": up/down arrows and a show/hide switch per section, Reset, and Save. The last visible section can't be hidden.
+- The layout is saved server-side (`settings.get/set_training_layout`, `PUT /api/preferences/training-layout`, returned in `GET /api/preferences`), so phone and laptop match. The default order is Trends · Now · Races · Records · Fitness · Predictions · Activities.
+- Adjacent cards pair up two per row on desktop. Unknown ids are rejected on write and dropped on read; missing ids are appended. No MCP counterpart (E16).
+
+**[CHANGED] Shoes**
+- Cards on `/shoes` are whole-card links; the Log run / Edit / Remove footer is gone.
+- The retirement pipeline previews **two shoes of different types** (`lib/pipeline.js`, worst first), with "See all N →" leading to the new `/shoes/pipeline` page.
+- ShoeDetail: Total runs, Avg pace and Avg HR sit on one line. **Edit** now holds the retirement limit (with the type recommendation and "Reset to N km"), a current-mileage correction and **Delete**.
+  - The Adjust mileage button and dialog are removed. A changed mileage still goes through `adjust-mileage` (INV-1, journaled) and never through the PUT.
+
+**[RESTORED] Editable retirement limit.** `d932e3b` (2026-10-08) was committed only on the local branch `ra-limit-editor` and never pushed or merged, which is why it "disappeared". Its backend was ported: `rotation.set_mileage_limit`, derived `recommended_limit_km`, `PUT mileage_limit: null` resets to the type default, and the MCP tool `set_shoe_mileage_limit`. Its UI was redone inside Edit.
+
+**[PERF] "The page feels unresponsive."** A profiling pass on a live-DB copy found:
+- `GET /api/owned-shoes/`: 47 queries and ~285–580 ms CPU (a 28k-row `LIKE` scan per shoe). Now `attach_computed_fields_bulk`: **4 queries, ~73 ms**.
+- `unified_activities` loaded full ORM entities for 710 runs. It now loads columns only: **~65 → ~17 ms**, and the weekly summary went from ~87 to ~27 ms. Seam unchanged.
+- Training made 2 redundant summary requests (~210 ms CPU); they're removed. The tiles now derive from the 365-day and 12-week queries.
+- Range, date and min-distance inputs are debounced (400 ms). `keepPreviousData` stops the chart flashing a skeleton. Skeletons match the real heights. A failed summary now shows an error instead of "0.0 km".
+- PWA cache:
+  - A `buster` (git hash) keeps an old-shape cache from rehydrating after a deploy.
+  - Persist throttle went from 1 s to 5 s, and the lifetime from 7 d to 24 h. Deals, prices and watchlist are no longer persisted.
+  - `refetchOnReconnect: false` (iOS resume used to refetch every stale query at once).
+  - SSE `/stream` is excluded from the SW cache.
+  - ChatDrawer isn't mounted on phones.
+
+**[CHANGED] Less phone scrolling** (scroll audit S1–S4, S6–S10, S12–S14, S16). These are mobile-first classes; sm+ is unchanged.
+- Page headers: actions sit beside the title, no eyebrow on phones.
+- Card padding is smaller.
+- Two-row activity rows; three-across stat tiles on ActivityDetail, Fitness and the Home strip.
+- Shorter Volume chart (160 px); Home shows 2 top deals.
+- ShoeDetail: a smaller header image and an 8-run history page.
+- Deals filters are two-column.
+
+**[VERIFIED]**
+- Suite **776 → 806 passed + 1 skipped**: `test_mileage_limit` +6, `test_training_layout` +21, `test_owned_shoes_bulk` +3, and `test_size_preference`'s exact-dict assertion now includes `training_layout`.
+- Parity scripts on a live-DB copy: owned-shoes bulk vs per-shoe `MISMATCHES: 0`; `unified_activities` and the summary / records / trends / readiness / home responses are byte-identical before and after.
+- `vite build` clean. Browser pass on a DB copy at 375 px and 1366 px, 0 console errors:
+  - Training reorder + hide → saved → survives reload → Reset.
+  - Pipeline preview picked Puma (tempo) + Neo Zen (daily) and skipped Neo Vista (tempo).
+  - `/shoes/pipeline` → detail.
+  - Edit set limit 800 + mileage 625 → journal note "Mileage manually adjusted from 619.7 km to 625.0 km."
+  - No horizontal page scroll on 9 routes.
+  - Not seen: Delete (only its confirm wiring was reviewed) and real iOS date-wheel behaviour.
+
+**[NOT DONE] / follow-ups**
+- Watchlist endpoint (~1.3 s CPU).
+- Caddy `encode zstd gzip` + lazy routes (a 1.18 MB bundle).
+- A refresh-on-resume handler.
+- Scroll audit S5 (collapsed retailer health), S11 (NowStrip footers) and S15 (Home alert rows) were held back as medium risk.
+- Shoes-page type groups with one shoe each leave half-empty rows on phones; worth a look.
+- `ra-limit-editor` can be deleted once this merges.
+
+---
+
 ## CI — GitHub Actions + a hermetic test env — 2026-10-09
 
 **[ADDED]** `.github/workflows/ci.yml` (PR #57, merged): on every PR and every push to `main`, two parallel jobs.

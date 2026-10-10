@@ -27,7 +27,7 @@ export default function Home() {
   const d = home.data
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 sm:space-y-6">
       <PageHeader eyebrow="HOME" title="Today">
         <ScrapeButton />
       </PageHeader>
@@ -38,7 +38,7 @@ export default function Home() {
         <ErrorState error={home.error} onRetry={home.refetch} />
       ) : (
         <>
-          <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
+          <div className="grid grid-cols-1 gap-4 sm:gap-5 lg:grid-cols-2">
             <TrainingPulse pulse={d?.training_pulse} loading={home.isLoading} />
             <TopDeals deals={d?.top_deals} loading={home.isLoading} />
           </div>
@@ -90,7 +90,7 @@ function CorosInboxBanner() {
 function ModuleCard({ icon: Icon, title, to, viewLabel = 'View all', children }) {
   return (
     <section className="flex flex-col overflow-hidden rounded-2xl border border-border bg-card">
-      <div className="flex items-center justify-between border-b border-border px-5 py-3.5">
+      <div className="flex items-center justify-between border-b border-border px-4 py-3 sm:px-5 sm:py-3.5">
         <div className="flex items-center gap-2.5">
           <Icon className="h-4 w-4 text-primary" />
           <span className="font-heading text-md-plus font-bold text-foreground">{title}</span>
@@ -103,7 +103,7 @@ function ModuleCard({ icon: Icon, title, to, viewLabel = 'View all', children })
           </Button>
         )}
       </div>
-      <div className="flex-1 p-5">{children}</div>
+      <div className="flex-1 p-4 sm:p-5">{children}</div>
     </section>
   )
 }
@@ -205,7 +205,10 @@ function TopDeals({ deals, loading }) {
         </div>
       ) : deals?.length ? (
         <div className="space-y-3">
-          {deals.map((deal) => <TopDealRow key={deal.id} deal={deal} />)}
+          {/* Phones show the top 2 only; sm+ keeps all of them. */}
+          {deals.map((deal, i) => (
+            <TopDealRow key={deal.id} deal={deal} className={i >= 2 ? 'hidden sm:flex' : undefined} />
+          ))}
         </div>
       ) : (
         <div className="flex h-full items-center justify-center rounded-[12px] border border-dashed border-border py-6 text-sm text-muted-foreground">
@@ -216,11 +219,11 @@ function TopDeals({ deals, loading }) {
   )
 }
 
-function TopDealRow({ deal }) {
+function TopDealRow({ deal, className }) {
   return (
     <Link
       to={`/deals?deal=${deal.id}`}
-      className="focus-ring flex items-center gap-3 rounded-[12px] border border-border bg-surface p-3 hover:border-primary/40"
+      className={cn('focus-ring flex items-center gap-3 rounded-[12px] border border-border bg-surface p-3 hover:border-primary/40', className)}
     >
       <div className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-[9px] bg-placeholder-stripes">
         {deal.image_url ? (
@@ -321,7 +324,7 @@ function ActivityStrip({ strip, loading }) {
     return <Skeleton className="h-[64px] w-full rounded-2xl" />
   }
   return (
-    <div className="grid grid-cols-1 gap-3 rounded-2xl border border-border bg-card p-4 sm:grid-cols-3">
+    <div className="grid grid-cols-3 gap-2 rounded-2xl border border-border bg-card p-3 sm:grid-cols-3 sm:gap-3 sm:p-4">
       <StripItem
         icon={RefreshCw}
         label="Last COROS sync"
@@ -346,11 +349,11 @@ function ActivityStrip({ strip, loading }) {
 function StripItem({ icon: Icon, label, value, sub, to }) {
   const body = (
     <div className="flex items-center gap-3">
-      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[10px] bg-surface">
+      <div className="hidden h-9 w-9 shrink-0 items-center justify-center rounded-[10px] bg-surface sm:flex">
         <Icon className="h-4 w-4 text-muted-foreground" />
       </div>
       <div className="min-w-0">
-        <div className="text-2xs font-bold uppercase tracking-[0.08em] text-faint">{label}</div>
+        <div className="truncate text-2xs font-bold uppercase tracking-[0.08em] text-faint">{label}</div>
         <div className="truncate text-sm font-semibold text-foreground">{value}</div>
         {sub && <div className="truncate text-xs text-muted-foreground">{sub}</div>}
       </div>

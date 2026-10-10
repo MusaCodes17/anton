@@ -610,6 +610,20 @@ Supporting choices:
 - Making the checks **required** on `main` is a repository setting (Settings → Branches), not code. It is a human step and isn't enforced by anything in the repo.
 
 **Verdict:** ✅ Keep.
+
+### E16. Training section layout is a server-side UI preference with no MCP counterpart (PWA UI pass, 2026-10-09)
+
+**Chosen:**
+- The Training page's section order and hidden set live in `app_settings` (`training_layout`, JSON) behind `PUT /api/preferences/training-layout`. They're read with `GET /api/preferences`.
+- `TRAINING_SECTIONS` in `services/settings.py` is the closed id set and the default order; the frontend's `lib/trainingLayout.js` mirrors it.
+- Writes are strict (unknown or duplicate ids, or everything hidden → 422). Reads are lenient: corrupt data → the default, and missing ids are appended so a new section always shows.
+
+**Why:**
+- The runner uses the PWA and the laptop, and expects the same layout on both. Browser storage would split per device.
+- **Exception to REST/MCP parity (CLAUDE.md §4.2), deliberately:** this is presentation state for one page. No assistant question needs it, and an MCP tool would only add surface.
+
+**Trade-offs:** the id list exists twice, backend and frontend, and the two must be kept in step. The server validates, so drift shows up as a 422, never as silent corruption.
+**Verdict:** ✅ Keep.
 ---
 
 ## Superseded Decisions (kept as history)

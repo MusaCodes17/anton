@@ -39,7 +39,7 @@ function VolumeTooltip({ active, payload }) {
  * Weekly data carries `rolling_4wk_km` (server-computed, R8.4.2), drawn as a
  * dashed trend line with a one-line key; monthly data has none, so no line.
  */
-export default function VolumeChart({ data, height = 220, xTicks, xTickFormatter }) {
+export default function VolumeChart({ data, xTicks, xTickFormatter }) {
   const lastIndex = data.length - 1
   // Dense ranges (e.g. a year of weekly bars) crowd the hollow history markers,
   // so drop them past a threshold and let the line carry the trend. The accented
@@ -71,58 +71,61 @@ export default function VolumeChart({ data, height = 220, xTicks, xTickFormatter
 
   return (
     <>
-      <ResponsiveContainer width="100%" height={height}>
-        <ComposedChart data={data} margin={{ top: 12, right: 4, left: 0, bottom: 0 }}>
-          <defs>
-            <linearGradient id="volumeFill" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor={GREEN} stopOpacity={0.26} />
-              <stop offset="100%" stopColor={GREEN} stopOpacity={0} />
-            </linearGradient>
-          </defs>
-          <CartesianGrid strokeDasharray="3 3" stroke="var(--chart-grid)" vertical={false} />
-          <XAxis
-            dataKey="label"
-            tick={{ fontSize: 11, fill: 'var(--faint)' }}
-            stroke="var(--chart-grid)"
-            fontFamily="JetBrains Mono, monospace"
-            {...(xTicks ? { ticks: xTicks } : { interval: 'preserveStartEnd' })}
-            {...(xTickFormatter ? { tickFormatter: xTickFormatter } : {})}
-            tickMargin={8}
-          />
-          <YAxis
-            orientation="right"
-            tick={{ fontSize: 11, fill: 'var(--faint)' }}
-            stroke="var(--chart-grid)"
-            fontFamily="JetBrains Mono, monospace"
-            tickFormatter={(v) => `${v} km`}
-            width={52}
-            tickCount={3}
-          />
-          <Tooltip cursor={{ stroke: GREEN, strokeOpacity: 0.35, strokeWidth: 1 }} content={<VolumeTooltip />} />
-          <Area
-            type="monotone"
-            dataKey="total_km"
-            stroke={GREEN}
-            strokeWidth={2.5}
-            fill="url(#volumeFill)"
-            dot={renderDot}
-            activeDot={{ r: 5, fill: GREEN, stroke: 'var(--card)', strokeWidth: 2 }}
-            isAnimationActive={false}
-          />
-          {showRolling && (
-            <Line
+      {/* Height lives on the wrapper: 160px on phones, 220px from sm up. */}
+      <div className="h-[160px] sm:h-[220px]">
+        <ResponsiveContainer width="100%" height="100%">
+          <ComposedChart data={data} margin={{ top: 12, right: 4, left: 0, bottom: 0 }}>
+            <defs>
+              <linearGradient id="volumeFill" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stopColor={GREEN} stopOpacity={0.26} />
+                <stop offset="100%" stopColor={GREEN} stopOpacity={0} />
+              </linearGradient>
+            </defs>
+            <CartesianGrid strokeDasharray="3 3" stroke="var(--chart-grid)" vertical={false} />
+            <XAxis
+              dataKey="label"
+              tick={{ fontSize: 11, fill: 'var(--faint)' }}
+              stroke="var(--chart-grid)"
+              fontFamily="JetBrains Mono, monospace"
+              {...(xTicks ? { ticks: xTicks } : { interval: 'preserveStartEnd' })}
+              {...(xTickFormatter ? { tickFormatter: xTickFormatter } : {})}
+              tickMargin={8}
+            />
+            <YAxis
+              orientation="right"
+              tick={{ fontSize: 11, fill: 'var(--faint)' }}
+              stroke="var(--chart-grid)"
+              fontFamily="JetBrains Mono, monospace"
+              tickFormatter={(v) => `${v} km`}
+              width={52}
+              tickCount={3}
+            />
+            <Tooltip cursor={{ stroke: GREEN, strokeOpacity: 0.35, strokeWidth: 1 }} content={<VolumeTooltip />} />
+            <Area
               type="monotone"
-              dataKey="rolling_4wk_km"
-              stroke={ROLLING}
-              strokeWidth={1.5}
-              strokeDasharray="4 3"
-              dot={false}
-              activeDot={false}
+              dataKey="total_km"
+              stroke={GREEN}
+              strokeWidth={2.5}
+              fill="url(#volumeFill)"
+              dot={renderDot}
+              activeDot={{ r: 5, fill: GREEN, stroke: 'var(--card)', strokeWidth: 2 }}
               isAnimationActive={false}
             />
-          )}
-        </ComposedChart>
-      </ResponsiveContainer>
+            {showRolling && (
+              <Line
+                type="monotone"
+                dataKey="rolling_4wk_km"
+                stroke={ROLLING}
+                strokeWidth={1.5}
+                strokeDasharray="4 3"
+                dot={false}
+                activeDot={false}
+                isAnimationActive={false}
+              />
+            )}
+          </ComposedChart>
+        </ResponsiveContainer>
+      </div>
       {showRolling && (
         <div className="mt-2 flex items-center gap-1.5 text-xs text-faint">
           <svg width="18" height="6" aria-hidden="true">

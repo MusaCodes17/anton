@@ -19,13 +19,19 @@ const VIEWS = [
 export default function RecordsCard({ records }) {
   const [view, setView] = useState('race_pbs')
   const list = records.data?.[view] ?? []
+  // The explainer is hidden on phones to save height; its text rides on the
+  // heading's title attribute so it stays reachable.
+  const explainer =
+    view === 'race_pbs'
+      ? 'Runs tagged Race or Parkrun, or linked to a race. Elapsed time.'
+      : 'The fastest stretch inside any run, like a 5k inside a 10k race. Elapsed time.'
 
   return (
     <div className="rounded-2xl border border-border bg-card">
       <div className="flex items-center justify-between gap-3 border-b border-border px-5 py-3">
         <div className="flex items-center gap-2.5">
           <Trophy className="h-4 w-4 text-primary" />
-          <span className="font-heading text-md-plus font-bold text-foreground">Records</span>
+          <span className="font-heading text-md-plus font-bold text-foreground" title={explainer}>Records</span>
         </div>
         <div className="flex rounded-lg border border-border p-0.5">
           {VIEWS.map((v) => (
@@ -57,16 +63,12 @@ export default function RecordsCard({ records }) {
           <ErrorState error={records.error} onRetry={records.refetch} />
         ) : list.length ? (
           <div className="space-y-3">
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-2 gap-2 sm:gap-3">
               {list.map((r) => (
                 <PBCard key={r.band} record={r} />
               ))}
             </div>
-            <p className="text-xs text-muted-foreground">
-              {view === 'race_pbs'
-                ? 'Runs tagged Race or Parkrun, or linked to a race. Elapsed time.'
-                : 'The fastest stretch inside any run, like a 5k inside a 10k race. Elapsed time.'}
-            </p>
+            <p className="hidden text-xs text-muted-foreground sm:block">{explainer}</p>
           </div>
         ) : view === 'race_pbs' ? (
           <EmptyState

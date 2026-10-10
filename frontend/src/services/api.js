@@ -320,6 +320,8 @@ export const preferencesApi = {
   get: () => client.get('/api/preferences').then((r) => r.data),
   // Body { preferred_size: string|null, hide_other_sizes: bool }; a bad size is a 422.
   update: (body) => client.put('/api/preferences', body).then((r) => r.data),
+  // Body { order: [ids], hidden: [ids] }; unknown/duplicate ids or all-hidden is a 422.
+  updateTrainingLayout: (body) => client.put('/api/preferences/training-layout', body).then((r) => r.data),
 }
 
 // ============== COROS DIRECT SYNC (R5.7) ==============

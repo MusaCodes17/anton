@@ -444,7 +444,7 @@ export default function SettingsSync() {
 
   return (
     <div className="space-y-5">
-    <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
+    <div className="grid grid-cols-1 gap-4 sm:gap-5 sm:grid-cols-2">
       {/* Deal scraping */}
       <Card>
         <CardHeader>

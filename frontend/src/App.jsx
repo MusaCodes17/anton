@@ -1,6 +1,7 @@
 import { Routes, Route, Navigate, useParams } from 'react-router-dom'
 import Layout from '@/components/layout/Layout'
 import ChatDrawer from '@/components/ChatDrawer'
+import { useMediaQuery } from '@/hooks/useMediaQuery'
 import Home from '@/pages/Home'
 import Deals from '@/pages/Deals'
 import Training from '@/pages/Training'
@@ -9,6 +10,7 @@ import Retailers from '@/pages/Retailers'
 import NewRuns from '@/pages/NewRuns'
 import MyShoes from '@/pages/MyShoes'
 import ShoeDetail from '@/pages/ShoeDetail'
+import ShoePipeline from '@/pages/ShoePipeline'
 import ActivityDetail from '@/pages/ActivityDetail'
 import ChatPage from '@/pages/ChatPage'
 import Settings from '@/pages/Settings'
@@ -21,6 +23,10 @@ function RedirectShoeDetail() {
 }
 
 export default function App() {
+  // ChatDrawer's open button is md+ only, so on phones the drawer is unreachable.
+  // Mount it only at md+ (768px) so its useChatStream and fixed overlay don't run
+  // on phones. Desktop is unchanged.
+  const isDesktop = useMediaQuery('(min-width: 768px)')
   return (
     <>
       <Routes>
@@ -31,6 +37,7 @@ export default function App() {
           <Route path="deals" element={<Deals />} />
           <Route path="new-runs" element={<NewRuns />} />
           <Route path="shoes" element={<MyShoes />} />
+          <Route path="shoes/pipeline" element={<ShoePipeline />} />
           <Route path="shoes/:id" element={<ShoeDetail />} />
           <Route path="assistant" element={<ChatPage />} />
 
@@ -50,7 +57,7 @@ export default function App() {
           <Route path="*" element={<Navigate to="/" replace />} />
         </Route>
       </Routes>
-      <ChatDrawer />
+      {isDesktop && <ChatDrawer />}
     </>
   )
 }

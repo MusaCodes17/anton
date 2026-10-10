@@ -75,7 +75,11 @@ def test_router_persists_size_and_hide_toggle(db):
     out = prefs_router.update_preferences(
         prefs_router.PreferencesUpdate(preferred_size="10", hide_other_sizes=True), db
     )
-    assert out == {"preferred_size": 10.0, "hide_other_sizes": True}
+    assert out == {
+        "preferred_size": 10.0,
+        "hide_other_sizes": True,
+        "training_layout": settings_svc.get_training_layout(db),
+    }
 
 
 # ---- deals + digest -------------------------------------------------------

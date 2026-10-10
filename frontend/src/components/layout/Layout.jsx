@@ -265,7 +265,7 @@ export default function Layout() {
           // pb-8 on mobile: the tab bar sits below <main>, so no FAB or
           // home-indicator clearance is needed any more; sm:p-6 restores
           // normal padding on wider screens.
-          <div className="p-4 pb-8 sm:p-6 lg:px-[34px] lg:py-[30px]">
+          <div className="p-4 pb-4 sm:pb-8 sm:p-6 lg:px-[34px] lg:py-[30px]">
             <Outlet />
           </div>
         )}
