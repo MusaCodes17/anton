@@ -6,9 +6,10 @@ Re-exported from `app.models.schemas`.
 from datetime import datetime
 from typing import List, Optional
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from app.models.schemas._common import validate_optional_shoe_type
+from app.scrapers.platform_detection import ALGOLIA_REQUIRED_KEYS
 
 
 # ============== SHOE SCHEMAS ==============
@@ -54,13 +55,49 @@ class ShoeResponse(ShoeBase):
 
 # ============== RETAILER SCHEMAS ==============
 
+class ScraperConfig(BaseModel):
+    """Input schema for `Retailer.scraper_config`: validates the *types* of the
+    known keys and the Algolia all-or-nothing rule at the API boundary (a
+    malformed config 422s here instead of failing at scrape time). Unknown keys
+    are allowed (bespoke scrapers read their own). The column stays plain JSON:
+    use `as_stored()` to get the dict that is persisted."""
+    model_config = ConfigDict(extra="allow")
+
+    algolia_app_id: Optional[str] = None
+    algolia_api_key: Optional[str] = None
+    algolia_index: Optional[str] = None
+    algolia_product_path: Optional[str] = None
+    homepage_url: Optional[str] = None
+    search_selector: Optional[str] = None
+    product_path: Optional[str] = None
+    use_browser: Optional[bool] = None
+    unscrapable: Optional[bool] = None
+    unscrapable_reason: Optional[str] = None
+    notes: Optional[str] = None
+
+    @model_validator(mode="after")
+    def _algolia_keys_all_or_nothing(self):
+        if any(getattr(self, k) for k in ALGOLIA_REQUIRED_KEYS):
+            missing = [k for k in ALGOLIA_REQUIRED_KEYS if not getattr(self, k)]
+            if missing:
+                raise ValueError(
+                    "Algolia scraper_config needs all of "
+                    f"{', '.join(ALGOLIA_REQUIRED_KEYS)}; missing: {', '.join(missing)}"
+                )
+        return self
+
+    def as_stored(self) -> dict:
+        """The plain dict to persist: unset keys omitted, extras included."""
+        return self.model_dump(exclude_none=True)
+
+
 class RetailerBase(BaseModel):
     """Base schema for retailer data"""
     name: str = Field(..., min_length=1, max_length=200, description="Retailer name")
     base_url: str = Field(..., description="Retailer base URL")
     is_active: bool = Field(True, description="Whether retailer is enabled")
     scraping_enabled: bool = Field(True, description="Whether to scrape this retailer")
-    scraper_config: Optional[dict] = Field(
+    scraper_config: Optional[ScraperConfig] = Field(
         None,
         description=(
             "Scraper configuration. For platform='algolia' must include "
@@ -90,7 +127,7 @@ class RetailerUpdate(BaseModel):
     base_url: Optional[str] = None
     is_active: Optional[bool] = None
     scraping_enabled: Optional[bool] = None
-    scraper_config: Optional[dict] = None
+    scraper_config: Optional[ScraperConfig] = None
     platform: Optional[str] = None
 
 
@@ -131,6 +168,9 @@ class RetailerResponse(RetailerBase):
     created_at: datetime
     updated_at: Optional[datetime] = None
     active_promo_codes: list[PromoCodeResponse] = []
+    # Responses return the stored dict verbatim (legacy rows may hold keys or
+    # shapes the input schema would reject); only inputs are validated.
+    scraper_config: Optional[dict] = None
 
     class Config:
         from_attributes = True

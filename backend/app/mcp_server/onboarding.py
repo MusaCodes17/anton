@@ -1,6 +1,9 @@
 """Retailer-onboarding MCP surface: queue, probe, onboard, mark unscrapable."""
 from typing import Optional
 
+from pydantic import ValidationError
+
+from app.models.schemas import ScraperConfig
 from app.services import onboarding as onboarding_svc
 from app.mcp_server import _core
 from app.mcp_server._core import mcp
@@ -96,10 +99,17 @@ def onboard_retailer(
                 "scraping. Re-call with confirm=True to apply."
             ),
         }
+    stored_config = None
+    if scraper_config is not None:
+        try:
+            stored_config = ScraperConfig.model_validate(scraper_config).as_stored()
+        except ValidationError as e:
+            msg = "; ".join(err["msg"].removeprefix("Value error, ") for err in e.errors())
+            return {"success": False, "error": f"Invalid scraper_config: {msg}"}
     try:
         with _core.get_session() as db:
             retailer = onboarding_svc.apply_onboarding(
-                db, retailer_id, platform=platform, scraper_config=scraper_config
+                db, retailer_id, platform=platform, scraper_config=stored_config
             )
             return {
                 "success": True,
