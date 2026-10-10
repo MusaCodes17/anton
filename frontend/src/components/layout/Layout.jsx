@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react'
+import { Suspense, useEffect, useRef } from 'react'
 import { Link, NavLink, Outlet, useLocation } from 'react-router-dom'
 import { Home, Activity, Tag, Sparkles, Settings as SettingsIcon, LogOut } from 'lucide-react'
 import { cn } from '@/lib/utils'
@@ -7,8 +7,10 @@ import { useDashboardStats } from '@/hooks/useApi'
 import { formatRelativeTime } from '@/lib/utils'
 import BrandMark from '@/components/layout/BrandMark'
 import ShoeIcon from '@/components/icons/ShoeIcon'
+import { RowSkeleton } from '@/components/StatusViews'
 import OfflineIndicator from '@/components/pwa/OfflineIndicator'
 import { useKeyboardViewport } from '@/hooks/useKeyboardViewport'
+import { useResumeRefresh } from '@/hooks/useResumeRefresh'
 
 // `short` is the bottom tab bar label (five tabs at 380px leave ~76px each);
 // `also` lists child routes that should light the tab, e.g. an activity
@@ -173,6 +175,8 @@ function Brand({ onHome }) {
 }
 
 export default function Layout() {
+  // Not React Query's refetchOnWindowFocus: that fires on every focus (the storm).
+  useResumeRefresh()
   const stats = useDashboardStats()
   const location = useLocation()
   // Chat manages its own internal scroll regions and needs the full
@@ -259,16 +263,34 @@ export default function Layout() {
           (chat) just fills this box and ChatPage's own h-full takes over its
           internal scrolling; padded routes scroll here. */}
       <main ref={mainRef} className="min-h-0 flex-1 overflow-y-auto md:pl-[236px]">
-        {isFullBleed ? (
-          <Outlet />
-        ) : (
-          // pb-8 on mobile: the tab bar sits below <main>, so no FAB or
-          // home-indicator clearance is needed any more; sm:p-6 restores
-          // normal padding on wider screens.
-          <div className="p-4 pb-4 sm:pb-8 sm:p-6 lg:px-[34px] lg:py-[30px]">
+        {/* Suspense sits here, inside the shell, so the header and tab bar stay
+            mounted while a lazily-loaded route chunk is fetched (App.jsx). The
+            fallback reuses the existing RowSkeleton, in the same padding the
+            page itself would use. */}
+        <Suspense
+          fallback={
+            isFullBleed ? (
+              <div className="p-4 sm:p-6">
+                <RowSkeleton count={5} />
+              </div>
+            ) : (
+              <div className="p-4 sm:p-6 lg:px-[34px] lg:py-[30px]">
+                <RowSkeleton count={5} />
+              </div>
+            )
+          }
+        >
+          {isFullBleed ? (
             <Outlet />
-          </div>
-        )}
+          ) : (
+            // pb-8 on mobile: the tab bar sits below <main>, so no FAB or
+            // home-indicator clearance is needed any more; sm:p-6 restores
+            // normal padding on wider screens.
+            <div className="p-4 pb-4 sm:pb-8 sm:p-6 lg:px-[34px] lg:py-[30px]">
+              <Outlet />
+            </div>
+          )}
+        </Suspense>
       </main>
 
       <MobileTabBar onReselect={scrollToTop} />
