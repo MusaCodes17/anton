@@ -1,4 +1,5 @@
 """Deal-watching MCP surface: deals, watchlist, retailers, scraping, price history, coupons."""
+from dataclasses import asdict
 from typing import List, Optional
 from datetime import datetime
 
@@ -7,7 +8,8 @@ from sqlalchemy import desc, func
 from app.models.models import Deal, PriceRecord, Retailer, Shoe
 from app.scrapers.orchestrator import ScrapeOrchestrator
 from app.scrapers.lock import ScrapeInProgressError, scrape_guard
-from app.services import settings as settings_svc, scrape_history as scrape_history_svc, deals as deals_svc, watchlist as watchlist_svc, deal_alerts as deal_alerts_svc, coupon_hunter as coupon_hunter_svc
+from app.services import settings as settings_svc, scrape_history as scrape_history_svc, deals as deals_svc, watchlist as watchlist_svc, deal_alerts as deal_alerts_svc, coupon_hunter as coupon_hunter_svc, purchase_draft as purchase_draft_svc
+from app.models.schemas import PurchaseDraftResponse
 from app.mcp_server import _core
 from app.mcp_server._core import mcp
 from app.mcp_server._shared import _deal_to_dict, _format_relative_time, _watchlist_entry_payload
@@ -72,6 +74,38 @@ def get_shoe_deals(brand: str, model: str) -> List[dict]:
     with _core.get_session() as db:
         deals = deals_svc.list_deals(db, brand=brand, model=model)
         return [_deal_to_dict(d) for d in deals]
+
+
+@mcp.tool()
+def draft_purchase_from_deal(deal_id: int) -> dict:
+    """
+    Draft an owned-shoe record from a deal, for when the runner says they bought
+    a shoe they saw on sale ("I bought the Adios from that deal").
+
+    This only DRAFTS: it writes nothing and links nothing. It returns the fields
+    to prefill the add-shoe form: brand, model, shoe_type (only if it is a known
+    owned-shoe type, otherwise null), purchase_price (the deal's current price),
+    purchase_date (today, Toronto), purchase_retailer, purchase_url, image_url,
+    colorway, plus deal_id and deal_active (false if the deal has expired, which
+    is fine: the runner may have bought it before then).
+
+    Before saving, the runner must review the price: coupons, size pricing or an
+    in-store purchase often change what was actually paid. Saving is a separate
+    step the runner does in the app (the owned-shoe create form, POST
+    /api/owned-shoes/). There is no MCP tool that creates an owned shoe, and
+    add_shoe is NOT the right tool here: it only adds a watchlist shoe.
+
+    Args:
+        deal_id: The deal's id, as returned by get_deals or get_shoe_deals.
+
+    Returns the draft dict on success, or {"error": "..."} if the deal does not exist.
+    """
+    with _core.get_session() as db:
+        try:
+            draft = purchase_draft_svc.purchase_draft_from_deal(db, deal_id)
+        except LookupError as exc:
+            return {"error": str(exc)}
+        return PurchaseDraftResponse(**asdict(draft)).model_dump(mode="json")
 
 
 @mcp.tool()

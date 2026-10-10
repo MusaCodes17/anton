@@ -1,6 +1,7 @@
 """
 Deals API — thin adapter over services/deals.py.
 """
+from dataclasses import asdict
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -8,7 +9,9 @@ from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.models import DealResponse
+from app.models.schemas import PurchaseDraftResponse
 from app.services import deals as deals_svc
+from app.services import purchase_draft as purchase_draft_svc
 
 router = APIRouter(prefix="/deals", tags=["deals"])
 
@@ -38,6 +41,16 @@ def get_deal(deal_id: int, db: Session = Depends(get_db)):
     if not deal:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Deal {deal_id} not found")
     return deal
+
+
+@router.get("/{deal_id}/purchase-draft", response_model=PurchaseDraftResponse)
+def get_purchase_draft(deal_id: int, db: Session = Depends(get_db)):
+    """R5.3 "Bought it" prefill. Read-only; saving is POST /owned-shoes/."""
+    try:
+        draft = purchase_draft_svc.purchase_draft_from_deal(db, deal_id)
+    except LookupError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
+    return PurchaseDraftResponse(**asdict(draft))
 
 
 @router.put("/{deal_id}/deactivate", response_model=DealResponse)

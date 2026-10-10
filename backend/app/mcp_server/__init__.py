@@ -38,6 +38,7 @@ from app.mcp_server.deals import (
     get_coupon_opportunities,
     hunt_coupons,
     coupon_digest,
+    draft_purchase_from_deal,
 )
 from app.mcp_server.shoes import (
     get_owned_shoes,
@@ -110,6 +111,7 @@ __all__ = [
     "get_coupon_opportunities",
     "hunt_coupons",
     "coupon_digest",
+    "draft_purchase_from_deal",
     "get_owned_shoes",
     "get_shoe_runs",
     "log_run_to_shoe",

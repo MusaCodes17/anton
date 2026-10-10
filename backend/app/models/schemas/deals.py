@@ -3,7 +3,7 @@ Pydantic schemas for the deal-watching domain: watchlist shoes, retailers,
 promo codes, price records, deals, dashboard stats and scrape requests.
 Re-exported from `app.models.schemas`.
 """
-from datetime import datetime
+from datetime import date, datetime
 from typing import List, Optional
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
@@ -255,6 +255,22 @@ class DealResponse(DealBase):
 
     class Config:
         from_attributes = True
+
+
+class PurchaseDraftResponse(BaseModel):
+    """R5.3 — prefill for the add-owned-shoe form, built from a deal. Read-only:
+    nothing here is stored or linked; the runner reviews and saves via POST /owned-shoes/."""
+    brand: str
+    model: str
+    shoe_type: Optional[str] = Field(None, description="Watchlist type if it is in the owned-shoe vocabulary, else null")
+    purchase_price: float = Field(..., description="The deal's current price; edit to the price actually paid")
+    purchase_date: date = Field(..., description="Toronto local date of drafting, unless pinned")
+    purchase_retailer: Optional[str] = None
+    purchase_url: Optional[str] = None
+    image_url: Optional[str] = None
+    colorway: Optional[str] = None
+    deal_id: int
+    deal_active: bool = Field(..., description="False when the deal has expired; the draft is still valid")
 
 
 # ============== DASHBOARD SCHEMAS ==============
