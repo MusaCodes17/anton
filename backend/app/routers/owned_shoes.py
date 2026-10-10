@@ -31,8 +31,7 @@ def get_owned_shoes(status_filter: str = None, db: Session = Depends(get_db)):
     if status_filter:
         query = query.filter(OwnedShoe.status == status_filter)
     shoes = query.order_by(OwnedShoe.created_at.desc()).all()
-    for shoe in shoes:
-        rotation.attach_computed_fields(db, shoe)
+    rotation.attach_computed_fields_bulk(db, shoes)
     return shoes
 
 

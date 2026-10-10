@@ -547,7 +547,8 @@ def get_owned_shoes(status_filter: Optional[str] = None) -> List[dict]:
         if status_filter:
             query = query.filter(OwnedShoe.status == status_filter)
         shoes = query.order_by(OwnedShoe.created_at.desc()).all()
-        return [_owned_shoe_to_dict(s, rotation.compute_lifetime_stats(db, s.id)) for s in shoes]
+        stats = rotation.compute_lifetime_stats_bulk(db, [s.id for s in shoes])
+        return [_owned_shoe_to_dict(s, stats[s.id]) for s in shoes]
 
 
 @mcp.tool()

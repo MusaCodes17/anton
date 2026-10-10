@@ -136,6 +136,39 @@ def compute_lifetime_stats(db: Session, owned_shoe_id: int) -> LifetimeStats:
     )
 
 
+def compute_lifetime_stats_bulk(db: Session, owned_shoe_ids: list[int]) -> dict[int, LifetimeStats]:
+    """
+    ``compute_lifetime_stats`` for many shoes in ONE query. Same arithmetic
+    (plain mean of pace, rounded mean of HR, total_runs counts every attributed
+    activity), same ``Activity`` columns (not ShoeRun proxies; CLAUDE.md §6).
+    Every requested id is present in the result (no runs -> empty stats).
+    """
+    rows = (
+        db.query(ShoeRun.owned_shoe_id, Activity.avg_pace_s_per_km, Activity.avg_hr)
+        .join(Activity, ShoeRun.activity_id == Activity.id)
+        .filter(ShoeRun.owned_shoe_id.in_(owned_shoe_ids))
+        .all()
+    ) if owned_shoe_ids else []
+    paces: dict[int, list] = {}
+    hrs: dict[int, list] = {}
+    totals: dict[int, int] = {}
+    for sid, pace, hr in rows:
+        totals[sid] = totals.get(sid, 0) + 1
+        if pace is not None:
+            paces.setdefault(sid, []).append(pace)
+        if hr is not None:
+            hrs.setdefault(sid, []).append(hr)
+    out: dict[int, LifetimeStats] = {}
+    for sid in owned_shoe_ids:
+        p, h = paces.get(sid), hrs.get(sid)
+        out[sid] = LifetimeStats(
+            lifetime_avg_pace=seconds_to_pace(sum(p) / len(p)) if p else None,
+            lifetime_avg_hr=round(sum(h) / len(h)) if h else None,
+            total_runs=totals.get(sid, 0),
+        )
+    return out
+
+
 def cost_per_km(shoe: OwnedShoe) -> Optional[float]:
     """Purchase price divided by current mileage, rounded to 2dp. None if not computable."""
     if shoe.purchase_price and shoe.current_mileage > 0:
@@ -300,6 +333,91 @@ def attach_computed_fields(db: Session, shoe: OwnedShoe) -> OwnedShoe:
     # after the limit has been raised past it.
     shoe.recommended_limit_km = default_mileage_limit(shoe.shoe_type)
     return shoe
+
+
+_ASCII_LOWER = {c: c + 32 for c in range(ord("A"), ord("Z") + 1)}
+
+
+def _ascii_lower(text: str) -> str:
+    """SQLite's lower() (and LIKE) fold ASCII only; Python's str.lower() folds
+    Unicode too, so mirror SQLite exactly to keep matching identical."""
+    return text.translate(_ASCII_LOWER)
+
+
+def find_matched_images_bulk(db: Session, shoes: list[OwnedShoe]) -> dict[int, Optional[str]]:
+    """
+    ``find_matched_image`` for many shoes: one pass over price_records instead
+    of one scan per shoe. The per-shoe SQL has no ORDER BY and SQLite plans it
+    as a rowid-order SCAN, so "first match" == lowest price_records.id; this
+    reproduces that by iterating in id order. Shoes whose brand/model contain
+    LIKE wildcards (% or _) fall back to the per-shoe query, since a Python
+    substring test would not match LIKE semantics there.
+    """
+    result: dict[int, Optional[str]] = {}
+    pending: list[OwnedShoe] = []
+    for sh in shoes:
+        if sh.image_url:
+            continue
+        if any(ch in (sh.brand + sh.model) for ch in "%_"):
+            result[sh.id] = find_matched_image(db, sh.brand, sh.model)
+        else:
+            pending.append(sh)
+    if not pending:
+        return result
+    tracked = [
+        (sid, _ascii_lower(b), _ascii_lower(m))
+        for sid, b, m in db.query(Shoe.id, Shoe.brand, Shoe.model).all()
+        if b is not None and m is not None
+    ]
+    keys = {(_ascii_lower(sh.brand), _ascii_lower(sh.model)) for sh in pending}
+    matching_ids = {
+        (bl, ml): {sid for sid, b, m in tracked if bl in b and ml in m} for bl, ml in keys
+    }
+    rows = [
+        (sid, None if cw is None else _ascii_lower(cw), img)
+        # Scrapes re-insert the same (shoe, colorway, image) every run; collapsing
+        # to the earliest id per distinct triple keeps "first match by id"
+        # identical while fetching ~1k rows instead of ~28k.
+        for sid, cw, img, _first_id in db.query(
+            PriceRecord.shoe_id, PriceRecord.colorway, PriceRecord.image_url, func.min(PriceRecord.id)
+        )
+        .filter(PriceRecord.image_url.isnot(None))
+        .group_by(PriceRecord.shoe_id, PriceRecord.colorway, PriceRecord.image_url)
+        .order_by(func.min(PriceRecord.id))
+        .all()
+    ]
+    for sh in pending:
+        key = (_ascii_lower(sh.brand), _ascii_lower(sh.model))
+        ids, ml = matching_ids[key], key[1]
+        result[sh.id] = next(
+            (img for sid, cw, img in rows if (cw is not None and ml in cw) or sid in ids), None
+        )
+    return result
+
+
+def attach_computed_fields_bulk(db: Session, shoes: list[OwnedShoe]) -> list[OwnedShoe]:
+    """
+    ``attach_computed_fields`` over a list with a constant number of queries
+    (lifetime stats: 1; matched images: 2) — identical attributes and values.
+
+    Personal-scale in-Python pass (CLAUDE.md §12): the per-shoe path cost
+    ~410-580 ms CPU / 47 queries for 23 shoes on GET /api/owned-shoes (a
+    lower(colorway) LIKE scan over ~28k price_records per shoe plus 1-2 stats
+    queries per shoe). Single-shoe callers keep using ``attach_computed_fields``.
+    """
+    if not shoes:
+        return shoes
+    images = find_matched_images_bulk(db, shoes)
+    stats = compute_lifetime_stats_bulk(db, [s.id for s in shoes])
+    for shoe in shoes:
+        shoe.matched_image_url = None if shoe.image_url else images.get(shoe.id)
+        st = stats[shoe.id]
+        shoe.lifetime_avg_pace = st.lifetime_avg_pace
+        shoe.lifetime_avg_hr = st.lifetime_avg_hr
+        shoe.total_runs = st.total_runs
+        shoe.cost_per_km = cost_per_km(shoe)
+        shoe.recommended_limit_km = default_mileage_limit(shoe.shoe_type)
+    return shoes
 
 
 def log_run(
