@@ -9,6 +9,7 @@ import Retailers from '@/pages/Retailers'
 import NewRuns from '@/pages/NewRuns'
 import MyShoes from '@/pages/MyShoes'
 import ShoeDetail from '@/pages/ShoeDetail'
+import ShoePipeline from '@/pages/ShoePipeline'
 import ActivityDetail from '@/pages/ActivityDetail'
 import ChatPage from '@/pages/ChatPage'
 import Settings from '@/pages/Settings'
@@ -31,6 +32,7 @@ export default function App() {
           <Route path="deals" element={<Deals />} />
           <Route path="new-runs" element={<NewRuns />} />
           <Route path="shoes" element={<MyShoes />} />
+          <Route path="shoes/pipeline" element={<ShoePipeline />} />
           <Route path="shoes/:id" element={<ShoeDetail />} />
           <Route path="assistant" element={<ChatPage />} />
 
