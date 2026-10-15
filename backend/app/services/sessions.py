@@ -100,3 +100,27 @@ def delete_session(raw: str) -> None:
         db.commit()
     finally:
         db.close()
+
+
+def revoke_all() -> int:
+    """
+    Delete every SPA session row (sign out everywhere, R9.2) and return how many
+    were removed. Expired-but-unswept rows are counted too: the number reports
+    rows deleted, not "live" sessions. Commits.
+    """
+    db = SessionLocal()
+    try:
+        n = db.query(AuthSession).delete()
+        db.commit()
+        return n
+    finally:
+        db.close()
+
+
+def count_active() -> int:
+    """Number of unexpired session rows (for the security status card)."""
+    db = SessionLocal()
+    try:
+        return db.query(AuthSession).filter(AuthSession.expires_at >= time.time()).count()
+    finally:
+        db.close()
