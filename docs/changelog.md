@@ -5,6 +5,27 @@
 
 ---
 
+## Champs Sports Canada scraper — 2026-10-15
+
+Probe-then-build for a new retailer (S05 add-retailer). Suite 900 passed + 1 skipped. Branch `redesign-template`, committed as `8060dc4`.
+
+**[ADDED] `backend/app/scrapers/champs_sports.py` — `ChampsSportsScraper`, bespoke, registered as `Champs Sports Canada`**
+- Probe: not Shopify (`/products.json` is HTML) and no Algolia, so bespoke. Search `/en/search?query=` is server-rendered: `ProductCardV3` tiles carry the name (`data-productcard` JSON), URL and price in HTML. PDP carries a `ProductGroup` `productLdJson` (colourway variants) and `Size: X` buttons in `ProductDetailsSizesV3`; disabled size buttons count as sold out.
+- Pagination is off-limits: robots.txt disallows `*currentPage=*`, so page 1 only. Model matching is whole-word, numbers included (`Pegasus 4` ≠ `Pegasus 42`), brand verified from the listing name.
+- Women's listings are excluded unless the watched model says women: a women's price is not a men's deal and would otherwise win the cheapest-offer read.
+- Sale blocks: current = min of the two `$` amounts, original = max, so markup order does not matter.
+- Live check: "Nike Pegasus 42" → 5 men's hits, one sale (159.99 vs 180.00); its PDP returned 9 sizes, `in_stock` True. Models not stocked (Pegasus 41, Ghost 16, Ultraboost) return 0 matches, not false prices.
+- Tests: `tests/test_champs_sports.py` — name rules, price shapes, registry and onboarding exclusion. No DOM fixtures (CLAUDE.md §10).
+
+**[ADDED] Retailer row `Champs Sports Canada` (id 17)** — `platform=custom`, `is_active=1`, `scraping_enabled=1`. Inserted through the app's ORM against the live DB; `~/anton-data/shoe_deals.db.bak-champs-sports` is the pre-insert backup. The running API is not restarted: the bespoke registry is read at import, so the first real scrape needs a backend restart.
+
+**[CHANGED] `registry.py` — `Champs Sports Canada` added to `BESPOKE_SCRAPERS`. `architecture.md` §10 Retailer Status table gets a Champs row.**
+
+
+**[VERIFIED]** pytest 900 passed + 1 skipped. `get_scraper(row)` resolves to `ChampsSportsScraper`. Live search and PDP parse checked by hand (above). **Not verified:** a full scheduled scrape end to end and a qualifying deal written to the DB — needs a backend restart.
+
+---
+
 ## PWA: cached reads and sign-in survive a server outage (E11 amendment) — 2026-10-15
 
 Fixes the "[FOUND, not fixed]" item from the Signal follow-up below. Frontend only, no migration, no API change. Backend suite untouched (no backend change).
@@ -14,6 +35,9 @@ Fixes the "[FOUND, not fixed]" item from the Signal follow-up below. Frontend on
 **[CHANGED] Offline banner:** `useOnline` reports `online | offline | unreachable` (`/health` ≥ 500 = unreachable). `OfflineIndicator` shows "Can't reach Anton — showing last synced data…" for the new state. api.js hints a re-probe on cache-fallback reads and 5xx/no-response failures, so the banner appears mid-session. While it shows, `/health` is re-probed every 30 s so the banner clears by itself. Writes are still online-only, never queued (E11).
 
 **[VERIFIED]** `npm run build` clean, and `dist/sw.js` contains the plugins. `vite preview` of `dist/` proxying `/api` and `/health` (as Caddy does) to a backend on a DB copy. Pages loaded, then the backend stopped (the preview proxy answers 500). Cached reads came back 200 with the fallback header, an uncached read got the real 500, and `/api/auth/session` was 500 and uncached. A reload of Shoes and Home stayed signed in and rendered cached data under the new banner, at desktop and 380 px. A client-side tab switch raised the banner mid-session. With the backend restarted, the banner cleared, and a cookie-less read returned 401 despite a cached 200. Console errors were only the expected failed-resource lines while the backend was down.
+
+---
+
 
 ---
 
@@ -436,8 +460,6 @@ Built by three subagents (R8.4.3 and R8.4.4 in parallel worktrees, R8.4.5 after 
 1. Run the backfill where the export can be read. Copy `~/Workspace/export_33354574/activities/` (72 MB) to the server and run `docker compose exec anton python -m app.scripts.backfill_best_efforts --export-dir <path>` (~6–7 min).
 2. COROS runs fill in on their own, 5 per poll tick.
 3. Sunday's Beneva Marathon (2026-10-11) is the first live COROS test.
-
----
 
 ---
 
