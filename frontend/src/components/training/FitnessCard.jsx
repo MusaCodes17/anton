@@ -11,7 +11,7 @@ function Vo2Sparkline({ history }) {
   return (
     <div className="px-4 pb-4">
       <div className="rounded-[14px] border border-border bg-surface px-4 pb-2 pt-3">
-        <div className="text-2xs font-medium uppercase tracking-[0.06em] text-faint">
+        <div className="font-mono text-2xs font-medium uppercase tracking-[0.06em] text-faint">
           VO₂ max · {formatDate(points[0].captured_date)} → {formatDate(points[points.length - 1].captured_date)}
         </div>
         <ResponsiveContainer width="100%" height={48}>
@@ -53,11 +53,11 @@ function Vo2Sparkline({ history }) {
  */
 export default function FitnessCard({ data, history }) {
   return (
-    <div className="rounded-2xl border border-border bg-card">
+    <div className="panel rounded-2xl border border-border bg-card">
       <div className="flex items-center justify-between border-b border-border px-5 py-3">
         <div className="flex items-center gap-2.5">
           <Activity className="h-4 w-4 text-primary" />
-          <span className="font-heading text-md-plus font-bold text-foreground">Fitness</span>
+          <span className="text-md-plus font-semibold text-foreground">Fitness</span>
         </div>
         {data?.captured_at && (
           <span className="text-2xs text-faint">as of {formatDate(data.captured_at)}</span>
@@ -71,26 +71,26 @@ export default function FitnessCard({ data, history }) {
       ) : (
         <div className="grid grid-cols-3 gap-2 p-3 sm:grid-cols-2 sm:gap-3 sm:p-4">
           <div className="rounded-[14px] border border-border bg-surface p-3 sm:p-4">
-            <div className="flex max-w-[97px] items-center gap-1.5 text-2xs font-medium uppercase tracking-[0.06em] text-faint">
+            <div className="font-mono flex max-w-[97px] items-center gap-1.5 text-2xs font-medium uppercase tracking-[0.06em] text-faint">
               <Gauge className="h-3 w-3 shrink-0" /> <span className="truncate">VO₂ Max</span>
             </div>
-            <div className="mt-1 font-heading text-xl font-extrabold tracking-tight text-foreground tabular-nums sm:text-[26px] sm:leading-[inherit]">
+            <div className="mt-1 font-heading text-xl font-light tracking-display text-foreground tabular-nums sm:text-[26px] sm:leading-[inherit]">
               {data.vo2max != null ? data.vo2max.toFixed(1) : '—'}
             </div>
           </div>
           <div className="rounded-[14px] border border-border bg-surface p-3 sm:p-4">
-            <div className="flex max-w-[97px] items-center gap-1.5 text-2xs font-medium uppercase tracking-[0.06em] text-faint">
+            <div className="font-mono flex max-w-[97px] items-center gap-1.5 text-2xs font-medium uppercase tracking-[0.06em] text-faint">
               <Timer className="h-3 w-3 shrink-0" /> <span className="truncate">Threshold</span>
             </div>
-            <div className="mt-1 font-heading text-xl font-extrabold tracking-tight text-foreground tabular-nums sm:text-[26px] sm:leading-[inherit]">
+            <div className="mt-1 font-heading text-xl font-light tracking-display text-foreground tabular-nums sm:text-[26px] sm:leading-[inherit]">
               {data.threshold_pace ?? '—'}
             </div>
           </div>
           <div className="rounded-[14px] border border-border bg-surface p-3 sm:p-4">
-            <div className="flex max-w-[97px] items-center gap-1.5 text-2xs font-medium uppercase tracking-[0.06em] text-faint">
+            <div className="font-mono flex max-w-[97px] items-center gap-1.5 text-2xs font-medium uppercase tracking-[0.06em] text-faint">
               <BarChart2 className="h-3 w-3 shrink-0" /> <span className="truncate">Running Level</span>
             </div>
-            <div className="mt-1 font-heading text-xl font-extrabold tracking-tight text-foreground tabular-nums sm:text-[26px] sm:leading-[inherit]">
+            <div className="mt-1 font-heading text-xl font-light tracking-display text-foreground tabular-nums sm:text-[26px] sm:leading-[inherit]">
               {data.running_level != null ? data.running_level.toFixed(1) : '—'}
             </div>
           </div>

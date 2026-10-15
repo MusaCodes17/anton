@@ -140,13 +140,12 @@ export default function ShoeDetail() {
         <div className="min-w-0 flex-1 space-y-2">
           <div className="flex flex-wrap items-start justify-between gap-2">
             <div>
-              <div className="text-2xs font-bold uppercase tracking-[0.08em] text-accent-foreground">
-                {shoe.brand}
-              </div>
-              <h1 className="font-heading text-2xl font-extrabold leading-tight text-foreground">
+              <h1 className="font-heading text-[30px] font-light leading-[1.02] text-foreground tracking-display sm:text-[38px]">
                 {shoe.nickname || shoe.model}
               </h1>
-              {shoe.nickname && <div className="text-sm text-faint">{shoe.model}</div>}
+              <div className="mt-1 font-mono text-xs text-muted-foreground">
+                {shoe.brand}{shoe.nickname && ` · ${shoe.model}`}
+              </div>
             </div>
             <div className="flex flex-wrap items-center gap-2">
               {shoe.shoe_type && <ShoeTypeBadge type={shoe.shoe_type} />}
@@ -202,7 +201,7 @@ export default function ShoeDetail() {
       {/* Stats row */}
       <div className="space-y-4 rounded-[14px] border border-border bg-surface p-4">
         <div className="space-y-1.5">
-          <div className="text-2xs font-bold uppercase tracking-[0.08em] text-faint">Mileage</div>
+          <div className="font-mono text-2xs font-medium uppercase tracking-[0.06em] text-faint">Mileage</div>
           <MileageProgressBar mileage={shoe.current_mileage} limit={limitKm} />
           {/* Only shown when the limit exceeds the type's recommendation; the bar already states the limit. */}
           {pastRecommended && (
@@ -337,7 +336,7 @@ function ReplacementDeals({ ownedShoeId, currentMileage, shoeType, onEditShoe })
             open && 'rotate-90'
           )}
         />
-        <h2 className="font-heading text-base font-bold text-foreground">
+        <h2 className="text-base font-semibold text-foreground">
           Replacement Deals{typeLabel ? ` — ${typeLabel}` : ''}
         </h2>
         {!open && collapseHint && (
@@ -404,22 +403,22 @@ function ReplacementDealCard({ deal }) {
           <Footprints className="h-8 w-8 text-faint" />
         )}
         {deal.savings_percent != null && (
-          <Badge className="absolute right-1.5 top-1.5 bg-primary px-2 py-0.5 font-heading text-2xs font-extrabold text-primary-foreground">
+          <Badge className="absolute right-1.5 top-1.5 border-transparent bg-primary px-2 py-0.5 font-mono text-2xs font-medium text-primary-foreground">
             {Math.round(deal.savings_percent)}% OFF
           </Badge>
         )}
       </div>
       <div className="flex flex-1 flex-col gap-1.5 p-3">
         <div>
-          <div className="text-[10px] font-bold uppercase tracking-[0.08em] text-accent-foreground">
+          <div className="font-mono text-[10px] font-medium uppercase tracking-[0.06em] text-accent-foreground">
             {deal.brand}
           </div>
-          <div className="line-clamp-2 font-heading text-sm font-bold leading-tight text-foreground">
+          <div className="line-clamp-2 text-sm font-semibold leading-tight text-foreground">
             {deal.model}
           </div>
           <div className="text-2xs text-muted-foreground">{deal.retailer}</div>
         </div>
-        <div className="font-heading text-base font-extrabold text-foreground">
+        <div className="text-base font-semibold text-foreground">
           {formatCurrency(deal.current_price)}
         </div>
         {Array.isArray(deal.sizes_available) && deal.sizes_available.length > 0 && (
@@ -442,8 +441,8 @@ function ReplacementDealCard({ deal }) {
 function Stat({ label, value }) {
   return (
     <div className="space-y-1">
-      <div className="text-2xs font-bold uppercase tracking-[0.08em] text-faint">{label}</div>
-      <div className="font-heading text-base font-bold tabular-nums text-foreground sm:text-lg">{value}</div>
+      <div className="font-mono text-2xs font-medium uppercase tracking-[0.06em] text-faint">{label}</div>
+      <div className="font-heading text-base font-light tabular-nums text-foreground sm:text-lg tracking-display">{value}</div>
     </div>
   )
 }
@@ -488,7 +487,7 @@ function NotesJournal({ ownedShoeId }) {
   return (
     <section className="space-y-3">
       <div className="flex items-center justify-between">
-        <h2 className="font-heading text-base font-bold text-foreground">Shoe Notes Journal</h2>
+        <h2 className="text-base font-semibold text-foreground">Shoe Notes Journal</h2>
         <Button size="sm" onClick={() => setAdding(true)}>
           <Plus className="h-3.5 w-3.5" /> Add note
         </Button>
@@ -595,7 +594,7 @@ function RunHistory({ ownedShoeId }) {
 
   return (
     <section className="space-y-3">
-      <h2 className="font-heading text-base font-bold text-foreground">Run History</h2>
+      <h2 className="text-base font-semibold text-foreground">Run History</h2>
 
       {runs.isError ? (
         <ErrorState error={runs.error} onRetry={runs.refetch} />

@@ -48,7 +48,7 @@ function ToastItem({ toast, onDismiss }) {
   return (
     <div
       className={cn(
-        'pointer-events-auto flex items-start gap-3 rounded-lg border bg-background p-4 shadow-lg animate-in slide-in-from-right-full',
+        'panel pointer-events-auto flex items-start gap-3 rounded-[14px] border border-input bg-card p-4 shadow-[0_30px_70px_-30px_rgba(0,0,0,1)] animate-in slide-in-from-right-full',
         toast.variant === 'destructive' && 'border-destructive/50 text-destructive',
         toast.variant === 'success' && 'border-success/50'
       )}

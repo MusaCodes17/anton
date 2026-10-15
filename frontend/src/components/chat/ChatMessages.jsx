@@ -36,7 +36,7 @@ export const MARKDOWN_COMPONENTS = {
     </div>
   ),
   th: ({ children }) => (
-    <th className="whitespace-nowrap border-b border-border bg-secondary px-3 py-2 text-left text-2xs font-semibold uppercase tracking-[0.1em] text-muted-foreground">
+    <th className="font-mono whitespace-nowrap border-b border-border bg-secondary px-3 py-2 text-left text-2xs font-medium uppercase tracking-[0.06em] text-muted-foreground">
       {children}
     </th>
   ),
@@ -64,7 +64,7 @@ export function ToolPill({ indicator }) {
       )}
     >
       {isCalling ? (
-        <span className="h-[7px] w-[7px] shrink-0 rotate-45 animate-pulse rounded-[2px] bg-primary" />
+        <span className="live-dot text-primary" aria-hidden="true" />
       ) : isError ? (
         <X className="h-3 w-3 text-destructive" strokeWidth={3} />
       ) : (
@@ -143,9 +143,10 @@ export function AssistantMessage({ message, onProposalResolved, busy }) {
         <Markdown components={MARKDOWN_COMPONENTS}>{message.content}</Markdown>
       ) : message.isStreaming ? (
         <span className="inline-flex items-center gap-1 py-1" aria-label="Son of Anton is thinking">
-          <span className="h-1.5 w-1.5 rounded-full bg-muted-foreground animate-bounce [animation-delay:-0.3s]" />
-          <span className="h-1.5 w-1.5 rounded-full bg-muted-foreground animate-bounce [animation-delay:-0.15s]" />
-          <span className="h-1.5 w-1.5 rounded-full bg-muted-foreground animate-bounce" />
+          {/* Template tick-fade: three signal dots brighten in sequence. */}
+          <span className="h-1.5 w-1.5 rounded-full bg-primary animate-tick-fade" />
+          <span className="h-1.5 w-1.5 rounded-full bg-primary animate-tick-fade [animation-delay:0.2s]" />
+          <span className="h-1.5 w-1.5 rounded-full bg-primary animate-tick-fade [animation-delay:0.4s]" />
         </span>
       ) : null}
       {message.proposals?.map((p) => (
@@ -171,10 +172,10 @@ export function EmptyState({ onPromptClick, isStreaming }) {
   return (
     <div className="flex flex-col gap-5 py-4">
       <div className="flex flex-col gap-2">
-        <span className="flex h-11 w-11 items-center justify-center rounded-xl bg-primary text-primary-foreground">
+        <span className="flex h-11 w-11 items-center justify-center rounded-[12px] border border-input bg-accent text-primary">
           <Sparkles className="h-6 w-6" />
         </span>
-        <h2 className="mt-1 font-heading text-[28px] font-extrabold leading-[1.05] tracking-[-0.02em] text-foreground">
+        <h2 className="mt-1 font-heading text-[28px] font-light leading-[1.05] tracking-display text-foreground">
           Son of Anton
         </h2>
         <p className="text-md-plus leading-normal text-muted-foreground md:text-sm">

@@ -29,7 +29,7 @@ function ResourcePicker({ groups, filter, activeIndex, onSelect, onClose, contai
     >
       {groups.map((group) => (
         <div key={group.label}>
-          <div className="px-3 py-1.5 text-2xs font-semibold uppercase tracking-wider text-muted-foreground select-none">
+          <div className="font-mono px-3 py-1.5 text-2xs font-medium uppercase tracking-[0.06em] text-muted-foreground select-none">
             {group.label}
           </div>
           {group.items.map((item) => {
@@ -355,7 +355,7 @@ export default function ChatInput({
             onClick={handleSend}
             disabled={sendDisabled}
             aria-label="Send"
-            className="focus-ring flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground transition-colors hover:bg-primary/90 disabled:bg-border disabled:text-faint"
+            className="focus-ring flex h-10 w-10 shrink-0 items-center justify-center btn-lit rounded-full disabled:border-transparent disabled:bg-secondary disabled:text-faint disabled:shadow-none"
           >
             <ArrowUp className="h-[18px] w-[18px]" strokeWidth={2.5} />
           </button>

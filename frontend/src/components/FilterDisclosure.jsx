@@ -23,7 +23,7 @@ export default function FilterDisclosure({ open, onToggle, count = 0, className 
       {/* Solid chip: Tailwind's /15 opacity modifier doesn't generate for the
           var()-based colour tokens, so a tinted chip would render bare. */}
       {count > 0 && (
-        <span className="rounded-full bg-primary px-2 py-0.5 text-xs font-bold text-primary-foreground">
+        <span className="rounded-full bg-primary px-2 py-0.5 font-mono text-xs font-medium text-primary-foreground">
           {count}
         </span>
       )}

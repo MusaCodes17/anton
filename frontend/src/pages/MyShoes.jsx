@@ -162,7 +162,11 @@ export default function MyShoes() {
 
   return (
     <div className="space-y-6">
-      <PageHeader eyebrow="MY SHOES" title="Shoe rotation" count={shoes.data?.filter((s) => s.status !== 'retired').length}>
+      <PageHeader
+        title="Shoe rotation"
+        count={shoes.data?.filter((s) => s.status !== 'retired').length}
+        meta={shoes.data && [`${shoes.data.filter((s) => s.status === 'retired').length} retired`]}
+      >
         {/* md+ only — phones get the same two actions as icon buttons in the
             filter row below, so the header doesn't eat a whole row. */}
         <div className="hidden items-center gap-3 md:flex">
@@ -287,7 +291,7 @@ export default function MyShoes() {
               const single = group.shoes.length === 1
               return (
                 <section key={group.type} className={single ? 'min-w-0' : 'col-span-full'}>
-                  <div className="mb-3.5 flex min-w-0 items-center gap-2 text-2xs font-bold uppercase tracking-[0.08em] text-faint">
+                  <div className="font-mono mb-3.5 flex min-w-0 items-center gap-2 text-2xs font-medium uppercase tracking-[0.06em] text-faint">
                     <span className="min-w-0 truncate">{group.label}</span>
                     <span className="text-edge">·</span>
                     <span>{group.shoes.length}</span>
@@ -318,7 +322,7 @@ export default function MyShoes() {
               <button
                 type="button"
                 onClick={() => setRetiredCollapsed((c) => !c)}
-                className="focus-ring rounded flex items-center gap-2 text-2xs font-bold uppercase tracking-[0.08em] text-faint hover:text-muted-foreground transition-colors mb-3.5"
+                className="font-mono focus-ring rounded flex items-center gap-2 text-2xs font-medium uppercase tracking-[0.06em] text-faint hover:text-muted-foreground transition-colors mb-3.5"
               >
                 <ChevronDown
                   className={`h-3.5 w-3.5 transition-transform duration-200 ${retiredCollapsed ? '-rotate-90' : ''}`}
@@ -395,7 +399,7 @@ const NewRunsLink = forwardRef(function NewRunsLink({ corosStatus, children, cla
       {pending > 0 && (
         <span
           className={cn(
-            'rounded-full bg-primary px-1.5 text-xs font-bold text-primary-foreground',
+            'rounded-full bg-primary px-1.5 font-mono text-xs font-medium text-primary-foreground',
             children ? 'ml-1' : 'absolute -right-1.5 -top-1.5'
           )}
         >
@@ -433,13 +437,12 @@ function ShoeCard({ shoe }) {
       </div>
       <div className="flex flex-1 flex-col gap-2.5 p-3 sm:p-4">
         <div className="min-w-0">
-          <div className="truncate text-2xs font-bold uppercase tracking-[0.08em] text-accent-foreground">
-            {shoe.brand}
-          </div>
-          <div className="mt-0.5 line-clamp-2 font-heading text-[15px] font-bold leading-tight text-foreground sm:text-base">
+          <div className="line-clamp-2 text-[15px] font-semibold leading-tight text-foreground sm:text-base">
             {shoe.nickname || shoe.model}
           </div>
-          {shoe.nickname && <div className="truncate text-xs text-faint">{shoe.model}</div>}
+          <div className="mt-0.5 truncate font-mono text-2xs text-muted-foreground">
+            {shoe.brand}{shoe.nickname && ` · ${shoe.model}`}
+          </div>
           {shoe.shoe_type && (
             <div className="mt-1.5">
               <ShoeTypeBadge type={shoe.shoe_type} />

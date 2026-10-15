@@ -3,23 +3,19 @@ import { cva } from 'class-variance-authority'
 import { cn } from '@/lib/utils'
 
 const badgeVariants = cva(
-  'inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-semibold transition-colors focus:outline-none',
+  // Template .tags / .state: a small mono tag with a hairline in its own
+  // hue over a faint wash of it — status reads by colour AND by word.
+  'inline-flex items-center gap-1 rounded-[5px] border px-2 py-[3px] font-mono text-2xs font-medium leading-none tracking-[0.02em] transition-colors focus:outline-none',
   {
     variants: {
       variant: {
-        default:
-          'border-transparent bg-primary text-primary-foreground',
-        secondary:
-          'border-transparent bg-secondary text-secondary-foreground',
-        destructive:
-          'border-transparent bg-destructive text-destructive-foreground',
-        success:
-          'border-transparent bg-success text-success-foreground',
-        warning:
-          'border-transparent bg-warning text-warning-foreground',
-        strava:
-          'border-transparent bg-strava text-strava-foreground',
-        outline: 'text-foreground',
+        default: 'border-primary/45 bg-primary/10 text-primary',
+        secondary: 'border-border bg-secondary text-secondary-foreground',
+        destructive: 'border-destructive/50 bg-destructive/10 text-destructive',
+        success: 'border-success/45 bg-success/10 text-success',
+        warning: 'border-warning/45 bg-warning/10 text-warning',
+        strava: 'border-strava/50 bg-strava/10 text-strava',
+        outline: 'border-input text-secondary-foreground',
       },
     },
     defaultVariants: {

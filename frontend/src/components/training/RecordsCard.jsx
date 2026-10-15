@@ -27,11 +27,11 @@ export default function RecordsCard({ records }) {
       : 'The fastest stretch inside any run, like a 5k inside a 10k race. Elapsed time.'
 
   return (
-    <div className="rounded-2xl border border-border bg-card">
+    <div className="panel rounded-2xl border border-border bg-card">
       <div className="flex items-center justify-between gap-3 border-b border-border px-5 py-3">
         <div className="flex items-center gap-2.5">
           <Trophy className="h-4 w-4 text-primary" />
-          <span className="font-heading text-md-plus font-bold text-foreground" title={explainer}>Records</span>
+          <span className="text-md-plus font-semibold text-foreground" title={explainer}>Records</span>
         </div>
         <div className="flex rounded-lg border border-border p-0.5">
           {VIEWS.map((v) => (

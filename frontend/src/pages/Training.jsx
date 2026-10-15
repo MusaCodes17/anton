@@ -98,8 +98,8 @@ function currentWeekKey(d = new Date()) {
 function Stat({ label, value, unit }) {
   return (
     <div className="rounded-[12px] border border-border bg-surface px-4 py-3">
-      <div className="text-2xs font-bold uppercase tracking-[0.08em] text-faint">{label}</div>
-      <div className="mt-1 font-heading text-2xl font-extrabold tracking-tight text-foreground tabular-nums">
+      <div className="font-mono text-2xs font-medium uppercase tracking-[0.06em] text-faint">{label}</div>
+      <div className="mt-1 font-heading text-2xl font-light tracking-display text-foreground tabular-nums">
         {value}
         {unit && <span className="ml-1 text-sm font-semibold text-faint">{unit}</span>}
       </div>
@@ -111,7 +111,7 @@ function SectionHeading({ id, icon: Icon, title, hint }) {
   return (
     <div id={id} className="flex items-baseline gap-2 scroll-mt-20">
       <Icon className="h-[18px] w-[18px] shrink-0 self-center text-accent-foreground" />
-      <h2 className="font-heading text-lg font-extrabold tracking-tight text-foreground">{title}</h2>
+      <h2 className="font-heading text-lg font-light tracking-display text-foreground">{title}</h2>
       {hint && <span className="text-xs text-faint">{hint}</span>}
     </div>
   )
@@ -334,11 +334,11 @@ export default function Training() {
               <Stat label="Runs · 12 mo" value={stats.runs12} />
             </div>
 
-            <div className="overflow-hidden rounded-2xl border border-border bg-card">
+            <div className="panel overflow-hidden rounded-2xl border border-border bg-card">
               <div className="flex items-center justify-between border-b border-border px-5 py-3">
                 <div className="flex min-w-0 items-center gap-2.5">
                   <Activity className="h-4 w-4 shrink-0 text-primary" />
-                  <span className="font-heading text-md-plus font-bold text-foreground">Volume</span>
+                  <span className="text-md-plus font-semibold text-foreground">Volume</span>
                   {/* Range totals — what the selected date range adds up to. */}
                   <span className="truncate text-xs text-faint tabular-nums">
                     · {rangeTotals.km.toFixed(1)} km · {rangeTotals.runs} run{rangeTotals.runs === 1 ? '' : 's'}
@@ -474,7 +474,7 @@ export default function Training() {
 
   return (
     <div className="space-y-5 md:space-y-8">
-      <PageHeader eyebrow="TRAIN" title="Training">
+      <PageHeader title="Training">
         <nav className="hidden gap-4 text-sm text-muted-foreground sm:flex">
           {visibleIds.map((id) => (
             <a key={id} href={`#${id}`} className="focus-ring rounded hover:text-foreground">

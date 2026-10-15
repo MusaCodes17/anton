@@ -35,7 +35,7 @@ export default function ShoePipeline() {
         <ArrowLeft className="h-4 w-4" /> Back to Shoes
       </Link>
 
-      <PageHeader eyebrow="MY SHOES" title="Retirement pipeline" />
+      <PageHeader title="Retirement pipeline" />
 
       {overview.isLoading || shoes.isLoading ? (
         <CardSkeletonGrid count={3} />

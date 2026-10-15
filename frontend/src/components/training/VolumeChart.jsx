@@ -86,7 +86,7 @@ export default function VolumeChart({ data, xTicks, xTickFormatter }) {
               dataKey="label"
               tick={{ fontSize: 11, fill: 'var(--faint)' }}
               stroke="var(--chart-grid)"
-              fontFamily="JetBrains Mono, monospace"
+              fontFamily="IBM Plex Mono, ui-monospace, monospace"
               {...(xTicks ? { ticks: xTicks } : { interval: 'preserveStartEnd' })}
               {...(xTickFormatter ? { tickFormatter: xTickFormatter } : {})}
               tickMargin={8}
@@ -95,7 +95,7 @@ export default function VolumeChart({ data, xTicks, xTickFormatter }) {
               orientation="right"
               tick={{ fontSize: 11, fill: 'var(--faint)' }}
               stroke="var(--chart-grid)"
-              fontFamily="JetBrains Mono, monospace"
+              fontFamily="IBM Plex Mono, ui-monospace, monospace"
               tickFormatter={(v) => `${v} km`}
               width={52}
               tickCount={3}

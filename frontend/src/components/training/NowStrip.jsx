@@ -49,9 +49,10 @@ const pace = (s) => (s == null ? '—' : `${formatDuration(s)}/km`)
 
 function NowCard({ eyebrow, children, footer }) {
   return (
-    <div className="flex min-w-0 flex-col rounded-2xl border border-border bg-card p-4">
-      <div className="text-2xs font-bold uppercase tracking-[0.08em] text-faint">{eyebrow}</div>
-      <div className="mt-1.5 flex flex-1 flex-col">{children}</div>
+    <div className="panel flex min-w-0 flex-col rounded-2xl border border-border bg-card p-4">
+      {/* Template .panel-head: the card names itself, then a hairline. */}
+      <div className="border-b border-border pb-2.5 text-sm font-semibold text-foreground">{eyebrow}</div>
+      <div className="mt-3 flex flex-1 flex-col">{children}</div>
       {footer && <p className="mt-2 text-2xs leading-snug text-faint sm:mt-3">{footer}</p>}
     </div>
   )
@@ -62,7 +63,7 @@ function Verdict({ icon: Icon, tone = 'text-foreground', children }) {
   return (
     <div className="flex items-start gap-2">
       <Icon className={`mt-[3px] h-4 w-4 shrink-0 ${tone}`} aria-hidden="true" />
-      <p className="font-heading text-md-plus font-bold leading-snug text-foreground">{children}</p>
+      <p className="text-md-plus font-semibold leading-snug text-foreground">{children}</p>
     </div>
   )
 }
@@ -73,7 +74,7 @@ function Numbers({ children }) {
 
 function CardSkeleton() {
   return (
-    <div className="space-y-3 rounded-2xl border border-border bg-card p-4">
+    <div className="panel space-y-3 rounded-2xl border border-border bg-card p-4">
       <Skeleton className="h-3 w-16" />
       <Skeleton className="h-5 w-4/5" />
       <Skeleton className="h-3 w-3/5" />
@@ -244,7 +245,7 @@ function FormChart({ months }) {
           axisLine={false}
           tickLine={false}
           interval="preserveStartEnd"
-          fontFamily="JetBrains Mono, monospace"
+          fontFamily="IBM Plex Mono, ui-monospace, monospace"
         />
         <YAxis hide domain={['dataMin - 0.02', 'dataMax + 0.02']} />
         <Tooltip

@@ -42,8 +42,8 @@ export default defineConfig({
         start_url: '/',
         scope: '/',
         // From the design tokens: --background #0e0f11, brand green #16a34a.
-        background_color: '#0e0f11',
-        theme_color: '#0e0f11',
+        background_color: '#070a13',
+        theme_color: '#070a13',
         icons: [
           { src: 'pwa-64x64.png', sizes: '64x64', type: 'image/png' },
           { src: 'pwa-192x192.png', sizes: '192x192', type: 'image/png' },

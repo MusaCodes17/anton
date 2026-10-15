@@ -180,7 +180,7 @@ function ModelOptions({ providers, model, onChange }) {
   return Object.entries(providers.providers ?? {}).map(([key, provider]) => (
     <div key={key}>
       <div className="flex items-center gap-2 px-3 py-1.5">
-        <span className="text-2xs font-semibold uppercase tracking-[0.1em] text-muted-foreground">
+        <span className="font-mono text-2xs font-medium uppercase tracking-[0.06em] text-muted-foreground">
           {provider.name}
         </span>
         {!provider.available && (
@@ -270,8 +270,8 @@ function ConversationPanel({
                 >
                   <span
                     className={cn(
-                      'h-[7px] w-[7px] shrink-0 rotate-45 rounded-[2px]',
-                      isActive ? 'bg-primary' : 'bg-nav-inactive'
+                      'h-1.5 w-1.5 shrink-0 rounded-full',
+                      isActive ? 'bg-primary shadow-[0_0_8px_var(--primary)]' : 'bg-nav-inactive'
                     )}
                   />
                   <span className="min-w-0 flex-1">
@@ -642,7 +642,7 @@ export default function ChatPage() {
               <span className="h-[5px] w-9 rounded-full bg-nav-inactive" />
             </div>
             <div className="flex shrink-0 items-center justify-between pl-5 pr-2">
-              <h2 className="font-heading text-[19px] font-extrabold tracking-[-0.025em] text-foreground">
+              <h2 className="font-heading text-[19px] font-light tracking-display text-foreground">
                 Conversations
               </h2>
               <button
@@ -658,7 +658,7 @@ export default function ChatPage() {
               <button
                 type="button"
                 onClick={handleMobileNew}
-                className="focus-ring flex h-11 w-full items-center justify-center gap-2 rounded-[10px] bg-primary font-heading text-[15px] font-extrabold text-primary-foreground hover:bg-primary/90"
+                className="btn-lit focus-ring flex h-11 w-full items-center justify-center gap-2 rounded-full text-md-plus font-medium"
               >
                 <Plus className="h-4 w-4" strokeWidth={2.5} />
                 New conversation
@@ -667,7 +667,7 @@ export default function ChatPage() {
             <details className="group/model mx-4 mb-3 shrink-0 rounded-[12px] border border-border bg-card">
               <summary className="focus-ring flex min-h-[52px] cursor-pointer list-none items-center gap-3 rounded-[12px] px-3.5 [&::-webkit-details-marker]:hidden">
                 <span className="flex min-w-0 flex-1 flex-col">
-                  <span className="text-2xs font-semibold uppercase tracking-[0.1em] text-muted-foreground">Model</span>
+                  <span className="font-mono text-2xs font-medium uppercase tracking-[0.06em] text-muted-foreground">Model</span>
                   <span className="truncate text-md-plus font-semibold text-foreground">{getModelName(model)}</span>
                 </span>
                 <ChevronDown className="h-4 w-4 text-muted-foreground transition-transform group-open/model:rotate-180" />
@@ -710,7 +710,7 @@ export default function ChatPage() {
               <span className="hidden md:inline">Son of Anton</span>
             </span>
             <span className="flex items-center gap-1.5 truncate text-xs text-muted-foreground md:hidden">
-              <span className="h-1.5 w-1.5 shrink-0 rotate-45 rounded-[1.5px] bg-primary" />
+              <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-primary shadow-[0_0_8px_var(--primary)]" />
               <span className="truncate">Son of Anton · {getModelName(model)}</span>
             </span>
           </div>
@@ -787,7 +787,7 @@ export default function ChatPage() {
             </div>
             <button
               onClick={handleNewConversation}
-              className="flex items-center gap-2 rounded-[10px] bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90"
+              className="flex items-center gap-2 btn-lit rounded-full px-4 py-2 text-sm font-medium"
             >
               <Plus className="h-4 w-4" />
               New conversation

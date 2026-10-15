@@ -24,8 +24,8 @@ const NO_TAG = '__none__'
 function Figure({ label, value, unit }) {
   return (
     <div className="min-w-0 rounded-[14px] border border-border bg-surface p-3 sm:p-4">
-      <div className="text-2xs uppercase tracking-[0.08em] text-faint">{label}</div>
-      <div className="mt-1 truncate font-heading text-xl font-extrabold tabular-nums text-foreground">
+      <div className="font-mono text-2xs uppercase tracking-[0.06em] text-faint">{label}</div>
+      <div className="mt-1 truncate font-heading text-xl font-light tabular-nums text-foreground tracking-display">
         {value ?? '—'}
         {value != null && unit ? <span className="ml-0.5 text-xs font-normal text-faint">{unit}</span> : null}
       </div>
@@ -101,7 +101,7 @@ export default function ActivityDetail() {
       </Link>
 
       <div className="flex flex-wrap items-center gap-3">
-        <h1 className="font-heading text-2xl font-extrabold tracking-tight text-foreground">
+        <h1 className="font-heading text-2xl font-light tracking-display text-foreground">
           {d.name || 'Run'}
         </h1>
         <Badge variant={runSourceVariant(d.source)} className="text-[10px]">{runSourceLabel(d.source)}</Badge>
@@ -146,8 +146,8 @@ export default function ActivityDetail() {
       </div>
 
       {/* Edit */}
-      <div className="space-y-4 rounded-2xl border border-border bg-card p-4 sm:p-5">
-        <h2 className="font-heading text-md-plus font-bold text-foreground">Edit</h2>
+      <div className="panel space-y-4 rounded-2xl border border-border bg-card p-4 sm:p-5">
+        <h2 className="text-md-plus font-semibold text-foreground">Edit</h2>
         <div className="grid grid-cols-2 gap-3">
           <div className="min-w-0 space-y-1.5">
             <Label>Tag</Label>

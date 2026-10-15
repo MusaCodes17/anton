@@ -60,7 +60,7 @@ export default function NewRuns() {
 
   return (
     <div className="space-y-5">
-      <PageHeader eyebrow="COROS" title="New runs" count={runs.length}>
+      <PageHeader title="New runs" count={runs.length}>
         {conn === 'connected' && (
           <Button variant="outline" onClick={syncNow}
             disabled={!online || sync.isPending} title={!online ? OFFLINE_MSG : undefined}>
@@ -70,7 +70,7 @@ export default function NewRuns() {
       </PageHeader>
 
       {conn && conn !== 'connected' && (
-        <div className="flex items-start gap-3 rounded-2xl border border-border bg-card p-4 text-sm">
+        <div className="panel flex items-start gap-3 rounded-2xl border border-border bg-card p-4 text-sm">
           <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-warning" />
           <div className="space-y-1">
             <p className="font-semibold text-foreground">
@@ -94,9 +94,9 @@ export default function NewRuns() {
           <Skeleton className="h-36 w-full rounded-2xl" />
         </div>
       ) : runs.length === 0 ? (
-        <div className="rounded-2xl border border-border bg-card p-8 text-center">
+        <div className="panel rounded-2xl border border-border bg-card p-8 text-center">
           <Watch className="mx-auto h-8 w-8 text-faint" />
-          <p className="mt-3 font-heading font-bold text-foreground">You're all caught up</p>
+          <p className="mt-3 font-semibold text-foreground">You're all caught up</p>
           <p className="mt-1 text-sm text-muted-foreground">
             New runs from your watch show up here within about 15 minutes of syncing to COROS.
           </p>
@@ -171,13 +171,13 @@ function PendingRunCard({ run, activeShoes, online }) {
   }
 
   return (
-    <article className="rounded-2xl border border-border bg-card p-4">
+    <article className="panel rounded-2xl border border-border bg-card p-4">
       <div className="flex items-start justify-between gap-3">
         <div>
-          <div className="text-2xs font-bold uppercase tracking-[0.08em] text-faint">
+          <div className="font-mono text-2xs font-medium uppercase tracking-[0.06em] text-faint">
             {formatDate(run.run_date)}
           </div>
-          <div className="mt-1 font-heading text-2xl font-extrabold tabular-nums text-foreground">
+          <div className="mt-1 font-heading text-2xl font-light tabular-nums text-foreground tracking-display">
             {run.distance_km.toFixed(2)}
             <span className="ml-1 text-sm font-semibold text-faint">km</span>
           </div>

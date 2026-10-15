@@ -66,12 +66,12 @@ export default function PriceChart({ records = [], targetPrice, msrp }) {
           dataKey="date"
           tick={{ fontSize: 11, fill: 'var(--faint)' }}
           stroke="var(--chart-grid)"
-          fontFamily="JetBrains Mono, monospace"
+          fontFamily="IBM Plex Mono, ui-monospace, monospace"
         />
         <YAxis
           tick={{ fontSize: 11, fill: 'var(--faint)' }}
           stroke="var(--chart-grid)"
-          fontFamily="JetBrains Mono, monospace"
+          fontFamily="IBM Plex Mono, ui-monospace, monospace"
           tickFormatter={(v) => `$${v}`}
           width={56}
         />

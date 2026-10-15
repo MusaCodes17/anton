@@ -53,7 +53,7 @@ export default function ChatDrawer() {
         aria-label="Open Son of Anton"
         className={cn(
           // Desktop only: on phones the tab bar's Anton tab replaces the FAB.
-          'fixed bottom-6 right-6 z-40 hidden items-center md:flex gap-2 rounded-full bg-primary px-4 py-3 text-sm font-semibold text-primary-foreground hover:bg-primary/90 transition-all duration-200',
+          'fixed bottom-6 right-6 z-40 hidden items-center md:flex gap-2 btn-lit rounded-full px-4 py-3 text-sm font-medium',
           isOpen ? 'opacity-0 pointer-events-none translate-y-2' : 'opacity-100 translate-y-0'
         )}
       >

@@ -1,7 +1,33 @@
 # Anton — Session Changelog
 
-**Last Updated:** 2026-10-10
+**Last Updated:** 2026-10-15
 **Status / current focus:** see `docs/project_state.md` (the perishable snapshot). This file is the append-only session log — the authoritative record of *what happened*; the `docs/` suite is the reference material.
+
+---
+
+## "Signal" redesign — the template's design language across the whole app — 2026-10-15
+
+Branch `redesign-template` (off `main`). Frontend only, no migration, no API change. Suite unchanged at 892 passed + 1 skipped. `vite build` clean. Decision: design_decisions E18 (supersedes the "Velocity" look).
+
+**[CHANGED] Design system, extracted from `frontend/template/redesign-template.html` (the runner's pinned visual source)**
+- Tokens (`index.css`): ink ground `#070a13` with ink-2/ink-3 layers, near-black panels (`#05070d`), blue-alpha hairlines, one signal-blue accent (`#8db5ff`, deep `#2b56c9`). Green, amber and red now mean only ok/warn/alert. Strava orange stays as the third-party exception. Retailer chart series re-picked so none collides with the signal blue. `color-scheme: dark`, themed selection, caret and scrollbars.
+- Type: Bricolage Grotesque light for display and figures (kept under the `heading` Tailwind key), Hanken Grotesk for body, IBM Plex Mono for labels, units and dates (tabular). Archivo and JetBrains Mono dropped.
+- Components: `.panel` (glow rising from behind the top edge, brighter on hover), `.btn-lit` (the template's lit primary pill), `.label-mono`, `.live-dot`, `.grain`, `.glass-bar`, plus the one easing (`ease-signal`) and a `tick-fade` animation.
+- Primitives: every Button is a pill (`default` = lit pill, new `signal` outline variant), Badge is a mono tag in its own hue, Inputs, Select, Textarea, Dialog, Switch, Table, Toast and Dropdown restyled.
+
+**[CHANGED] Shell and pages (navigation model unchanged, by choice)**
+- Sidebar and phone tab bar kept (E14) and restyled: active row as a raised ink pill with a lit dot, tab bar with a signal filament, glass bars, grain. The sidebar scrape dot is static and coloured by freshness (green ≤ 48 h, amber older).
+- `PageHeader`: light display title, mono count, new `meta` line. The mono eyebrow above titles is removed (it repeated the title).
+- Home: a header band with today's date, and the WebGL iridescence (`components/layout/Iridescence.jsx`; CSS fallback; DPR- and fps-capped on phones; pauses off-screen; one still frame under reduced motion; full teardown on unmount). Rows inside panels are hairline-divided rather than nested cards; meters are 3 px hairlines.
+- Sweep over every page: about 55 heading call sites moved to the display or sans-semibold voice, tracked micro-labels to mono, raw `bg-card` panels to `.panel`, solid primary buttons to the lit pill, brand labels moved from above product names to a mono line beneath. Product photos sit on the `--photo` backdrop once loaded (`:has(> img)`); stripes stay for empty slots.
+- Chat: the bouncing "thinking" dots became a tick-fade. Settings sub-nav is a segmented pill strip (active tab scrolled into view on phones).
+
+**[VERIFIED]**
+- `vite build` clean. Backend suite 892 passed, 1 skipped (no backend change).
+- Browser pass on an isolated preview: a DB copy, a throwaway login, the COROS poller off, and no COROS key. Desktop 1440 and phone 380 on Home, Training, Shoes, Shoe detail (with the Log run dialog), Deals, Son of Anton and Settings → Sync. Every API call returned 200; no new console errors.
+- An independent design review ran twice. First verdict: fix (8 items). Second: 5 resolved; grain, the page meta lines, the edge fade and two regressions (a rounded divider, a duplicated figure) were partial. Those were then fixed and checked in the browser, but not re-reviewed. Still open from the review's "ceiling" list: Training's stat tiles stay boxed rather than open `.stat` figures, and only Home and Shoe rotation carry a meta line.
+
+**[BLOCKED / human]** On-device check on the installed iPhone PWA: iridescence battery and frame rate, glass bars, notch inset.
 
 ---
 
