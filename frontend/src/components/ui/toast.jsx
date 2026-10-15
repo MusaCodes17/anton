@@ -27,8 +27,11 @@ export function ToastProvider({ children }) {
   return (
     <ToastContext.Provider value={{ toast, dismiss }}>
       {children}
-      {/* Mobile: lifted above the bottom tab bar (h-14 + home indicator). */}
-      <div className="fixed bottom-[calc(3.5rem+env(safe-area-inset-bottom))] right-0 z-[100] flex max-h-screen w-full flex-col gap-2 p-4 sm:max-w-sm md:bottom-0">
+      {/* Mobile: lifted above the bottom tab bar (h-14 + home indicator).
+          pointer-events-none: the empty container (its p-4 strip) would
+          otherwise swallow clicks in the bottom-right corner — the toasts
+          themselves opt back in with pointer-events-auto. */}
+      <div className="pointer-events-none fixed bottom-[calc(3.5rem+env(safe-area-inset-bottom))] right-0 z-[100] flex max-h-screen w-full flex-col gap-2 p-4 sm:max-w-sm md:bottom-0">
         {toasts.map((t) => (
           <ToastItem key={t.id} toast={t} onDismiss={() => dismiss(t.id)} />
         ))}
