@@ -629,7 +629,7 @@ export default function ChatPage() {
         <div className="fixed inset-0 z-50 md:hidden">
           {/* touch-none: a drag on the backdrop must not scroll the thread behind it. */}
           <div
-            className="absolute inset-0 touch-none bg-black/55"
+            className="absolute inset-0 touch-none bg-[var(--scrim)]"
             onClick={() => setShowConvList(false)}
           />
           <section

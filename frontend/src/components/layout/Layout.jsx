@@ -1,6 +1,6 @@
 import { Suspense, useEffect, useRef } from 'react'
 import { Link, NavLink, Outlet, useLocation } from 'react-router-dom'
-import { Home, Activity, Tag, Sparkles, Settings as SettingsIcon, LogOut } from 'lucide-react'
+import { Home, Activity, Tag, Sparkles, Settings as SettingsIcon, LogOut, Sun, Moon } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { authApi, UNAUTHENTICATED_EVENT } from '@/services/api'
 import { useDashboardStats } from '@/hooks/useApi'
@@ -11,6 +11,7 @@ import { RowSkeleton } from '@/components/StatusViews'
 import OfflineIndicator from '@/components/pwa/OfflineIndicator'
 import { useKeyboardViewport } from '@/hooks/useKeyboardViewport'
 import { useResumeRefresh } from '@/hooks/useResumeRefresh'
+import { useTheme } from '@/hooks/useTheme'
 
 // `short` is the bottom tab bar label (five tabs at 380px leave ~76px each);
 // `also` lists child routes that should light the tab, e.g. an activity
@@ -140,6 +141,39 @@ function MobileTabBar({ onReselect }) {
   )
 }
 
+// Light/dark switch. The icon shows the theme you'd switch TO (sun in dark,
+// moon in light), the label says it in words. `compact` is the phone header's
+// icon-only button; the sidebar gets a full row like its neighbours.
+function ThemeToggle({ compact = false }) {
+  const { theme, toggleTheme } = useTheme()
+  const toLight = theme === 'dark'
+  const label = toLight ? 'Light mode' : 'Dark mode'
+  const Icon = toLight ? Sun : Moon
+  if (compact) {
+    return (
+      <button
+        type="button"
+        onClick={toggleTheme}
+        aria-label={`Switch to ${label.toLowerCase()}`}
+        className="focus-ring flex h-11 w-11 items-center justify-center rounded-full text-muted-foreground transition-colors duration-300 ease-signal hover:bg-accent hover:text-foreground"
+      >
+        <Icon className="h-5 w-5" />
+      </button>
+    )
+  }
+  return (
+    <button
+      type="button"
+      onClick={toggleTheme}
+      aria-label={`Switch to ${label.toLowerCase()}`}
+      className="focus-ring flex w-full items-center gap-3 rounded-full px-3.5 py-[10px] text-sm font-medium text-muted-foreground transition-colors duration-300 ease-signal hover:bg-accent hover:text-foreground"
+    >
+      <Icon className="h-[15px] w-[15px] shrink-0" />
+      {label}
+    </button>
+  )
+}
+
 // RA2.1 logout — clears the session cookie server-side, then fires the app-wide
 // unauthenticated event so AuthGate drops back to the login view. Dispatches the
 // event even if the request fails, so a click always returns the user to login.
@@ -232,6 +266,7 @@ export default function Layout() {
         </div>
         <NavLinks />
         <div className="mt-auto border-t border-border pt-3">
+          <ThemeToggle />
           <SettingsLink />
           <LogoutButton />
         </div>
@@ -262,18 +297,21 @@ export default function Layout() {
         )}
       >
         <Brand onHome={scrollToTop} />
-        <NavLink
-          to="/settings"
-          aria-label="Settings"
-          className={({ isActive }) =>
-            cn(
-              'focus-ring flex h-11 w-11 items-center justify-center rounded-full transition-colors duration-300 ease-signal hover:bg-accent',
-              isActive ? 'text-primary' : 'text-muted-foreground'
-            )
-          }
-        >
-          <SettingsIcon className="h-5 w-5" />
-        </NavLink>
+        <div className="flex items-center">
+          <ThemeToggle compact />
+          <NavLink
+            to="/settings"
+            aria-label="Settings"
+            className={({ isActive }) =>
+              cn(
+                'focus-ring flex h-11 w-11 items-center justify-center rounded-full transition-colors duration-300 ease-signal hover:bg-accent',
+                isActive ? 'text-primary' : 'text-muted-foreground'
+              )
+            }
+          >
+            <SettingsIcon className="h-5 w-5" />
+          </NavLink>
+        </div>
       </header>
 
       {/* Main is the single scroll region for all routes: flex-1 fills the height

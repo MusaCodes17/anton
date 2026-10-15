@@ -696,6 +696,24 @@ Supporting choices:
 - The design record files (`DESIGN.md`, `PRODUCT.md`, `.impeccable/`) are not committed, per the runner's 2026-10-09 request (`5ae53bb`). This entry and the `index.css` comments are the record.
 
 **Verdict:** ✅ Keep. Supersedes the unnamed-in-this-file "Velocity" look (green accent, Archivo heavy display).
+
+### E19. Light theme as a per-device, token-only variant of Signal; dark stays the default (2026-10-15 — extends E18)
+
+**Chosen:**
+- `:root[data-theme='light']` in `index.css` redefines every token. Layout, type, radii and motion are unchanged. On paper the white panels sit *above* the ground (lift); in dark they sink *below* the ink. Signal blue deepens to `--signal-deep` (#2b56c9), and the status and chart hues darken, so text clears 4.5:1 on white.
+- Component colours that used to be literals are now tokens: panel glow, drop shadows, glass bars, scrims, stripes, scrollbar, selection, grain opacity and the Home shader's blend and strength. The hero blends with `multiply` in light because `screen` vanishes on white.
+- The toggle is a row in the sidebar footer and a sun/moon icon in the phone header (`hooks/useTheme.js`). The preference is stored in `localStorage` (`lib/theme.js`). An inline script in `index.html` applies it before first paint, so the page never flashes dark first.
+- There is no "follow system" mode. The runner asked for dark by default with a manual switch.
+
+**Why:** the runner wants to read in daylight sometimes without losing the Signal look. Doing it entirely at the token layer means no component forks.
+
+**Trade-offs:**
+- The preference is per device, not server-side (unlike E16's layout preference). It's a viewing convenience, and the boot script has to read it synchronously.
+- The installed iOS app reads the status-bar style only at launch, so after a theme change it needs a cold start for status-bar text to be readable. Not verified on a device.
+- The manifest `theme_color` stays dark: it's static and only shapes the splash screen.
+- `--iridescence-*` and the shader tint are retuned by hand; nothing checks them automatically.
+
+**Verdict:** ✅ Keep.
 ---
 
 ## Superseded Decisions (kept as history)

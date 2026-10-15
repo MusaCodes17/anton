@@ -173,8 +173,10 @@ export default function Iridescence({ className }) {
         <canvas
           ref={canvasRef}
           className={cn(
-            'absolute right-[-35%] top-[-60%] h-[220%] w-[min(900px,140vw)] mix-blend-screen transition-opacity duration-[2400ms] ease-signal md:right-[-8%]',
-            mode === 'on' ? 'opacity-70' : 'opacity-0'
+            'absolute right-[-35%] top-[-60%] h-[220%] w-[min(900px,140vw)] transition-opacity duration-[2400ms] ease-signal md:right-[-8%]',
+            // Blend + strength are theme tokens: screen lights the ink in dark,
+            // multiply tints the paper in light (screen on white is invisible).
+            mode === 'on' ? 'opacity-[var(--iridescence-opacity)] [mix-blend-mode:var(--iridescence-blend)]' : 'opacity-0 [mix-blend-mode:var(--iridescence-blend)]'
           )}
           style={{ WebkitMaskImage: MASK, maskImage: MASK }}
         />

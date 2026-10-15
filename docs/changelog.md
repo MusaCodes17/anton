@@ -5,6 +5,26 @@
 
 ---
 
+## Light theme toggle for the Signal design — 2026-10-15
+
+The runner asked for a light version of the new look, with dark as the default. Frontend only; no backend or test changes. Decision: `design_decisions.md` E19.
+
+**[ADDED] Light token set (`index.css` `:root[data-theme='light']`)** — paper ground, white panels, deeper signal blue, and status and chart hues darkened for contrast on white. Every other part of the design is unchanged.
+
+**[ADDED] Theme toggle** — `lib/theme.js` (storage and apply), `hooks/useTheme.js` (state shared by every toggle), and `ThemeToggle` in `Layout.jsx`: a row above Settings in the sidebar and a sun/moon icon in the phone header. `index.html` applies a stored light choice before first paint and switches iOS `theme-color` and the status-bar style.
+
+**[CHANGED] Hard-coded colours became tokens** — the panel glow and shadow, glass bars, placeholder stripes, scrollbar, selection and chart-dot glow in `index.css`. Also the shadows in the dialog, select, dropdown, toast and chart tooltip, and the drawer and sheet scrims (`ChatDrawer`, `ChatPage`). The Home iridescence blend and opacity are now tokens too: screen in dark, multiply in light.
+
+**[VERIFIED]** `vite build` clean, 0 console errors. Checked against a copy of the live DB on a side port (COROS poll off):
+- Light at 1280 px: Home, Training, Deals and Shoes.
+- Light at 380 px: Home, Son of Anton and the Add-shoe dialog.
+- Dark at 380 px after toggling back: unchanged.
+- The choice survives full reloads.
+
+**Not verified:** the iOS standalone status bar after a theme change, which needs a device.
+
+---
+
 ## Champs Sports Canada scraper — 2026-10-15
 
 Probe-then-build for a new retailer (S05 add-retailer). Suite 900 passed + 1 skipped. Branch `redesign-template`, committed as `8060dc4`.
