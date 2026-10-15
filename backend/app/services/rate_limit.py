@@ -20,6 +20,16 @@ Four limiters live here, each scoped to a different threat:
    model: scraping/hammering of the one deliberately public data endpoint.
    Tunable via `PUBLIC_RATE_LIMIT_PER_MINUTE` / `PUBLIC_RATE_LIMIT_BURST`.
 
+5. `login_global_limiter` — a single, all-IPs ceiling on password failures for
+   both password login endpoints (`POST /api/auth/session`, `POST /oauth/login`)
+   (R9.5). Adversary model: a distributed brute force that stays under every
+   per-IP bucket by fanning out across many addresses. Trade-off, accepted: once
+   the ceiling is hit an attacker can lock the *login form* for up to an hour,
+   but existing 14-day sessions, the Desktop bearer and the claude.ai connector
+   keep working, so the owner is not locked out of the app. Only wrong passwords
+   spend from it; a correct password never does. Tunable via
+   `LOGIN_GLOBAL_FAILURE_LIMIT_PER_HOUR`.
+
 All limiters are deliberately **not** security boundaries alone — they are
 visibility and throttling aids. `app/middleware/auth.py` is the boundary.
 
@@ -81,6 +91,21 @@ class TokenBucket:
             self._refill(self._now())
             if self._tokens >= tokens:
                 self._tokens -= tokens
+                return RateLimitResult(True, 0.0)
+            deficit = tokens - self._tokens
+            retry = deficit / self.refill_per_s if self.refill_per_s > 0 else float("inf")
+            return RateLimitResult(False, retry)
+
+    def peek(self, tokens: float = 1.0) -> RateLimitResult:
+        """Report whether `tokens` are available, WITHOUT spending them.
+
+        Used where the spend must wait for an outcome: the login ceiling checks
+        with `peek` before the password compare and only `take`s on a wrong
+        password, so a correct password never draws down the bucket. Refills to
+        now, same as `take`."""
+        with self._lock:
+            self._refill(self._now())
+            if self._tokens >= tokens:
                 return RateLimitResult(True, 0.0)
             deficit = tokens - self._tokens
             retry = deficit / self.refill_per_s if self.refill_per_s > 0 else float("inf")
@@ -204,6 +229,18 @@ def _build_login_failure_limiter() -> KeyedRateLimiter:
                             max_keys=_max_keys())
 
 
+def _build_login_global_limiter() -> TokenBucket:
+    """Global (all-IPs) ceiling on login password failures (R9.5).
+
+    A single bucket, not keyed: a distributed guess spread across many client
+    IPs would stay under every per-IP bucket, so the ceiling counts all failures
+    together. Default 50 wrong passwords per hour, refilling at 50/3600 per
+    second, so a sustained attack is held to that rate and a burst is capped at
+    the full 50. Tune via `LOGIN_GLOBAL_FAILURE_LIMIT_PER_HOUR`."""
+    per_hour = float(os.getenv("LOGIN_GLOBAL_FAILURE_LIMIT_PER_HOUR", "50"))
+    return TokenBucket(capacity=per_hour, refill_per_s=per_hour / 3600.0)
+
+
 def _build_public_limiter() -> KeyedRateLimiter:
     """Per-IP limiter for the public deals endpoint (R9.3).
 
@@ -222,3 +259,4 @@ chat_limiter = _build_chat_limiter()
 auth_failure_limiter = _build_auth_failure_limiter()
 login_failure_limiter = _build_login_failure_limiter()
 public_limiter = _build_public_limiter()
+login_global_limiter = _build_login_global_limiter()

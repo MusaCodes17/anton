@@ -37,8 +37,11 @@ anton.musasouled.com {
 
     # Backend paths — each has its own auth (session cookie, desktop bearer,
     # connector OAuth). Must reach the backend, NOT the static handler.
+    # /.well-known/oauth-protected-resource is public in the backend's PUBLIC_PATHS
+    # (routers/oauth.py); it must be listed here or it falls through to the SPA.
+    # R9.5 reconcile: check the production server's Caddyfile matches this matcher.
     @backend {
-        path /api /api/* /mcp /mcp/* /authorize /token /revoke /oauth/login /.well-known/oauth-authorization-server /health
+        path /api /api/* /mcp /mcp/* /authorize /token /revoke /oauth/login /.well-known/oauth-authorization-server /.well-known/oauth-protected-resource /health
     }
     handle @backend {
         reverse_proxy localhost:8000 {
@@ -67,4 +70,16 @@ anton.musasouled.com {
     header @manifest Content-Type "application/manifest+json"
 
     header Strict-Transport-Security "max-age=31536000; includeSubDomains"
+
+    # R9.5 — the deals page link is shared with the run club; CSP ships report-only
+    # first and switches to enforcing (rename the header to Content-Security-Policy)
+    # after a clean week; noindex because the page is for a small group, not search engines.
+    header {
+        X-Content-Type-Options "nosniff"
+        Referrer-Policy "strict-origin-when-cross-origin"
+        X-Frame-Options "DENY"
+        X-Robots-Tag "noindex, nofollow"
+        Permissions-Policy "camera=(), microphone=(), geolocation=(), payment=(), usb=()"
+        Content-Security-Policy-Report-Only "default-src 'self'; img-src 'self' https: data:; font-src https://fonts.gstatic.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; connect-src 'self'; frame-ancestors 'none'"
+    }
 }

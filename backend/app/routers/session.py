@@ -36,7 +36,7 @@ from pydantic import BaseModel
 
 from app.middleware.auth import _client_ip as _get_client_ip
 from app.services.auth_admin import security_status, sign_out_everywhere
-from app.services.rate_limit import login_failure_limiter
+from app.services.rate_limit import login_failure_limiter, login_global_limiter
 from app.services.sessions import (
     create_session,
     delete_session,
@@ -48,6 +48,8 @@ logger = logging.getLogger(__name__)
 
 # Module-level reference so tests can monkeypatch it (mirrors routers/oauth.py).
 _login_failure_limiter = login_failure_limiter
+# Global (all-IPs) password-failure ceiling (R9.5). Only wrong passwords spend it.
+_login_global_limiter = login_global_limiter
 
 SESSION_COOKIE = "anton_session"
 
@@ -68,6 +70,11 @@ async def create_session_endpoint(body: SessionLogin, request: Request, response
     exhausted (429 + Retry-After). The password is compared with
     `secrets.compare_digest` (timing-safe); a wrong password returns 401 with a
     generic message (C9 — no oracle).
+
+    R9.5 global ceiling: after the per-IP check, `_login_global_limiter` is
+    peeked (not spent). When exhausted, the form is refused for every IP with the
+    same 429 a per-IP throttle gets. Only a WRONG password spends from it, so a
+    correct login never draws down the ceiling.
     """
     ip = _get_client_ip(request.scope)
 
@@ -77,6 +84,12 @@ async def create_session_endpoint(body: SessionLogin, request: Request, response
         logger.warning("session login rate-limited from %s", ip)
         return Response(status_code=429, headers={"Retry-After": retry})
 
+    global_rl = _login_global_limiter.peek()
+    if not global_rl.allowed:
+        retry = str(max(1, int(global_rl.retry_after_s)))
+        logger.warning("login global failure ceiling reached (from %s)", ip)
+        return Response(status_code=429, headers={"Retry-After": retry})
+
     expected = os.getenv("ANTON_LOGIN_PASSWORD", "").strip()
     if not expected:
         # Login unconfigured — refuse rather than allow an empty-password bypass.
@@ -84,6 +97,7 @@ async def create_session_endpoint(body: SessionLogin, request: Request, response
 
     if not secrets.compare_digest(body.password.encode(), expected.encode()):
         logger.warning("session login failed from %s", ip)
+        _login_global_limiter.take()
         return Response(status_code=401)
 
     raw = create_session()

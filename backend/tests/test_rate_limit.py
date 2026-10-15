@@ -145,3 +145,25 @@ def test_max_keys_env_tunable(monkeypatch):
     assert rate_limit_module._max_keys() == 10_000
     monkeypatch.setenv("RATE_LIMIT_MAX_KEYS", "7")
     assert rate_limit_module._max_keys() == 7
+
+
+# --- R9.5: peek does not spend (global login ceiling) ------------------------
+
+def test_peek_does_not_spend_tokens():
+    clock = _Clock()
+    bucket = TokenBucket(capacity=1, refill_per_s=1.0, now=clock)
+    assert bucket.peek().allowed is True
+    assert bucket.peek().allowed is True          # still there: peek spent nothing
+    assert bucket.take().allowed is True          # the one token is intact
+    assert bucket.take().allowed is False
+
+
+def test_peek_reports_retry_when_empty():
+    clock = _Clock()
+    bucket = TokenBucket(capacity=1, refill_per_s=0.5, now=clock)
+    assert bucket.take().allowed is True
+    result = bucket.peek()
+    assert result.allowed is False
+    assert result.retry_after_s == pytest.approx(2.0)   # 1 token at 0.5/s
+    clock.advance(2.0)
+    assert bucket.peek().allowed is True
