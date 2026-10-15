@@ -6,15 +6,18 @@ import {
   YAxis,
   CartesianGrid,
   Tooltip,
-  Legend,
+  ReferenceLine,
   ResponsiveContainer,
 } from 'recharts'
+import {
+  SIGNAL, MUTED, axisProps, gridProps, lineCursor, thresholdProps, ChartTooltip, ChartLegend,
+} from '@/components/charts/signal'
 import { formatCurrency, formatDate } from '@/lib/utils'
 import { EmptyState } from '@/components/StatusViews'
 import { LineChart as LineChartIcon } from 'lucide-react'
 
-// Distinct colors per retailer line — the --chart-N tokens in index.css (green
-// is reserved for the "Velocity" accent / Target line, so they start at blue).
+// Distinct colors per retailer line — the --chart-N tokens in index.css (signal
+// blue is reserved for actions and the Target marker, so they start at cyan).
 const COLORS = [1, 2, 3, 4, 5, 6].map((n) => `var(--chart-${n})`)
 
 /**
@@ -58,71 +61,75 @@ export default function PriceChart({ records = [], targetPrice, msrp }) {
     )
   }
 
+  // Template chart language (components/charts/signal): hairline grid, mono
+  // axes, retailer series in the --chart-N hues, MSRP and Target as labelled
+  // dashed markers, and a mono legend with drawn swatches.
   return (
-    <ResponsiveContainer width="100%" height={300}>
-      <LineChart data={data} margin={{ top: 10, right: 16, left: 0, bottom: 0 }}>
-        <CartesianGrid strokeDasharray="3 3" stroke="var(--chart-grid)" />
-        <XAxis
-          dataKey="date"
-          tick={{ fontSize: 11, fill: 'var(--faint)' }}
-          stroke="var(--chart-grid)"
-          fontFamily="IBM Plex Mono, ui-monospace, monospace"
-        />
-        <YAxis
-          tick={{ fontSize: 11, fill: 'var(--faint)' }}
-          stroke="var(--chart-grid)"
-          fontFamily="IBM Plex Mono, ui-monospace, monospace"
-          tickFormatter={(v) => `$${v}`}
-          width={56}
-        />
-        <Tooltip
-          formatter={(value) => formatCurrency(value)}
-          contentStyle={{
-            borderRadius: 10,
-            border: '1px solid var(--border)',
-            background: 'var(--popover)',
-            fontSize: 12,
-            color: 'var(--foreground)',
-          }}
-          labelStyle={{ color: 'var(--muted-foreground)' }}
-        />
-        <Legend wrapperStyle={{ fontSize: 12, color: 'var(--muted-foreground)' }} />
-        {msrp != null && (
-          <Line
-            type="monotone"
-            dataKey={() => msrp}
-            name="MSRP (sale below)"
-            stroke="var(--faint)"
-            strokeOpacity={0.6}
-            strokeDasharray="2 3"
-            dot={false}
-            isAnimationActive={false}
-          />
-        )}
-        {targetPrice != null && (
-          <Line
-            type="monotone"
-            dataKey={() => targetPrice}
-            name="Target"
-            stroke="var(--primary)"
-            strokeOpacity={0.5}
-            strokeDasharray="6 4"
-            dot={false}
-            isAnimationActive={false}
-          />
-        )}
-        {retailers.map((name, i) => (
-          <Line
-            key={name}
-            type="monotone"
-            dataKey={name}
-            stroke={COLORS[i % COLORS.length]}
-            strokeWidth={2}
-            connectNulls
-            dot={{ r: 3 }}
-          />
-        ))}
-      </LineChart>
-    </ResponsiveContainer>
+    <div>
+      <div className="h-[260px] sm:h-[300px]">
+        <ResponsiveContainer width="100%" height="100%">
+          <LineChart data={data} margin={{ top: 16, right: 8, left: 0, bottom: 0 }}>
+            <CartesianGrid {...gridProps} />
+            <XAxis dataKey="date" {...axisProps} interval="preserveStartEnd" minTickGap={32} tickMargin={8} />
+            <YAxis {...axisProps} tickFormatter={(v) => `$${v}`} width={52} />
+            <Tooltip
+              cursor={lineCursor}
+              content={
+                <ChartTooltip
+                  render={(d, payload) => (
+                    <>
+                      <div className="mb-1 font-sans font-semibold text-foreground">{d.date}</div>
+                      {payload.map((p) => (
+                        <div key={p.dataKey} className="flex items-center justify-between gap-4">
+                          <span className="inline-flex items-center gap-1.5">
+                            <i className="inline-block h-[2px] w-2.5 rounded-full" style={{ background: p.color }} />
+                            {p.dataKey}
+                          </span>
+                          <span className="text-foreground">{formatCurrency(p.value)}</span>
+                        </div>
+                      ))}
+                    </>
+                  )}
+                />
+              }
+            />
+            {/* MSRP labels left and Target right, so equal values never overprint. */}
+            {msrp != null && (
+              <ReferenceLine
+                y={msrp}
+                {...thresholdProps(`MSRP ${formatCurrency(msrp)}`, { color: MUTED, position: 'insideTopLeft' })}
+              />
+            )}
+            {targetPrice != null && (
+              <ReferenceLine y={targetPrice} {...thresholdProps(`target ${formatCurrency(targetPrice)}`, { color: SIGNAL })} />
+            )}
+            {retailers.map((name, i) => (
+              <Line
+                key={name}
+                // Prices change in steps between scrapes; a smoothed curve would
+                // draw dips and peaks that never happened.
+                type="stepAfter"
+                dataKey={name}
+                stroke={COLORS[i % COLORS.length]}
+                strokeWidth={2}
+                strokeLinecap="round"
+                connectNulls
+                dot={false}
+                activeDot={{ r: 4, stroke: 'var(--card)', strokeWidth: 2 }}
+                isAnimationActive={false}
+              />
+            ))}
+          </LineChart>
+        </ResponsiveContainer>
+      </div>
+      <ChartLegend
+        className="mt-3"
+        items={[
+          ...retailers.map((name, i) => ({ kind: 'line', color: COLORS[i % COLORS.length], label: name })),
+          ...(msrp != null ? [{ kind: 'threshold', color: MUTED, label: 'MSRP (sale below)' }] : []),
+          ...(targetPrice != null ? [{ kind: 'threshold', color: SIGNAL, label: 'Target' }] : []),
+        ]}
+      />
+    </div>
   )
 }

@@ -1,44 +1,68 @@
 import { Activity, Gauge, Timer, BarChart2 } from 'lucide-react'
-import { Line, LineChart, ResponsiveContainer, Tooltip, YAxis } from 'recharts'
+import { Area, ComposedChart, ResponsiveContainer, Tooltip, YAxis } from 'recharts'
+import {
+  SIGNAL, useFillId, SignalFill, endpointDot, activeDot, lineCursor, ChartTooltip, ChartLegend,
+} from '@/components/charts/signal'
 import { formatDate } from '@/lib/utils'
 
 // VO₂ max history (R8.4.5) from the trends response's `form.fitness` step
 // series (R8.4.1 snapshots). Values only change at a new snapshot, so it's a
 // step line. Hidden below 2 readings — one point is not a trend.
 function Vo2Sparkline({ history }) {
+  const fillId = useFillId('vo2')
   const points = (history || []).filter((p) => p.vo2max != null)
   if (points.length < 2) return null
   return (
-    <div className="px-4 pb-4">
-      <div className="rounded-[14px] border border-border bg-surface px-4 pb-2 pt-3">
-        <div className="font-mono text-2xs font-medium uppercase tracking-[0.06em] text-faint">
-          VO₂ max · {formatDate(points[0].captured_date)} → {formatDate(points[points.length - 1].captured_date)}
-        </div>
-        <ResponsiveContainer width="100%" height={48}>
-          <LineChart data={points} margin={{ top: 6, right: 4, left: 4, bottom: 2 }}>
-            <YAxis hide domain={['dataMin - 1', 'dataMax + 1']} />
-            <Tooltip
-              cursor={{ stroke: 'var(--primary)', strokeOpacity: 0.35, strokeWidth: 1 }}
-              content={({ active, payload }) =>
-                active && payload?.length ? (
-                  <div className="rounded-[10px] border border-border bg-popover px-2.5 py-1.5 text-xs tabular-nums">
-                    <div className="font-semibold text-foreground">{formatDate(payload[0].payload.captured_date)}</div>
-                    <div className="text-muted-foreground">VO₂ max {payload[0].payload.vo2max}</div>
-                  </div>
-                ) : null
-              }
-            />
-            <Line
-              type="stepAfter"
-              dataKey="vo2max"
-              stroke="var(--primary)"
-              strokeWidth={2}
-              dot={false}
-              activeDot={{ r: 4, fill: 'var(--primary)', stroke: 'var(--card)', strokeWidth: 2 }}
-              isAnimationActive={false}
-            />
-          </LineChart>
-        </ResponsiveContainer>
+    <div className="border-t border-border px-5 pb-4 pt-3">
+      <div className="flex items-baseline justify-between gap-3">
+        <ChartLegend items={[{ kind: 'line', label: 'VO₂ max' }]} />
+        <span className="font-mono text-2xs text-faint">
+          {formatDate(points[0].captured_date)} → {formatDate(points[points.length - 1].captured_date)}
+        </span>
+      </div>
+      <ResponsiveContainer width="100%" height={56}>
+        <ComposedChart data={points} margin={{ top: 8, right: 6, left: 4, bottom: 2 }}>
+          <defs>
+            <SignalFill id={fillId} />
+          </defs>
+          <YAxis hide domain={['dataMin - 1', 'dataMax + 1']} />
+          <Tooltip
+            cursor={lineCursor}
+            content={
+              <ChartTooltip
+                render={(d) => (
+                  <>
+                    <div className="font-sans font-semibold text-foreground">{formatDate(d.captured_date)}</div>
+                    <div>VO₂ max {d.vo2max}</div>
+                  </>
+                )}
+              />
+            }
+          />
+          <Area
+            type="stepAfter"
+            dataKey="vo2max"
+            stroke={SIGNAL}
+            strokeWidth={2}
+            fill={`url(#${fillId})`}
+            dot={endpointDot(points.length - 1)}
+            activeDot={activeDot}
+            isAnimationActive={false}
+          />
+        </ComposedChart>
+      </ResponsiveContainer>
+    </div>
+  )
+}
+
+function Kpi({ icon: Icon, label, value }) {
+  return (
+    <div className="min-w-0 px-4 py-4 sm:px-5">
+      <div className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
+        <Icon className="h-3 w-3 shrink-0" /> <span className="truncate">{label}</span>
+      </div>
+      <div className="mt-0.5 truncate text-lg font-semibold tracking-[-0.01em] text-foreground tabular-nums sm:text-[22px]">
+        {value}
       </div>
     </div>
   )
@@ -48,7 +72,7 @@ function Vo2Sparkline({ history }) {
  * COROS athlete-level fitness metrics (R2.7 T5, F3): VO2 max, lactate-threshold
  * pace, and running level. Race predictions are split into PredictionsCard (F4).
  * Always rendered in the 2×2 grid — shows an empty state when no snapshot exists.
- * Tiles run two-up at every width, matching PredictionsCard. `history` (optional)
+ * The three figures sit in one hairline-divided row (template .kpis). `history` (optional)
  * is the fitness step series from /api/training/trends, drawn as a sparkline.
  */
 export default function FitnessCard({ data, history }) {
@@ -69,31 +93,11 @@ export default function FitnessCard({ data, history }) {
           No fitness data yet — run the <code className="font-mono text-xs">sync_fitness</code> prompt in Claude Desktop.
         </p>
       ) : (
-        <div className="grid grid-cols-3 gap-2 p-3 sm:grid-cols-2 sm:gap-3 sm:p-4">
-          <div className="rounded-[14px] border border-border bg-surface p-3 sm:p-4">
-            <div className="font-mono flex max-w-[97px] items-center gap-1.5 text-2xs font-medium uppercase tracking-[0.06em] text-faint">
-              <Gauge className="h-3 w-3 shrink-0" /> <span className="truncate">VO₂ Max</span>
-            </div>
-            <div className="mt-1 font-heading text-xl font-light tracking-display text-foreground tabular-nums sm:text-[26px] sm:leading-[inherit]">
-              {data.vo2max != null ? data.vo2max.toFixed(1) : '—'}
-            </div>
-          </div>
-          <div className="rounded-[14px] border border-border bg-surface p-3 sm:p-4">
-            <div className="font-mono flex max-w-[97px] items-center gap-1.5 text-2xs font-medium uppercase tracking-[0.06em] text-faint">
-              <Timer className="h-3 w-3 shrink-0" /> <span className="truncate">Threshold</span>
-            </div>
-            <div className="mt-1 font-heading text-xl font-light tracking-display text-foreground tabular-nums sm:text-[26px] sm:leading-[inherit]">
-              {data.threshold_pace ?? '—'}
-            </div>
-          </div>
-          <div className="rounded-[14px] border border-border bg-surface p-3 sm:p-4">
-            <div className="font-mono flex max-w-[97px] items-center gap-1.5 text-2xs font-medium uppercase tracking-[0.06em] text-faint">
-              <BarChart2 className="h-3 w-3 shrink-0" /> <span className="truncate">Running Level</span>
-            </div>
-            <div className="mt-1 font-heading text-xl font-light tracking-display text-foreground tabular-nums sm:text-[26px] sm:leading-[inherit]">
-              {data.running_level != null ? data.running_level.toFixed(1) : '—'}
-            </div>
-          </div>
+        // Template .kpis: three figures in one row, split by hairlines.
+        <div className="grid grid-cols-3 divide-x divide-border">
+          <Kpi icon={Gauge} label="VO₂ max" value={data.vo2max != null ? data.vo2max.toFixed(1) : '—'} />
+          <Kpi icon={Timer} label="Threshold" value={data.threshold_pace ?? '—'} />
+          <Kpi icon={BarChart2} label="Running level" value={data.running_level != null ? data.running_level.toFixed(1) : '—'} />
         </div>
       )}
       {data?.has_data && <Vo2Sparkline history={history} />}
