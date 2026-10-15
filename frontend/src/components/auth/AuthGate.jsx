@@ -1,7 +1,12 @@
-import { useEffect, useState } from 'react'
+import { Suspense, useEffect, useState } from 'react'
+import { useLocation } from 'react-router-dom'
 import { authApi, UNAUTHENTICATED_EVENT } from '@/services/api'
 import { clearOfflineData } from '@/lib/queryClient'
 import LoginView from '@/components/auth/LoginView'
+import { lazyPage } from '@/components/lazyPage'
+
+// R9.4: lazy so signed-in users never download the public page's chunk.
+const PublicDeals = lazyPage(() => import('@/pages/PublicDeals'))
 
 // RA2.1 auth gate — the app's login-vs-app switch.
 //
@@ -18,6 +23,8 @@ import LoginView from '@/components/auth/LoginView'
 export default function AuthGate({ children }) {
   // 'loading' until the first probe resolves, then 'authed' | 'unauthed'.
   const [status, setStatus] = useState('loading')
+  // AuthGate sits inside <BrowserRouter> (main.jsx), so useLocation is safe.
+  const { pathname } = useLocation()
 
   useEffect(() => {
     let cancelled = false
@@ -60,6 +67,18 @@ export default function AuthGate({ children }) {
   }
 
   if (status === 'unauthed') {
+    // R9.4: the one public route. Logged-out /deals gets the read-only
+    // "Musa's picks" page; every other path still gets LoginView. The public
+    // tree must never mount a component that calls an authed hook: each 401
+    // burns the visitor's auth-failure rate-limit bucket and fires
+    // UNAUTHENTICATED_EVENT. It may use only usePublicDeals.
+    if (pathname === '/deals' || pathname === '/deals/') {
+      return (
+        <Suspense fallback={<div className="min-h-screen bg-background" />}>
+          <PublicDeals />
+        </Suspense>
+      )
+    }
     return <LoginView onAuthenticated={() => setStatus('authed')} />
   }
 

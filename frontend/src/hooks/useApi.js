@@ -4,6 +4,7 @@ import {
   shoesApi,
   retailersApi,
   dealsApi,
+  publicApi,
   preferencesApi,
   dashboardApi,
   scrapeApi,
@@ -831,6 +832,17 @@ export function useSignOutEverywhere() {
       await clearOfflineData()
       window.dispatchEvent(new Event(UNAUTHENTICATED_EVENT))
     },
+  })
+}
+
+// ============== PUBLIC (R9.4) ==============
+// The only hook the logged-out public deals page may use. Every other hook in
+// this file calls an authed endpoint: mounting one there burns the visitor's
+// auth-failure bucket and fires UNAUTHENTICATED_EVENT.
+export function usePublicDeals() {
+  return useQuery({
+    queryKey: ['public', 'deals'],
+    queryFn: () => publicApi.deals(),
   })
 }
 

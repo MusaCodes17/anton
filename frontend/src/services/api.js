@@ -170,6 +170,13 @@ export const dealsApi = {
     client.get(`/api/deals/retailer/${retailerId}`, { params }).then((r) => r.data),
 }
 
+// ============== PUBLIC (R9.4) ==============
+// The ONLY call the logged-out "Musa's picks" page makes. Exact path, no
+// trailing slash: the slash form is not in PUBLIC_PATHS and would 401.
+export const publicApi = {
+  deals: () => client.get('/api/public/deals').then((r) => r.data),
+}
+
 // ============== DASHBOARD ==============
 export const dashboardApi = {
   stats: () => client.get('/api/dashboard/stats').then((r) => r.data),
