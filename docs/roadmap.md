@@ -1,6 +1,6 @@
 # Anton — Product Roadmap
 
-**Generated:** 2026-07-04. **Last updated:** 2026-10-10 (**Heat analysis run on the 215 archive weather rows — no effect; external weather lookup + heat-adjusted efficiency parked; new §Parked & gated list (confirmed by the runner).** Prior update 2026-10-10: **R5.3 built; R5.4.1 location and R5.4.2 free-half weather built; R5.4.4 runbook added; R5.5.1–R5.5.2 built; R5.5.3 dry run built, apply pending the runner's review.** Prior update 2026-10-10: **R5.3–R5.5 scoped** at the runner's request — §R5.3 "Bought it" with string provenance (B1 holds), §R5.4 location + weather + splits gated on R5.5 questions, §R5.5 phase-1 shoe performance / wear curves / archive tags; injury context parked with notes; not scheduled. Prior update 2026-10-09: **R8 — Training page: records, races & dashboards** scoped at the runner's request — R8.1 records rules, R8.2 best efforts inside longer runs, R8.3 past-races cleanup, R8.4 dashboards placeholder; not scheduled, see §R8. Earlier the same day: R7.1–R7.3 all closed the same day — R7.3 as an honest "unscrapable"; **R7 — Polish & coverage** added and **scheduled** by the runner: R7.1 design cleanup → R7.2 chat confirmation card → R7.3 scraper coverage (Sport Experts). See §R7. Prior update 2026-10-08: **R6 — Daily-use improvements** scoped from a project-state review: docs refresh, retirement forecast → deal radar, my-size deal filter, gated new-run push; and **RA3 — push-to-deploy** scoped in the RA milestone. Neither scheduled; see §R6 and §RA3. Prior update 2026-07-09: **RA — Remote Access & Deployment** added as the next milestone, prioritized ahead of R3 and R4, which are **parked**; RA pulls R5.2 forward and executes it. Plan doc: REMOTE_ACCESS_PLAN (retired). Prior update 2026-07-08: R2.7.1 Training Depth follow-ups.)
+**Generated:** 2026-07-04. **Last updated:** 2026-10-15 (**R9 — Public deals page for the run club + sign out everywhere** scoped at the runner's request, grounded in a code read of the auth middleware, sessions, rate limiters, deals schema/page, PWA config and Caddyfile; security tasks ship before the link is shared; see §R9.) Prior update 2026-10-10 (**Heat analysis run on the 215 archive weather rows — no effect; external weather lookup + heat-adjusted efficiency parked; new §Parked & gated list (confirmed by the runner).** Prior update 2026-10-10: **R5.3 built; R5.4.1 location and R5.4.2 free-half weather built; R5.4.4 runbook added; R5.5.1–R5.5.2 built; R5.5.3 dry run built, apply pending the runner's review.** Prior update 2026-10-10: **R5.3–R5.5 scoped** at the runner's request — §R5.3 "Bought it" with string provenance (B1 holds), §R5.4 location + weather + splits gated on R5.5 questions, §R5.5 phase-1 shoe performance / wear curves / archive tags; injury context parked with notes; not scheduled. Prior update 2026-10-09: **R8 — Training page: records, races & dashboards** scoped at the runner's request — R8.1 records rules, R8.2 best efforts inside longer runs, R8.3 past-races cleanup, R8.4 dashboards placeholder; not scheduled, see §R8. Earlier the same day: R7.1–R7.3 all closed the same day — R7.3 as an honest "unscrapable"; **R7 — Polish & coverage** added and **scheduled** by the runner: R7.1 design cleanup → R7.2 chat confirmation card → R7.3 scraper coverage (Sport Experts). See §R7. Prior update 2026-10-08: **R6 — Daily-use improvements** scoped from a project-state review: docs refresh, retirement forecast → deal radar, my-size deal filter, gated new-run push; and **RA3 — push-to-deploy** scoped in the RA milestone. Neither scheduled; see §R6 and §RA3. Prior update 2026-07-09: **RA — Remote Access & Deployment** added as the next milestone, prioritized ahead of R3 and R4, which are **parked**; RA pulls R5.2 forward and executes it. Plan doc: REMOTE_ACCESS_PLAN (retired). Prior update 2026-07-08: R2.7.1 Training Depth follow-ups.)
 **Inputs:** REDESIGN_PLAN Phase-5 backlog, standing wishlist items recorded in `docs/changelog.md`, the ⚠️ verdicts in `docs/design_decisions.md`, `docs/architecture.md` §16, and user feature requests 2026-07-07.
 **Framing:** Anton is evolving from a finished redesign into a long-term personal AI platform. This roadmap sequences that evolution.
 
@@ -634,6 +634,104 @@ Scoped 2026-10-09 with greps over `frontend/src`; re-run them at session start, 
 3. R8.4.5 last, consuming all three.
 
 Commits `r8:` one per task. **Exit:** the three answers render from one endpoint each with tests on the threshold boundaries (exactly 1.1 is building? — decide and test it), taper inside 3 weeks, no-HR runs excluded, no planned race → readiness card hides.
+
+---
+
+## R9 — Public deals page for the run club *(scoped 2026-10-15 at the runner's request — ready to schedule)*
+
+*Share `anton.musasouled.com/deals` with the run club. Anyone with the link sees the shoes on sale ("Musa's picks"). Everything else stays behind the password, and signing in lands on Home exactly as today. This is Anton's first deliberately public data surface, so the security work ships **before** the link is shared, not alongside it. Grounded in a code read on 2026-10-15 of `middleware/auth.py`, `routers/session.py`, `services/sessions.py`, `services/rate_limit.py`, `routers/deals.py`, `models/schemas/deals.py`, `pages/Deals.jsx`, `DealDetailModal.jsx`, `AuthGate.jsx`, `vite.config.js` and `deploy/Caddyfile`.*
+
+**Already in place (don't rebuild):** default-deny auth middleware with an exact-match `PUBLIC_PATHS` allowlist that covers every route including `/mcp`; an httpOnly + Secure + SameSite=Lax session cookie, hashed at rest, 14-day TTL; Origin-check CSRF on cookie-authenticated writes; timing-safe password compare; per-IP login (5/min) and auth-failure (10/min) limiters; credential-redacting logs; HSTS; a bundle with no secrets in it. The existing gate stays the boundary. R9 opens it by exactly one path.
+
+| # | Item | Description | Why it matters | Dependencies | Complexity |
+|---|---|---|---|---|---|
+| R9.1 | **Gate regression test + limiter cap** | A test that walks every registered route and asserts a logged-out request gets 401, except a pinned public allowlist. Cap the in-memory rate-limiter dicts. Detail in §R9.1. | Turns "everything else is gated" from a belief into a check that also catches future sessions adding a route. | — | Low |
+| R9.2 | **Sign out everywhere** | One action that ends every browser session **and** every claude.ai OAuth token. Changing the password triggers it automatically on restart. Settings → Security card. Detail in §R9.2. | The leaked-password / lost-phone playbook. Today logout only ends the current device. | — | Low–Medium |
+| R9.3 | **Public deals endpoint** | `GET /api/public/deals`: a field-allowlisted projection of active deals, rate-limited, the only new public path. Detail in §R9.3. | The current deal payload carries personal fields (`notes`, `target_price`, `size_fit`) that must never go public. | R9.1 | Low |
+| R9.4 | **Public deals page ("Musa's picks")** | Logged-out `/deals` renders a read-only page with filters and a Sign-in link. Logged-in `/deals` is unchanged. Detail in §R9.4. | The thing the run club actually sees. | R9.3 | Low–Medium |
+| R9.5 | **Edge hardening + go-live** | Security headers + noindex in Caddy, a global login-failure ceiling, passphrase rotation, a production smoke test. Detail in §R9.5. | More eyes on the login form, and a link that will get forwarded. | R9.1–R9.4 | Low |
+| R9.6 | **Docs** | Decision entry, trust-model update, stale CLAUDE.md §1 line. Detail in §R9.6. | Standing rule. | R9.1–R9.5 | Low |
+
+**Order within R9:** R9.1 → R9.2 (one session, backend-first) → R9.3 → R9.4 (one session) → R9.5 → R9.6. **The link is shared only after R9.5's exit check passes.** R9.2 is useful on its own and can ship first even if the public page waits.
+
+### §R9 — Threat model: what changes when the link goes out
+
+The host has been public since RA1 and bots already probe it. The link adds *attention* and a known URL: friendly but curious club members (some will open dev tools), whoever they forward it to, and the same bots. The named-bearer (Desktop, loopback) and OAuth connector paths are unchanged.
+
+| Risk | Mitigation | Task |
+|---|---|---|
+| A non-public route answers a logged-out request (now, or after a future session adds one) | Route-coverage test with a pinned allowlist | R9.1 |
+| Public payload leaks personal data: `ShoeResponse.notes`, `target_price` (personal "ping me at"), R6.3 `size_fit` (reveals your size), the watchlist, retailer `scraper_config` | Dedicated `PublicDeal` schema built from an explicit field list, plus a leak test | R9.3 |
+| Public page mounts a component that calls an authed endpoint: every 401 burns the visitor's auth-failure bucket and fires `UNAUTHENTICATED_EVENT`. Or a write control (Archive deal, Bought it, Stop watching) leaks into the public view | Separate public component tree using only `usePublicDeals`. No `DealDetailModal` | R9.4 |
+| Password guessing on a now-familiar login screen | Existing per-IP limiter + a global ceiling + passphrase rotation | R9.5 |
+| Password leaks or a device is lost | Sign out everywhere (sessions + OAuth); automatic on password change | R9.2 |
+| Load or abuse on the public endpoint; unbounded limiter memory (`KeyedRateLimiter`'s own docstring: "if this were ever exposed to an open network the unbounded dict would need capping") | Public per-IP limiter; `max_keys` cap on every keyed limiter | R9.1, R9.3 |
+| A public GET triggers work (scrape, sync) | Endpoint is a plain read query; a test asserts no scrape/lock call | R9.3 |
+| Clickjacking, referrer leakage, search indexing | Caddy headers, `X-Robots-Tag: noindex`, `robots.txt`, `rel="noopener noreferrer"` | R9.4, R9.5 |
+| Republishing scraped prices to a group (not a security risk, worth knowing) | Kept low-key: noindex, small audience, every deal links to the retailer. Take a retailer down if one ever asks | R9.5 |
+
+### §R9.1 — Gate regression test + limiter cap
+
+- **`tests/test_public_surface.py`:** enumerate `app.routes` (API routes, plain routes, the `/mcp` mount, and the OAuth routes, which `tests/conftest.py` already enables via `ANTON_HOST_URL`). For each declared method except OPTIONS (which passes through by design), fill path params with dummy values, send a request with no credentials, and assert 401. The only exemptions are paths in `PUBLIC_PATHS`.
+- **Pin `PUBLIC_PATHS` to a literal expected set in the same test.** Adding a public path then has to touch the test: deliberate friction that shows up in the PR diff.
+- **Limiter cap:** `KeyedRateLimiter` gets `max_keys` (e.g. 10 000). When full, it evicts buckets that have refilled to capacity first. A full bucket is identical to a fresh one, so evicting it loses nothing; a currently throttled IP is never reset. Applies to all limiters (auth-failure, login, chat, the new public one).
+- **Tests:** the route walk; `max_keys` stays bounded and a throttled IP stays throttled across evictions.
+- **Exit:** green on today's code. This is a ratchet, not a fix. If it finds a hole, that's a correctness bug and gets fixed in this task.
+
+### §R9.2 — Sign out everywhere
+
+**Today:** `DELETE /api/auth/session` deletes only the session presenting the cookie. The password is `ANTON_LOGIN_PASSWORD` in `backend/.env`, and the same password gates `/oauth/login`. So someone who knows it can also connect *their own* claude.ai to Anton's MCP and hold OAuth tokens that survive a session wipe. "Everywhere" therefore means **all `sessions` rows + all OAuth access/refresh tokens + pending auth codes**. Named bearer tokens (Desktop, loopback) don't come from the password and stay untouched; they rotate via `ANTON_TOKENS` as today.
+
+- **Service:** `sessions.revoke_all(db) -> int` and `oauth.revoke_all(db) -> int`, composed by one `sign_out_everywhere(db)` service that returns both counts and logs a WARNING with the counts and source IP.
+- **Endpoint:** `POST /api/auth/sign-out-everywhere`. Cookie-authenticated, not in `PUBLIC_PATHS`; the middleware's Origin CSRF check applies automatically. It clears the caller's cookie too. The SPA then fires `UNAUTHENTICATED_EVENT`, which already wipes the offline caches and shows the login screen.
+- **Automatic on password change:** at boot (lifespan, after migrations) compute a salted, slow fingerprint of `ANTON_LOGIN_PASSWORD` (`hashlib.scrypt`, stdlib, random salt) and compare it with `AppSettings["login_password_fingerprint"]`. On a mismatch, run `sign_out_everywhere`, store the new fingerprint, and log a WARNING. First boot with nothing stored: store it, don't purge. *Why scrypt and not SHA-256:* the DB is replicated to B2 by Litestream, and a plain hash of a passphrase sitting in a backup can be cracked offline.
+- **Leaked-password playbook (goes in the Settings card and `architecture.md`):** change `ANTON_LOGIN_PASSWORD` on the server, run `docker compose up -d --force-recreate` (not `restart`, which doesn't re-read `env_file`), sign in again, reconnect the claude.ai connector. Every other device and connector is already out.
+- **CLI fallback:** `scripts/sign_out_everywhere.py` for use over SSH (phone lost and no other signed-in device).
+- **Settings → Security card:** "Signed in on N devices · Claude connector: connected / not connected" (counts only, from `GET /api/auth/security`), and a destructive **Sign out everywhere** button behind a confirmation dialog (CLAUDE.md §7).
+- **Not on MCP:** a deliberate exception to REST/MCP parity (CLAUDE.md §4.2). Auth administration isn't an AI-callable capability. Record it in `design_decisions.md`.
+- **Tests:** a cookie valid before revoke gets 401 after; an OAuth token stops verifying; bearer tokens still work; the endpoint returns 401 logged-out and 403 cross-origin; fingerprint unchanged → no purge, changed → purge, first boot → no purge.
+- **Known limit:** a device that is offline keeps showing its cached reads until it next reaches the server (then 401 → wipe). Same as RA2.2 today.
+- **Decision (v1): the password stays in env.** The alternative is a hashed password in the DB with "change password" in Settings, which requires the current password. The env version means a stolen session can never change the password and lock you out; the cost is that changing it needs SSH. Revisit only if changing it from the phone becomes a felt need.
+
+### §R9.3 — Public deals endpoint
+
+- **`GET /api/public/deals`** in a new `routers/public.py` (prefix `/api/public`), added to `PUBLIC_PATHS` as that exact path. GET only, **no query parameters** (filters stay client-side, as on today's Deals page), so there's nothing to tune and nothing to abuse.
+- **Service:** `deals.list_public_deals(db)`, a thin projection over the existing `list_deals(is_active=True)`. One computation, as in CLAUDE.md §6.
+- **Schema `PublicDeal`, built field by field (never `from_attributes` on the ORM object):** `shoe_id`, `brand`, `model`, `shoe_type`, `colorway`, `image_url`, `current_price`, `msrp`, `savings_amount`, `savings_percent`, `sizes_available`, `in_stock`, `retailer_id`, `retailer_name`, `product_url`, `promo_codes` (code, description, discount), `detected_at`. Envelope: `{"deals": [...], "checked_at": <last successful scrape>}`.
+- **Never in the payload:** `notes`, `target_price`, `size_fit`, `is_active`, anything from the watchlist, retailer `scraper_config` / platform internals, owned shoes, price history.
+- **Rate limit:** a new `public_limiter` per IP (60/min, burst 60, env-tunable via `PUBLIC_RATE_LIMIT_*`) → 429 + Retry-After. Response header `Cache-Control: public, max-age=300`.
+- **Tests:** the exact key set; a leak test that seeds a shoe with `notes="SECRET-NOTE"`, a `target_price` and a preferred size, then asserts none of them appear anywhere in the body; only active deals are returned; 429 after the burst; no scrape lock or orchestrator call; other methods are refused.
+- **No new MCP tool:** `get_deals` already serves the owner.
+
+### §R9.4 — Public deals page ("Musa's picks")
+
+- **Routing:** `AuthGate` gets one public-route branch. Logged-out at `/deals` → `<PublicDeals />` in a standalone shell (no nav, no chat drawer, no scrape button, no Watching section). Logged-in at `/deals` → today's Deals page, unchanged. Logged-out anywhere else → `LoginView`, unchanged. After signing in from the public page → navigate to `/` (Home).
+- **Data:** only `usePublicDeals` (`api.js` `publicApi.deals` → `useApi.js`). The page must never mount a component that calls an authed hook. Brand, retailer, type and size options are derived from the payload, not from `/shoes` or `/retailers`.
+- **Components:** reuse `ShoeProductCard` if it is display-only (verify it calls no hooks). Deal detail goes in a new read-only `PublicDealSheet`: image, price, retail price, savings, sizes, promo codes, "View at retailer". Not `DealDetailModal`, which loads authed price history and carries Archive / Bought it / Stop watching.
+- **Filters:** size (most prominent on mobile, since every runner's size differs), brand, retailer, type, min savings, sort.
+- **Copy:** header **"Musa's picks"**, then one line: *"Shoes I'd actually buy, on sale now at Canadian retailers. Prices checked {relative checked_at}."* A small "Sign in" link in the footer. No emoji (R7.1). Outbound links use `target="_blank" rel="noopener noreferrer"`.
+- **PWA note:** visitors also get the service worker (it registers for everyone). That's fine, since the bundle and this payload are both public. "Add to Home Screen" from `/deals` would open at `start_url: '/'` → login. Acceptable for v1.
+- **Exit:** a logged-out visit makes exactly two API calls (`/api/auth/session` probe + `/api/public/deals`), with 0 401s and 0 console errors in the network tab. Desktop + ~380 px pass. Signing in from the page lands on Home. Logged-in `/deals` is pixel-identical to today.
+
+### §R9.5 — Edge hardening + go-live
+
+- **Caddy headers (whole site):** `X-Content-Type-Options nosniff`, `Referrer-Policy strict-origin-when-cross-origin`, `X-Frame-Options DENY`, `X-Robots-Tag "noindex, nofollow"`, a minimal `Permissions-Policy`. CSP first as **`Content-Security-Policy-Report-Only`** (`default-src 'self'; img-src 'self' https: data:; font-src https://fonts.gstatic.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; connect-src 'self'; frame-ancestors 'none'`); switch to enforcing after a clean week. Add `public/robots.txt` with `Disallow: /`.
+- **Global login-failure ceiling** across all IPs (e.g. 50 failures/hour), on top of the per-IP limiter, so a distributed guess can't fan out. Trade-off: an attacker could lock the *login form* for up to an hour. Existing sessions (14-day), the Desktop bearer and the connector keep working, so it's acceptable. Confirm the number at build time.
+- **Human step, before sharing:** rotate `ANTON_LOGIN_PASSWORD` to a long passphrase (5+ random words). This also exercises R9.2's automatic purge end to end.
+- **Reconcile Caddy and `PUBLIC_PATHS`:** `/.well-known/oauth-protected-resource` is in `PUBLIC_PATHS` but not in the repo Caddyfile's `@backend` matcher (it would fall through to the SPA). The connector works in production, so check whether the server's Caddyfile differs from the repo and make them match.
+- **Deploy both halves** (backend + `dist/`), then smoke-test from a logged-out private window on cellular.
+- **Exit:** headers present (`curl -I`); logged-out `/deals` works; every other page shows login; `curl https://anton.musasouled.com/api/owned-shoes/` → 401; `/api/public/deals` returns no personal fields.
+
+### §R9.6 — Docs
+
+- `design_decisions.md`: new entry covering the first public data surface; the field-allowlist schema; the route-coverage test as the ratchet; sign-out scope (sessions + OAuth, not bearers) and the MCP-parity exception; password stays in env.
+- `architecture.md` §11 trust model: add the public tier and the leaked-password playbook.
+- `CLAUDE.md` §1 still says "no auth by explicit deferral", stale since RA1. Correct it.
+- `project_state.md` and the changelog, as usual.
+
+**Not in scope:** accounts for club members, per-member size preferences or alerts, a public watchlist ("Watching"), public price history (could come later as a projection if asked), analytics or visitor tracking, affiliate links.
+
+**Exit (R9 as a whole):** (1) logged-out `/deals` shows active deals with no personal fields (leak test green); (2) every other route answers 401 to a logged-out request (route-coverage test green, spot-checked in production); (3) Sign out everywhere logs out a second device and the claude.ai connector, and changing the password does the same after a recreate; (4) logged in, Home and `/deals` are unchanged; (5) suite + CI green, `vite build` clean, desktop + ~380 px pass.
 
 ---
 
