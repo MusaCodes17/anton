@@ -31,9 +31,9 @@ import { formatDate, formatRelativeTime } from '@/lib/utils'
 // dash when we have nothing yet.
 function StatRow({ label, value }) {
   return (
-    <div className="flex items-baseline justify-between gap-4 py-1.5 text-sm">
+    <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-0.5 py-1.5 text-sm">
       <span className="text-muted-foreground">{label}</span>
-      <span className="font-medium text-foreground tabular-nums">{value ?? '—'}</span>
+      <span className="min-w-0 text-right font-medium text-foreground tabular-nums">{value ?? '—'}</span>
     </div>
   )
 }

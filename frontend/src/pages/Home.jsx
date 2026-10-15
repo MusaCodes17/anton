@@ -4,6 +4,7 @@ import {
   AlertTriangle, CheckCircle2, RefreshCw, Radar, ShieldCheck, Watch,
 } from 'lucide-react'
 import PageHeader from '@/components/PageHeader'
+import Iridescence from '@/components/layout/Iridescence'
 import ScrapeButton from '@/components/ScrapeButton'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -28,9 +29,18 @@ export default function Home() {
 
   return (
     <div className="space-y-4 sm:space-y-6">
-      <PageHeader eyebrow="HOME" title="Today">
-        <ScrapeButton />
-      </PageHeader>
+      {/* The header band: title + meta on open ground, the iridescence
+          confined behind it (relative + isolate + overflow-hidden) so the
+          panels below never cover the bloom. */}
+      <div className="relative isolate -mx-4 -mt-4 px-4 pt-6 sm:-mx-6 sm:-mt-6 sm:px-6 sm:pt-10 lg:-mx-[34px] lg:-mt-[30px] lg:px-[34px] lg:pt-14">
+        <Iridescence />
+        <PageHeader
+          title="Today"
+          meta={[todayLabel()]}
+        >
+          <ScrapeButton />
+        </PageHeader>
+      </div>
 
       <CorosInboxBanner />
 
@@ -50,6 +60,13 @@ export default function Home() {
   )
 }
 
+// Header meta: the runner's local calendar day (America/Toronto, like runs).
+function todayLabel() {
+  return new Date().toLocaleDateString('en-CA', {
+    weekday: 'long', month: 'long', day: 'numeric', timeZone: 'America/Toronto',
+  })
+}
+
 // ── COROS inbox → /new-runs (R5.7 §6) ─────────────────────────────────────────
 // Renders nothing unless there's something to act on: runs waiting, or a
 // connection that needs the runner's attention (failures are shown, not hidden).
@@ -63,7 +80,7 @@ function CorosInboxBanner() {
   if (st.status === 'reauth_required') {
     return (
       <Link to="/settings/sync"
-        className="flex items-center gap-3 rounded-2xl border border-border bg-card px-5 py-3.5 text-sm">
+        className="panel flex items-center gap-3 rounded-2xl border border-border bg-card px-5 py-3.5 text-sm">
         <AlertTriangle className="h-4 w-4 shrink-0 text-warning" />
         <span className="flex-1 font-semibold text-foreground">COROS needs to be reconnected</span>
         <ArrowRight className="h-4 w-4 text-faint" />
@@ -73,9 +90,9 @@ function CorosInboxBanner() {
   if (st.status !== 'connected' || pending === 0) return null
   return (
     <Link to="/new-runs"
-      className="flex items-center gap-3 rounded-2xl border border-border bg-card px-5 py-3.5 transition-colors hover:bg-secondary">
+      className="panel flex items-center gap-3 rounded-2xl border border-border bg-card px-5 py-3.5 transition-colors hover:bg-secondary">
       <Watch className="h-4 w-4 shrink-0 text-primary" />
-      <span className="flex-1 font-heading text-md-plus font-bold text-foreground">
+      <span className="flex-1 text-md-plus font-semibold text-foreground">
         {pending} new run{pending === 1 ? '' : 's'} from COROS
       </span>
       <span className="flex items-center gap-1 text-sm font-semibold text-primary">
@@ -89,11 +106,11 @@ function CorosInboxBanner() {
 
 function ModuleCard({ icon: Icon, title, to, viewLabel = 'View all', children }) {
   return (
-    <section className="flex flex-col overflow-hidden rounded-2xl border border-border bg-card">
+    <section className="panel flex flex-col overflow-hidden rounded-2xl border border-border bg-card">
       <div className="flex items-center justify-between border-b border-border px-4 py-3 sm:px-5 sm:py-3.5">
         <div className="flex items-center gap-2.5">
           <Icon className="h-4 w-4 text-primary" />
-          <span className="font-heading text-md-plus font-bold text-foreground">{title}</span>
+          <span className="text-md-plus font-semibold text-foreground">{title}</span>
         </div>
         {to && (
           <Button variant="ghost" size="sm" asChild>
@@ -122,10 +139,10 @@ function TrainingPulse({ pulse, loading }) {
         <div className="space-y-4">
           <div className="flex items-end justify-between gap-4">
             <div>
-              <div className="text-2xs font-bold uppercase tracking-[0.08em] text-faint">
+              <div className="font-mono text-2xs font-medium uppercase tracking-[0.06em] text-faint">
                 This week
               </div>
-              <div className="mt-1 font-heading text-4xl font-extrabold tracking-tight text-foreground tabular-nums">
+              <div className="mt-1 font-heading text-4xl font-light tracking-display text-foreground tabular-nums">
                 {(pulse?.this_week_km ?? 0).toFixed(1)}
                 <span className="ml-1 text-lg font-semibold text-faint">km</span>
               </div>
@@ -166,13 +183,13 @@ function LastRun({ run }) {
     )
   }
   return (
-    <div className="rounded-[12px] border border-border bg-surface px-4 py-3">
+    <div className="border-t border-border pt-3">
       <div className="flex items-center justify-between gap-2">
-        <span className="text-2xs font-bold uppercase tracking-[0.08em] text-faint">Last run</span>
+        <span className="font-mono text-2xs font-medium uppercase tracking-[0.06em] text-faint">Last run</span>
         <Badge variant={runSourceVariant(run.source)}>{runSourceLabel(run.source)}</Badge>
       </div>
       <div className="mt-1.5 flex flex-wrap items-baseline gap-x-3 gap-y-0.5">
-        <span className="font-heading text-xl font-extrabold text-foreground tabular-nums">
+        <span className="font-heading text-xl font-light text-foreground tabular-nums tracking-display">
           {run.distance_km.toFixed(1)} km
         </span>
         {run.avg_pace && <span className="text-sm text-muted-foreground tabular-nums">{run.avg_pace}</span>}
@@ -204,7 +221,7 @@ function TopDeals({ deals, loading }) {
           {Array.from({ length: 3 }).map((_, i) => <Skeleton key={i} className="h-16 w-full rounded-[12px]" />)}
         </div>
       ) : deals?.length ? (
-        <div className="space-y-3">
+        <div className="-my-3 divide-y divide-border">
           {/* Phones show the top 2 only; sm+ keeps all of them. */}
           {deals.map((deal, i) => (
             <TopDealRow key={deal.id} deal={deal} className={i >= 2 ? 'hidden sm:flex' : undefined} />
@@ -223,7 +240,7 @@ function TopDealRow({ deal, className }) {
   return (
     <Link
       to={`/deals?deal=${deal.id}`}
-      className={cn('focus-ring flex items-center gap-3 rounded-[12px] border border-border bg-surface p-3 hover:border-primary/40', className)}
+      className={cn('focus-ring group flex items-center gap-3 py-3 transition-colors duration-300 ease-signal', className)}
     >
       <div className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-[9px] bg-placeholder-stripes">
         {deal.image_url ? (
@@ -233,22 +250,19 @@ function TopDealRow({ deal, className }) {
         )}
       </div>
       <div className="min-w-0 flex-1">
-        <div className="text-2xs font-bold uppercase tracking-[0.06em] text-accent-foreground">
-          {deal.brand}
-        </div>
-        <div className="truncate text-sm font-semibold text-foreground">{deal.model}</div>
-        <div className="text-xs text-muted-foreground">{deal.retailer}</div>
+        <div className="truncate text-sm font-semibold text-foreground transition-colors duration-300 ease-signal group-hover:text-primary">{deal.model}</div>
+        <div className="truncate font-mono text-2xs text-muted-foreground">{deal.brand} · {deal.retailer}</div>
       </div>
       <div className="shrink-0 text-right">
         <div className="flex items-baseline justify-end gap-1.5 tabular-nums">
-          <span className="font-heading text-md-plus font-extrabold text-foreground">
+          <span className="text-md-plus font-semibold text-foreground">
             {formatCurrency(deal.current_price)}
           </span>
           {deal.msrp != null && (
             <span className="text-xs text-faint line-through">{formatCurrency(deal.msrp)}</span>
           )}
         </div>
-        <Badge className="mt-0.5 rounded-[6px] bg-primary px-1.5 py-0.5 text-2xs font-extrabold text-primary-foreground">
+        <Badge className="mt-0.5 rounded-[5px] border-transparent bg-primary px-1.5 py-0.5 font-mono text-2xs font-medium text-primary-foreground">
           {formatPercent(deal.savings_percent)} OFF
         </Badge>
       </div>
@@ -266,7 +280,7 @@ function ShoeAlerts({ alerts, loading }) {
           {Array.from({ length: 2 }).map((_, i) => <Skeleton key={i} className="h-14 w-full rounded-[12px]" />)}
         </div>
       ) : alerts?.length ? (
-        <div className="space-y-3">
+        <div className="-my-3 divide-y divide-border">
           {alerts.map((a) => <ShoeAlertRow key={a.id} alert={a} />)}
         </div>
       ) : (
@@ -286,11 +300,11 @@ function ShoeAlertRow({ alert }) {
   return (
     <Link
       to={`/shoes/${alert.id}`}
-      className="focus-ring flex flex-row items-center gap-3 rounded-[12px] border border-border bg-surface p-3.5 hover:border-primary/40 sm:gap-4"
+      className="focus-ring group flex flex-row items-center gap-3 py-3.5 sm:gap-4"
     >
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-2">
-          <span className="truncate text-sm font-bold text-foreground">
+          <span className="truncate text-sm font-semibold text-foreground transition-colors duration-300 ease-signal group-hover:text-primary">
             {alert.nickname || `${alert.brand} ${alert.model}`}
           </span>
           {over && (
@@ -308,10 +322,10 @@ function ShoeAlertRow({ alert }) {
         </div>
       </div>
       <div className="flex w-20 shrink-0 items-center gap-2 sm:w-48 sm:gap-3">
-        <div className="h-2 flex-1 overflow-hidden rounded-full bg-secondary">
+        <div className="h-[3px] flex-1 overflow-hidden rounded-full bg-border">
           <div className={cn('h-full rounded-full', barColor)} style={{ width: `${Math.min(100, pct)}%` }} />
         </div>
-        <span className="shrink-0 text-xs font-semibold text-foreground tabular-nums">{pct}%</span>
+        <span className="w-10 shrink-0 text-right font-mono text-xs text-secondary-foreground">{pct}%</span>
       </div>
     </Link>
   )
@@ -324,7 +338,7 @@ function ActivityStrip({ strip, loading }) {
     return <Skeleton className="h-[64px] w-full rounded-2xl" />
   }
   return (
-    <div className="grid grid-cols-3 gap-2 rounded-2xl border border-border bg-card p-3 sm:grid-cols-3 sm:gap-3 sm:p-4">
+    <div className="panel grid grid-cols-3 gap-2 rounded-2xl border border-border bg-card p-3 sm:grid-cols-3 sm:gap-3 sm:p-4">
       <StripItem
         icon={RefreshCw}
         label="Last COROS sync"
@@ -353,7 +367,7 @@ function StripItem({ icon: Icon, label, value, sub, to }) {
         <Icon className="h-4 w-4 text-muted-foreground" />
       </div>
       <div className="min-w-0">
-        <div className="truncate text-2xs font-bold uppercase tracking-[0.08em] text-faint">{label}</div>
+        <div className="font-mono truncate text-2xs font-medium uppercase tracking-[0.06em] text-faint">{label}</div>
         <div className="truncate text-sm font-semibold text-foreground">{value}</div>
         {sub && <div className="truncate text-xs text-muted-foreground">{sub}</div>}
       </div>

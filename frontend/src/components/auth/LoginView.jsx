@@ -40,13 +40,13 @@ export default function LoginView({ onAuthenticated }) {
     <div className="flex min-h-screen items-center justify-center bg-background p-4">
       <form
         onSubmit={handleSubmit}
-        className="w-full max-w-sm rounded-xl border border-border bg-card p-8 shadow-sm"
+        className="panel w-full max-w-sm rounded-lg border border-border bg-card p-8"
       >
         <div className="mb-6 flex items-center gap-[11px]">
-          <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary text-background">
-            <BrandMark className="h-[21px] w-[21px]" />
+          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[10px] border border-input text-primary">
+            <BrandMark className="h-[19px] w-[19px]" />
           </span>
-          <span className="font-heading text-[21px] font-extrabold tracking-tight text-foreground">
+          <span className="font-heading text-[21px] font-light tracking-display text-foreground">
             Anton
           </span>
         </div>

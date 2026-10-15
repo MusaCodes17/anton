@@ -158,7 +158,7 @@ export default function Shoes() {
 
   return (
     <div className="space-y-6">
-      <PageHeader eyebrow="SHOES" title="Tracked shoes" count={shoes.data?.length}>
+      <PageHeader title="Tracked shoes" count={shoes.data?.length}>
         <Button variant="outline" onClick={handleExport} disabled={exporting}>
           <Download className="h-4 w-4" /> {exporting ? 'Exporting…' : 'Export seed data'}
         </Button>
@@ -206,12 +206,10 @@ export default function Shoes() {
                     )}
                   </div>
                   <div className="min-w-0 flex-1">
-                    <div className="text-2xs font-bold uppercase tracking-[0.08em] text-accent-foreground">
-                      {shoe.brand}
-                    </div>
-                    <div className="mt-0.5 truncate font-heading text-base font-bold leading-tight text-foreground">
+                    <div className="truncate text-base font-semibold leading-tight text-foreground">
                       {shoe.model}
                     </div>
+                    <div className="mt-0.5 truncate font-mono text-2xs text-muted-foreground">{shoe.brand}</div>
                     {shoe.shoe_type && (
                       <div className="mt-1">
                         <ShoeTypeBadge type={shoe.shoe_type} />
@@ -239,11 +237,11 @@ export default function Shoes() {
                 </div>
                 <div className="flex border-t border-border">
                   <div className="flex-1 border-r border-border px-4 py-3">
-                    <div className="text-2xs uppercase tracking-[0.06em] text-faint">
+                    <div className="font-mono text-2xs uppercase tracking-[0.06em] text-faint">
                       {onSale ? 'Lowest active' : 'Current price'}
                     </div>
                     <div className="flex items-baseline gap-1.5">
-                      <span className="mt-0.5 font-heading text-lg font-extrabold text-foreground">
+                      <span className="mt-0.5 font-heading text-lg font-light text-foreground tracking-display">
                         {displayPrice != null ? formatCurrency(displayPrice) : '—'}
                       </span>
                       {shoe.msrp != null && (
@@ -257,10 +255,10 @@ export default function Shoes() {
                     </div>
                   </div>
                   <div className="flex-1 px-4 py-3">
-                    <div className="text-2xs uppercase tracking-[0.06em] text-faint">
+                    <div className="font-mono text-2xs uppercase tracking-[0.06em] text-faint">
                       Retailers
                     </div>
-                    <div className="mt-0.5 font-heading text-lg font-extrabold text-foreground">
+                    <div className="mt-0.5 font-heading text-lg font-light text-foreground tracking-display">
                       {retailersScraped ?? '—'}
                     </div>
                   </div>

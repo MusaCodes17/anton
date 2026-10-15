@@ -13,7 +13,7 @@ export default function RetirementPipeline({ entries, total = entries.length, on
     <section className="rounded-[14px] border border-warning/30 bg-warning/5 p-4">
       <div className="mb-1.5 flex items-center gap-2">
         <AlertTriangle className="h-4 w-4 text-warning" />
-        <h2 className="font-heading text-sm font-bold text-foreground">Retirement pipeline</h2>
+        <h2 className="text-sm font-semibold text-foreground">Retirement pipeline</h2>
         <Badge variant="warning">{total}</Badge>
         {seeAllTo && total > entries.length && (
           <Link
@@ -27,7 +27,7 @@ export default function RetirementPipeline({ entries, total = entries.length, on
       <p className="mb-3.5 text-xs text-muted-foreground">
         Past 75% of their mileage limit — worst first. Time to plan a replacement.
       </p>
-      <div className="space-y-2.5">
+      <div className="divide-y divide-warning/15 border-t border-warning/15">
         {entries.map((entry) => (
           <PipelineRow key={entry.owned_shoe_id} entry={entry} onOpenDetail={onOpenDetail} />
         ))}
@@ -43,7 +43,7 @@ function PipelineRow({ entry, onOpenDetail }) {
   const overLimit = pct >= 1
 
   return (
-    <div className="flex flex-col gap-3 rounded-[11px] border border-border bg-surface p-3 sm:flex-row sm:items-center">
+    <div className="flex flex-col gap-3 py-3 last:pb-0 sm:flex-row sm:items-center">
       <button
         type="button"
         onClick={() => onOpenDetail(shoe.id)}
@@ -58,7 +58,7 @@ function PipelineRow({ entry, onOpenDetail }) {
         </div>
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
-            <span className="truncate font-heading text-sm font-bold text-foreground">
+            <span className="truncate text-sm font-semibold text-foreground">
               {shoe.nickname || `${shoe.brand} ${shoe.model}`}
             </span>
             <Badge variant={overLimit ? 'destructive' : 'warning'}>{Math.round(pct * 100)}%</Badge>

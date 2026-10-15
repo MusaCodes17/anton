@@ -229,7 +229,7 @@ function ViewAllButton({ count, onClick }) {
     <button
       type="button"
       onClick={onClick}
-      className="focus-ring rounded text-2xs font-bold uppercase tracking-[0.08em] text-faint hover:text-muted-foreground"
+      className="font-mono focus-ring rounded text-2xs font-medium uppercase tracking-[0.06em] text-faint hover:text-muted-foreground"
     >
       View all · {count}
     </button>
@@ -335,11 +335,11 @@ export default function PlannedRacesCard() {
   const visiblePast = past.slice(0, VISIBLE_LIMIT)
 
   return (
-    <div className="rounded-2xl border border-border bg-card">
+    <div className="panel rounded-2xl border border-border bg-card">
       <div className="flex items-center justify-between border-b border-border px-5 py-3">
         <div className="flex items-center gap-2.5">
           <Flag className="h-4 w-4 text-primary" />
-          <span className="font-heading text-md-plus font-bold text-foreground">Races</span>
+          <span className="text-md-plus font-semibold text-foreground">Races</span>
         </div>
         <Button size="sm" variant="outline" onClick={openAdd}>
           <Plus className="h-4 w-4" /> Add race
@@ -385,7 +385,7 @@ export default function PlannedRacesCard() {
             {past.length > 0 && (
               <div className="space-y-1.5 border-t border-border/50 pt-3">
                 <div className="flex items-center justify-between pb-1">
-                  <span className="text-2xs font-bold uppercase tracking-[0.08em] text-faint">
+                  <span className="font-mono text-2xs font-medium uppercase tracking-[0.06em] text-faint">
                     Past races · {past.length}
                   </span>
                   {past.length > VISIBLE_LIMIT && (

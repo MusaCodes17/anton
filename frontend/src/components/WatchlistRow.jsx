@@ -7,7 +7,7 @@ import { formatCurrency, formatRelativeTime } from '@/lib/utils'
 function Stat({ label, children }) {
   return (
     <div className="min-w-[64px]">
-      <div className="text-2xs font-bold uppercase tracking-[0.08em] text-faint">{label}</div>
+      <div className="font-mono text-2xs font-medium uppercase tracking-[0.06em] text-faint">{label}</div>
       <div className="mt-0.5 text-sm font-semibold text-foreground tabular-nums">{children ?? '—'}</div>
     </div>
   )
@@ -71,7 +71,7 @@ export default function WatchlistRow({ item }) {
 
       {/* Last-seen per retailer */}
       <div className="flex min-w-0 flex-col gap-1.5 sm:w-[220px]">
-        <div className="text-2xs font-bold uppercase tracking-[0.08em] text-faint">Last seen</div>
+        <div className="font-mono text-2xs font-medium uppercase tracking-[0.06em] text-faint">Last seen</div>
         {last_seen && last_seen.length ? (
           <div className="flex flex-wrap gap-1.5">
             {last_seen.map((ls) => (

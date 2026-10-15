@@ -36,12 +36,12 @@ function retailerStatus(retailer) {
 }
 
 const STATUS_DOT = {
-  success: 'bg-primary ring-4 ring-primary/[0.16]',
-  warning: 'bg-warning ring-4 ring-warning/[0.16]',
-  muted: 'bg-faint ring-4 ring-faint/[0.16]',
+  success: 'bg-success shadow-[0_0_8px_var(--success)]',
+  warning: 'bg-warning shadow-[0_0_8px_var(--warning)]',
+  muted: 'bg-faint',
 }
 const STATUS_PILL = {
-  success: 'bg-primary/[0.13] text-accent-foreground',
+  success: 'bg-success/[0.12] text-success',
   warning: 'bg-warning/[0.13] text-warning',
   muted: 'bg-secondary text-muted-foreground',
 }
@@ -120,7 +120,7 @@ export default function Retailers() {
 
   return (
     <div className="space-y-6">
-      <PageHeader eyebrow="RETAILERS" title="Retailers" count={retailers.data?.length}>
+      <PageHeader title="Retailers" count={retailers.data?.length}>
         <Button onClick={() => setFormState({})}>
           <Plus className="h-4 w-4" /> Add retailer
         </Button>
@@ -139,8 +139,8 @@ export default function Retailers() {
       ) : retailers.isError ? (
         <ErrorState error={retailers.error} onRetry={retailers.refetch} />
       ) : retailers.data?.length ? (
-        <div className="overflow-hidden rounded-[14px] border border-border bg-card">
-          <div className="grid grid-cols-[2fr_1.1fr_1fr_1.2fr_1.6fr] gap-3.5 border-b border-border px-5 py-3 font-mono text-2xs uppercase tracking-[0.08em] text-faint">
+        <div className="panel overflow-hidden rounded-[14px] border border-border bg-card">
+          <div className="grid grid-cols-[2fr_1.1fr_1fr_1.2fr_1.6fr] gap-3.5 border-b border-border px-5 py-3 font-mono text-2xs uppercase tracking-[0.06em] text-faint">
             <span>Retailer</span>
             <span>Status</span>
             <span>Active deals</span>
@@ -161,7 +161,7 @@ export default function Retailers() {
                 className="grid grid-cols-[2fr_1.1fr_1fr_1.2fr_1.6fr] items-center gap-3.5 border-b border-divider px-5 py-3.5 last:border-b-0"
               >
                 <div className="flex min-w-0 items-center gap-3">
-                  <div className="flex h-[42px] w-[42px] shrink-0 items-center justify-center rounded-[9px] bg-secondary font-heading text-md-plus font-extrabold text-secondary-foreground">
+                  <div className="flex h-[42px] w-[42px] shrink-0 items-center justify-center rounded-[9px] bg-secondary text-md-plus font-semibold text-secondary-foreground">
                     {initials}
                   </div>
                   <div className="min-w-0">
@@ -192,7 +192,7 @@ export default function Retailers() {
                     <span className="text-xs font-bold">{status.label}</span>
                   </span>
                 </div>
-                <div className="font-heading text-base font-extrabold text-foreground">
+                <div className="text-base font-semibold text-foreground">
                   {dealsByRetailer.get(retailer.id) ?? 0}
                 </div>
                 <div className="font-mono text-xs text-muted-foreground">
@@ -305,7 +305,7 @@ function StatusTile({ count, label, tone }) {
     <div className="flex items-center gap-3.5 rounded-[13px] border border-border bg-surface p-[17px]">
       <span className={cn('h-2.5 w-2.5 shrink-0 rounded-full', STATUS_DOT[tone])} />
       <div>
-        <div className="font-heading text-2xl font-extrabold leading-none text-foreground">
+        <div className="font-heading text-2xl font-light leading-none text-foreground tracking-display">
           {count}
         </div>
         <div className="mt-1 text-xs text-muted-foreground">{label}</div>

@@ -176,7 +176,7 @@ export default function Deals() {
 
   return (
     <div className="space-y-4 sm:space-y-6">
-      <PageHeader eyebrow="DEALS" title="Deals" count={groups.length}>
+      <PageHeader title="Deals" count={groups.length}>
         <ScrapeButton variant="outline" />
       </PageHeader>
 
@@ -293,11 +293,11 @@ export default function Deals() {
       {/* ── On sale now ─────────────────────────────────────────── */}
       <section className="space-y-4">
         <div className="flex items-baseline gap-2">
-          <h2 className="font-heading text-lg font-extrabold tracking-tight text-foreground">
+          <h2 className="font-heading text-lg font-light tracking-display text-foreground">
             On sale now
           </h2>
           {!deals.isLoading && !deals.isError && (
-            <span className="text-sm text-faint">
+            <span className="font-mono text-xs text-muted-foreground">
               {groups.length} shoe{groups.length === 1 ? '' : 's'} · {visible.length} deal
               {visible.length === 1 ? '' : 's'}
             </span>
@@ -355,7 +355,7 @@ export default function Deals() {
               }`}
             />
             <Eye className="h-4 w-4 shrink-0 text-accent-foreground" />
-            <span className="font-heading text-lg font-extrabold tracking-tight text-foreground">
+            <span className="font-heading text-lg font-light tracking-display text-foreground">
               Watching
             </span>
             <span className="text-sm text-faint">

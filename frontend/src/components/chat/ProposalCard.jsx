@@ -65,14 +65,14 @@ export default function ProposalCard({ proposal, onResolved, busy }) {
   const canEdit = proposal.edit?.kind === 'log_run'
 
   return (
-    <div className="mt-3 rounded-[14px] border border-edge bg-card p-3.5">
+    <div className="panel mt-3 rounded-[14px] border border-edge bg-card p-3.5">
       <div className="flex items-center gap-2">
         <ShieldCheck className="h-4 w-4 shrink-0 text-primary" />
-        <span className="text-2xs font-semibold uppercase tracking-[0.1em] text-muted-foreground">
+        <span className="font-mono text-2xs font-medium uppercase tracking-[0.06em] text-muted-foreground">
           Confirm to apply
         </span>
       </div>
-      <p className="mt-1.5 font-heading text-md-plus font-extrabold text-foreground">{proposal.title}</p>
+      <p className="mt-1.5 text-md-plus font-semibold text-foreground">{proposal.title}</p>
 
       <dl className="mt-2.5 space-y-1.5">
         {proposal.fields.map((f) => (

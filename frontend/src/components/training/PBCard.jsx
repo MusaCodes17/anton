@@ -18,7 +18,7 @@ export default function PBCard({ record }) {
   return (
     <div className="flex flex-col gap-3 rounded-[14px] border border-border bg-surface p-3 sm:p-4">
       <div className="flex items-center justify-between">
-        <span className="font-heading text-sm font-extrabold uppercase tracking-[0.06em] text-accent-foreground">
+        <span className="font-mono text-2xs font-medium uppercase tracking-[0.06em] text-accent-foreground">
           {BAND_LABEL[band] ?? band}
         </span>
         <span
@@ -30,7 +30,7 @@ export default function PBCard({ record }) {
       </div>
 
       <div>
-        <div className="font-heading text-[26px] font-extrabold tracking-tight text-foreground tabular-nums">
+        <div className="font-heading text-[26px] font-light tracking-display text-foreground tabular-nums">
           {formatDuration(total_time_s)}
         </div>
         <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-muted-foreground tabular-nums">

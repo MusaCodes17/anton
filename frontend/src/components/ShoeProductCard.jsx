@@ -29,7 +29,7 @@ export default function ShoeProductCard({ group, onViewDetails }) {
   const promo = bestPromo(selected.current_price, retailerObj?.active_promo_codes)
 
   return (
-    <div className="flex flex-col overflow-hidden rounded-[14px] border border-border bg-card">
+    <div className="panel flex flex-col overflow-hidden rounded-[14px] border border-border bg-card">
       {/* Primary image */}
       <button
         type="button"
@@ -49,7 +49,7 @@ export default function ShoeProductCard({ group, onViewDetails }) {
           </div>
         )}
         {savings != null && (
-          <Badge className="absolute right-2 top-2 rounded-[7px] bg-primary px-[9px] py-[5px] font-heading text-sm-plus font-extrabold text-primary-foreground">
+          <Badge className="absolute right-2 top-2 rounded-[6px] border-transparent bg-primary px-2 py-[5px] font-mono text-xs font-medium text-primary-foreground shadow-[0_0_18px_-4px_var(--primary)]">
             {formatPercent(savings)} OFF
           </Badge>
         )}
@@ -57,12 +57,10 @@ export default function ShoeProductCard({ group, onViewDetails }) {
 
       <div className="flex flex-1 flex-col gap-3 p-3 sm:p-4">
         <div className="min-w-0">
-          <p className="text-2xs font-bold uppercase tracking-[0.1em] text-accent-foreground">
-            {shoe.brand}
-          </p>
-          <h3 className="truncate font-heading text-base font-extrabold leading-tight text-foreground">
+          <h3 className="truncate text-base font-semibold leading-tight text-foreground">
             {shoe.model}
           </h3>
+          <p className="truncate font-mono text-2xs text-muted-foreground">{shoe.brand}</p>
           {selected.colorway && (
             <p className="truncate text-xs text-muted-foreground">{selected.colorway}</p>
           )}
@@ -74,7 +72,7 @@ export default function ShoeProductCard({ group, onViewDetails }) {
         <div className="flex flex-wrap items-end justify-between gap-x-2 gap-y-1.5">
           <div className="min-w-0">
             <div className="flex items-baseline gap-2">
-              <p className="font-heading text-xl font-extrabold text-foreground sm:text-2xl">
+              <p className="font-heading text-xl font-light text-foreground sm:text-2xl tracking-display">
                 {formatCurrency(selected.current_price)}
               </p>
               {shoe.msrp != null && (

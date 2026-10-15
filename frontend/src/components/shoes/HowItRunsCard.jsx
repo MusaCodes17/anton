@@ -110,9 +110,9 @@ export default function HowItRunsCard({ ownedShoeId }) {
   return (
     <section className="space-y-3 rounded-[14px] border border-border bg-surface p-4">
       <div className="flex items-center justify-between gap-2">
-        <div className="text-2xs font-bold uppercase tracking-[0.08em] text-faint">How it runs</div>
+        <div className="font-mono text-2xs font-medium uppercase tracking-[0.06em] text-faint">How it runs</div>
         {data?.performance?.heuristic && (
-          <span className="text-2xs uppercase tracking-[0.08em] text-faint">Heuristic</span>
+          <span className="font-mono text-2xs uppercase tracking-[0.06em] text-faint">Heuristic</span>
         )}
       </div>
 
@@ -139,7 +139,7 @@ export default function HowItRunsCard({ ownedShoeId }) {
           <>
             {perf.enough_data ? (
               <div className="space-y-1">
-                <div className="font-heading text-base font-bold tabular-nums text-foreground sm:text-lg">
+                <div className="font-heading text-base font-light tabular-nums text-foreground sm:text-lg tracking-display">
                   <Numbers p={perf} />
                 </div>
                 <div className="text-xs text-muted-foreground">

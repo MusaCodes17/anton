@@ -12,7 +12,7 @@ function Figure({ value, unit, caption }) {
         {value ?? '—'}
         {value != null && unit ? <span className="ml-0.5 text-2xs font-normal text-faint">{unit}</span> : null}
       </div>
-      <div className="text-2xs uppercase tracking-[0.08em] text-faint">{caption}</div>
+      <div className="font-mono text-2xs uppercase tracking-[0.06em] text-faint">{caption}</div>
     </div>
   )
 }

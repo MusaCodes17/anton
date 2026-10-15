@@ -219,7 +219,7 @@ export default function OwnedShoeForm({ initial, prefill, onSubmit, onCancel, su
 
       {initial && (
         <div className="space-y-3">
-          <div className="text-2xs font-bold uppercase tracking-[0.08em] text-faint">Mileage</div>
+          <div className="font-mono text-2xs font-medium uppercase tracking-[0.06em] text-faint">Mileage</div>
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-1.5">
               <Label>Retirement limit (km)</Label>
