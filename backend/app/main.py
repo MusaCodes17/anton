@@ -15,6 +15,7 @@ from app.middleware.access_log import AccessLogMiddleware
 from app.middleware.auth import BearerAuthMiddleware
 from app.routers import shoes, retailers, deals, dashboard, scraping, export, owned_shoes, coros_connect, chat, admin, training, strava, watchlist, activities, races, home, shoe_types, checkpoints, insights, preferences, oauth as oauth_router, session as session_router, public as public_router
 from app.services import schedule as schedule_svc
+from app.services.auth_admin import check_password_rotation
 
 # Load environment variables
 load_dotenv()
@@ -65,6 +66,7 @@ async def lifespan(app: FastAPI):
     # AppSettings (DB → env → default, #7) at boot through the same apply_config path.
     _boot_db = SessionLocal()
     try:
+        check_password_rotation(_boot_db)  # R9.2: changed login password -> sign out everywhere
         schedule_svc.start(_boot_db)
     finally:
         _boot_db.close()
