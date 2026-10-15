@@ -15,16 +15,17 @@ export default function MileageProgressBar({ mileage, limit = DEFAULT_LIMIT_KM, 
 
   return (
     <div className={cn('space-y-1', className)}>
-      <div className="h-2 w-full overflow-hidden rounded-full bg-secondary">
+      {/* Template .meter: a 3px hairline on the panel-line track. */}
+      <div className="h-[3px] w-full overflow-hidden rounded-full bg-border">
         <div
           className={cn('h-full rounded-full transition-all', colorClass)}
           style={{ width: `${pct}%` }}
         />
       </div>
       {compact ? (
-        <div className="text-2xs tabular-nums text-faint">{Math.round(mileage)} km</div>
+        <div className="font-mono text-2xs text-muted-foreground">{Math.round(mileage)} km</div>
       ) : (
-        <div className="flex justify-between text-2xs tabular-nums text-faint">
+        <div className="flex justify-between font-mono text-2xs text-muted-foreground">
           <span>{Math.round(mileage)} km</span>
           <span>{limit} km limit</span>
         </div>

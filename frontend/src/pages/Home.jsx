@@ -1,7 +1,7 @@
 import { Link } from 'react-router-dom'
 import {
   Activity, Tag, Footprints, ArrowRight, TrendingUp, TrendingDown,
-  AlertTriangle, CheckCircle2, RefreshCw, Radar, ShieldCheck, Watch,
+  AlertTriangle, RefreshCw, Radar, ShieldCheck, Watch,
 } from 'lucide-react'
 import PageHeader from '@/components/PageHeader'
 import Iridescence from '@/components/layout/Iridescence'
@@ -15,7 +15,8 @@ import {
   formatCurrency, formatPercent, formatDate, formatRelativeTime, cn,
 } from '@/lib/utils'
 import { runSourceVariant, runSourceLabel } from '@/lib/runSource'
-import { forecastLabel } from '@/lib/forecast'
+import { pipelinePreview } from '@/lib/pipeline'
+import RetirementPipeline from '@/components/shoes/RetirementPipeline'
 
 /**
  * Home — the attention surface (§4 Phase 4). Four modules, each answering one
@@ -270,64 +271,23 @@ function TopDealRow({ deal, className }) {
   )
 }
 
-// ── Shoe alerts → /shoes ─────────────────────────────────────────────────────
+// ── Retirement pipeline → /shoes/pipeline ──────────────────────────────────
+// The same component and the same two-row, two-type preview as the Shoes page
+// (lib/pipeline), so the two never show different shoes or details. The
+// server's alerts are the full pipeline, worst first; they're reshaped into the
+// Shoes page's `{ ...entry, shoe }` form here (presentation only).
 
 function ShoeAlerts({ alerts, loading }) {
+  if (loading) return <Skeleton className="h-[220px] w-full rounded-2xl" />
+  const entries = (alerts || []).map((a) => ({
+    ...a,
+    shoe: {
+      id: a.id, brand: a.brand, model: a.model, nickname: a.nickname,
+      shoe_type: a.shoe_type, image_url: a.image_url,
+    },
+  }))
   return (
-    <ModuleCard icon={AlertTriangle} title="Rotation alerts" to="/shoes" viewLabel="My shoes">
-      {loading ? (
-        <div className="space-y-3">
-          {Array.from({ length: 2 }).map((_, i) => <Skeleton key={i} className="h-14 w-full rounded-[12px]" />)}
-        </div>
-      ) : alerts?.length ? (
-        <div className="-my-3 divide-y divide-border">
-          {alerts.map((a) => <ShoeAlertRow key={a.id} alert={a} />)}
-        </div>
-      ) : (
-        <div className="flex items-center gap-2.5 text-sm text-muted-foreground">
-          <CheckCircle2 className="h-4 w-4 text-success" />
-          <span>Rotation healthy — no shoes near their mileage limit.</span>
-        </div>
-      )}
-    </ModuleCard>
-  )
-}
-
-function ShoeAlertRow({ alert }) {
-  const pct = Math.round(alert.pct * 100)
-  const over = alert.pct >= 1
-  const barColor = over ? 'bg-destructive' : 'bg-warning'
-  return (
-    <Link
-      to={`/shoes/${alert.id}`}
-      className="focus-ring group flex flex-row items-center gap-3 py-3.5 sm:gap-4"
-    >
-      <div className="min-w-0 flex-1">
-        <div className="flex items-center gap-2">
-          <span className="truncate text-sm font-semibold text-foreground transition-colors duration-300 ease-signal group-hover:text-primary">
-            {alert.nickname || `${alert.brand} ${alert.model}`}
-          </span>
-          {over && (
-            <Badge variant="destructive" className="shrink-0 text-2xs">Over limit</Badge>
-          )}
-        </div>
-        <div className="mt-0.5 text-xs text-muted-foreground tabular-nums">
-          {Math.round(alert.current_mileage)} km / {Math.round(alert.mileage_limit)} km
-          {forecastLabel(alert) && <span>{' · '}{forecastLabel(alert)}</span>}
-          {alert.replacement_deals > 0 && (
-            <span className="text-accent-foreground">
-              {' · '}{alert.replacement_deals} replacement deal{alert.replacement_deals === 1 ? '' : 's'}
-            </span>
-          )}
-        </div>
-      </div>
-      <div className="flex w-20 shrink-0 items-center gap-2 sm:w-48 sm:gap-3">
-        <div className="h-[3px] flex-1 overflow-hidden rounded-full bg-border">
-          <div className={cn('h-full rounded-full', barColor)} style={{ width: `${Math.min(100, pct)}%` }} />
-        </div>
-        <span className="w-10 shrink-0 text-right font-mono text-xs text-secondary-foreground">{pct}%</span>
-      </div>
-    </Link>
+    <RetirementPipeline entries={pipelinePreview(entries)} total={entries.length} seeAllTo="/shoes/pipeline" />
   )
 }
 

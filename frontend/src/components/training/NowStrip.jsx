@@ -10,16 +10,20 @@ import {
   X,
 } from 'lucide-react'
 import {
+  Area,
   Bar,
   Cell,
   ComposedChart,
   Line,
-  LineChart,
   ResponsiveContainer,
   Tooltip,
   XAxis,
   YAxis,
 } from 'recharts'
+import {
+  SIGNAL, axisProps, useFillId, SignalFill, endpointDot, activeDot, lineCursor,
+  ChartTooltip, ChartLegend,
+} from '@/components/charts/signal'
 import { useMediaQuery } from '@/hooks/useMediaQuery'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -34,7 +38,7 @@ import { formatDate, formatDuration } from '@/lib/utils'
  * the readiness card's absence leaves no hole.
  */
 
-const PRIMARY = 'var(--primary)'
+const PRIMARY = SIGNAL
 const MUTED = 'var(--muted-foreground)'
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
@@ -99,15 +103,6 @@ function CardError({ eyebrow, error, onRetry }) {
   )
 }
 
-function ChartTooltip({ active, payload, render }) {
-  if (!active || !payload?.length) return null
-  return (
-    <div className="rounded-[10px] border border-border bg-popover px-2.5 py-1.5 text-xs tabular-nums">
-      {render(payload[0].payload)}
-    </div>
-  )
-}
-
 // ── Load: "am I building or holding?" ───────────────────────────
 
 const LOAD_VERDICT = {
@@ -141,16 +136,22 @@ function LoadChart({ weeks }) {
             />
           }
         />
-        <Bar dataKey="total_km" radius={[4, 4, 0, 0]} isAnimationActive={false}>
+        {/* Template .track: thin ticks, history dim, the current week lit. */}
+        <Bar dataKey="total_km" radius={[2, 2, 0, 0]} maxBarSize={14} isAnimationActive={false}>
           {weeks.map((w, i) => (
-            <Cell key={w.period} fill={PRIMARY} fillOpacity={i === last ? 1 : 0.4} />
+            <Cell
+              key={w.period}
+              fill={PRIMARY}
+              fillOpacity={i === last ? 1 : 0.32}
+              className={i === last ? 'chart-dot' : undefined}
+            />
           ))}
         </Bar>
         <Line
           type="monotone"
           dataKey="rolling_4wk_km"
           stroke={MUTED}
-          strokeWidth={2}
+          strokeWidth={1.5}
           strokeDasharray="4 3"
           dot={false}
           activeDot={false}
@@ -197,7 +198,13 @@ function LoadCard({ load, weeks }) {
         {hasWeeks ? (
           <>
             <LoadChart weeks={weeks} />
-            <p className="mt-1 text-2xs text-faint">Weekly km, last 12 weeks · dashed = 4-week average</p>
+            <ChartLegend
+              className="mt-2"
+              items={[
+                { kind: 'bar', label: 'Weekly km, 12 wks' },
+                { kind: 'dashed', color: MUTED, label: '4-week average' },
+              ]}
+            />
           </>
         ) : (
           <p className="py-6 text-center text-xs text-faint">No runs in the last 12 weeks</p>
@@ -231,31 +238,30 @@ function formVerdictText(form) {
 
 function FormChart({ months }) {
   const isSm = useMediaQuery('(min-width: 640px)')
+  const fillId = useFillId('form')
   const data = months.map((m) => {
     const [y, mm] = m.month.split('-')
     const mon = MONTHS[parseInt(mm, 10) - 1]
     return { ...m, label: mon, fullLabel: `${mon} ${y}` }
   })
+  // The endpoint marks the latest month that has a value (gaps are allowed).
+  const lastPlotted = data.reduce((acc, d, i) => (d.m_per_beat != null ? i : acc), -1)
   return (
     <ResponsiveContainer width="100%" height={chartHeight(isSm)}>
-      <LineChart data={data} margin={{ top: 6, right: 6, left: 6, bottom: 0 }}>
-        <XAxis
-          dataKey="label"
-          tick={{ fontSize: 10, fill: 'var(--faint)' }}
-          axisLine={false}
-          tickLine={false}
-          interval="preserveStartEnd"
-          fontFamily="IBM Plex Mono, ui-monospace, monospace"
-        />
+      <ComposedChart data={data} margin={{ top: 6, right: 6, left: 6, bottom: 0 }}>
+        <defs>
+          <SignalFill id={fillId} />
+        </defs>
+        <XAxis dataKey="label" {...axisProps} interval="preserveStartEnd" />
         <YAxis hide domain={['dataMin - 0.02', 'dataMax + 0.02']} />
         <Tooltip
-          cursor={{ stroke: PRIMARY, strokeOpacity: 0.35, strokeWidth: 1 }}
+          cursor={lineCursor}
           content={
             <ChartTooltip
               render={(d) => (
                 <>
-                  <div className="font-semibold text-foreground">{d.fullLabel}</div>
-                  <div className="text-muted-foreground">
+                  <div className="font-sans font-semibold text-foreground">{d.fullLabel}</div>
+                  <div>
                     {d.m_per_beat != null ? `${d.m_per_beat.toFixed(3)} m/beat` : 'Too few steady runs'}
                   </div>
                   <div className="text-faint">{d.steady_runs} steady run{d.steady_runs === 1 ? '' : 's'}</div>
@@ -264,17 +270,18 @@ function FormChart({ months }) {
             />
           }
         />
-        <Line
+        <Area
           type="monotone"
           dataKey="m_per_beat"
           stroke={PRIMARY}
           strokeWidth={2}
-          dot={{ r: 2.5, fill: PRIMARY, strokeWidth: 0 }}
-          activeDot={{ r: 4, fill: PRIMARY, stroke: 'var(--card)', strokeWidth: 2 }}
+          fill={`url(#${fillId})`}
+          dot={endpointDot(lastPlotted)}
+          activeDot={activeDot}
           connectNulls={false}
           isAnimationActive={false}
         />
-      </LineChart>
+      </ComposedChart>
     </ResponsiveContainer>
   )
 }
@@ -316,7 +323,7 @@ function FormCard({ form }) {
         {hasMonths ? (
           <>
             <FormChart months={form.months} />
-            <p className="mt-1 text-2xs text-faint">Metres per heartbeat by month, last 12 months</p>
+            <ChartLegend className="mt-2" items={[{ kind: 'line', label: 'Metres per heartbeat, by month' }]} />
           </>
         ) : (
           <p className="py-6 text-center text-xs text-faint">No month has enough steady runs to plot yet</p>

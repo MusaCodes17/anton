@@ -63,6 +63,11 @@ class ShoeAlert:
     weekly_km: float = 0.0
     weeks_to_limit: Optional[float] = None
     projected_limit_date: Optional[str] = None
+    # Signal redesign: Home renders the same pipeline component as /shoes, so it
+    # needs what that one shows — the type (the two-type preview pick) and the
+    # thumbnail (own image, else the scraped match, as on the Shoes page).
+    shoe_type: Optional[str] = None
+    image_url: Optional[str] = None
 
 
 @dataclass
@@ -155,6 +160,17 @@ def _shoe_alerts(db: Session) -> List[ShoeAlert]:
     computation backs the /shoes lifecycle view, so Home and Shoes never
     disagree about which shoes are past the threshold or how many replacement
     deals exist."""
+    entries = rotation_svc.retirement_pipeline(db)
+    # Scraped-image fallback (the same heuristic the Shoes page uses) for the
+    # few pipeline shoes with no photo of their own. Per-shoe on purpose: the
+    # pipeline is a handful of shoes, and one indexed lookup each measured
+    # ~10 ms vs ~100 ms for find_matched_images_bulk's full price_records pass
+    # (which pays off only over the whole rotation). /api/home budget: 200 ms.
+    matched = {
+        e.shoe.id: rotation_svc.find_matched_image(db, e.shoe.brand, e.shoe.model)
+        for e in entries
+        if not e.shoe.image_url
+    }
     return [
         ShoeAlert(
             id=e.shoe.id,
@@ -169,8 +185,10 @@ def _shoe_alerts(db: Session) -> List[ShoeAlert]:
             weekly_km=e.weekly_km,
             weeks_to_limit=e.weeks_to_limit,
             projected_limit_date=e.projected_limit_date,
+            shoe_type=e.shoe.shoe_type,
+            image_url=e.shoe.image_url or matched.get(e.shoe.id),
         )
-        for e in rotation_svc.retirement_pipeline(db)
+        for e in entries
     ]
 
 

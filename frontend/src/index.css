@@ -277,6 +277,18 @@
   }
 }
 
+/* Chart kit (components/charts/signal.jsx): the endpoint dot glows; its ring
+   pulses only when the point is live. transform-box keeps the scale centred
+   on the SVG circle. */
+.chart-dot {
+  filter: drop-shadow(0 0 6px rgba(141, 181, 255, 0.7));
+}
+.chart-ring {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: pulse-ring 2s ease-out infinite;
+}
+
 @keyframes pulse-ring {
   0% { transform: scale(1); opacity: 0.5; }
   100% { transform: scale(2.8); opacity: 0; }

@@ -95,14 +95,16 @@ function currentWeekKey(d = new Date()) {
   return `${date.getUTCFullYear()}-W${String(week).padStart(2, '0')}`
 }
 
+// Template .stat: an open figure, not a tile. A rule on top, the value large
+// in display weight 200 with its unit in signal, the label underneath.
 function Stat({ label, value, unit }) {
   return (
-    <div className="rounded-[12px] border border-border bg-surface px-4 py-3">
-      <div className="font-mono text-2xs font-medium uppercase tracking-[0.06em] text-faint">{label}</div>
-      <div className="mt-1 font-heading text-2xl font-light tracking-display text-foreground tabular-nums">
+    <div className="min-w-0 border-t border-input pt-4 sm:pt-5">
+      <div className="truncate font-heading text-[42px] font-extralight leading-[0.9] tracking-[-0.02em] text-foreground tabular-nums sm:text-[54px] lg:text-[64px]">
         {value}
-        {unit && <span className="ml-1 text-sm font-semibold text-faint">{unit}</span>}
+        {unit && <small className="ml-1 text-[0.4em] tracking-normal text-primary">{unit}</small>}
       </div>
+      <div className="mt-3 text-sm font-medium text-secondary-foreground sm:text-md-plus">{label}</div>
     </div>
   )
 }
@@ -317,7 +319,7 @@ export default function Training() {
 
         {summaryLoading ? (
           <div className="space-y-4">
-            <Skeleton className="h-[168px] w-full rounded-[12px] sm:h-[88px]" />
+            <Skeleton className="h-[220px] w-full rounded-[12px] sm:h-[120px]" />
             <Skeleton className="h-[160px] w-full rounded-[12px] sm:h-[220px]" />
           </div>
         ) : summaryError ? (
@@ -327,7 +329,7 @@ export default function Training() {
           />
         ) : (
           <>
-            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+            <div className="grid grid-cols-2 gap-x-5 gap-y-6 pb-2 sm:grid-cols-4 sm:gap-x-8">
               <Stat label="This week" value={stats.thisWeek.toFixed(1)} unit="km" />
               <Stat label="This month" value={stats.thisMonth.toFixed(1)} unit="km" />
               <Stat label="Last 12 mo" value={stats.total12.toFixed(1)} unit="km" />
@@ -366,7 +368,12 @@ export default function Training() {
                 {ranged.isLoading ? (
                   <Skeleton className="h-[160px] w-full rounded-[12px] sm:h-[220px]" />
                 ) : chartData.length ? (
-                  <VolumeChart data={chartData} {...xAxis} />
+                  <VolumeChart
+                    data={chartData}
+                    {...xAxis}
+                    // Pulse only when the newest point is the period still in progress.
+                    liveLast={chartData.at(-1)?.period === (period === 'weekly' ? currentWeekKey() : currentMonthKey())}
+                  />
                 ) : (
                   <EmptyState
                     icon={Activity}

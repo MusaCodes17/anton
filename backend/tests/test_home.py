@@ -158,6 +158,16 @@ def test_shoe_alerts_replacement_deal_count(db):
     assert alerts[0].replacement_deals == 2
 
 
+def test_shoe_alerts_carry_type_and_image_for_the_shared_pipeline(db):
+    # Home renders the /shoes pipeline component: it needs the type (two-type
+    # preview pick) and the shoe's own image when it has one.
+    _owned(db, model="Typed", mileage=700, limit=800, shoe_type="tempo")
+    db.commit()
+    alert = home_svc._shoe_alerts(db)[0]
+    assert alert.shoe_type == "tempo"
+    assert alert.image_url is None  # no own image, no scraped match
+
+
 def test_shoe_alerts_no_type_means_zero_replacements(db):
     _owned(db, model="Typeless", mileage=700, limit=800, shoe_type=None)
     db.commit()

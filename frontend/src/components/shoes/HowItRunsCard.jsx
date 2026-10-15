@@ -1,17 +1,21 @@
 import {
   ComposedChart,
   Area,
+  CartesianGrid,
   XAxis,
   YAxis,
   Tooltip,
   ReferenceLine,
   ResponsiveContainer,
 } from 'recharts'
+import {
+  SIGNAL, ALERT, axisProps, gridProps, useFillId, SignalFill, endpointDot, activeDot,
+  lineCursor, thresholdProps, ChartTooltip, ChartLegend,
+} from '@/components/charts/signal'
 import { useShoeInsights } from '@/hooks/useApi'
 import { Skeleton } from '@/components/ui/skeleton'
 import { formatShoeType } from '@/lib/shoeTypes'
 
-const GREEN = 'var(--primary)'
 
 // Formatting only: the server sends pace as int seconds/km; M:SS is presentation.
 function fmtPace(s) {
@@ -32,69 +36,65 @@ function Numbers({ p }) {
   )
 }
 
-function WearTooltip({ active, payload }) {
-  if (!active || !payload?.length) return null
-  const d = payload[0].payload
+function renderWearTooltip(d) {
   return (
-    <div className="rounded-[10px] border border-border bg-popover px-3 py-2 text-xs tabular-nums">
-      <div className="font-semibold text-foreground">{d.week}</div>
-      <div className="text-muted-foreground">
+    <>
+      <div className="font-sans font-semibold text-foreground">{d.week}</div>
+      <div>
         {d.cumulative_km.toFixed(0)} km total · +{d.km.toFixed(1)} km
       </div>
-    </div>
+    </>
   )
 }
 
+// Cumulative wear in the template's chart language: signal area, mono axes,
+// the mileage limit as the dashed alert threshold with its mono label, and the
+// latest week as the glowing endpoint (static — wear isn't a live reading).
 function WearChart({ wear }) {
+  const fillId = useFillId('wear')
   const weeks = wear?.weeks || []
   if (weeks.length < 2) return null
   const limit = wear.mileage_limit
   return (
-    <div className="h-[140px] sm:h-[180px]">
-      <ResponsiveContainer width="100%" height="100%">
-        <ComposedChart data={weeks} margin={{ top: 12, right: 4, left: 0, bottom: 0 }}>
-          <defs>
-            <linearGradient id="wearFill" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor={GREEN} stopOpacity={0.26} />
-              <stop offset="100%" stopColor={GREEN} stopOpacity={0} />
-            </linearGradient>
-          </defs>
-          <XAxis
-            dataKey="week"
-            tick={{ fontSize: 11, fill: 'var(--faint)' }}
-            stroke="var(--chart-grid)"
-            interval="preserveStartEnd"
-            tickMargin={8}
-          />
-          <YAxis
-            orientation="right"
-            tick={{ fontSize: 11, fill: 'var(--faint)' }}
-            stroke="var(--chart-grid)"
-            tickFormatter={(v) => `${v} km`}
-            width={52}
-            tickCount={3}
-            domain={[0, (max) => (limit != null ? Math.max(max, limit) : max)]}
-          />
-          <Tooltip content={<WearTooltip />} />
-          {limit != null && (
-            <ReferenceLine
-              y={limit}
-              stroke="var(--warning)"
-              strokeDasharray="4 3"
-              label={{ value: `limit ${limit} km`, position: 'insideTopLeft', fontSize: 11, fill: 'var(--faint)' }}
+    <div>
+      <div className="h-[140px] sm:h-[180px]">
+        <ResponsiveContainer width="100%" height="100%">
+          <ComposedChart data={weeks} margin={{ top: 16, right: 4, left: 0, bottom: 0 }}>
+            <defs>
+              <SignalFill id={fillId} />
+            </defs>
+            <CartesianGrid {...gridProps} />
+            <XAxis dataKey="week" {...axisProps} interval="preserveStartEnd" tickMargin={8} />
+            <YAxis
+              orientation="right"
+              {...axisProps}
+              tickFormatter={(v) => `${v} km`}
+              width={52}
+              tickCount={3}
+              domain={[0, (max) => (limit != null ? Math.max(max, limit) : max)]}
             />
-          )}
-          <Area
-            type="monotone"
-            dataKey="cumulative_km"
-            stroke={GREEN}
-            strokeWidth={2}
-            fill="url(#wearFill)"
-            dot={false}
-            isAnimationActive={false}
-          />
-        </ComposedChart>
-      </ResponsiveContainer>
+            <Tooltip cursor={lineCursor} content={<ChartTooltip render={renderWearTooltip} />} />
+            {limit != null && <ReferenceLine y={limit} {...thresholdProps(`limit ${limit} km`)} />}
+            <Area
+              type="monotone"
+              dataKey="cumulative_km"
+              stroke={SIGNAL}
+              strokeWidth={2}
+              fill={`url(#${fillId})`}
+              dot={endpointDot(weeks.length - 1)}
+              activeDot={activeDot}
+              isAnimationActive={false}
+            />
+          </ComposedChart>
+        </ResponsiveContainer>
+      </div>
+      <ChartLegend
+        className="mt-2"
+        items={[
+          { kind: 'line', label: 'Cumulative km' },
+          ...(limit != null ? [{ kind: 'threshold', color: ALERT, label: 'Mileage limit' }] : []),
+        ]}
+      />
     </div>
   )
 }

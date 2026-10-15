@@ -41,11 +41,15 @@ export default function PredictionsCard({ data }) {
           No race predictions yet — run the <code className="font-mono text-xs">sync_fitness</code> prompt in Claude Desktop.
         </p>
       ) : (
-        <div className="grid grid-cols-2 gap-3 p-4">
-          {preds.map((p) => (
-            <div key={p.label} className="rounded-[14px] border border-border bg-surface p-3 sm:p-4">
-              <div className="font-mono text-2xs font-medium uppercase tracking-[0.06em] text-faint">{p.label}</div>
-              <div className="mt-1 font-heading text-xl font-light tracking-display text-foreground tabular-nums sm:text-[26px] sm:leading-[inherit]">
+        // Template .kpis: figures in cells split by hairlines, not nested tiles.
+        <div className="grid grid-cols-2">
+          {preds.map((p, i) => (
+            <div
+              key={p.label}
+              className={`px-5 py-4 ${i % 2 === 0 ? 'border-r border-border' : ''} ${i >= 2 ? 'border-t border-border' : ''}`}
+            >
+              <div className="text-xs font-medium text-muted-foreground">{p.label}</div>
+              <div className="mt-0.5 whitespace-nowrap text-[22px] font-semibold tracking-[-0.01em] text-foreground tabular-nums">
                 {formatDuration(p.s)}
               </div>
             </div>

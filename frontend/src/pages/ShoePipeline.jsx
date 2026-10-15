@@ -1,5 +1,5 @@
 import { useMemo } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link } from 'react-router-dom'
 import { ArrowLeft, Footprints } from 'lucide-react'
 import PageHeader from '@/components/PageHeader'
 import RetirementPipeline from '@/components/shoes/RetirementPipeline'
@@ -9,7 +9,6 @@ import { useOwnedShoes, useRotationOverview } from '@/hooks/useApi'
 // Full retirement pipeline (every shoe past 75% of its limit). The Shoes page
 // shows a two-shoe preview and links here via "See all N".
 export default function ShoePipeline() {
-  const navigate = useNavigate()
   const overview = useRotationOverview()
   const shoes = useOwnedShoes()
 
@@ -42,7 +41,7 @@ export default function ShoePipeline() {
       ) : overview.isError || shoes.isError ? (
         <ErrorState error={overview.error || shoes.error} onRetry={retry} />
       ) : all.length ? (
-        <RetirementPipeline entries={all} total={all.length} onOpenDetail={(id) => navigate(`/shoes/${id}`)} />
+        <RetirementPipeline entries={all} total={all.length} />
       ) : (
         <EmptyState
           icon={Footprints}
