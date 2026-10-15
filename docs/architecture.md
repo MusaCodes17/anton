@@ -361,6 +361,7 @@ Known operational constraints recorded in project docs: full scrapes take 20–3
 | ForeRunners | Shopify | ✅ | `shop.forerunners.ca` |
 | En Route Run | Shopify (headless Astro) | ✅ | inline variant hydration JSON |
 | Boutique Courir | WooCommerce (WordPress) | ✅ | bespoke (R7.4, 2026-10-09): Store API closed to anonymous callers, so search HTML + product JSON-LD; French prices; no sizes listed online |
+| Champs Sports Canada | Foot Locker SSR storefront (Express), not Shopify/Algolia | ✅ | bespoke `champs_sports.py` (2026-10-15): server-rendered search tiles + PDP `productLdJson`; men's only (women's excluded); page 1 only (`currentPage` is robots-disallowed); Queue-it script present but no queue seen at probe |
 | Sport Experts | FGL (Orckestra Composer), Imperva-protected | ❌ blocked | marked unscrapable (R7.3, 2026-10-09): headless Chromium gets 403 from Hetzner; real domain is `sportsexperts.ca`; search pages robots-disallowed |
 | Sporting Life | Cloudflare-protected | ❌ blocked | paid unblocking declined on principle (D3) |
 

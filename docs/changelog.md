@@ -5,6 +5,26 @@
 
 ---
 
+## Champs Sports Canada scraper — 2026-10-15
+
+Probe-then-build for a new retailer (S05 add-retailer). Suite 900 passed + 1 skipped. Branch `redesign-template`, uncommitted.
+
+**[ADDED] `backend/app/scrapers/champs_sports.py` — `ChampsSportsScraper`, bespoke, registered as `Champs Sports Canada`**
+- Probe: not Shopify (`/products.json` is HTML) and no Algolia, so bespoke. Search `/en/search?query=` is server-rendered: `ProductCardV3` tiles carry the name (`data-productcard` JSON), URL and price in HTML. PDP carries a `ProductGroup` `productLdJson` (colourway variants) and `Size: X` buttons in `ProductDetailsSizesV3`; disabled size buttons count as sold out.
+- Pagination is off-limits: robots.txt disallows `*currentPage=*`, so page 1 only. Model matching is whole-word, numbers included (`Pegasus 4` ≠ `Pegasus 42`), brand verified from the listing name.
+- Women's listings are excluded unless the watched model says women: a women's price is not a men's deal and would otherwise win the cheapest-offer read.
+- Sale blocks: current = min of the two `$` amounts, original = max, so markup order does not matter.
+- Live check: "Nike Pegasus 42" → 5 men's hits, one sale (159.99 vs 180.00); its PDP returned 9 sizes, `in_stock` True. Models not stocked (Pegasus 41, Ghost 16, Ultraboost) return 0 matches, not false prices.
+- Tests: `tests/test_champs_sports.py` — name rules, price shapes, registry and onboarding exclusion. No DOM fixtures (CLAUDE.md §10).
+
+**[ADDED] Retailer row `Champs Sports Canada` (id 17)** — `platform=custom`, `is_active=1`, `scraping_enabled=1`. Inserted through the app's ORM against the live DB; `~/anton-data/shoe_deals.db.bak-champs-sports` is the pre-insert backup. The running API is not restarted: the bespoke registry is read at import, so the first real scrape needs a backend restart.
+
+**[CHANGED] `registry.py` — `Champs Sports Canada` added to `BESPOKE_SCRAPERS`. `architecture.md` §10 Retailer Status table gets a Champs row.**
+
+**[VERIFIED]** pytest 900 passed + 1 skipped. `get_scraper(row)` resolves to `ChampsSportsScraper`. Live search and PDP parse checked by hand (above). **Not verified:** a full scheduled scrape end to end and a qualifying deal written to the DB — needs a backend restart.
+
+---
+
 ## "Signal" redesign — the template's design language across the whole app — 2026-10-15
 
 Branch `redesign-template` (off `main`). Frontend only, no migration, no API change. Suite unchanged at 892 passed + 1 skipped. `vite build` clean. Decision: design_decisions E18 (supersedes the "Velocity" look).
