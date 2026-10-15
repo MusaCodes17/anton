@@ -3,63 +3,81 @@
 @tailwind utilities;
 
 /*
- * "Velocity" design system (see frontend/ui_design/CLAUDE.md) — a single,
- * fixed dark theme. No light-mode variant exists in the design, so there is
- * no `.dark` class to toggle; these are the only values.
+ * "Signal" design system (2026-10 redesign) — extracted from
+ * frontend/template/redesign-template.html, the user-pinned visual source of
+ * truth: deep ink ground, ONE cool signal-blue accent, light grotesque display
+ * type, mono figures, near-black panels with a glow rising behind the top
+ * edge. Single dark look by choice (an athlete's instrument, read mostly on a
+ * phone right after a run) — there is no light variant and no `.dark` toggle.
+ *
+ * Colour jobs: --primary (signal blue) = actions, links, active nav, chart
+ * lines. Green/amber/red (--success/--warning/--destructive) mean ok/warn/
+ * alert ONLY — never decoration. Hairlines are blue-tinted alpha, not greys.
  */
 @layer base {
   :root {
-    --background: #0e0f11;
-    --foreground: #f2f2f0;
-    --card: #13151a;
-    --card-foreground: #f2f2f0;
-    --popover: #16181b;
-    --popover-foreground: #f2f2f0;
-    --primary: oklch(0.74 0.17 153);
-    --primary-foreground: #0e0f11;
-    --secondary: #16181b;
-    --secondary-foreground: #c4c8ce;
-    --muted: #16181b;
-    --muted-foreground: #8a8f96;
-    --accent: oklch(0.74 0.17 153 / 0.13);
-    --accent-foreground: oklch(0.8 0.16 153);
-    --destructive: oklch(0.65 0.2 25);
-    --destructive-foreground: #f2f2f0;
-    --success: oklch(0.74 0.17 153);
-    --success-foreground: #0e0f11;
-    --warning: oklch(0.8 0.15 75);
-    --warning-foreground: #1a1206;
-    /* Strava brand-orange accent for backfilled runs (source='strava'). */
-    --strava: oklch(0.66 0.19 41);
-    --strava-foreground: #0e0f11;
-    --border: #23262b;
-    --input: #23262b;
-    --ring: oklch(0.74 0.17 153);
-    --radius: 0.75rem;
+    /* Native controls (date picker, number spinners, scrollbars) render dark. */
+    color-scheme: dark;
+    /* Ink layers (template --ink / --ink-2 / --ink-3) */
+    --background: #070a13;
+    --foreground: #e9ecf5;
+    --card: #05070d;              /* template --panel: panels sit DARKER than the ground */
+    --card-foreground: #e9ecf5;
+    --popover: #0c1121;
+    --popover-foreground: #e9ecf5;
+    --primary: #8db5ff;           /* --signal */
+    --primary-foreground: #070a13;
+    --secondary: #121933;         /* --ink-3: raised control fill */
+    --secondary-foreground: #b8bfd5; /* --text-2 */
+    --muted: #0c1121;
+    --muted-foreground: #848ba5;  /* --mute, 5.7:1 on ink */
+    --accent: rgba(141, 181, 255, 0.1);  /* --signal-10: selected/active wash */
+    --accent-foreground: #8db5ff;
+    --destructive: #ff6b7d;       /* --alert */
+    --destructive-foreground: #070a13;
+    --success: #4fcf9f;           /* --ok */
+    --success-foreground: #070a13;
+    --warning: #f0b64e;           /* --warn */
+    --warning-foreground: #070a13;
+    /* Strava brand-orange for backfilled runs (source='strava') — a third-party
+       mark, kept outside the signal palette on purpose. */
+    --strava: oklch(0.7 0.18 45);
+    --strava-foreground: #070a13;
+    --border: rgba(160, 182, 235, 0.14);  /* --panel-line */
+    --input: rgba(160, 182, 235, 0.22);   /* --line-2 */
+    --ring: #8db5ff;
+    --radius: 16px;               /* panel radius; md/sm step down 2px/4px */
 
-    /* Velocity-specific tones not covered by the shadcn set above. */
-    --surface: #16181b;
-    --faint: #7c8188;         /* ≥ 4.5:1 on background/card/surface/sidebar (was #6a6f76, ~3.5–3.8:1); stays below --muted-foreground */
-    --sidebar: #101215;       /* sidebar / topbar background */
-    --divider: #1a1d22;       /* subtle row divider, softer than --border */
-    --edge: #2e3239;          /* dashed "add card" border */
-    --nav-inactive: #3a3e44;  /* inactive nav diamond */
+    /* Signal extras the shadcn set has no slot for */
+    --signal-deep: #2b56c9;       /* the lit primary pill's body */
+    --glow: rgb(176, 222, 255);
+    --glow-soft: rgba(176, 222, 255, 0.45);
+    --signal-16: rgba(141, 181, 255, 0.16);
+    --signal-50: rgba(141, 181, 255, 0.5);
+    --ease: cubic-bezier(0.6, 0, 0.2, 1); /* the template's one easing */
+
+    --surface: #0c1121;           /* nested tile/row inside a panel (--ink-2) */
+    --faint: #7a819b;             /* ≥ 4.5:1 on ink/panel/surface; below --muted-foreground */
+    --sidebar: #05070d;           /* shell rails (sidebar, phone bars) */
+    --divider: rgba(160, 182, 235, 0.09);  /* softer row divider than --border */
+    --edge: rgba(160, 182, 235, 0.22);     /* dashed "add" borders, hover edges */
+    --nav-inactive: #3d4b6d;      /* the template's blank-pill slate */
 
     /* Charts (recharts takes colour strings; SVG attributes accept var()). */
-    --chart-grid: #1e2126;    /* grid lines + axis strokes */
-    /* Retailer series. Green is left out on purpose: it's the primary accent
-       and the price chart's Target line, so retailer lines start at blue. */
-    --chart-1: #3b6fe0;
-    --chart-2: #e0186e;
+    --chart-grid: rgba(160, 182, 235, 0.11);
+    /* Retailer series. Signal blue is left out on purpose: it's the primary
+       accent and the price chart's Target line, so retailers start at cyan. */
+    --chart-1: #5ad1d8;
+    --chart-2: #ff8a6a;
     --chart-3: #c8f032;
-    --chart-4: #7c3aed;
-    --chart-5: #0891b2;
-    --chart-6: #d97706;
+    --chart-4: #b49cff;
+    --chart-5: #ff79c6;
+    --chart-6: #d9b98a;
 
-    /* Product photos are shot on near-white; the card keeps that backdrop so
-       cut-out images don't float on the dark theme. */
-    --photo: #f4f4f2;
-    --photo-foreground: #b8b8ae; /* placeholder icon on --photo */
+    /* Product photos are shot on near-white; the card keeps a cool near-white
+       backdrop so cut-out images don't float on the ink. */
+    --photo: #eef0f5;
+    --photo-foreground: #aab0c2;
   }
 }
 
@@ -75,17 +93,130 @@
 
   /*
    * Diagonal placeholder stripes shown behind product images before one
-   * loads. Previously duplicated inline in 6 spots with slightly varying
-   * stripe widths (5–7px); unified here at 6px.
+   * loads (unified at 6px). Ink-tinted to sit on the panel.
    */
   .bg-placeholder-stripes {
     background-image: repeating-linear-gradient(
       135deg,
-      #202327,
-      #202327 6px,
-      #26292e 6px,
-      #26292e 12px
+      #0c1121,
+      #0c1121 6px,
+      #111830 6px,
+      #111830 12px
     );
+  }
+  /* Product photos are shot on near-white: once an image occupies the slot,
+     the hatching gives way to the --photo backdrop, so a white photo never
+     floats as a hard rectangle on stripes. Stripes stay for empty slots. */
+  .bg-placeholder-stripes:has(> img) {
+    background: var(--photo);
+  }
+
+  /*
+   * The template's panel — THE signature surface. A near-black card whose
+   * soft signal glow rises from behind its top edge and brightens on hover.
+   * Drawn as an isolated ::before gradient (not the template's blurred blob)
+   * so the panel never needs overflow:hidden: recharts tooltips, popovers
+   * and focus rings inside a panel are never clipped.
+   */
+  .panel {
+    position: relative;
+    isolation: isolate;
+    box-shadow: 0 40px 90px -50px rgba(0, 0, 0, 1);
+  }
+  .panel::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    border-radius: inherit;
+    pointer-events: none;
+    /* Template geometry: an 18rem soft circle centred on the top edge, its
+       light reaching ~140px into the panel. Two layers so hover can cross-
+       fade (gradients don't interpolate): ::before rests, ::after brightens. */
+    background: radial-gradient(9rem 9rem at 50% 0, rgba(141, 181, 255, 0.16), rgba(141, 181, 255, 0.05) 55%, transparent 100%);
+  }
+  .panel::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    border-radius: inherit;
+    pointer-events: none;
+    background: radial-gradient(9rem 9rem at 50% 0, rgba(141, 181, 255, 0.26), rgba(141, 181, 255, 0.08) 55%, transparent 100%);
+    opacity: 0;
+    transition: opacity 0.7s var(--ease);
+  }
+  .panel:hover::after {
+    opacity: 1;
+  }
+
+  /*
+   * The lit pill: the template's "power switch" primary. Unlit it is a deep
+   * blue pill with a top highlight; on hover/focus current runs through it as
+   * a tight cyan inset and a short bloom.
+   */
+  .btn-lit {
+    background: var(--signal-deep);
+    color: #fff;
+    border: 1px solid rgba(190, 215, 255, 0.4);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.16), 0 12px 30px -14px rgba(43, 86, 201, 0.9);
+    transition: border-color 0.4s var(--ease), box-shadow 0.4s var(--ease), background 0.4s var(--ease);
+  }
+  .btn-lit:hover,
+  .btn-lit:focus-visible {
+    border-color: #fff;
+    box-shadow: inset 0 0 1px var(--glow), inset 0 0 10px var(--glow-soft), 0 0 18px var(--glow-soft),
+      0 0 52px rgba(43, 86, 201, 0.5);
+  }
+
+  /* Mono section/field label (template .label): units, dates, meta. */
+  .label-mono {
+    font-family: theme('fontFamily.mono');
+    font-size: 11.5px;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--muted-foreground);
+  }
+
+  /* A live data point: signal dot with a slow pulse ring (template .chart .ring). */
+  .live-dot {
+    position: relative;
+    display: inline-block;
+    width: 6px;
+    height: 6px;
+    flex-shrink: 0;
+    border-radius: 9999px;
+    background: currentColor;
+    box-shadow: 0 0 8px currentColor;
+  }
+  .live-dot::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    background: currentColor;
+    opacity: 0.5;
+    animation: pulse-ring 2.4s ease-out infinite;
+  }
+
+  /* Film grain (template hero/CTA). Normal blend, not the template's overlay:
+     overlay over near-black ink multiplies to nothing, so the noise is laid on
+     at low alpha instead. Never under text contrast. */
+  .grain::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    opacity: 0.045;
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='180' height='180'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 0.6 0'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>");
+  }
+
+  /* Translucent shell bar (template .header-bar): only on chrome that content
+     actually scrolls under or beside. */
+  .glass-bar {
+    background: rgba(5, 7, 13, 0.78);
+    -webkit-backdrop-filter: blur(18px) saturate(140%);
+    backdrop-filter: blur(18px) saturate(140%);
   }
 }
 
@@ -93,17 +224,45 @@
   * {
     @apply border-border;
   }
+  html {
+    background: var(--background);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
   body {
     @apply bg-background text-foreground font-sans;
+    line-height: 1.55;
     font-feature-settings: 'rlig' 1, 'calt' 1;
+    caret-color: var(--primary);
+  }
+  h1, h2, h3 {
+    text-wrap: balance;
+  }
+  /* Figures in mono are data: always tabular so columns of paces line up. */
+  .font-mono {
+    font-variant-numeric: tabular-nums;
+  }
+  ::selection {
+    background: rgba(141, 181, 255, 0.3);
+    color: #fff;
   }
   ::-webkit-scrollbar {
     width: 10px;
+    height: 10px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
   }
   ::-webkit-scrollbar-thumb {
-    background: #2a2e34;
+    background: #1b2340;
     border-radius: 6px;
     border: 3px solid var(--background);
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: #2a3560;
+  }
+  * {
+    scrollbar-color: #1b2340 transparent;
   }
 }
 
@@ -115,5 +274,17 @@
   }
   .scrollbar-none::-webkit-scrollbar {
     display: none;
+  }
+}
+
+@keyframes pulse-ring {
+  0% { transform: scale(1); opacity: 0.5; }
+  100% { transform: scale(2.8); opacity: 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    transition-duration: 0.001ms !important;
+    animation: none !important;
   }
 }

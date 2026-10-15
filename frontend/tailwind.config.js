@@ -19,9 +19,12 @@ export default {
     },
     extend: {
       fontFamily: {
-        sans: ['Hanken Grotesk', 'sans-serif'],
-        heading: ['Archivo', 'sans-serif'],
-        mono: ['JetBrains Mono', 'monospace'],
+        // Signal redesign: template --sans / --display / --mono. `heading` is
+        // the display voice (Bricolage Grotesque, set LIGHT — 200–300), kept
+        // under its old key so call sites didn't churn.
+        sans: ['Hanken Grotesk', 'Helvetica Neue', 'Helvetica', 'Arial', 'system-ui', 'sans-serif'],
+        heading: ['Bricolage Grotesque', 'Helvetica Neue', 'Helvetica', 'Arial', 'sans-serif'],
+        mono: ['IBM Plex Mono', 'ui-monospace', 'SFMono-Regular', 'Menlo', 'Consolas', 'monospace'],
       },
       // Named steps for the recurring arbitrary sizes that fall between
       // Tailwind's defaults. Plain strings (font-size only, no line-height) so
@@ -88,6 +91,7 @@ export default {
         divider: token('divider'),
         edge: token('edge'),
         'nav-inactive': token('nav-inactive'),
+        'signal-deep': token('signal-deep'),
         photo: {
           DEFAULT: token('photo'),
           foreground: token('photo-foreground'),
@@ -99,6 +103,11 @@ export default {
         sm: 'calc(var(--radius) - 4px)',
       },
       keyframes: {
+        // Template tick-fade: a sweep of fading ticks (used for "working" dots).
+        'tick-fade': {
+          '0%, 100%': { opacity: '0.15' },
+          '50%': { opacity: '1' },
+        },
         'accordion-down': {
           from: { height: '0' },
           to: { height: 'var(--radix-accordion-content-height)' },
@@ -108,9 +117,16 @@ export default {
           to: { height: '0' },
         },
       },
+      transitionTimingFunction: {
+        signal: 'cubic-bezier(0.6, 0, 0.2, 1)', // template --ease
+      },
+      letterSpacing: {
+        display: '-0.035em', // template .display
+      },
       animation: {
         'accordion-down': 'accordion-down 0.2s ease-out',
         'accordion-up': 'accordion-up 0.2s ease-out',
+        'tick-fade': 'tick-fade 1.2s ease-in-out infinite',
       },
     },
   },
