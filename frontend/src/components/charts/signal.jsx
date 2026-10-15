@@ -82,7 +82,7 @@ export function thresholdProps(label, { color = ALERT, position = 'insideTopRigh
 export function ChartTooltip({ active, payload, render }) {
   if (!active || !payload?.length) return null
   return (
-    <div className="rounded-[10px] border border-input bg-popover px-3 py-2 font-mono text-xs text-secondary-foreground shadow-[0_20px_40px_-20px_rgba(0,0,0,0.9)]">
+    <div className="rounded-[10px] border border-input bg-popover px-3 py-2 font-mono text-xs text-secondary-foreground shadow-[0_20px_40px_-20px_var(--shadow-color)]">
       {render(payload[0].payload, payload)}
     </div>
   )

@@ -7,8 +7,11 @@
  * frontend/template/redesign-template.html, the user-pinned visual source of
  * truth: deep ink ground, ONE cool signal-blue accent, light grotesque display
  * type, mono figures, near-black panels with a glow rising behind the top
- * edge. Single dark look by choice (an athlete's instrument, read mostly on a
- * phone right after a run) — there is no light variant and no `.dark` toggle.
+ * edge. Dark is the default (an athlete's instrument, read mostly on a phone
+ * right after a run); a light variant (`html[data-theme="light"]`, below)
+ * re-tones every token for daylight viewing — same layout, type and motion.
+ * The choice is per device (lib/theme.js) and applied before first paint by
+ * the inline script in index.html, so there is no dark→light flash.
  *
  * Colour jobs: --primary (signal blue) = actions, links, active nav, chart
  * lines. Green/amber/red (--success/--warning/--destructive) mean ok/warn/
@@ -78,6 +81,102 @@
        backdrop so cut-out images don't float on the ink. */
     --photo: #eef0f5;
     --photo-foreground: #aab0c2;
+
+    /* Colours the component layer used to hard-code, tokenised so the light
+       theme can re-tone them. */
+    --panel-glow: rgba(141, 181, 255, 0.16);
+    --panel-glow-tail: rgba(141, 181, 255, 0.05);
+    --panel-glow-hover: rgba(141, 181, 255, 0.26);
+    --panel-glow-hover-tail: rgba(141, 181, 255, 0.08);
+    --shadow-color: rgba(0, 0, 0, 1);         /* panel/popover drop shadows */
+    --glass: rgba(5, 7, 13, 0.78);            /* translucent shell bars */
+    --scrim: rgba(0, 0, 0, 0.45);             /* drawer/sheet backdrops */
+    --stripe-a: #0c1121;
+    --stripe-b: #111830;
+    --scrollbar: #1b2340;
+    --scrollbar-hover: #2a3560;
+    --selection: rgba(141, 181, 255, 0.3);
+    --selection-foreground: #fff;
+    --grain-opacity: 0.045;
+    --iridescence-blend: screen;              /* Home hero shader */
+    --iridescence-opacity: 0.7;
+  }
+
+  /*
+   * Light variant ("Signal, daylight"). Same jobs, re-toned: paper ground with
+   * white panels lifted ABOVE it (the dark theme sinks panels below the ink —
+   * on paper the equivalent depth cue is lift), signal blue deepened to the
+   * --signal-deep body so links and figures clear 4.5:1 on white, and the
+   * status/chart hues darkened for contrast. Hairlines stay blue-tinted alpha.
+   */
+  :root[data-theme='light'] {
+    color-scheme: light;
+    --background: #f2f4f9;
+    --foreground: #0d1324;
+    --card: #ffffff;
+    --card-foreground: #0d1324;
+    --popover: #ffffff;
+    --popover-foreground: #0d1324;
+    --primary: #2b56c9;
+    --primary-foreground: #ffffff;
+    --secondary: #e6eaf4;
+    --secondary-foreground: #3a4361;
+    --muted: #edf0f7;
+    --muted-foreground: #556079;  /* 6.2:1 on white */
+    --accent: rgba(43, 86, 201, 0.08);
+    --accent-foreground: #2b56c9;
+    --destructive: #cf2d47;
+    --destructive-foreground: #ffffff;
+    --success: #12845a;
+    --success-foreground: #ffffff;
+    --warning: #9e6500;           /* amber deep enough for text on white */
+    --warning-foreground: #ffffff;
+    --strava: oklch(0.6 0.19 42);
+    --strava-foreground: #ffffff;
+    --border: rgba(28, 48, 110, 0.12);
+    --input: rgba(28, 48, 110, 0.2);
+    --ring: #2b56c9;
+
+    --signal-deep: #2b56c9;
+    --glow: rgb(176, 222, 255);
+    --glow-soft: rgba(43, 86, 201, 0.35);
+    --signal-16: rgba(43, 86, 201, 0.12);
+    --signal-50: rgba(43, 86, 201, 0.45);
+
+    --surface: #f3f5fa;
+    --faint: #626b86;             /* ≥ 4.5:1 on white and on --surface */
+    --sidebar: #ffffff;
+    --divider: rgba(28, 48, 110, 0.08);
+    --edge: rgba(28, 48, 110, 0.22);
+    --nav-inactive: #bcc5da;
+
+    --chart-grid: rgba(28, 48, 110, 0.09);
+    --chart-1: #0b939c;
+    --chart-2: #dc5530;
+    --chart-3: #5f8a00;
+    --chart-4: #7457e0;
+    --chart-5: #cc348f;
+    --chart-6: #9a7134;
+
+    --photo: #eef0f5;
+    --photo-foreground: #8a91a6;
+
+    --panel-glow: rgba(43, 86, 201, 0.07);
+    --panel-glow-tail: rgba(43, 86, 201, 0.02);
+    --panel-glow-hover: rgba(43, 86, 201, 0.12);
+    --panel-glow-hover-tail: rgba(43, 86, 201, 0.04);
+    --shadow-color: rgba(22, 36, 80, 0.28);
+    --glass: rgba(255, 255, 255, 0.8);
+    --scrim: rgba(13, 19, 36, 0.3);
+    --stripe-a: #eef1f7;
+    --stripe-b: #e4e8f2;
+    --scrollbar: #c9d0e0;
+    --scrollbar-hover: #a9b3ca;
+    --selection: rgba(43, 86, 201, 0.2);
+    --selection-foreground: #0d1324;
+    --grain-opacity: 0;           /* white noise on paper only greys it */
+    --iridescence-blend: multiply;
+    --iridescence-opacity: 0.22;
   }
 }
 
@@ -98,10 +197,10 @@
   .bg-placeholder-stripes {
     background-image: repeating-linear-gradient(
       135deg,
-      #0c1121,
-      #0c1121 6px,
-      #111830 6px,
-      #111830 12px
+      var(--stripe-a),
+      var(--stripe-a) 6px,
+      var(--stripe-b) 6px,
+      var(--stripe-b) 12px
     );
   }
   /* Product photos are shot on near-white: once an image occupies the slot,
@@ -121,7 +220,7 @@
   .panel {
     position: relative;
     isolation: isolate;
-    box-shadow: 0 40px 90px -50px rgba(0, 0, 0, 1);
+    box-shadow: 0 40px 90px -50px var(--shadow-color);
   }
   .panel::before {
     content: '';
@@ -133,7 +232,7 @@
     /* Template geometry: an 18rem soft circle centred on the top edge, its
        light reaching ~140px into the panel. Two layers so hover can cross-
        fade (gradients don't interpolate): ::before rests, ::after brightens. */
-    background: radial-gradient(9rem 9rem at 50% 0, rgba(141, 181, 255, 0.16), rgba(141, 181, 255, 0.05) 55%, transparent 100%);
+    background: radial-gradient(9rem 9rem at 50% 0, var(--panel-glow), var(--panel-glow-tail) 55%, transparent 100%);
   }
   .panel::after {
     content: '';
@@ -142,7 +241,7 @@
     z-index: -1;
     border-radius: inherit;
     pointer-events: none;
-    background: radial-gradient(9rem 9rem at 50% 0, rgba(141, 181, 255, 0.26), rgba(141, 181, 255, 0.08) 55%, transparent 100%);
+    background: radial-gradient(9rem 9rem at 50% 0, var(--panel-glow-hover), var(--panel-glow-hover-tail) 55%, transparent 100%);
     opacity: 0;
     transition: opacity 0.7s var(--ease);
   }
@@ -207,14 +306,14 @@
     position: absolute;
     inset: 0;
     pointer-events: none;
-    opacity: 0.045;
+    opacity: var(--grain-opacity);
     background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='180' height='180'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 0.6 0'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>");
   }
 
   /* Translucent shell bar (template .header-bar): only on chrome that content
      actually scrolls under or beside. */
   .glass-bar {
-    background: rgba(5, 7, 13, 0.78);
+    background: var(--glass);
     -webkit-backdrop-filter: blur(18px) saturate(140%);
     backdrop-filter: blur(18px) saturate(140%);
   }
@@ -243,8 +342,8 @@
     font-variant-numeric: tabular-nums;
   }
   ::selection {
-    background: rgba(141, 181, 255, 0.3);
-    color: #fff;
+    background: var(--selection);
+    color: var(--selection-foreground);
   }
   ::-webkit-scrollbar {
     width: 10px;
@@ -254,15 +353,15 @@
     background: transparent;
   }
   ::-webkit-scrollbar-thumb {
-    background: #1b2340;
+    background: var(--scrollbar);
     border-radius: 6px;
     border: 3px solid var(--background);
   }
   ::-webkit-scrollbar-thumb:hover {
-    background: #2a3560;
+    background: var(--scrollbar-hover);
   }
   * {
-    scrollbar-color: #1b2340 transparent;
+    scrollbar-color: var(--scrollbar) transparent;
   }
 }
 
@@ -281,7 +380,7 @@
    pulses only when the point is live. transform-box keeps the scale centred
    on the SVG circle. */
 .chart-dot {
-  filter: drop-shadow(0 0 6px rgba(141, 181, 255, 0.7));
+  filter: drop-shadow(0 0 6px var(--signal-50));
 }
 .chart-ring {
   transform-box: fill-box;
