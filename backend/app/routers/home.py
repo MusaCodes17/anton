@@ -56,6 +56,8 @@ class ShoeAlertResponse(BaseModel):
     weekly_km: float = 0.0
     weeks_to_limit: Optional[float] = None
     projected_limit_date: Optional[str] = None
+    shoe_type: Optional[str] = None
+    image_url: Optional[str] = None
 
 
 class TopDealResponse(BaseModel):

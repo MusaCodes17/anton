@@ -1,5 +1,5 @@
 import { forwardRef, useMemo, useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link } from 'react-router-dom'
 import { Plus, Footprints, RefreshCw, ChevronDown } from 'lucide-react'
 import PageHeader from '@/components/PageHeader'
 import FilterDisclosure from '@/components/FilterDisclosure'
@@ -71,7 +71,6 @@ const statusLabel = {
 }
 
 export default function MyShoes() {
-  const navigate = useNavigate()
   const [brand, setBrand] = useState(ALL)
   const [shoeType, setShoeType] = useState(ALL)
   const [mileageBucket, setMileageBucket] = useState(ALL)
@@ -278,7 +277,6 @@ export default function MyShoes() {
             <RetirementPipeline
               entries={pipelinePreview(pipeline)}
               total={pipeline.length}
-              onOpenDetail={(id) => navigate(`/shoes/${id}`)}
               seeAllTo="/shoes/pipeline"
             />
           )}
