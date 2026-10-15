@@ -108,6 +108,12 @@ export const authApi = {
     client.post('/api/auth/session', { password }).then((r) => r.data),
   // Logout → clears the cookie and deletes the session row.
   logout: () => client.delete('/api/auth/session').then((r) => r.data),
+  // R9.2: { active_sessions, connector_connected } for the Security card.
+  security: () => client.get('/api/auth/security').then((r) => r.data),
+  // R9.2: revokes every browser session + the Claude connector's OAuth tokens;
+  // the server also clears this caller's cookie.
+  signOutEverywhere: () =>
+    client.post('/api/auth/sign-out-everywhere').then((r) => r.data),
 }
 
 // ============== SHOES ==============
@@ -162,6 +168,13 @@ export const dealsApi = {
     client.get(`/api/deals/shoe/${shoeId}`, { params }).then((r) => r.data),
   forRetailer: (retailerId, params) =>
     client.get(`/api/deals/retailer/${retailerId}`, { params }).then((r) => r.data),
+}
+
+// ============== PUBLIC (R9.4) ==============
+// The ONLY call the logged-out "Musa's picks" page makes. Exact path, no
+// trailing slash: the slash form is not in PUBLIC_PATHS and would 401.
+export const publicApi = {
+  deals: () => client.get('/api/public/deals').then((r) => r.data),
 }
 
 // ============== DASHBOARD ==============

@@ -449,3 +449,38 @@ def create_auth_code(
     finally:
         db.close()
     return raw
+
+
+def revoke_all() -> int:
+    """
+    Delete every OAuth token (access + refresh) and every authorization code
+    (sign out everywhere, R9.2). Returns the number of `OAuthToken` rows deleted
+    (auth codes are short-lived plumbing and are not counted). Commits.
+    """
+    db = _db()
+    try:
+        n = db.query(OAuthToken).delete()
+        db.query(OAuthAuthCode).delete()
+        db.commit()
+        return n
+    finally:
+        db.close()
+
+
+def has_active_connector() -> bool:
+    """
+    True if a connector could still act: any unexpired access token, or any
+    refresh token that is non-expiring (expires_at NULL) or unexpired. A refresh
+    token alone counts because it can mint a new access token.
+    """
+    now = time.time()
+    db = _db()
+    try:
+        q = db.query(OAuthToken.id).filter(
+            ((OAuthToken.token_type == "access") & (OAuthToken.expires_at >= now))
+            | ((OAuthToken.token_type == "refresh")
+               & ((OAuthToken.expires_at.is_(None)) | (OAuthToken.expires_at >= now)))
+        )
+        return q.first() is not None
+    finally:
+        db.close()

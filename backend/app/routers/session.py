@@ -11,6 +11,14 @@ cookie that gates `/api`.
   DELETE /api/auth/session  — clear the cookie and delete the session row (logout).
   GET    /api/auth/session  — public. Return {authenticated: bool} so the SPA can
                               decide login-vs-app on load.
+  POST   /api/auth/sign-out-everywhere — gated. Revoke every session and OAuth
+                              token/auth code, clear the caller's cookie (R9.2).
+  GET    /api/auth/security — gated. Counts-only status {active_sessions,
+                              connector_connected}.
+
+The R9.2 endpoints are deliberately NOT exposed over MCP: auth administration
+is not an AI-callable capability. They are not in PUBLIC_PATHS, so the
+middleware gates them (and its CSRF Origin check covers the POST).
 
 This is a *third* credential type alongside named bearer tokens and OAuth 2.1
 access tokens — it does not touch the /mcp mount or the OAuth connector flow.
@@ -27,7 +35,8 @@ from fastapi import APIRouter, Request, Response
 from pydantic import BaseModel
 
 from app.middleware.auth import _client_ip as _get_client_ip
-from app.services.rate_limit import login_failure_limiter
+from app.services.auth_admin import security_status, sign_out_everywhere
+from app.services.rate_limit import login_failure_limiter, login_global_limiter
 from app.services.sessions import (
     create_session,
     delete_session,
@@ -39,6 +48,8 @@ logger = logging.getLogger(__name__)
 
 # Module-level reference so tests can monkeypatch it (mirrors routers/oauth.py).
 _login_failure_limiter = login_failure_limiter
+# Global (all-IPs) password-failure ceiling (R9.5). Only wrong passwords spend it.
+_login_global_limiter = login_global_limiter
 
 SESSION_COOKIE = "anton_session"
 
@@ -59,6 +70,11 @@ async def create_session_endpoint(body: SessionLogin, request: Request, response
     exhausted (429 + Retry-After). The password is compared with
     `secrets.compare_digest` (timing-safe); a wrong password returns 401 with a
     generic message (C9 — no oracle).
+
+    R9.5 global ceiling: after the per-IP check, `_login_global_limiter` is
+    peeked (not spent). When exhausted, the form is refused for every IP with the
+    same 429 a per-IP throttle gets. Only a WRONG password spends from it, so a
+    correct login never draws down the ceiling.
     """
     ip = _get_client_ip(request.scope)
 
@@ -68,6 +84,12 @@ async def create_session_endpoint(body: SessionLogin, request: Request, response
         logger.warning("session login rate-limited from %s", ip)
         return Response(status_code=429, headers={"Retry-After": retry})
 
+    global_rl = _login_global_limiter.peek()
+    if not global_rl.allowed:
+        retry = str(max(1, int(global_rl.retry_after_s)))
+        logger.warning("login global failure ceiling reached (from %s)", ip)
+        return Response(status_code=429, headers={"Retry-After": retry})
+
     expected = os.getenv("ANTON_LOGIN_PASSWORD", "").strip()
     if not expected:
         # Login unconfigured — refuse rather than allow an empty-password bypass.
@@ -75,6 +97,7 @@ async def create_session_endpoint(body: SessionLogin, request: Request, response
 
     if not secrets.compare_digest(body.password.encode(), expected.encode()):
         logger.warning("session login failed from %s", ip)
+        _login_global_limiter.take()
         return Response(status_code=401)
 
     raw = create_session()
@@ -109,3 +132,22 @@ async def probe_session_endpoint(request: Request):
     raw = request.cookies.get(SESSION_COOKIE)
     authenticated = bool(raw) and verify_session_sync(raw)
     return {"authenticated": authenticated}
+
+
+@router.post("/sign-out-everywhere")
+async def sign_out_everywhere_endpoint(request: Request, response: Response):
+    """Revoke all sessions + OAuth tokens/codes and clear the caller's cookie."""
+    ip = _get_client_ip(request.scope)
+    result = sign_out_everywhere(source=ip)
+    response.delete_cookie(key=SESSION_COOKIE, path="/")
+    return {
+        "success": True,
+        "sessions_revoked": result.sessions_revoked,
+        "oauth_tokens_revoked": result.oauth_tokens_revoked,
+    }
+
+
+@router.get("/security")
+async def security_status_endpoint():
+    """Counts-only security status for the settings card."""
+    return security_status()

@@ -257,6 +257,51 @@ class DealResponse(DealBase):
         from_attributes = True
 
 
+# ============== PUBLIC (LOGGED-OUT) DEAL SCHEMAS — R9.3 ==============
+
+class PublicPromoCode(BaseModel):
+    """A retailer promo code as shown on the public deals page."""
+    code: str
+    description: Optional[str] = None
+    discount_percent: Optional[float] = None
+    discount_amount: Optional[float] = None
+
+
+class PublicDeal(BaseModel):
+    """One active deal as served to logged-out visitors (R9.3).
+
+    Built FIELD BY FIELD in `services.deals.list_public_deals` — deliberately
+    without `from_attributes`, so a column added to Deal/Shoe/Retailer later can
+    never leak by default. Never add `notes`, `target_price`, `size_fit`,
+    `is_active`, watchlist, scraper_config, owned shoes or price history here.
+    """
+    id: int
+    shoe_id: int
+    brand: str
+    model: str
+    shoe_type: Optional[str] = None
+    colorway: Optional[str] = None
+    image_url: Optional[str] = None
+    current_price: float
+    msrp: Optional[float] = None
+    savings_amount: float
+    savings_percent: float
+    sizes_available: Optional[List[str]] = None
+    in_stock: bool
+    retailer_id: int
+    retailer_name: str
+    product_url: str
+    promo_codes: List[PublicPromoCode] = []
+    detected_at: datetime
+
+
+class PublicDealsResponse(BaseModel):
+    """Envelope for GET /api/public/deals. `checked_at` is the latest successful
+    scrape finish time (None if there has never been one)."""
+    deals: List[PublicDeal]
+    checked_at: Optional[datetime] = None
+
+
 class PurchaseDraftResponse(BaseModel):
     """R5.3 — prefill for the add-owned-shoe form, built from a deal. Read-only:
     nothing here is stored or linked; the runner reviews and saves via POST /owned-shoes/."""

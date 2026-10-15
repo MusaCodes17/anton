@@ -4,6 +4,7 @@ import {
   shoesApi,
   retailersApi,
   dealsApi,
+  publicApi,
   preferencesApi,
   dashboardApi,
   scrapeApi,
@@ -21,9 +22,12 @@ import {
   chatProposalsApi,
   checkpointsApi,
   adminApi,
+  authApi,
+  UNAUTHENTICATED_EVENT,
   SCRAPE_STREAM_URL,
   authHeaders,
 } from '@/services/api'
+import { clearOfflineData } from '@/lib/queryClient'
 
 // Centralized query keys so mutations can invalidate precisely.
 export const queryKeys = {
@@ -60,6 +64,7 @@ export const queryKeys = {
   conversation: (id) => ['conversations', 'detail', id],
   chatProposal: (id) => ['chat-proposals', id],
   checkpointPrompts: () => ['checkpoint-prompts'],
+  authSecurity: () => ['auth', 'security'],
 }
 
 // ============== SHOES ==============
@@ -806,6 +811,38 @@ export function useDismissPendingRun() {
   return useMutation({
     mutationFn: (id) => corosApi.dismiss(id),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['coros'] }),
+  })
+}
+
+// ============== AUTH / SECURITY (R9.2) ==============
+export function useAuthSecurity() {
+  return useQuery({
+    queryKey: queryKeys.authSecurity(),
+    queryFn: () => authApi.security(),
+  })
+}
+
+// Server revokes every session and clears our cookie; we then wipe the
+// persisted offline cache and fire the same event the 401 interceptor does,
+// which makes AuthGate drop to the login view.
+export function useSignOutEverywhere() {
+  return useMutation({
+    mutationFn: () => authApi.signOutEverywhere(),
+    onSuccess: async () => {
+      await clearOfflineData()
+      window.dispatchEvent(new Event(UNAUTHENTICATED_EVENT))
+    },
+  })
+}
+
+// ============== PUBLIC (R9.4) ==============
+// The only hook the logged-out public deals page may use. Every other hook in
+// this file calls an authed endpoint: mounting one there burns the visitor's
+// auth-failure bucket and fires UNAUTHENTICATED_EVENT.
+export function usePublicDeals() {
+  return useQuery({
+    queryKey: ['public', 'deals'],
+    queryFn: () => publicApi.deals(),
   })
 }
 

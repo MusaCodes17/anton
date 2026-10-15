@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react'
 import { NavLink, Outlet, useLocation } from 'react-router-dom'
-import { Footprints, Store, RefreshCw } from 'lucide-react'
+import { Footprints, Store, RefreshCw, ShieldCheck } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { LogoutButton } from '@/components/layout/Layout'
 import PageHeader from '@/components/PageHeader'
@@ -12,6 +12,7 @@ const subNav = [
   { to: '/settings/tracking', label: 'Tracking', icon: Footprints },
   { to: '/settings/retailers', label: 'Retailers', icon: Store },
   { to: '/settings/sync', label: 'Sync & Scraping', icon: RefreshCw },
+  { to: '/settings/security', label: 'Security', icon: ShieldCheck },
 ]
 
 export default function Settings() {

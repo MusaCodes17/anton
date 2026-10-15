@@ -20,6 +20,7 @@ const ActivityDetail = lazyPage(() => import('@/pages/ActivityDetail'))
 const ChatPage = lazyPage(() => import('@/pages/ChatPage'))
 const Settings = lazyPage(() => import('@/pages/Settings'))
 const SettingsSync = lazyPage(() => import('@/pages/SettingsSync'))
+const SettingsSecurity = lazyPage(() => import('@/pages/SettingsSecurity'))
 
 // Preserve the :id when redirecting the old /my-shoes/:id bookmark to /shoes/:id.
 function RedirectShoeDetail() {
@@ -52,6 +53,7 @@ export default function App() {
             <Route path="tracking" element={<Shoes />} />
             <Route path="retailers" element={<Retailers />} />
             <Route path="sync" element={<SettingsSync />} />
+            <Route path="security" element={<SettingsSecurity />} />
           </Route>
 
           {/* Redirects for old bookmarks (§1 route table) */}

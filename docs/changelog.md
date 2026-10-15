@@ -5,6 +5,63 @@
 
 ---
 
+## R9 — public deals page for the run club + sign out everywhere — 2026-10-15
+
+The runner wants to share `anton.musasouled.com/deals` with the run club ("Musa's picks"). That makes the deals list Anton's first deliberately public data surface, so the security work was built first and the page last. Branch `r9-public-deals`, one commit per task. Built by subagents and reviewed here before each commit. Decision: `design_decisions.md` E20. Roadmap §R9.
+
+**[ADDED] R9.1 — gate regression test + limiter cap.** `tests/test_public_surface.py` pins `PUBLIC_PATHS` to a literal set and walks every registered route (API, plain, the `/mcp` mount, OAuth), asserting a logged-out request gets 401 for everything outside the set. It found no hole on today's code; it is a ratchet. `KeyedRateLimiter` gets `max_keys` (default 10 000, `RATE_LIMIT_MAX_KEYS`): at the cap it evicts only buckets that have refilled to full, so a throttled IP is never reset. The cap is soft (a new key is admitted with a WARNING if every bucket is throttled).
+
+**[ADDED] R9.2 — sign out everywhere.** `services/auth_admin.py` ends all browser sessions, all OAuth tokens and pending auth codes (named bearer tokens are untouched). `POST /api/auth/sign-out-everywhere` (cookie-authenticated, so the Origin CSRF check applies) and `GET /api/auth/security` (counts only: signed-in devices, connector connected or not). CLI fallback `python -m app.scripts.sign_out_everywhere`. Settings → Security sub-page with a confirmation dialog. **Automatic on password change:** at boot `check_password_rotation` compares a scrypt-salted fingerprint of `ANTON_LOGIN_PASSWORD` with `AppSettings["login_password_fingerprint"]` and signs everyone out on a mismatch (first boot stores without purging; a malformed stored value counts as a change). scrypt rather than SHA-256 because Litestream replicates the DB to B2. Deliberately not exposed on MCP (a documented exception to REST/MCP parity). The password stays in env.
+
+**[ADDED] R9.3 — `GET /api/public/deals`.** New `routers/public.py`, exact path added to `PUBLIC_PATHS`. `PublicDeal` is built field by field, never `from_attributes`; no `notes`, `target_price`, `size_fit` or watchlist data. No query parameters, `public_limiter` 60/min per IP (`PUBLIC_RATE_LIMIT_PER_MINUTE` / `PUBLIC_RATE_LIMIT_BURST`), `Cache-Control: public, max-age=300`, `checked_at` = latest successful `ScrapeRun.finished_at`. Backed by `deals.list_public_deals`, a projection over the existing deal list.
+
+**[ADDED] R9.4 — public "Musa's picks" page.** `AuthGate` has one public branch: logged-out `/deals` renders `PublicDeals` in a standalone shell (no nav, chat drawer or scrape button); anywhere else logged-out still shows the login. It uses only `usePublicDeals`, a read-only `PublicDealSheet` (not `DealDetailModal`, which loads authed price history and carries write controls), and `ShoeProductCard` through an adapter. Filters are derived from the payload. Signing in from the page lands on Home. Logged-in `/deals` is unchanged.
+
+**[ADDED] R9.5 (code half) — edge hardening.** `deploy/Caddyfile`: `X-Content-Type-Options`, `Referrer-Policy`, `X-Frame-Options DENY`, `X-Robots-Tag: noindex, nofollow`, `Permissions-Policy`, and a `Content-Security-Policy-Report-Only` header (to be switched to enforcing after a clean week). `frontend/public/robots.txt` disallows all. A global login-failure ceiling of 50 wrong passwords per hour across all IPs (`LOGIN_GLOBAL_FAILURE_LIMIT_PER_HOUR`) on both password endpoints (`POST /api/auth/session` and `/oauth/login`); only wrong passwords spend it, and it is checked before and spent after the password compare, so it is a soft ceiling.
+
+**[CHANGED] Caddyfile `@backend` matcher** now lists `/.well-known/oauth-protected-resource`, which was public in the backend but would have fallen through to the SPA from the repo template. The live server file may already differ (the connector works in production), so it must be reconciled by hand.
+
+**[CHANGED] Docs (R9.6).** `design_decisions.md` E20; `architecture.md` §11 gains the public tier and the leaked-password playbook; `CLAUDE.md` §1 drops the stale "no auth by explicit deferral" phrasing and §14 gains INV-10 (public surface is a pinned allowlist); roadmap, `project_state.md`.
+
+**[VERIFIED]**
+- **Backend suite: 947 passed, 1 skipped** (was 900 + 1 skipped). New modules: `test_public_surface` (2), `test_public_deals` (10, including the leak test), `test_sign_out_everywhere` (11), `test_password_rotation` (11), `test_login_global_ceiling` (6), plus additions to `test_rate_limit`.
+- `vite build` clean.
+- **Live preview pass** on an isolated copy of the DB, desktop and 380 px: logged-out `/deals` made only the `/api/auth/session` probe and `/api/public/deals` (0 401s, 0 console errors); the detail sheet opens; signing in from the page lands on Home; logged-in `/deals` is unchanged; the Security card shows the counts; Sign out everywhere end to end emptied the `sessions` table and returned to the login screen with 0 console errors.
+
+**[BLOCKED] Not verified / human steps (R9.5 go-live).** The Caddyfile has **not** been validated (no `caddy` or docker locally), and CI has not run (the PR is not open yet). Still to do before the link is shared:
+1. On the server, `caddy validate`, and reconcile `/etc/caddy/Caddyfile` with the repo copy (especially the protected-resource matcher); `caddy reload`.
+2. Deploy backend and `dist/`.
+3. Rotate `ANTON_LOGIN_PASSWORD` to a 5+ word passphrase and run `docker compose up -d --force-recreate`. This exercises the automatic purge end to end; expect to sign in again.
+4. Reconnect the claude.ai connector.
+5. Smoke test from a logged-out private window on cellular; `curl -I` for the headers; `curl https://anton.musasouled.com/api/owned-shoes/` returns 401; `/api/public/deals` carries no personal fields.
+6. Share the link. Switch the CSP to enforcing after a clean week.
+
+---
+
+## Every-other-day production DB snapshots to the laptop — 2026-10-15
+
+The runner wanted a backup today and an automatic one about every other day, and wasn't sure the earlier setup was still running. Ops only: no app code, schema or UI changes.
+
+**Audit of what existed:**
+- **Litestream (RA1.4) is running in production.** The runner checked `litestream snapshots` / `generations` on the host: daily snapshots 2026-10-02 → 2026-10-15, one generation, lag under 1 s.
+- **Nothing ran on the laptop.** There was no Anton cron or launchd job, and `pull-snapshot.sh` had never been run (`~/anton-data-mirror/` doesn't exist).
+- **`~/anton-data/shoe_deals.db` is a stale dev copy, not production.** Its newest run is 2026-07-16 (945 activities, against 1,020 in production).
+
+**[ADDED] `deploy/backup-prod.sh`** — runs `sqlite3 .backup` inside the production container over SSH (the host has no sqlite3), streams the copy back, then checks it with `integrity_check` and an activities count > 0 before keeping it as `~/anton-data/backups/shoe_deals.db.<date>-prod-auto.bak`. It keeps the newest 15 auto snapshots (about 30 days) and never touches manual `.bak` files. It skips the run if the newest snapshot is under 44 h old, which makes a daily trigger run every other day and still catch up after sleep. A failure posts a macOS notification. It only reads production: no second app process (INV-9).
+
+**[ADDED] `deploy/com.anton.prod-backup.plist`** — launchd template (daily 09:30, `ANTON_BACKUP_HOST=anton`). Installed as `~/Library/LaunchAgents/com.anton.prod-backup.plist`, running a copy at `~/anton-data/bin/backup-prod.sh` so a branch checkout can't break the job.
+
+**Why alongside Litestream:** restoring from Litestream needs B2 credentials and the litestream binary, and anything older than 14 days is gone. The laptop copies are plain SQLite files that last longer.
+
+**[VERIFIED]**
+- **Today's production snapshot** `shoe_deals.db.2026-10-15-prod-auto.bak` (39 MB): integrity ok, and activities 1,020, shoe_runs 753 and owned_shoes 24 match live production. Newest run 2026-10-11, 10,115.53 km, alembic `e4f5a6b7c8d9`.
+- **Local dev DB snapshot** `backups/shoe_deals.db.2026-10-15-snapshot.bak`: integrity ok, and all 26 tables' counts match the source.
+- **Script behaviour** (against a fake ssh): retention pruned 17 files to 15 and left a manual `.bak` alone; a second run skipped; an SSH failure and a corrupt payload each failed loudly with no `.partial` left behind.
+- **launchd:** the agent loaded and a kickstart run exited 0 (a correct skip). A one-shot launchd job confirmed SSH to `anton` works from the launchd context (key in the keychain).
+- No backend tests touched.
+
+---
+
 ## Son of Anton trigger tucks away over controls — 2026-10-15
 
 The floating "Son of Anton" pill covered row controls near the bottom-right (e.g. a retailer's enable switch and its tag/edit/delete icons). Frontend only.

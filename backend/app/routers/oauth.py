@@ -29,12 +29,14 @@ from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 
 from app.middleware.auth import _client_ip as _get_client_ip
 from app.services.oauth import create_auth_code
-from app.services.rate_limit import login_failure_limiter
+from app.services.rate_limit import login_failure_limiter, login_global_limiter
 
 logger = logging.getLogger(__name__)
 
 # Module-level reference so tests can monkeypatch it.
 _login_failure_limiter = login_failure_limiter
+# Global (all-IPs) password-failure ceiling (R9.5). Only wrong passwords spend it.
+_login_global_limiter = login_global_limiter
 
 router = APIRouter(tags=["oauth"])
 
@@ -186,6 +188,10 @@ async def login_post(
     attempt is throttled to LOGIN_FAILURE_LIMIT_PER_MINUTE after the burst is
     exhausted. Returns 429 with Retry-After when the limit is hit.
 
+    R9.5 global ceiling: after the per-IP check, `_login_global_limiter` is
+    peeked (not spent). When exhausted, every IP gets the same 429 the per-IP
+    throttle returns. Only a WRONG password spends from it.
+
     On success: create an auth code, redirect to redirect_uri?code=...&state=...
     On failure: re-render the form with a generic error (C9 — no oracle for
     which field was wrong).
@@ -197,6 +203,16 @@ async def login_post(
     if not rl.allowed:
         retry = str(max(1, int(rl.retry_after_s)))
         logger.warning("login rate-limited from %s", ip)
+        return HTMLResponse(
+            "<html><body><p>Too many attempts. Please wait and try again.</p></body></html>",
+            status_code=429,
+            headers={"Retry-After": retry},
+        )
+
+    global_rl = _login_global_limiter.peek()
+    if not global_rl.allowed:
+        retry = str(max(1, int(global_rl.retry_after_s)))
+        logger.warning("login global failure ceiling reached (from %s)", ip)
         return HTMLResponse(
             "<html><body><p>Too many attempts. Please wait and try again.</p></body></html>",
             status_code=429,
@@ -221,6 +237,7 @@ async def login_post(
 
     if not secrets.compare_digest(password.encode(), expected.encode()):
         logger.warning("login failed from %s", ip)
+        _login_global_limiter.take()
         return HTMLResponse(
             _render_login(
                 code_challenge=code_challenge,

@@ -13,8 +13,9 @@ from app.database import run_migrations, SessionLocal
 from app.mcp_server import mcp
 from app.middleware.access_log import AccessLogMiddleware
 from app.middleware.auth import BearerAuthMiddleware
-from app.routers import shoes, retailers, deals, dashboard, scraping, export, owned_shoes, coros_connect, chat, admin, training, strava, watchlist, activities, races, home, shoe_types, checkpoints, insights, preferences, oauth as oauth_router, session as session_router
+from app.routers import shoes, retailers, deals, dashboard, scraping, export, owned_shoes, coros_connect, chat, admin, training, strava, watchlist, activities, races, home, shoe_types, checkpoints, insights, preferences, oauth as oauth_router, session as session_router, public as public_router
 from app.services import schedule as schedule_svc
+from app.services.auth_admin import check_password_rotation
 
 # Load environment variables
 load_dotenv()
@@ -65,6 +66,7 @@ async def lifespan(app: FastAPI):
     # AppSettings (DB → env → default, #7) at boot through the same apply_config path.
     _boot_db = SessionLocal()
     try:
+        check_password_rotation(_boot_db)  # R9.2: changed login password -> sign out everywhere
         schedule_svc.start(_boot_db)
     finally:
         _boot_db.close()
@@ -136,6 +138,8 @@ app.include_router(oauth_router.router)
 # login (POST) and probe (GET) paths are public in the auth middleware; the
 # cookie gates every other /api call.
 app.include_router(session_router.router)
+# R9.3 — the only public data endpoint (GET /api/public/deals); owns its full prefix.
+app.include_router(public_router.router)
 
 # OAuth 2.1 protocol routes (/.well-known, /authorize, /token, /revoke).
 # Registered only when ANTON_HOST_URL is set — that var is the issuer URL and

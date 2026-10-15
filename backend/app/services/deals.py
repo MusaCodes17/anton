@@ -16,10 +16,11 @@ from __future__ import annotations
 import logging
 from typing import Optional
 
-from sqlalchemy import desc
+from sqlalchemy import desc, func
 from sqlalchemy.orm import Session, joinedload
 
-from app.models.models import Deal, Retailer, Shoe
+from app.models.models import Deal, Retailer, ScrapeRun, Shoe
+from app.models.schemas.deals import PublicDeal, PublicDealsResponse, PublicPromoCode
 from app.services import settings as settings_svc
 from app.utils.shoe_sizes import parse_size_label, size_fit
 
@@ -160,3 +161,51 @@ def get_deals_for_retailer(
     if is_active is not None:
         query = query.filter(Deal.is_active == is_active)
     return attach_size_fit(db, query.order_by(desc(Deal.savings_percent)).all())
+
+
+def list_public_deals(db: Session) -> PublicDealsResponse:
+    """The public (logged-out) projection of active deals (R9.3).
+
+    A thin projection over ``list_deals(db, is_active=True)`` (same
+    biggest-discount-first ordering). Every field is copied explicitly so that
+    personal data (notes, target_price, size_fit, ...) cannot leak by default.
+    Performs no scrape or sync work: ``checked_at`` merely reads the latest
+    successful ScrapeRun.finished_at (None if there is none).
+    """
+    deals = [
+        PublicDeal(
+            id=d.id,
+            shoe_id=d.shoe_id,
+            brand=d.shoe.brand,
+            model=d.shoe.model,
+            shoe_type=d.shoe.shoe_type,
+            colorway=d.colorway,
+            image_url=d.image_url,
+            current_price=d.current_price,
+            msrp=d.shoe.msrp,
+            savings_amount=d.savings_amount,
+            savings_percent=d.savings_percent,
+            sizes_available=d.sizes_available,
+            in_stock=bool(d.in_stock),
+            retailer_id=d.retailer_id,
+            retailer_name=d.retailer.name,
+            product_url=d.product_url,
+            promo_codes=[
+                PublicPromoCode(
+                    code=c.code,
+                    description=c.description,
+                    discount_percent=c.discount_percent,
+                    discount_amount=c.discount_amount,
+                )
+                for c in d.retailer.active_promo_codes
+            ],
+            detected_at=d.detected_at,
+        )
+        for d in list_deals(db, is_active=True)
+    ]
+    checked_at = (
+        db.query(func.max(ScrapeRun.finished_at))
+        .filter(ScrapeRun.status == "success")
+        .scalar()
+    )
+    return PublicDealsResponse(deals=deals, checked_at=checked_at)
