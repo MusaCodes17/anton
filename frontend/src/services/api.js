@@ -108,6 +108,12 @@ export const authApi = {
     client.post('/api/auth/session', { password }).then((r) => r.data),
   // Logout → clears the cookie and deletes the session row.
   logout: () => client.delete('/api/auth/session').then((r) => r.data),
+  // R9.2: { active_sessions, connector_connected } for the Security card.
+  security: () => client.get('/api/auth/security').then((r) => r.data),
+  // R9.2: revokes every browser session + the Claude connector's OAuth tokens;
+  // the server also clears this caller's cookie.
+  signOutEverywhere: () =>
+    client.post('/api/auth/sign-out-everywhere').then((r) => r.data),
 }
 
 // ============== SHOES ==============
