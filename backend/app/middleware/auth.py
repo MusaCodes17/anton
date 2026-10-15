@@ -82,6 +82,9 @@ PUBLIC_PATHS: frozenset[str] = frozenset({
     "/revoke",
     # Human-facing login page (app/routers/oauth.py).
     "/oauth/login",
+    # R9.3: field-allowlisted public deals projection (routers/public.py). Exact
+    # path only — no prefix match, so nothing else under /api/public is public.
+    "/api/public/deals",
     # SPA session-cookie auth (RA2.1): password login, logout, and the load-time
     # probe. POST issues the cookie (can't require the cookie it's about to set);
     # GET reports {authenticated}; DELETE is a self-scoped logout — all three

@@ -1,7 +1,7 @@
 """
 In-process rate limiting (roadmap R2 / RA1.3).
 
-Three limiters live here, each scoped to a different threat:
+Four limiters live here, each scoped to a different threat:
 
 1. `chat_limiter` — caps `POST /api/chat/message` per client IP to prevent a
    runaway authenticated loop from burning paid LLM credits (R2.1-adjacent).
@@ -15,6 +15,10 @@ Three limiters live here, each scoped to a different threat:
 3. `login_failure_limiter` — caps `POST /oauth/login` password failures per client
    IP. Adversary model: brute-force against the single-user OAuth login page.
    Tunable via `LOGIN_FAILURE_LIMIT_PER_MINUTE` / `LOGIN_FAILURE_BURST`.
+
+4. `public_limiter` — caps `GET /api/public/deals` per client IP (R9.3). Adversary
+   model: scraping/hammering of the one deliberately public data endpoint.
+   Tunable via `PUBLIC_RATE_LIMIT_PER_MINUTE` / `PUBLIC_RATE_LIMIT_BURST`.
 
 All limiters are deliberately **not** security boundaries alone — they are
 visibility and throttling aids. `app/middleware/auth.py` is the boundary.
@@ -200,8 +204,21 @@ def _build_login_failure_limiter() -> KeyedRateLimiter:
                             max_keys=_max_keys())
 
 
+def _build_public_limiter() -> KeyedRateLimiter:
+    """Per-IP limiter for the public deals endpoint (R9.3).
+
+    Default 60 requests/minute with a burst of 60: the page is cached for 5
+    minutes by browsers, so a human never gets near this; it only bites a
+    scraper loop. Tune via `PUBLIC_RATE_LIMIT_PER_MINUTE` / `PUBLIC_RATE_LIMIT_BURST`."""
+    per_min = float(os.getenv("PUBLIC_RATE_LIMIT_PER_MINUTE", "60"))
+    burst = float(os.getenv("PUBLIC_RATE_LIMIT_BURST", str(per_min)))
+    return KeyedRateLimiter(capacity=burst, refill_per_s=per_min / 60.0,
+                            max_keys=_max_keys())
+
+
 # Module singletons. Tests build their own instances with an injected clock
 # rather than poking these (avoids inter-test state leakage).
 chat_limiter = _build_chat_limiter()
 auth_failure_limiter = _build_auth_failure_limiter()
 login_failure_limiter = _build_login_failure_limiter()
+public_limiter = _build_public_limiter()

@@ -54,6 +54,8 @@ EXPECTED_PUBLIC_PATHS = frozenset({
     "/revoke",
     "/oauth/login",
     "/api/auth/session",
+    # R9.3: field-allowlisted public deals projection (exact path only).
+    "/api/public/deals",
 })
 
 _engine = create_engine(
