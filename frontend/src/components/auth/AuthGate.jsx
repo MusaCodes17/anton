@@ -33,12 +33,17 @@ export default function AuthGate({ children }) {
           setStatus('unauthed')
         }
       })
-      .catch(() => {
+      .catch((err) => {
         if (cancelled) return
-        // Probe failed. Offline → keep the app (session likely still valid,
-        // cache is readable). Online → a real failure; show login.
-        const offline = typeof navigator !== 'undefined' && navigator.onLine === false
-        setStatus(offline ? 'authed' : 'unauthed')
+        // Probe failed. The session endpoint is never cached, so it fails
+        // whenever the server can't be reached: offline (no status), a dead
+        // network (no status), or online with the server down — Caddy's 502/
+        // 503/504 during a deploy restart or crash. In all of those the cookie
+        // is still on the device, so keep the app and let the cached reads
+        // render; a real 401 on the next request drops back to login (E11).
+        // Any other status (a 4xx) is a real answer: show login.
+        const unreachable = err?.status === undefined || err.status >= 500
+        setStatus(unreachable ? 'authed' : 'unauthed')
       })
 
     const onUnauthenticated = () => setStatus('unauthed')

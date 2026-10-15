@@ -118,6 +118,45 @@ export default defineConfig({
               networkTimeoutSeconds: 5,
               expiration: { maxEntries: 100, maxAgeSeconds: 60 * 60 * 24 * 7 },
               cacheableResponse: { statuses: [200] },
+              // Server unreachable while the phone is online (deploy restart,
+              // crash): Caddy answers 502/503/504 — the vite preview proxy, 500
+              // — and NetworkFirst would hand that error to the app because an
+              // HTTP response counts as network success. These plugins make a
+              // 5xx behave like a network failure (E11): serve the last cached
+              // 200, mark it stale, and only if nothing is cached pass the
+              // original 5xx through. 401 and other 4xx are untouched, so an
+              // expired session still reaches the login fallback. Plugins are
+              // serialized into sw.js, so they can't close over anything here.
+              plugins: [
+                {
+                  // `state` is Workbox's per-request scratch object for this
+                  // plugin; it carries the 5xx to handlerDidError below.
+                  fetchDidSucceed: async ({ response, state }) => {
+                    if (response.status >= 500) {
+                      if (state) state.serverError = response
+                      throw new Error(`anton: server answered ${response.status}`)
+                    }
+                    return response
+                  },
+                  // NetworkFirst reads the cache only on a fallback (network
+                  // error, 5xx, timeout), so every response through here is
+                  // stale. The header lets services/api.js tell the UI.
+                  cachedResponseWillBeUsed: async ({ cachedResponse }) => {
+                    if (!cachedResponse) return cachedResponse
+                    const headers = new Headers(cachedResponse.headers)
+                    headers.set('X-Anton-Cache-Fallback', '1')
+                    return new Response(cachedResponse.body, {
+                      status: cachedResponse.status,
+                      statusText: cachedResponse.statusText,
+                      headers,
+                    })
+                  },
+                  // Nothing cached: NetworkFirst throws 'no-response' (which
+                  // drops the error above). Return the real 5xx so the app sees
+                  // the server's status, not a synthetic network error.
+                  handlerDidError: async ({ state }) => state?.serverError,
+                },
+              ],
             },
           },
         ],

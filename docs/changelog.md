@@ -5,6 +5,18 @@
 
 ---
 
+## PWA: cached reads and sign-in survive a server outage (E11 amendment) — 2026-10-15
+
+Fixes the "[FOUND, not fixed]" item from the Signal follow-up below. Frontend only, no migration, no API change. Backend suite untouched (no backend change).
+
+**[CHANGED] Service worker (`vite.config.js`):** the `anton-api-reads` NetworkFirst rule treats a 5xx like a network failure and serves the last cached 200, marked `X-Anton-Cache-Fallback: 1`. With nothing cached, the original 5xx passes through. 401/4xx are never replaced by the cache.
+**[CHANGED] `AuthGate`:** a session probe that fails with a 5xx or no response keeps the user signed in (it was offline-only), so a reload during a deploy restart no longer drops to login. A 4xx, or a logged-out 200, still shows login.
+**[CHANGED] Offline banner:** `useOnline` reports `online | offline | unreachable` (`/health` ≥ 500 = unreachable). `OfflineIndicator` shows "Can't reach Anton — showing last synced data…" for the new state. api.js hints a re-probe on cache-fallback reads and 5xx/no-response failures, so the banner appears mid-session. While it shows, `/health` is re-probed every 30 s so the banner clears by itself. Writes are still online-only, never queued (E11).
+
+**[VERIFIED]** `npm run build` clean, and `dist/sw.js` contains the plugins. `vite preview` of `dist/` proxying `/api` and `/health` (as Caddy does) to a backend on a DB copy. Pages loaded, then the backend stopped (the preview proxy answers 500). Cached reads came back 200 with the fallback header, an uncached read got the real 500, and `/api/auth/session` was 500 and uncached. A reload of Shoes and Home stayed signed in and rendered cached data under the new banner, at desktop and 380 px. A client-side tab switch raised the banner mid-session. With the backend restarted, the banner cleared, and a cookie-less read returned 401 despite a cached 200. Console errors were only the expected failed-resource lines while the backend was down.
+
+---
+
 ## "Signal" redesign — the template's design language across the whole app — 2026-10-15
 
 Branch `redesign-template` (off `main`). Frontend only, no migration, no API change. Suite unchanged at 892 passed + 1 skipped. `vite build` clean. Decision: design_decisions E18 (supersedes the "Velocity" look).
