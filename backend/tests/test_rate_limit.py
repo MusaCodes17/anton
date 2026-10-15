@@ -84,3 +84,64 @@ def test_dependency_missing_client_uses_stable_key(monkeypatch):
     chat_router.enforce_chat_rate_limit(req)
     with pytest.raises(HTTPException):
         chat_router.enforce_chat_rate_limit(req)
+
+
+# --- R9.1: key-space cap -----------------------------------------------------
+
+from app.services import rate_limit as rate_limit_module  # noqa: E402
+
+
+def test_bucket_is_full_reports_refilled_state():
+    clock = _Clock()
+    bucket = TokenBucket(capacity=2, refill_per_s=1.0, now=clock)
+    assert bucket.is_full(clock.t) is True
+    bucket.take(); bucket.take()
+    assert bucket.is_full(clock.t) is False
+    clock.advance(2.0)                         # 2 tokens back, capacity reached
+    assert bucket.is_full(clock.t) is True
+
+
+def test_keyed_limiter_stays_bounded_when_keys_refill_to_full():
+    # 50 one-shot clients at a cap of 5. Each bucket is spent, then the clock
+    # advances enough to refill it, so it is full and evictable at the next sweep.
+    clock = _Clock()
+    limiter = KeyedRateLimiter(capacity=1, refill_per_s=1.0, now=clock, max_keys=5)
+    for i in range(50):
+        assert limiter.take(f"10.0.0.{i}").allowed is True
+        clock.advance(1.0)
+        assert len(limiter) <= 5 + 1
+    assert len(limiter) <= 5 + 1
+
+
+def test_throttled_key_survives_eviction_sweep(caplog):
+    # `hot` is drained and the clock is frozen, so it stays throttled. New keys are
+    # created full (tokens=0 spends nothing) so each sweep has something to evict —
+    # the sweep must drop those and keep `hot`, or an abusive client gets a free reset.
+    clock = _Clock()
+    limiter = KeyedRateLimiter(capacity=1, refill_per_s=1.0, now=clock, max_keys=3)
+    assert limiter.take("hot").allowed is True
+    assert limiter.take("hot").allowed is False
+    for i in range(20):
+        assert limiter.take(f"new-{i}", tokens=0).allowed is True
+    assert len(limiter) <= 3 + 1
+    assert limiter.take("hot").allowed is False
+
+
+def test_all_throttled_at_cap_admits_new_key_soft_cap(caplog):
+    clock = _Clock()
+    limiter = KeyedRateLimiter(capacity=1, refill_per_s=1.0, now=clock, max_keys=2)
+    for key in ("a", "b"):
+        assert limiter.take(key).allowed is True
+        assert limiter.take(key).allowed is False      # both throttled, none evictable
+    with caplog.at_level("WARNING", logger=rate_limit_module.__name__):
+        result = limiter.take("c")
+    assert result.allowed is True                      # new key still served
+    assert len(limiter) == 2 + 1                       # soft cap: one over
+    assert any("rate limiter at cap" in r.getMessage() for r in caplog.records)
+
+
+def test_max_keys_env_tunable(monkeypatch):
+    monkeypatch.delenv("RATE_LIMIT_MAX_KEYS", raising=False)
+    assert rate_limit_module._max_keys() == 10_000
+    monkeypatch.setenv("RATE_LIMIT_MAX_KEYS", "7")
+    assert rate_limit_module._max_keys() == 7

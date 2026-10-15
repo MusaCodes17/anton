@@ -26,11 +26,14 @@ scheduler exists (R4.1), and is labelled here rather than solved silently.
 """
 from __future__ import annotations
 
+import logging
 import os
 import threading
 import time
 from dataclasses import dataclass
 from typing import Callable
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -79,28 +82,50 @@ class TokenBucket:
             retry = deficit / self.refill_per_s if self.refill_per_s > 0 else float("inf")
             return RateLimitResult(False, retry)
 
+    def is_full(self, t: float) -> bool:
+        """True when the bucket would be at `capacity` at time `t` (refilled to `t`).
+        A full bucket is indistinguishable from a fresh one, so the keyed limiter
+        may evict it without changing any later decision."""
+        with self._lock:
+            self._refill(t)
+            return self._tokens >= self.capacity
+
 
 class KeyedRateLimiter:
     """
     One `TokenBucket` per key (e.g. client IP), created lazily on first use so
-    each client gets its own allowance. At single-user LAN scale the key space is
-    a handful of devices, so a plain dict under a lock is right — no eviction
-    policy is needed (bounded by the owner's device count). If this were ever
-    exposed to an open network the unbounded dict would need capping; it isn't.
+    each client gets its own allowance.
+
+    The dict is capped at `max_keys` (R9.1): the public deals page puts the key
+    space on the open internet, so an unbounded dict would be a memory-growth
+    vector. When a new key arrives at the cap, buckets that are full are swept
+    out — a full bucket is indistinguishable from a fresh one, so evicting it
+    changes no future decision. Throttled buckets are never evicted: resetting an
+    abusive client's bucket would hand it a free burst. If every bucket is
+    throttled the sweep frees nothing and the new key is still admitted, so the
+    cap is soft in that pathological case (logged as a WARNING).
     """
 
     def __init__(self, *, capacity: float, refill_per_s: float,
-                 now: Callable[[], float] = time.monotonic):
+                 now: Callable[[], float] = time.monotonic,
+                 max_keys: int = 10_000):
         self._capacity = capacity
         self._refill_per_s = refill_per_s
         self._now = now
+        self._max_keys = max_keys
         self._buckets: dict[str, TokenBucket] = {}
         self._lock = threading.Lock()
+
+    def __len__(self) -> int:
+        with self._lock:
+            return len(self._buckets)
 
     def take(self, key: str, tokens: float = 1.0) -> RateLimitResult:
         with self._lock:
             bucket = self._buckets.get(key)
             if bucket is None:
+                if len(self._buckets) >= self._max_keys:
+                    self._evict_full_buckets()
                 bucket = TokenBucket(
                     capacity=self._capacity,
                     refill_per_s=self._refill_per_s,
@@ -108,6 +133,31 @@ class KeyedRateLimiter:
                 )
                 self._buckets[key] = bucket
         return bucket.take(tokens)
+
+    def _evict_full_buckets(self) -> None:
+        """Drop every full bucket. Caller holds `self._lock`.
+
+        Runs only when a new key arrives at the cap. The scan is O(n) over at
+        most `max_keys` entries — a labelled full pass, acceptable at personal
+        scale. It is NOT amortised: if every bucket stays throttled, each new key
+        at the cap repeats the scan (still bounded by `max_keys`). The sanctioned
+        escape if that ever budgets badly is an LRU/time-indexed structure, not a
+        larger cap."""
+        now = self._now()
+        for key in [k for k, b in self._buckets.items() if b.is_full(now)]:
+            del self._buckets[key]
+        if len(self._buckets) >= self._max_keys:
+            logger.warning(
+                "rate limiter at cap (%d keys, max_keys=%d) with no full buckets "
+                "to evict; admitting new key over the soft cap",
+                len(self._buckets), self._max_keys,
+            )
+
+
+def _max_keys() -> int:
+    """Per-limiter key cap (R9.1). Tune via `RATE_LIMIT_MAX_KEYS`; default 10000
+    comfortably exceeds any real client population for this app."""
+    return int(os.getenv("RATE_LIMIT_MAX_KEYS", "10000"))
 
 
 def _build_chat_limiter() -> KeyedRateLimiter:
@@ -119,7 +169,8 @@ def _build_chat_limiter() -> KeyedRateLimiter:
     (sustained rate) and `CHAT_RATE_LIMIT_BURST` (bucket capacity)."""
     per_min = float(os.getenv("CHAT_RATE_LIMIT_PER_MINUTE", "20"))
     burst = float(os.getenv("CHAT_RATE_LIMIT_BURST", str(per_min)))
-    return KeyedRateLimiter(capacity=burst, refill_per_s=per_min / 60.0)
+    return KeyedRateLimiter(capacity=burst, refill_per_s=per_min / 60.0,
+                            max_keys=_max_keys())
 
 
 def _build_auth_failure_limiter() -> KeyedRateLimiter:
@@ -132,7 +183,8 @@ def _build_auth_failure_limiter() -> KeyedRateLimiter:
     Tune via `AUTH_FAILURE_LIMIT_PER_MINUTE` / `AUTH_FAILURE_BURST`."""
     per_min = float(os.getenv("AUTH_FAILURE_LIMIT_PER_MINUTE", "10"))
     burst = float(os.getenv("AUTH_FAILURE_BURST", str(per_min)))
-    return KeyedRateLimiter(capacity=burst, refill_per_s=per_min / 60.0)
+    return KeyedRateLimiter(capacity=burst, refill_per_s=per_min / 60.0,
+                            max_keys=_max_keys())
 
 
 def _build_login_failure_limiter() -> KeyedRateLimiter:
@@ -144,7 +196,8 @@ def _build_login_failure_limiter() -> KeyedRateLimiter:
     `LOGIN_FAILURE_LIMIT_PER_MINUTE` / `LOGIN_FAILURE_BURST`."""
     per_min = float(os.getenv("LOGIN_FAILURE_LIMIT_PER_MINUTE", "5"))
     burst = float(os.getenv("LOGIN_FAILURE_BURST", str(per_min)))
-    return KeyedRateLimiter(capacity=burst, refill_per_s=per_min / 60.0)
+    return KeyedRateLimiter(capacity=burst, refill_per_s=per_min / 60.0,
+                            max_keys=_max_keys())
 
 
 # Module singletons. Tests build their own instances with an injected clock
