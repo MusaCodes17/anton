@@ -714,6 +714,36 @@ Supporting choices:
 - `--iridescence-*` and the shader tint are retuned by hand; nothing checks them automatically.
 
 **Verdict:** ✅ Keep.
+
+---
+
+### E20. The first public data surface: one allowlisted path, a route-coverage ratchet, and sign-out-everywhere (R9, 2026-10-15 — extends E9/E10)
+
+**Chosen:**
+- **Exactly one public data path.** `GET /api/public/deals` (`routers/public.py`) is added to `PUBLIC_PATHS` as that exact string — no prefix match, so nothing else under `/api/public` is public. Everything else stays behind the E9/E10 credentials. It is a plain read: no query parameters, no scrape or sync work, `Cache-Control: public, max-age=300`, per-IP `public_limiter` (60/min, `PUBLIC_RATE_LIMIT_*`).
+- **The payload is a field allowlist, never `from_attributes`.** `PublicDeal` is built field by field in `deals.list_public_deals`, a projection over the existing deal list (one computation, CLAUDE.md §6). A new column on `Shoe`, `Deal` or `Retailer` therefore cannot reach the public by accident; it has to be added to the schema on purpose. `tests/test_public_deals.py` seeds `notes`, `target_price` and a preferred size and asserts none of them appear anywhere in the body.
+- **The route-coverage test is the ratchet.** `tests/test_public_surface.py` pins `PUBLIC_PATHS` to a literal set and walks every registered route (API, plain, the `/mcp` mount, OAuth) asserting a logged-out request gets 401. Adding a public path, or a route that forgets the gate, now fails a test. Friction by design: it shows up in the PR diff. Recorded as INV-10 in CLAUDE.md §14. The same task capped `KeyedRateLimiter` (`max_keys`, default 10 000, `RATE_LIMIT_MAX_KEYS`): when full it evicts only buckets that have refilled to capacity, which are indistinguishable from fresh ones, so a throttled IP is never reset. It is a soft cap: if every bucket is mid-throttle, the new key is admitted over the cap (logged as a WARNING) rather than forgetting a throttled key.
+- **Sign out everywhere ends sessions and OAuth tokens, not bearers.** `services/auth_admin.py` deletes all `sessions` rows, all OAuth access/refresh tokens and pending auth codes. Named bearer tokens (`ANTON_TOKENS`: Desktop, loopback) don't come from the password and rotate through env as before. Reach: `POST /api/auth/sign-out-everywhere`, `GET /api/auth/security` (counts only), the Settings → Security card, and the CLI `python -m app.scripts.sign_out_everywhere` for use over SSH.
+- **Deliberate exception to REST/MCP parity (CLAUDE.md §4.2).** Sign out everywhere has no MCP tool. Auth administration is not an AI-callable capability, and an LLM (or anything holding a connector token) being able to end the owner's sessions or the connector itself is the wrong direction for the trust model. Same family as E16's exception.
+- **A password change purges automatically.** At boot (lifespan, after migrations) `check_password_rotation` compares a scrypt fingerprint of `ANTON_LOGIN_PASSWORD` with `AppSettings["login_password_fingerprint"]`. Mismatch, or a stored value that doesn't parse, counts as a change: sign out everywhere, store the new fingerprint, log a WARNING. First boot with nothing stored: store it, don't purge.
+- **The password stays in env (v1).** One owner for the secret, as in E10.
+- **A global login-failure ceiling.** On top of the per-IP limiter, both password endpoints (`POST /api/auth/session` and `/oauth/login`) share a ceiling of 50 wrong passwords per hour across all IPs (`LOGIN_GLOBAL_FAILURE_LIMIT_PER_HOUR`). Only wrong passwords spend it.
+
+**Why:** the runner wants to share a link to the deals page with the run club. That moves Anton from "public host, bots probe it" to "a known URL that will be forwarded and poked at by curious people", so the gate had to become a checked property rather than a belief, the public payload had to be incapable of leaking personal fields, and a leaked password or lost phone needed a one-step answer. Today logout only ended the current device, and someone who knew the password could also hold OAuth tokens that survive a session wipe.
+
+**Alternatives considered:**
+- *Hashed password in the DB with "change password" in Settings (requires the current password).* Rejected for v1: with the password in env, a stolen session can never change it and lock the owner out. The cost is that changing it needs SSH and a recreate. Revisit only if changing it from the phone becomes a felt need.
+- *Plain SHA-256 for the fingerprint.* Rejected: the DB is replicated to B2 by Litestream, and a fast hash of a passphrase sitting in a backup is crackable offline. scrypt (stdlib, random salt, N=2^14) makes that slow. The fingerprint is a change detector, never used to authenticate a login.
+- *`from_attributes` on a trimmed ORM response.* Rejected: allowlists fail closed, denylists fail open.
+
+**Trade-offs:**
+- The global ceiling is soft: each login peeks at it before the password check and spends a token only on a wrong password, so a burst of concurrent wrong guesses can overshoot slightly. And an attacker can lock the login form for up to an hour. Accepted: existing sessions (14 days), the Desktop bearer and the connector keep working.
+- A device that is offline keeps showing cached reads until it next reaches the server (then 401, then wipe). Same as E11.
+- The `sessions`, OAuth and limiter state are in-process or single-DB, so INV-9 (one worker) still holds.
+- The CSP ships as `Content-Security-Policy-Report-Only` and switches to enforcing after a clean week. The repo `deploy/Caddyfile` is a template; the live one is on the host and must be reconciled by hand (R9.5).
+
+**Verdict:** ✅ Keep.
+
 ---
 
 ## Superseded Decisions (kept as history)
