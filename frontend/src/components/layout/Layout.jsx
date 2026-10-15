@@ -23,6 +23,16 @@ const navItems = [
   { to: '/assistant', label: 'Son of Anton', short: 'Anton', icon: Sparkles },
 ]
 
+// Sidebar scrape-status dot: green within two days of the last scrape, amber
+// once it's older (the schedule is nightly), muted when never scraped.
+const SCRAPE_FRESH_MS = 48 * 36e5
+function scrapeDot(lastScrape) {
+  if (!lastScrape) return 'bg-faint'
+  return Date.now() - new Date(lastScrape).getTime() <= SCRAPE_FRESH_MS
+    ? 'bg-success shadow-[0_0_8px_var(--success)]'
+    : 'bg-warning shadow-[0_0_8px_var(--warning)]'
+}
+
 const settingsItem = { to: '/settings', label: 'Settings', icon: SettingsIcon }
 
 function NavLinks({ onNavigate }) {
@@ -36,10 +46,12 @@ function NavLinks({ onNavigate }) {
           onClick={onNavigate}
           className={({ isActive }) =>
             cn(
-              'focus-ring flex items-center gap-3 rounded-[9px] px-3 py-[11px] text-sm transition-colors',
+              // Template .tab[aria-selected]: the active row is a raised ink-3
+              // pill with a hairline inset; its dot is lit signal.
+              'focus-ring flex items-center gap-3 rounded-full px-3.5 py-[10px] text-sm font-medium transition-colors duration-300 ease-signal',
               isActive
-                ? 'bg-accent font-bold text-accent-foreground'
-                : 'font-medium text-muted-foreground hover:bg-secondary hover:text-foreground'
+                ? 'bg-secondary text-foreground shadow-[inset_0_0_0_1px_var(--input)]'
+                : 'text-muted-foreground hover:bg-accent hover:text-foreground'
             )
           }
         >
@@ -47,8 +59,8 @@ function NavLinks({ onNavigate }) {
             <>
               <span
                 className={cn(
-                  'h-[7px] w-[7px] shrink-0 rotate-45 rounded-[2px]',
-                  isActive ? 'bg-primary' : 'bg-nav-inactive'
+                  'h-1.5 w-1.5 shrink-0 rounded-full transition-colors duration-300',
+                  isActive ? 'bg-primary shadow-[0_0_8px_var(--primary)]' : 'bg-nav-inactive'
                 )}
               />
               {label}
@@ -70,10 +82,10 @@ function SettingsLink({ onNavigate }) {
       onClick={onNavigate}
       className={({ isActive }) =>
         cn(
-          'focus-ring flex items-center gap-3 rounded-[9px] px-3 py-[11px] text-sm transition-colors',
+          'focus-ring flex items-center gap-3 rounded-full px-3.5 py-[10px] text-sm font-medium transition-colors duration-300 ease-signal',
           isActive
-            ? 'bg-accent font-bold text-accent-foreground'
-            : 'font-medium text-muted-foreground hover:bg-secondary hover:text-foreground'
+            ? 'bg-secondary text-foreground shadow-[inset_0_0_0_1px_var(--input)]'
+            : 'text-muted-foreground hover:bg-accent hover:text-foreground'
         )
       }
     >
@@ -97,7 +109,7 @@ function MobileTabBar({ onReselect }) {
   return (
     <nav
       aria-label="Primary"
-      className="z-30 grid shrink-0 grid-cols-5 border-t border-divider bg-sidebar pb-[env(safe-area-inset-bottom)] md:hidden [.keyboard-open_&]:hidden"
+      className="glass-bar grain relative z-30 grid shrink-0 grid-cols-5 border-t border-border pb-[env(safe-area-inset-bottom)] md:hidden [.keyboard-open_&]:hidden"
     >
       {navItems.map((item) => {
         const active = isActive(item)
@@ -111,15 +123,15 @@ function MobileTabBar({ onReselect }) {
             // Tapping the tab you're already on returns to the top (iOS convention).
             onClick={() => active && onReselect()}
             className={cn(
-              'focus-ring relative flex h-14 flex-col items-center justify-center gap-1 text-2xs transition-colors',
-              active ? 'font-bold text-accent-foreground' : 'font-semibold text-muted-foreground hover:text-foreground'
+              'focus-ring relative flex h-14 flex-col items-center justify-center gap-1 text-2xs font-medium transition-colors duration-300 ease-signal',
+              active ? 'text-foreground' : 'text-muted-foreground hover:text-foreground'
             )}
           >
-            {/* The nav's diamond signature, moved above the icon. */}
+            {/* Active tab: a lit signal filament on the bar's top edge. */}
             {active && (
-              <span className="absolute top-0 h-[7px] w-[7px] -translate-y-1/2 rotate-45 rounded-[2px] bg-primary" />
+              <span className="absolute top-0 h-[2px] w-6 rounded-full bg-primary shadow-[0_0_10px_var(--primary)]" />
             )}
-            <Icon className="h-[22px] w-[22px]" strokeWidth={1.8} />
+            <Icon className={cn('h-[22px] w-[22px]', active && 'text-primary')} strokeWidth={1.6} />
             {item.short}
           </NavLink>
         )
@@ -146,7 +158,7 @@ export function LogoutButton({ onNavigate }) {
     <button
       type="button"
       onClick={handleLogout}
-      className="focus-ring flex w-full items-center gap-3 rounded-[9px] px-3 py-[11px] text-sm font-medium text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
+      className="focus-ring flex w-full items-center gap-3 rounded-full px-3.5 py-[10px] text-sm font-medium text-muted-foreground transition-colors duration-300 ease-signal hover:bg-accent hover:text-foreground"
     >
       <LogOut className="h-[15px] w-[15px] shrink-0" />
       Sign out
@@ -162,12 +174,13 @@ function Brand({ onHome }) {
       to="/"
       onClick={onHome}
       aria-label="Anton — home"
-      className="focus-ring flex items-center gap-[11px] rounded-lg px-2"
+      className="focus-ring flex items-center gap-2.5 rounded-full px-2"
     >
-      <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-primary text-background">
-        <BrandMark className="h-[19px] w-[19px]" />
+      {/* Template .logo-mark: a hairline-framed tile, the mark lit in signal. */}
+      <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[9px] border border-input text-primary">
+        <BrandMark className="h-[17px] w-[17px]" />
       </span>
-      <span className="font-heading text-[19px] font-extrabold tracking-tight text-foreground">
+      <span className="font-heading text-[21px] font-light tracking-display text-foreground">
         Anton
       </span>
     </Link>
@@ -213,7 +226,7 @@ export default function Layout() {
       </div>
 
       {/* Desktop sidebar */}
-      <aside className="fixed inset-y-0 left-0 z-30 hidden w-[236px] flex-none flex-col bg-sidebar p-4 pt-6 md:flex">
+      <aside className="grain fixed inset-y-0 left-0 z-30 hidden w-[236px] flex-none flex-col border-r border-border bg-sidebar p-4 pt-6 md:flex">
         <div className="pb-[30px]">
           <Brand onHome={scrollToTop} />
         </div>
@@ -222,9 +235,15 @@ export default function Layout() {
           <SettingsLink />
           <LogoutButton />
         </div>
-        <div className="mt-3 flex items-center gap-[9px] border-t border-border px-2.5 pt-3">
-          <span className="relative flex h-2 w-2 shrink-0 rounded-full bg-primary ring-[3px] ring-primary/[0.18]" />
-          <span className="text-xs text-faint">
+        {/* Template .header-status: a mono status line with a live dot. */}
+        <div className="mt-3 flex items-center gap-2.5 border-t border-border px-3 pt-3">
+          {/* Static, coloured by freshness: a pulse would claim live activity
+              (surface brief: pulses only on live data). */}
+          <span
+            aria-hidden="true"
+            className={cn('h-1.5 w-1.5 shrink-0 rounded-full', scrapeDot(stats.data?.last_scrape))}
+          />
+          <span className="font-mono text-2xs text-muted-foreground">
             {stats.data?.last_scrape
               ? `Last scraped ${formatRelativeTime(stats.data.last_scrape)}`
               : 'Not scraped yet'}
@@ -238,7 +257,7 @@ export default function Layout() {
           it so the phone shows one bar, not two. */}
       <header
         className={cn(
-          'z-30 flex h-14 shrink-0 items-center justify-between border-b border-border bg-sidebar pl-4 pr-1.5 md:hidden',
+          'glass-bar grain relative z-30 flex h-14 shrink-0 items-center justify-between border-b border-border pl-2.5 pr-1.5 md:hidden',
           isFullBleed && 'hidden'
         )}
       >
@@ -248,8 +267,8 @@ export default function Layout() {
           aria-label="Settings"
           className={({ isActive }) =>
             cn(
-              'focus-ring flex h-11 w-11 items-center justify-center rounded-[10px] transition-colors hover:bg-secondary',
-              isActive ? 'text-accent-foreground' : 'text-muted-foreground'
+              'focus-ring flex h-11 w-11 items-center justify-center rounded-full transition-colors duration-300 ease-signal hover:bg-accent',
+              isActive ? 'text-primary' : 'text-muted-foreground'
             )
           }
         >

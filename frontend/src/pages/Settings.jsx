@@ -1,7 +1,9 @@
-import { NavLink, Outlet } from 'react-router-dom'
+import { useEffect, useRef } from 'react'
+import { NavLink, Outlet, useLocation } from 'react-router-dom'
 import { Footprints, Store, RefreshCw } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { LogoutButton } from '@/components/layout/Layout'
+import PageHeader from '@/components/PageHeader'
 
 // Settings is a control room, not a primary domain. It re-homes the former
 // top-level "Tracked Shoes" and "Retailers" pages plus a new sync/scraping
@@ -13,29 +15,36 @@ const subNav = [
 ]
 
 export default function Settings() {
+  // On phones the strip scrolls; keep the active tab fully in view.
+  const navRef = useRef(null)
+  const { pathname } = useLocation()
+  useEffect(() => {
+    navRef.current
+      ?.querySelector('[aria-current="page"]')
+      ?.scrollIntoView({ block: 'nearest', inline: 'nearest' })
+  }, [pathname])
+
   return (
     <div>
-      <div className="mb-3 sm:mb-6">
-        <div className="hidden font-mono text-xs font-semibold tracking-[0.14em] text-accent-foreground sm:block">
-          SETTINGS
-        </div>
-        <h1 className="text-2xl font-heading font-extrabold tracking-tight text-foreground sm:mt-1.5 sm:text-[30px]">
-          Settings
-        </h1>
-      </div>
+      <PageHeader title="Settings" />
 
-      {/* Sub-nav — horizontal scroll on narrow viewports rather than wrapping */}
-      <nav className="mb-4 flex sm:mb-7 gap-1.5 overflow-x-auto border-b border-border pb-px">
+      {/* Sub-nav — the template's segmented .tabs pill; scrolls horizontally on
+          narrow viewports rather than wrapping. */}
+      <nav
+        ref={navRef}
+        // Edge fades say "more this way" when the strip overflows.
+        className="scrollbar-none mb-5 flex w-fit max-w-full gap-1 overflow-x-auto rounded-full border border-border p-1 [mask-image:linear-gradient(90deg,transparent,#000_18px,#000_calc(100%-24px),transparent)] sm:mb-8 sm:[mask-image:none]"
+      >
         {subNav.map(({ to, label, icon: Icon }) => (
           <NavLink
             key={to}
             to={to}
             className={({ isActive }) =>
               cn(
-                'focus-ring -mb-px flex shrink-0 items-center gap-2 rounded-t-lg border-b-2 px-3.5 py-2.5 text-sm transition-colors',
+                'focus-ring flex shrink-0 items-center gap-2 rounded-full px-3.5 py-2 text-sm font-medium transition-colors duration-300 ease-signal',
                 isActive
-                  ? 'border-primary font-bold text-foreground'
-                  : 'border-transparent font-medium text-muted-foreground hover:text-foreground'
+                  ? 'bg-secondary text-foreground shadow-[inset_0_0_0_1px_var(--input)]'
+                  : 'text-muted-foreground hover:text-foreground'
               )
             }
           >
