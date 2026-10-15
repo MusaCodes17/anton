@@ -1,0 +1,23 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "redesign-api",
+      "runtimeExecutable": "/private/tmp/claude-501/-Users-musasouled-workspace-claude-code-anton/f5d18370-7da5-4e7a-8a92-89d0714370a6/scratchpad/backend.sh",
+      "runtimeArgs": [],
+      "port": 8010
+    },
+    {
+      "name": "redesign-web",
+      "runtimeExecutable": "/private/tmp/claude-501/-Users-musasouled-workspace-claude-code-anton/f5d18370-7da5-4e7a-8a92-89d0714370a6/scratchpad/web.sh",
+      "runtimeArgs": [],
+      "port": 5180
+    },
+    {
+      "name": "redesign-pwa",
+      "runtimeExecutable": "/private/tmp/claude-501/-Users-musasouled-workspace-claude-code-anton/f5d18370-7da5-4e7a-8a92-89d0714370a6/scratchpad/pwa.sh",
+      "runtimeArgs": [],
+      "port": 4180
+    }
+  ]
+}
