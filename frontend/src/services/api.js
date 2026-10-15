@@ -33,6 +33,19 @@ function signalUnauthenticated() {
   }
 }
 
+// E11: server reachability hints for useOnline (the offline banner). A read the
+// service worker answered from its cache (X-Anton-Cache-Fallback, set in
+// vite.config.js) or a request that failed with a 5xx / no response at all says
+// the server may be down; a fresh response says it's back. These are only
+// hints — useOnline confirms with its own /health probe before changing state.
+export const SERVER_UNREACHABLE_EVENT = 'anton:server-unreachable'
+export const SERVER_REACHABLE_EVENT = 'anton:server-reachable'
+function signalReachability(reachable) {
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new Event(reachable ? SERVER_REACHABLE_EVENT : SERVER_UNREACHABLE_EVENT))
+  }
+}
+
 // RA2.2 §4 — writes require connectivity. When the browser is definitively
 // offline, reject any mutating request (POST/PUT/PATCH/DELETE) BEFORE it fires
 // so nothing is ever silently queued and no confirmed action commits later
@@ -52,8 +65,16 @@ client.interceptors.request.use((config) => {
 
 // Normalize errors so the UI gets a readable message regardless of shape.
 client.interceptors.response.use(
-  (response) => response,
+  (response) => {
+    signalReachability(response.headers?.['x-anton-cache-fallback'] !== '1')
+    return response
+  },
   (error) => {
+    const status = error.response?.status
+    // A cancelled request (React Query aborting on unmount) says nothing.
+    if (!axios.isCancel(error) && (status === undefined || status >= 500)) {
+      signalReachability(false)
+    }
     // A 401 means the session cookie is missing/expired — fall back to login.
     // The probe endpoint itself is exempt (it's how the login view checks state).
     if (error.response?.status === 401) {

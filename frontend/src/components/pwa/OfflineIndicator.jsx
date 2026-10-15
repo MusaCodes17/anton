@@ -1,15 +1,30 @@
-import { WifiOff } from 'lucide-react'
+import { ServerCrash, WifiOff } from 'lucide-react'
 import { useOnline } from '@/hooks/useOnline'
 
 // RA2.2 §3/§4 — honest offline signaling.
 //
 // When the real connectivity probe (useOnline) reports offline, a subtle
 // banner tells the runner the data is last-synced and writes are paused —
-// "offline, showing last synced data" over the illusion of live data. Uses the
+// "offline, showing last synced data" over the illusion of live data. E11 adds
+// the online-but-server-down case (deploy restart, crash): same banner, its own
+// wording, since the phone has signal and only Anton is missing. Uses the
 // warning design token; no new colors. Renders nothing when online.
+const COPY = {
+  offline: {
+    Icon: WifiOff,
+    text: 'Offline — showing last synced data. Changes are paused until you reconnect.',
+  },
+  unreachable: {
+    Icon: ServerCrash,
+    text: "Can't reach Anton — showing last synced data. Changes won't save until it's back.",
+  },
+}
+
 export default function OfflineIndicator() {
-  const { online } = useOnline()
-  if (online) return null
+  const { status } = useOnline()
+  const copy = COPY[status]
+  if (!copy) return null
+  const { Icon, text } = copy
 
   return (
     <div
@@ -17,8 +32,8 @@ export default function OfflineIndicator() {
       className="flex items-center justify-center gap-2 bg-warning px-4 py-1.5 text-center text-xs font-semibold text-warning-foreground"
       style={{ paddingTop: 'max(0.375rem, env(safe-area-inset-top))' }}
     >
-      <WifiOff className="h-3.5 w-3.5 shrink-0" />
-      <span>Offline — showing last synced data. Changes are paused until you reconnect.</span>
+      <Icon className="h-3.5 w-3.5 shrink-0" />
+      <span>{text}</span>
     </div>
   )
 }

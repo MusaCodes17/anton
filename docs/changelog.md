@@ -7,7 +7,7 @@
 
 ## Champs Sports Canada scraper — 2026-10-15
 
-Probe-then-build for a new retailer (S05 add-retailer). Suite 900 passed + 1 skipped. Branch `redesign-template`, uncommitted.
+Probe-then-build for a new retailer (S05 add-retailer). Suite 900 passed + 1 skipped. Branch `redesign-template`, committed as `8060dc4`.
 
 **[ADDED] `backend/app/scrapers/champs_sports.py` — `ChampsSportsScraper`, bespoke, registered as `Champs Sports Canada`**
 - Probe: not Shopify (`/products.json` is HTML) and no Algolia, so bespoke. Search `/en/search?query=` is server-rendered: `ProductCardV3` tiles carry the name (`data-productcard` JSON), URL and price in HTML. PDP carries a `ProductGroup` `productLdJson` (colourway variants) and `Size: X` buttons in `ProductDetailsSizesV3`; disabled size buttons count as sold out.
@@ -21,7 +21,23 @@ Probe-then-build for a new retailer (S05 add-retailer). Suite 900 passed + 1 ski
 
 **[CHANGED] `registry.py` — `Champs Sports Canada` added to `BESPOKE_SCRAPERS`. `architecture.md` §10 Retailer Status table gets a Champs row.**
 
+
 **[VERIFIED]** pytest 900 passed + 1 skipped. `get_scraper(row)` resolves to `ChampsSportsScraper`. Live search and PDP parse checked by hand (above). **Not verified:** a full scheduled scrape end to end and a qualifying deal written to the DB — needs a backend restart.
+
+---
+
+## PWA: cached reads and sign-in survive a server outage (E11 amendment) — 2026-10-15
+
+Fixes the "[FOUND, not fixed]" item from the Signal follow-up below. Frontend only, no migration, no API change. Backend suite untouched (no backend change).
+
+**[CHANGED] Service worker (`vite.config.js`):** the `anton-api-reads` NetworkFirst rule treats a 5xx like a network failure and serves the last cached 200, marked `X-Anton-Cache-Fallback: 1`. With nothing cached, the original 5xx passes through. 401/4xx are never replaced by the cache.
+**[CHANGED] `AuthGate`:** a session probe that fails with a 5xx or no response keeps the user signed in (it was offline-only), so a reload during a deploy restart no longer drops to login. A 4xx, or a logged-out 200, still shows login.
+**[CHANGED] Offline banner:** `useOnline` reports `online | offline | unreachable` (`/health` ≥ 500 = unreachable). `OfflineIndicator` shows "Can't reach Anton — showing last synced data…" for the new state. api.js hints a re-probe on cache-fallback reads and 5xx/no-response failures, so the banner appears mid-session. While it shows, `/health` is re-probed every 30 s so the banner clears by itself. Writes are still online-only, never queued (E11).
+
+**[VERIFIED]** `npm run build` clean, and `dist/sw.js` contains the plugins. `vite preview` of `dist/` proxying `/api` and `/health` (as Caddy does) to a backend on a DB copy. Pages loaded, then the backend stopped (the preview proxy answers 500). Cached reads came back 200 with the fallback header, an uncached read got the real 500, and `/api/auth/session` was 500 and uncached. A reload of Shoes and Home stayed signed in and rendered cached data under the new banner, at desktop and 380 px. A client-side tab switch raised the banner mid-session. With the backend restarted, the banner cleared, and a cookie-less read returned 401 despite a cached 200. Console errors were only the expected failed-resource lines while the backend was down.
+
+---
+
 
 ---
 
@@ -444,8 +460,6 @@ Built by three subagents (R8.4.3 and R8.4.4 in parallel worktrees, R8.4.5 after 
 1. Run the backfill where the export can be read. Copy `~/Workspace/export_33354574/activities/` (72 MB) to the server and run `docker compose exec anton python -m app.scripts.backfill_best_efforts --export-dir <path>` (~6–7 min).
 2. COROS runs fill in on their own, 5 per poll tick.
 3. Sunday's Beneva Marathon (2026-10-11) is the first live COROS test.
-
----
 
 ---
 
