@@ -41,7 +41,7 @@ export default defineConfig({
         orientation: 'portrait',
         start_url: '/',
         scope: '/',
-        // From the design tokens: --background #0e0f11, brand green #16a34a.
+        // From the design tokens: --background #070a13 (Signal ink).
         background_color: '#070a13',
         theme_color: '#070a13',
         icons: [
@@ -79,6 +79,24 @@ export default defineConfig({
         clientsClaim: true,
         skipWaiting: true,
         runtimeCaching: [
+          // Signal redesign: the type IS the design (Bricolage display, Plex
+          // Mono figures), so the Google Fonts stylesheet and files are cached
+          // for offline use instead of falling back to Helvetica. Workbox's
+          // standard recipe: the CSS revalidates, the font files are immutable.
+          {
+            urlPattern: ({ url }) => url.origin === 'https://fonts.googleapis.com',
+            handler: 'StaleWhileRevalidate',
+            options: { cacheName: 'anton-font-css' },
+          },
+          {
+            urlPattern: ({ url }) => url.origin === 'https://fonts.gstatic.com',
+            handler: 'CacheFirst',
+            options: {
+              cacheName: 'anton-font-files',
+              expiration: { maxEntries: 20, maxAgeSeconds: 60 * 60 * 24 * 365 },
+              cacheableResponse: { statuses: [0, 200] },
+            },
+          },
           {
             // §3 offline READ: cache safe GET /api reads. NetworkFirst =
             // fresh when online, last-good when offline. Scoped to GET only;
