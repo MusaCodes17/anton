@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  launchd agent for deploy/backup-prod.sh — template; install steps are in
+  that script's header (__HOME__ / __HOST__ are filled in by sed).
+  Fires daily at 09:30; a run missed while asleep fires on wake. The script
+  itself skips unless the last snapshot is ~2 days old.
+-->
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.anton.prod-backup</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>/bin/bash</string>
+        <string>__HOME__/anton-data/bin/backup-prod.sh</string>
+    </array>
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>ANTON_BACKUP_HOST</key>
+        <string>__HOST__</string>
+        <key>PATH</key>
+        <string>/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+    </dict>
+    <key>StartCalendarInterval</key>
+    <dict>
+        <key>Hour</key>
+        <integer>9</integer>
+        <key>Minute</key>
+        <integer>30</integer>
+    </dict>
+    <key>StandardOutPath</key>
+    <string>__HOME__/Library/Logs/anton-prod-backup.log</string>
+    <key>StandardErrorPath</key>
+    <string>__HOME__/Library/Logs/anton-prod-backup.log</string>
+</dict>
+</plist>

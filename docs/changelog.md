@@ -5,6 +5,30 @@
 
 ---
 
+## Every-other-day production DB snapshots to the laptop — 2026-10-15
+
+The runner wanted a backup today and an automatic one about every other day, and wasn't sure the earlier setup was still running. Ops only: no app code, schema or UI changes.
+
+**Audit of what existed:**
+- **Litestream (RA1.4) is running in production.** The runner checked `litestream snapshots` / `generations` on the host: daily snapshots 2026-10-02 → 2026-10-15, one generation, lag under 1 s.
+- **Nothing ran on the laptop.** There was no Anton cron or launchd job, and `pull-snapshot.sh` had never been run (`~/anton-data-mirror/` doesn't exist).
+- **`~/anton-data/shoe_deals.db` is a stale dev copy, not production.** Its newest run is 2026-07-16 (945 activities, against 1,020 in production).
+
+**[ADDED] `deploy/backup-prod.sh`** — runs `sqlite3 .backup` inside the production container over SSH (the host has no sqlite3), streams the copy back, then checks it with `integrity_check` and an activities count > 0 before keeping it as `~/anton-data/backups/shoe_deals.db.<date>-prod-auto.bak`. It keeps the newest 15 auto snapshots (about 30 days) and never touches manual `.bak` files. It skips the run if the newest snapshot is under 44 h old, which makes a daily trigger run every other day and still catch up after sleep. A failure posts a macOS notification. It only reads production: no second app process (INV-9).
+
+**[ADDED] `deploy/com.anton.prod-backup.plist`** — launchd template (daily 09:30, `ANTON_BACKUP_HOST=anton`). Installed as `~/Library/LaunchAgents/com.anton.prod-backup.plist`, running a copy at `~/anton-data/bin/backup-prod.sh` so a branch checkout can't break the job.
+
+**Why alongside Litestream:** restoring from Litestream needs B2 credentials and the litestream binary, and anything older than 14 days is gone. The laptop copies are plain SQLite files that last longer.
+
+**[VERIFIED]**
+- **Today's production snapshot** `shoe_deals.db.2026-10-15-prod-auto.bak` (39 MB): integrity ok, and activities 1,020, shoe_runs 753 and owned_shoes 24 match live production. Newest run 2026-10-11, 10,115.53 km, alembic `e4f5a6b7c8d9`.
+- **Local dev DB snapshot** `backups/shoe_deals.db.2026-10-15-snapshot.bak`: integrity ok, and all 26 tables' counts match the source.
+- **Script behaviour** (against a fake ssh): retention pruned 17 files to 15 and left a manual `.bak` alone; a second run skipped; an SSH failure and a corrupt payload each failed loudly with no `.partial` left behind.
+- **launchd:** the agent loaded and a kickstart run exited 0 (a correct skip). A one-shot launchd job confirmed SSH to `anton` works from the launchd context (key in the keychain).
+- No backend tests touched.
+
+---
+
 ## Son of Anton trigger tucks away over controls — 2026-10-15
 
 The floating "Son of Anton" pill covered row controls near the bottom-right (e.g. a retailer's enable switch and its tag/edit/delete icons). Frontend only.
