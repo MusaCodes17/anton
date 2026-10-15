@@ -5,6 +5,18 @@
 
 ---
 
+## Son of Anton trigger tucks away over controls — 2026-10-15
+
+The floating "Son of Anton" pill covered row controls near the bottom-right (e.g. a retailer's enable switch and its tag/edit/delete icons). Frontend only.
+
+**[CHANGED] `ChatDrawer.jsx` trigger** — on desktop mouse input (`hover: hover` + `pointer: fine`, md+), when the pointer comes within 16 px of the pill *and* the element under the pointer (looking through the pill via `elementsFromPoint`) is actionable, the pill shrinks to its icon and slides into the bottom-right corner gutter (page padding, not content). Hovering the tucked icon keeps it tucked so it can be clicked to open the drawer. Moving away restores the full pill. Pointer moves are rAF-throttled. Touch and phones are unaffected because the trigger is md+ only.
+
+**[FIXED] Toast container swallowed corner clicks (`ui/toast.jsx`)** — the always-mounted, empty toast stack (a `p-4` strip at z-100 in the bottom-right) intercepted pointer events, including the bottom of the chat pill. It is now `pointer-events-none`; the toasts already opt back in.
+
+**Verified:** at 1280 px on Shoes (card under the pill) and Settings › Retailers (switch row under the pill), the pill tucks, the controls are exposed, the tucked icon opens the drawer, and the pill restores when the pointer leaves. 0 console errors; `vite build` clean. Ran against a throwaway DB copy (COROS polling off).
+
+---
+
 ## Light theme toggle for the Signal design — 2026-10-15
 
 The runner asked for a light version of the new look, with dark as the default. Frontend only; no backend or test changes. Decision: `design_decisions.md` E19.
