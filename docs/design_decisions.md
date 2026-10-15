@@ -672,6 +672,26 @@ Supporting choices:
 **Verdict:** ✅ Keep.
 ---
 
+### E18. "Signal" design system: the runner's template is the visual source of truth (redesign, 2026-10-15)
+
+**Chosen:**
+- The look is extracted from `frontend/template/redesign-template.html`: ink ground, one signal-blue accent, Bricolage Grotesque light display, Hanken Grotesk body, IBM Plex Mono for data. Panels glow from behind the top edge, and the primary action is a "lit" pill. Tokens live in `index.css`; components keep using them through Tailwind (`token()` colour-mix helper, unchanged).
+- Colour jobs are strict. Signal blue is for actions, links, active nav and chart lines. Green, amber and red are only for ok, warn and alert. Strava orange is the one third-party exception.
+- Navigation does not change: the sidebar and the phone tab bar stay (E14). The template's full-screen menu was offered and declined.
+- Effects are "signature moments" only. The WebGL iridescence runs only behind Home's header band, with a CSS fallback, phone DPR and fps caps, an off-screen pause and a reduced-motion still frame. A pulse means live activity, never decoration.
+- House rules: no eyebrow kicker above a heading; no nested cards inside panels (use hairline-divided rows); no hex in components.
+
+**Why:** the runner asked for the template's design language across the app with every route, behaviour and number preserved. Keeping the change at the token and primitive layer, plus one sweep, made that possible without touching data flow.
+
+**Trade-offs:**
+- The shader tint can't read CSS tokens, so it is hard-coded in `Iridescence.jsx` (commented).
+- Grain uses normal blending, not the template's overlay, because overlay disappears on near-black.
+- Product photos keep a near-white backdrop, the one light surface in a dark system.
+- The design record files (`DESIGN.md`, `PRODUCT.md`, `.impeccable/`) are not committed, per the runner's 2026-10-09 request (`5ae53bb`). This entry and the `index.css` comments are the record.
+
+**Verdict:** ✅ Keep. Supersedes the unnamed-in-this-file "Velocity" look (green accent, Archivo heavy display).
+---
+
 ## Superseded Decisions (kept as history)
 
 | Decision | Was | Superseded by | When |
