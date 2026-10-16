@@ -1,7 +1,19 @@
 # Anton — Session Changelog
 
-**Last Updated:** 2026-10-15
+**Last Updated:** 2026-10-16
 **Status / current focus:** see `docs/project_state.md` (the perishable snapshot). This file is the append-only session log — the authoritative record of *what happened*; the `docs/` suite is the reference material.
+
+---
+
+## Dark theme lifted a step — 2026-10-16
+
+The runner wasn't getting used to the near-black dark theme. Frontend only, tokens only. Decision: `design_decisions.md` E21.
+
+**[CHANGED] Dark tokens (`index.css` `:root`)** — the ground, panels, rails, surfaces and raised fills move from near-black to a dim slate, in the same hue family and depth order. `--muted-foreground` and `--faint` are re-tuned so they still clear 4.5:1 on the lighter surfaces. Panel glow, drop shadows and grain are softened. The light theme is untouched.
+
+**[CHANGED] Browser chrome** — the `theme-color` meta (`index.html`), the dark value in `lib/theme.js` and the PWA manifest colours (`vite.config.js`) now use the new ground `#131a29`. The app icons are unchanged.
+
+**Verified:** Home and Training at 1280 px; Shoes at 380 px; 0 console errors; `vite build` clean. Ran against a throwaway DB copy (COROS polling off). An installed iOS PWA keeps the old splash and status-bar colour until it is reinstalled.
 
 ---
 

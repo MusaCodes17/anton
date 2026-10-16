@@ -10,6 +10,7 @@
  * edge. Dark is the default (an athlete's instrument, read mostly on a phone
  * right after a run); a light variant (`html[data-theme="light"]`, below)
  * re-tones every token for daylight viewing — same layout, type and motion.
+ * The dark ink was lifted one step from the template to a dim slate (E21).
  * The choice is per device (lib/theme.js) and applied before first paint by
  * the inline script in index.html, so there is no dark→light flash.
  *
@@ -21,19 +22,23 @@
   :root {
     /* Native controls (date picker, number spinners, scrollbars) render dark. */
     color-scheme: dark;
-    /* Ink layers (template --ink / --ink-2 / --ink-3) */
-    --background: #070a13;
+    /* Ink layers (template --ink / --ink-2 / --ink-3). Lifted one step from the
+       template's near-black (#070a13 ground, #05070d panels) to a dim slate on
+       2026-10-16 — the runner found the original too dark to live with. Same
+       hue family and the same depth order (panels below the ground, surfaces
+       above it), so the design reads the same; design_decisions E21. */
+    --background: #131a29;
     --foreground: #e9ecf5;
-    --card: #05070d;              /* template --panel: panels sit DARKER than the ground */
+    --card: #0f1522;              /* template --panel: panels sit DARKER than the ground */
     --card-foreground: #e9ecf5;
-    --popover: #0c1121;
+    --popover: #1a2131;
     --popover-foreground: #e9ecf5;
     --primary: #8db5ff;           /* --signal */
     --primary-foreground: #070a13;
-    --secondary: #121933;         /* --ink-3: raised control fill */
+    --secondary: #222b44;         /* --ink-3: raised control fill */
     --secondary-foreground: #b8bfd5; /* --text-2 */
-    --muted: #0c1121;
-    --muted-foreground: #848ba5;  /* --mute, 5.7:1 on ink */
+    --muted: #1a2131;
+    --muted-foreground: #8d94ad;  /* --mute, 5.8:1 on ink, 5.3:1 on surface */
     --accent: rgba(141, 181, 255, 0.1);  /* --signal-10: selected/active wash */
     --accent-foreground: #8db5ff;
     --destructive: #ff6b7d;       /* --alert */
@@ -59,12 +64,12 @@
     --signal-50: rgba(141, 181, 255, 0.5);
     --ease: cubic-bezier(0.6, 0, 0.2, 1); /* the template's one easing */
 
-    --surface: #0c1121;           /* nested tile/row inside a panel (--ink-2) */
-    --faint: #7a819b;             /* ≥ 4.5:1 on ink/panel/surface; below --muted-foreground */
-    --sidebar: #05070d;           /* shell rails (sidebar, phone bars) */
+    --surface: #1a2131;           /* nested tile/row inside a panel (--ink-2) */
+    --faint: #868da7;             /* ≥ 4.5:1 on ink/panel/surface (4.9:1 on surface); below --muted-foreground */
+    --sidebar: #0f1522;           /* shell rails (sidebar, phone bars) */
     --divider: rgba(160, 182, 235, 0.09);  /* softer row divider than --border */
     --edge: rgba(160, 182, 235, 0.22);     /* dashed "add" borders, hover edges */
-    --nav-inactive: #3d4b6d;      /* the template's blank-pill slate */
+    --nav-inactive: #46557a;      /* the template's blank-pill slate */
 
     /* Charts (recharts takes colour strings; SVG attributes accept var()). */
     --chart-grid: rgba(160, 182, 235, 0.11);
@@ -84,20 +89,20 @@
 
     /* Colours the component layer used to hard-code, tokenised so the light
        theme can re-tone them. */
-    --panel-glow: rgba(141, 181, 255, 0.16);
+    --panel-glow: rgba(141, 181, 255, 0.12);
     --panel-glow-tail: rgba(141, 181, 255, 0.05);
-    --panel-glow-hover: rgba(141, 181, 255, 0.26);
+    --panel-glow-hover: rgba(141, 181, 255, 0.2);
     --panel-glow-hover-tail: rgba(141, 181, 255, 0.08);
-    --shadow-color: rgba(0, 0, 0, 1);         /* panel/popover drop shadows */
-    --glass: rgba(5, 7, 13, 0.78);            /* translucent shell bars */
+    --shadow-color: rgba(3, 6, 14, 0.75);     /* panel/popover drop shadows */
+    --glass: rgba(15, 21, 34, 0.8);            /* translucent shell bars */
     --scrim: rgba(0, 0, 0, 0.45);             /* drawer/sheet backdrops */
-    --stripe-a: #0c1121;
-    --stripe-b: #111830;
-    --scrollbar: #1b2340;
-    --scrollbar-hover: #2a3560;
+    --stripe-a: #1a2131;
+    --stripe-b: #212a3d;
+    --scrollbar: #2a344d;
+    --scrollbar-hover: #3a4766;
     --selection: rgba(141, 181, 255, 0.3);
     --selection-foreground: #fff;
-    --grain-opacity: 0.045;
+    --grain-opacity: 0.035;
     --iridescence-blend: screen;              /* Home hero shader */
     --iridescence-opacity: 0.7;
   }

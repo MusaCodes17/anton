@@ -717,6 +717,18 @@ Supporting choices:
 
 ---
 
+### E21. Dark theme lifted from near-black to a dim slate (2026-10-16 — amends E18/E19)
+
+**Chosen:** the dark `:root` tokens in `index.css` move up one step and keep the Signal hue family and depth order: panels below the ground, surfaces and popovers above it. Ground `#070a13` → `#131a29`, panels and rails `#05070d` → `#0f1522`, surface/muted/popover `#0c1121` → `#1a2131`, raised control fill `#121933` → `#222b44`. Secondary text is re-checked against the lighter surfaces: `--muted-foreground` → `#8d94ad` (5.3:1 on surface) and `--faint` → `#868da7` (4.9:1). The panel glow, the drop-shadow strength and the grain are softened to match. Browser-chrome colours (`theme-color` meta, `lib/theme.js`, the PWA manifest) follow the new ground. The app icons keep the original ink because they are brand marks, not UI.
+
+**Why:** after a few days on the redesign, the runner found the template's near-black too dark to live with. The light theme (E19) answers daylight viewing, not this. A palette lift costs one token block, whereas a reskin would re-verify every page.
+
+**Alternatives considered:** a third "dim" theme beside dark and light. Rejected for now: it adds a three-way toggle to keep a look the runner wants to leave. If the original ink is ever missed, it can come back as that third option from this entry's old values.
+
+**Verdict:** ✅ Keep.
+
+---
+
 ### E20. The first public data surface: one allowlisted path, a route-coverage ratchet, and sign-out-everywhere (R9, 2026-10-15 — extends E9/E10)
 
 **Chosen:**
