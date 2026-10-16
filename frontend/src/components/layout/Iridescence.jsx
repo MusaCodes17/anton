@@ -5,8 +5,8 @@ import { cn } from '@/lib/utils'
  * The redesign's one atmospheric effect (Signal design system; ported from the
  * template's hero shader in frontend/template/redesign-template.html): an
  * iridescent WebGL field tinted to the ink blue, screen-blended and masked to
- * an ellipse so it reads as a glow, not a picture. Used ONLY behind the top of
- * Home — every other page stays still (surface brief: "signature moments").
+ * an ellipse so it reads as a glow, not a picture. Sits behind the shared
+ * PageHeader band on every page (the band is sticky, so it stays on screen).
  *
  * Budget rules, because this is the phone's launch screen:
  *  - DPR capped (1 on touch devices, 1.5 otherwise) and ~30 fps on touch;

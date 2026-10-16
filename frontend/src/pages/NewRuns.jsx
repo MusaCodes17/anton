@@ -62,7 +62,7 @@ export default function NewRuns() {
     <div className="space-y-5">
       <PageHeader title="New runs" count={runs.length}>
         {conn === 'connected' && (
-          <Button variant="outline" onClick={syncNow}
+          <Button onClick={syncNow}
             disabled={!online || sync.isPending} title={!online ? OFFLINE_MSG : undefined}>
             <RefreshCw className={sync.isPending ? 'h-4 w-4 animate-spin' : 'h-4 w-4'} /> Sync now
           </Button>

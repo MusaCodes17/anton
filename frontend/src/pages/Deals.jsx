@@ -177,7 +177,7 @@ export default function Deals() {
   return (
     <div className="space-y-4 sm:space-y-6">
       <PageHeader title="Deals" count={groups.length}>
-        <ScrapeButton variant="outline" />
+        <ScrapeButton />
       </PageHeader>
 
       {/* Mobile-only disclosure toggle; hidden on md+ where the deck is inline. */}

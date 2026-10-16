@@ -27,7 +27,7 @@ const navItems = [
 // Sidebar scrape-status dot: green within two days of the last scrape, amber
 // once it's older (the schedule is nightly), muted when never scraped.
 const SCRAPE_FRESH_MS = 48 * 36e5
-function scrapeDot(lastScrape) {
+export function scrapeDot(lastScrape) {
   if (!lastScrape) return 'bg-faint'
   return Date.now() - new Date(lastScrape).getTime() <= SCRAPE_FRESH_MS
     ? 'bg-success shadow-[0_0_8px_var(--success)]'
@@ -144,7 +144,7 @@ function MobileTabBar({ onReselect }) {
 // Light/dark switch. The icon shows the theme you'd switch TO (sun in dark,
 // moon in light), the label says it in words. `compact` is the phone header's
 // icon-only button; the sidebar gets a full row like its neighbours.
-function ThemeToggle({ compact = false }) {
+export function ThemeToggle({ compact = false }) {
   const { theme, toggleTheme } = useTheme()
   const toLight = theme === 'dark'
   const label = toLight ? 'Light mode' : 'Dark mode'
@@ -202,10 +202,10 @@ export function LogoutButton({ onNavigate }) {
 
 // The logo is always a way home: it links to "/" and, because <main> (not the
 // document) is the scroll region, also resets that scroll when already there.
-function Brand({ onHome }) {
+export function Brand({ onHome, to = '/' }) {
   return (
     <Link
-      to="/"
+      to={to}
       onClick={onHome}
       aria-label="Anton — home"
       className="focus-ring flex items-center gap-2.5 rounded-full px-2"
@@ -218,6 +218,21 @@ function Brand({ onHome }) {
         Anton
       </span>
     </Link>
+  )
+}
+
+// Template .header-status: a mono status line with a live dot. Shared with the
+// logged-out shell (PublicLayout), which feeds it the public payload's checked_at.
+export function ScrapeStatus({ lastScrape, label = 'Last scraped' }) {
+  return (
+    <div className="mt-3 flex items-center gap-2.5 border-t border-border px-3 pt-3">
+      {/* Static, coloured by freshness: a pulse would claim live activity
+          (surface brief: pulses only on live data). */}
+      <span aria-hidden="true" className={cn('h-1.5 w-1.5 shrink-0 rounded-full', scrapeDot(lastScrape))} />
+      <span className="font-mono text-2xs text-muted-foreground">
+        {lastScrape ? `${label} ${formatRelativeTime(lastScrape)}` : 'Not scraped yet'}
+      </span>
+    </div>
   )
 }
 
@@ -270,20 +285,7 @@ export default function Layout() {
           <SettingsLink />
           <LogoutButton />
         </div>
-        {/* Template .header-status: a mono status line with a live dot. */}
-        <div className="mt-3 flex items-center gap-2.5 border-t border-border px-3 pt-3">
-          {/* Static, coloured by freshness: a pulse would claim live activity
-              (surface brief: pulses only on live data). */}
-          <span
-            aria-hidden="true"
-            className={cn('h-1.5 w-1.5 shrink-0 rounded-full', scrapeDot(stats.data?.last_scrape))}
-          />
-          <span className="font-mono text-2xs text-muted-foreground">
-            {stats.data?.last_scrape
-              ? `Last scraped ${formatRelativeTime(stats.data.last_scrape)}`
-              : 'Not scraped yet'}
-          </span>
-        </div>
+        <ScrapeStatus lastScrape={stats.data?.last_scrape} />
       </aside>
 
       {/* Mobile top bar — brand + Settings gear (Settings is plumbing, kept out
