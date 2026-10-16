@@ -1,5 +1,11 @@
 import Iridescence from '@/components/layout/Iridescence'
 
+// The full-bleed hero band. Negative margins cancel Layout's page padding so the
+// glow reaches the edges of <main>; sticky + opaque keeps the title pinned.
+const BAND_CLASSES =
+  'isolate sticky top-0 z-20 -mx-4 -mt-4 mb-4 flex flex-row items-end justify-between gap-3 overflow-hidden border-b border-border bg-background px-4 pb-4 pt-6 sm:-mx-6 sm:-mt-6 sm:mb-6 sm:gap-4 sm:px-6 sm:pb-6 sm:pt-10 lg:-mx-[34px] lg:-mt-[30px] lg:px-[34px] lg:pt-14'
+const PLAIN_CLASSES = 'mb-5 flex flex-row flex-wrap items-end justify-between gap-3 sm:mb-8 sm:gap-4'
+
 /**
  * Page title + optional count, meta line, description and right-aligned actions.
  *
@@ -14,12 +20,15 @@ import Iridescence from '@/components/layout/Iridescence'
  * is sticky + opaque so the title and actions stay pinned while content scrolls
  * beneath it. This works because <main> is the scroll container — never add
  * overflow to an ancestor. overflow-hidden clips the glow to the band.
+ *
+ * `plain` is for headers nested inside another page's band (Settings sub-pages),
+ * so the animation and sticky band appear once.
  */
-export default function PageHeader({ title, count, meta, description, children }) {
+export default function PageHeader({ title, count, meta, description, plain = false, children }) {
   const metaItems = (meta || []).filter(Boolean)
   return (
-    <div className="isolate sticky top-0 z-20 -mx-4 -mt-4 mb-4 flex flex-row items-end justify-between gap-3 overflow-hidden border-b border-border bg-background px-4 pb-4 pt-6 sm:-mx-6 sm:-mt-6 sm:mb-6 sm:gap-4 sm:px-6 sm:pb-6 sm:pt-10 lg:-mx-[34px] lg:-mt-[30px] lg:px-[34px] lg:pt-14">
-      <Iridescence />
+    <div className={plain ? PLAIN_CLASSES : BAND_CLASSES}>
+      {!plain && <Iridescence />}
       <div className="min-w-0">
         <h1 className="font-heading text-[34px] font-light leading-[0.98] tracking-display text-foreground sm:text-[46px]">
           {title}

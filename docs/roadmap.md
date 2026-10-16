@@ -646,7 +646,7 @@ Commits `r8:` one per task. **Exit:** the three answers render from one endpoint
 | # | Item | Description | Why it matters | Dependencies | Complexity |
 |---|---|---|---|---|---|
 | R9.1 | ✅ **Built 2026-10-15.** **Gate regression test + limiter cap** | A test that walks every registered route and asserts a logged-out request gets 401, except a pinned public allowlist. Cap the in-memory rate-limiter dicts. Detail in §R9.1. | Turns "everything else is gated" from a belief into a check that also catches future sessions adding a route. | — | Low |
-| R9.2 | ✅ **Built 2026-10-15.** **Sign out everywhere** | One action that ends every browser session **and** every claude.ai OAuth token. Changing the password triggers it automatically on restart. Settings → Security card. Detail in §R9.2. | The leaked-password / lost-phone playbook. Today logout only ends the current device. | — | Low–Medium |
+| R9.2 | ✅ **Built 2026-10-15.** **Sign out everywhere** | One action that ends every browser session **and** every claude.ai OAuth token. Changing the password triggers it automatically on restart. Settings → Security card (the playbook is in `architecture.md` only, not shown in the app). Detail in §R9.2. | The leaked-password / lost-phone playbook. Today logout only ends the current device. | — | Low–Medium |
 | R9.3 | ✅ **Built 2026-10-15.** **Public deals endpoint** | `GET /api/public/deals`: a field-allowlisted projection of active deals, rate-limited, the only new public path. Detail in §R9.3. | The current deal payload carries personal fields (`notes`, `target_price`, `size_fit`) that must never go public. | R9.1 | Low |
 | R9.4 | ✅ **Built 2026-10-15.** **Public deals page ("Musa's picks")** | Logged-out `/deals` renders a read-only page with filters and a Sign-in link. Logged-in `/deals` is unchanged. Detail in §R9.4. | The thing the run club actually sees. | R9.3 | Low–Medium |
 | R9.5 | 🟡 **Code built 2026-10-15; human go-live steps pending** (see §R9.5). **Edge hardening + go-live** | Security headers + noindex in Caddy, a global login-failure ceiling, passphrase rotation, a production smoke test. Detail in §R9.5. | More eyes on the login form, and a link that will get forwarded. | R9.1–R9.4 | Low |
@@ -685,7 +685,7 @@ The host has been public since RA1 and bots already probe it. The link adds *att
 - **Service:** `sessions.revoke_all(db) -> int` and `oauth.revoke_all(db) -> int`, composed by one `sign_out_everywhere(db)` service that returns both counts and logs a WARNING with the counts and source IP.
 - **Endpoint:** `POST /api/auth/sign-out-everywhere`. Cookie-authenticated, not in `PUBLIC_PATHS`; the middleware's Origin CSRF check applies automatically. It clears the caller's cookie too. The SPA then fires `UNAUTHENTICATED_EVENT`, which already wipes the offline caches and shows the login screen.
 - **Automatic on password change:** at boot (lifespan, after migrations) compute a salted, slow fingerprint of `ANTON_LOGIN_PASSWORD` (`hashlib.scrypt`, stdlib, random salt) and compare it with `AppSettings["login_password_fingerprint"]`. On a mismatch, run `sign_out_everywhere`, store the new fingerprint, and log a WARNING. First boot with nothing stored: store it, don't purge. *Why scrypt and not SHA-256:* the DB is replicated to B2 by Litestream, and a plain hash of a passphrase sitting in a backup can be cracked offline.
-- **Leaked-password playbook (goes in the Settings card and `architecture.md`):** change `ANTON_LOGIN_PASSWORD` on the server, run `docker compose up -d --force-recreate` (not `restart`, which doesn't re-read `env_file`), sign in again, reconnect the claude.ai connector. Every other device and connector is already out.
+- **Leaked-password playbook (lives in `architecture.md` only; deliberately not shown in the Settings card):** change `ANTON_LOGIN_PASSWORD` on the server, run `docker compose up -d --force-recreate` (not `restart`, which doesn't re-read `env_file`), sign in again, reconnect the claude.ai connector. Every other device and connector is already out.
 - **CLI fallback:** `scripts/sign_out_everywhere.py` for use over SSH (phone lost and no other signed-in device).
 - **Settings → Security card:** "Signed in on N devices · Claude connector: connected / not connected" (counts only, from `GET /api/auth/security`), and a destructive **Sign out everywhere** button behind a confirmation dialog (CLAUDE.md §7).
 - **Not on MCP:** a deliberate exception to REST/MCP parity (CLAUDE.md §4.2). Auth administration isn't an AI-callable capability. Record it in `design_decisions.md`.
@@ -726,7 +726,7 @@ The host has been public since RA1 and bots already probe it. The link adds *att
 ### §R9.6 — Docs
 
 - `design_decisions.md`: new entry covering the first public data surface; the field-allowlist schema; the route-coverage test as the ratchet; sign-out scope (sessions + OAuth, not bearers) and the MCP-parity exception; password stays in env.
-- `architecture.md` §11 trust model: add the public tier and the leaked-password playbook.
+- `architecture.md` §11 trust model: add the public tier and the leaked-password playbook (kept in the doc, not the app).
 - `CLAUDE.md` §1 still says "no auth by explicit deferral", stale since RA1. Correct it.
 - `project_state.md` and the changelog, as usual.
 
