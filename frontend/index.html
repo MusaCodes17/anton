@@ -18,21 +18,10 @@
     <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <meta name="apple-mobile-web-app-title" content="Anton" />
-    <!-- Theme boot (src/lib/theme.js owns the key + colours): apply a stored
-         light preference before first paint so light-mode users never see a
-         dark flash. Dark is the default and needs no attribute. -->
-    <script>
-      try {
-        if (localStorage.getItem('anton-theme') === 'light') {
-          document.documentElement.dataset.theme = 'light'
-          document.querySelector('meta[name="theme-color"]').setAttribute('content', '#f2f4f9')
-          // black-translucent draws WHITE status-bar text, unreadable on paper;
-          // "default" gives dark text on its own bar. iOS reads this at launch,
-          // so the installed app picks up a theme change on its next cold start.
-          document.querySelector('meta[name="apple-mobile-web-app-status-bar-style"]').setAttribute('content', 'default')
-        }
-      } catch (e) {}
-    </script>
+    <!-- Theme boot: applies a stored light preference before first paint.
+         Lives in public/theme-boot.js so the CSP needs no 'unsafe-inline'.
+         (src/lib/theme.js owns the key + colours.) Dark is the default and needs no attribute. -->
+    <script src="/theme-boot.js"></script>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
