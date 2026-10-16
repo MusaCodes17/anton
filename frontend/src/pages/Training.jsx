@@ -110,8 +110,9 @@ function Stat({ label, value, unit }) {
 }
 
 function SectionHeading({ id, icon: Icon, title, hint }) {
+  // scroll-mt offsets clear the sticky PageHeader band so in-page anchor jumps land below it.
   return (
-    <div id={id} className="flex items-baseline gap-2 scroll-mt-20">
+    <div id={id} className="flex items-baseline gap-2 scroll-mt-28 sm:scroll-mt-36 lg:scroll-mt-40">
       <Icon className="h-[18px] w-[18px] shrink-0 self-center text-accent-foreground" />
       <h2 className="font-heading text-lg font-light tracking-display text-foreground">{title}</h2>
       {hint && <span className="text-xs text-faint">{hint}</span>}
@@ -388,22 +389,22 @@ export default function Training() {
       </section>
     ),
     races: (
-      <div id="races" className="scroll-mt-20">
+      <div id="races" className="scroll-mt-28 sm:scroll-mt-36 lg:scroll-mt-40">
         <PlannedRacesCard />
       </div>
     ),
     records: (
-      <div id="records" className="scroll-mt-20">
+      <div id="records" className="scroll-mt-28 sm:scroll-mt-36 lg:scroll-mt-40">
         <RecordsCard records={records} />
       </div>
     ),
     fitness: (
-      <div id="fitness" className="scroll-mt-20">
+      <div id="fitness" className="scroll-mt-28 sm:scroll-mt-36 lg:scroll-mt-40">
         <FitnessCard data={fitness.data} history={trends.data?.form?.fitness} />
       </div>
     ),
     predictions: (
-      <div id="predictions" className="scroll-mt-20">
+      <div id="predictions" className="scroll-mt-28 sm:scroll-mt-36 lg:scroll-mt-40">
         <PredictionsCard data={fitness.data} />
       </div>
     ),

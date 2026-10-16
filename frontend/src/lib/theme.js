@@ -2,7 +2,7 @@
 // opt-in viewing mode that only re-tones the CSS tokens (index.css,
 // :root[data-theme='light']). Stored in localStorage on purpose: it's a
 // per-device viewing convenience, not user data worth a server round trip —
-// and index.html's inline boot script must read it synchronously before the
+// and public/theme-boot.js (the boot script index.html loads) must read it synchronously before the
 // first paint. Keep STORAGE_KEY and THEME_COLORS in step with that script.
 
 export const STORAGE_KEY = 'anton-theme'

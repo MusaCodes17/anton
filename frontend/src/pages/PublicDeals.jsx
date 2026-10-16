@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
-import { Link } from 'react-router-dom'
 import { Tag, SlidersHorizontal } from 'lucide-react'
-import BrandMark from '@/components/layout/BrandMark'
+import PublicLayout from '@/components/layout/PublicLayout'
+import PageHeader from '@/components/PageHeader'
 import ShoeProductCard from '@/components/ShoeProductCard'
 import PublicDealSheet from '@/components/PublicDealSheet'
 import FilterDisclosure from '@/components/FilterDisclosure'
@@ -46,7 +46,7 @@ function adapt(d) {
 }
 
 /**
- * Logged-out "Musa's picks" page (R9.4). Standalone shell: no Layout, nav, chat
+ * Logged-out "Musa's picks" page (R9.4). Uses PublicLayout (reduced shell): no app nav, chat
  * drawer, scrape button or Watching section. All filter options are derived
  * from the public payload; filtering and sorting are client-side.
  */
@@ -125,23 +125,14 @@ export default function PublicDeals() {
   const hasFilters = collapsedActive > 0 || size !== ALL
 
   return (
-    <div className="min-h-screen bg-background text-foreground">
-      <div className="mx-auto max-w-6xl space-y-4 px-4 py-6 sm:space-y-6 sm:px-6 sm:py-10">
-        <header className="space-y-3">
-          <div className="flex items-center gap-2.5">
-            <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary text-primary-foreground">
-              <BrandMark className="h-5 w-5" />
-            </span>
-            <span className="font-heading text-sm tracking-display text-muted-foreground">Anton</span>
-          </div>
-          <h1 className="font-heading text-[34px] font-light leading-[0.98] tracking-display text-foreground sm:text-[46px]">
-            Musa&apos;s picks
-          </h1>
-          <p className="max-w-2xl text-sm text-muted-foreground sm:text-base">
-            Shoes I&apos;d actually buy, on sale now at Canadian retailers.
-            {checkedAt ? ` Prices checked ${formatRelativeTime(checkedAt)}.` : ''}
-          </p>
-        </header>
+    <PublicLayout lastScrape={checkedAt}>
+      <div className="space-y-4 sm:space-y-6">
+        <PageHeader
+          title="Musa's picks"
+          description={`Shoes I'd actually buy, on sale now at Canadian retailers.${
+            checkedAt ? ` Prices checked ${formatRelativeTime(checkedAt)}.` : ''
+          }`}
+        />
 
         <Card>
           <CardContent className="grid grid-cols-2 gap-3 p-4 sm:gap-4 md:grid-cols-3 lg:grid-cols-6">
@@ -301,16 +292,9 @@ export default function PublicDeals() {
             />
           )}
         </section>
-
-        <footer className="border-t border-border pt-4 text-xs text-muted-foreground">
-          {/* Signing in at "/" lands on Home (AuthGate shows LoginView there). */}
-          <Link to="/" className="focus-ring rounded underline-offset-4 hover:text-foreground hover:underline">
-            Sign in
-          </Link>
-        </footer>
       </div>
 
       <PublicDealSheet deal={selected} open={!!selected} onOpenChange={(o) => !o && setSelected(null)} />
-    </div>
+    </PublicLayout>
   )
 }

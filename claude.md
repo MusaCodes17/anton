@@ -74,7 +74,7 @@ docs/              the documentation suite + changelog.md
 - **next** — do the single highest-priority task from project_state §11 (execute, or plan-and-confirm if it's a phase).
 - **phase `<name>`** — execute a named roadmap phase end to end, one commit per task, ending in S13.
 - **wrapup** — run the S13 session-wrapup skill to close a session (changelog, project_state, decisions, roadmap).
-- **create-pr** — commit, push, open a PR, wait for CI, and merge into `main` only when both checks are green (stops and reports on any red check).
+- **create-pr** — commit, push, open a PR, turn on Auto-fix (desktop app), wait for CI, and merge into `main` only when both checks are green (fixes red checks under Auto-fix; stops on requested changes or a repeat failure).
 
 **Run locally** (there are no READMEs; this is the setup):
 - Backend: `cd backend && python -m venv venv && venv/bin/pip install -r requirements.txt`; copy `.env.example` → `.env` (`DATABASE_URL` points at `~/anton-data/shoe_deals.db`, outside the tree); `venv/bin/python run.py` serves `127.0.0.1:8000` and runs `alembic upgrade head` on boot. Tests: `venv/bin/python -m pytest -q`.

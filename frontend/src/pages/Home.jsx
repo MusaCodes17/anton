@@ -4,7 +4,6 @@ import {
   AlertTriangle, RefreshCw, Radar, ShieldCheck, Watch,
 } from 'lucide-react'
 import PageHeader from '@/components/PageHeader'
-import Iridescence from '@/components/layout/Iridescence'
 import ScrapeButton from '@/components/ScrapeButton'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -30,18 +29,9 @@ export default function Home() {
 
   return (
     <div className="space-y-4 sm:space-y-6">
-      {/* The header band: title + meta on open ground, the iridescence
-          confined behind it (relative + isolate + overflow-hidden) so the
-          panels below never cover the bloom. */}
-      <div className="relative isolate -mx-4 -mt-4 px-4 pt-6 sm:-mx-6 sm:-mt-6 sm:px-6 sm:pt-10 lg:-mx-[34px] lg:-mt-[30px] lg:px-[34px] lg:pt-14">
-        <Iridescence />
-        <PageHeader
-          title="Today"
-          meta={[todayLabel()]}
-        >
-          <ScrapeButton />
-        </PageHeader>
-      </div>
+      <PageHeader title="Today" meta={[todayLabel()]}>
+        <ScrapeButton />
+      </PageHeader>
 
       <CorosInboxBanner />
 

@@ -1,4 +1,4 @@
-import SizePreferenceCard from '@/components/SizePreferenceCard'
+import SizePreferenceButton from '@/components/SizePreferenceButton'
 import { useMemo, useState } from 'react'
 import {
   Plus,
@@ -158,16 +158,16 @@ export default function Shoes() {
 
   return (
     <div className="space-y-6">
-      <PageHeader title="Tracked shoes" count={shoes.data?.length}>
-        <Button variant="outline" onClick={handleExport} disabled={exporting}>
-          <Download className="h-4 w-4" /> {exporting ? 'Exporting…' : 'Export seed data'}
+      <PageHeader title="Tracked shoes" count={shoes.data?.length} plain>
+        <SizePreferenceButton />
+        <Button variant="outline" onClick={handleExport} disabled={exporting} aria-label="Export seed data">
+          <Download className="h-4 w-4" />
+          <span className="hidden sm:inline">{exporting ? 'Exporting…' : 'Export seed data'}</span>
         </Button>
         <Button onClick={() => setFormState({})}>
           <Plus className="h-4 w-4" /> Add shoe
         </Button>
       </PageHeader>
-
-      <SizePreferenceCard />
 
       <div className="relative max-w-sm">
         <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />

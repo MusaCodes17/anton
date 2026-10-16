@@ -71,6 +71,8 @@ anton.musasouled.com {
 
     header Strict-Transport-Security "max-age=31536000; includeSubDomains"
 
+    # The service worker fetches Google Fonts itself (runtime caching in vite.config.js),
+    # so connect-src must allow the Google Fonts hosts as well as 'self'.
     # R9.5 — the deals page link is shared with the run club; CSP ships report-only
     # first and switches to enforcing (rename the header to Content-Security-Policy)
     # after a clean week; noindex because the page is for a small group, not search engines.
@@ -80,6 +82,6 @@ anton.musasouled.com {
         X-Frame-Options "DENY"
         X-Robots-Tag "noindex, nofollow"
         Permissions-Policy "camera=(), microphone=(), geolocation=(), payment=(), usb=()"
-        Content-Security-Policy-Report-Only "default-src 'self'; img-src 'self' https: data:; font-src https://fonts.gstatic.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; connect-src 'self'; frame-ancestors 'none'"
+        Content-Security-Policy-Report-Only "default-src 'self'; img-src 'self' https: data:; font-src https://fonts.gstatic.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; connect-src 'self' https://fonts.googleapis.com https://fonts.gstatic.com; frame-ancestors 'none'"
     }
 }

@@ -22,30 +22,6 @@ function StatRow({ label, children }) {
   )
 }
 
-// R9.2 leaked-password playbook. Collapsed by default: it is a break-glass
-// procedure, not everyday content. Native <details> keeps it dependency-free.
-function LeakPlaybook() {
-  return (
-    <details className="group rounded-md border border-border px-3 py-2 text-sm">
-      <summary className="focus-ring cursor-pointer list-none font-medium text-foreground">
-        If your password leaks
-      </summary>
-      <ol className="mt-3 list-decimal space-y-1.5 pl-5 text-muted-foreground">
-        <li>Change <code className="font-mono text-foreground">ANTON_LOGIN_PASSWORD</code> on the server.</li>
-        <li>
-          Run <code className="font-mono text-foreground">docker compose up -d --force-recreate</code>. Do not use{' '}
-          <code className="font-mono text-foreground">restart</code>; it does not re-read the env file.
-        </li>
-        <li>Sign in again with the new password.</li>
-        <li>Reconnect the Claude connector.</li>
-      </ol>
-      <p className="mt-3 text-xs text-faint">
-        Every other device and connector is signed out automatically on that restart.
-      </p>
-    </details>
-  )
-}
-
 /**
  * Settings → Security (R9.2). Shows how many browser sessions are live and
  * whether the Claude connector holds a token, with a confirmed "Sign out
@@ -111,8 +87,6 @@ export default function SettingsSecurity() {
           <LogOut className="mr-2 h-4 w-4" />
           Sign out everywhere
         </Button>
-
-        <LeakPlaybook />
       </CardContent>
 
       <Dialog open={confirmOpen} onOpenChange={(o) => !signOut.isPending && setConfirmOpen(o)}>

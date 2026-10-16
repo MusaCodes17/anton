@@ -120,7 +120,7 @@ export default function Retailers() {
 
   return (
     <div className="space-y-6">
-      <PageHeader title="Retailers" count={retailers.data?.length}>
+      <PageHeader title="Retailers" count={retailers.data?.length} plain>
         <Button onClick={() => setFormState({})}>
           <Plus className="h-4 w-4" /> Add retailer
         </Button>

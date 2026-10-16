@@ -32,7 +32,7 @@ export default defineConfig({
       registerType: 'autoUpdate',
       // Icons live in public/ (generated via `npm run generate-pwa-assets`);
       // include them + the source SVG in the precache glob below.
-      includeAssets: ['favicon.svg', 'icon.svg', 'apple-touch-icon-180x180.png'],
+      includeAssets: ['favicon.svg', 'icon.svg', 'apple-touch-icon-180x180.png', 'theme-boot.js'],
       manifest: {
         name: 'Anton',
         short_name: 'Anton',
