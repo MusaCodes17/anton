@@ -5,6 +5,14 @@
 
 ---
 
+## Champs Sports: production row never reached its scraper — 2026-10-15
+
+Production's Retailers page showed Champs Sports as Active, scraped "14m ago", 0 products. `scrape_health` showed the real state: run 940 for retailer **id 20 "Champs Sports"** (`https://www.champssports.ca/`) ended `error`, with "No scraper implemented for Champs Sports" once per watched shoe (49), and the row was in `needs_onboarding`. The bespoke scraper is keyed `"Champs Sports Canada"`, the name of the row inserted into the local DB when it was built, while production's row was added through the UI under a different name. `registry` looks bespoke scrapers up by exact name only, so the production row never reached the scraper. The site itself is fine: there is no bot wall, and a live search returned Vomero 18 men's tiles at $129.99 (original $190).
+
+**[CHANGED] `registry.bespoke_class_for` — bespoke lookup by name, then by host.** The host comes from each subclass's own `base_url` (`www.` and the trailing slash are ignored), so the scraper file stays the one place it is written. `get_scraper`, `build_registry` (now walks every DB row, not only shopify/algolia) and `onboarding._has_working_scraper` all use it. A row whose name doesn't match a key but whose host does now gets the scraper and leaves the onboarding queue. No DB change; the production row keeps its name.
+
+**[VERIFIED]** Two new tests in `tests/test_champs_sports.py`: production's exact row resolves in `get_scraper`, `build_registry` and onboarding, and an unknown host (footlocker.ca) does not match. Live dry run through `get_scraper(Retailer(name="Champs Sports", base_url="https://www.champssports.ca/"))`: 4 Vomero 18 results, and the product page parses at $129.99 / $190.00, in stock, sizes 8–13. Full suite 947 → 949 passed + 1 skipped. **Not verified:** a production scrape, which needs this branch deployed.
+
 ## R9 — public deals page for the run club + sign out everywhere — 2026-10-15
 
 The runner wants to share `anton.musasouled.com/deals` with the run club ("Musa's picks"). That makes the deals list Anton's first deliberately public data surface, so the security work was built first and the page last. Branch `r9-public-deals`, one commit per task. Built by subagents and reviewed here before each commit. Decision: `design_decisions.md` E20. Roadmap §R9.

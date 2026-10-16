@@ -4,7 +4,8 @@ Champs Sports Canada scraper (champssports.ca)
 Foot Locker's Canadian banner. Probed 2026-10-15 (S05 add-retailer):
 
 - Not Shopify (`/products.json` returns the HTML storefront) and not Algolia,
-  so this is a bespoke scraper keyed by name in `registry.BESPOKE_SCRAPERS`.
+  so this is a bespoke scraper in `registry.BESPOKE_SCRAPERS` (found by name,
+  or by host when the DB row is named differently, e.g. "Champs Sports").
 - Search (`/en/search?query=<q>`) is server-rendered: each result is a
   `[data-testid=ProductCardV3]` carrying the name (in `data-productcard` JSON),
   the URL and the price. No XHR, no browser needed.

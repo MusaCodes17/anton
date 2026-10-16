@@ -32,7 +32,7 @@ from app.scrapers.platform_detection import (
     determine_platform,
     has_algolia_credentials,
 )
-from app.scrapers.registry import BESPOKE_SCRAPERS, build_dynamic_scraper
+from app.scrapers.registry import bespoke_class_for, build_dynamic_scraper
 
 logger = logging.getLogger(__name__)
 
@@ -51,10 +51,10 @@ def _has_working_scraper(retailer: Retailer) -> bool:
     """
     True when *some* scraper can already run for this retailer, without
     instantiating one (construction is cheap but this stays purely inspective):
-    a hand-written bespoke subclass by name, a Shopify platform (needs no
+    a hand-written bespoke subclass by name or host, a Shopify platform (needs no
     config), or an Algolia platform with its credentials present.
     """
-    if retailer.name in BESPOKE_SCRAPERS:
+    if bespoke_class_for(retailer) is not None:
         return True
     if retailer.platform == "shopify":
         return True
