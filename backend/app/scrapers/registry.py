@@ -6,7 +6,9 @@ Dynamic scrapers are built from the retailer row's platform + scraper_config
 for retailers that don't have a hand-written subclass.
 """
 import logging
+from functools import lru_cache
 from typing import Optional
+from urllib.parse import urlparse
 
 from sqlalchemy.orm import Session
 
@@ -82,12 +84,45 @@ def build_dynamic_scraper(retailer: Retailer) -> Optional[BaseScraper]:
     return None
 
 
-def get_scraper(retailer: Retailer) -> Optional[BaseScraper]:
+def _host(url: Optional[str]) -> str:
+    """Bare host of a URL, lower-cased, without a leading 'www.'."""
+    host = (urlparse(url or "").hostname or "").lower()
+    return host[4:] if host.startswith("www.") else host
+
+
+@lru_cache(maxsize=1)
+def _bespoke_by_host() -> dict[str, type[BaseScraper]]:
+    """Host -> bespoke class, read from each subclass's own base_url.
+
+    Construction is cheap (a requests.Session, no network, no browser), and it
+    keeps the scraper file as the one place the host is written down.
     """
-    Return a scraper for the given retailer: bespoke subclass by name first,
-    else a dynamically-built generic scraper by platform, else None.
+    return {_host(cls().base_url): cls for cls in BESPOKE_SCRAPERS.values()}
+
+
+def bespoke_class_for(retailer: Retailer) -> Optional[type[BaseScraper]]:
+    """The hand-written scraper for a retailer row: by exact name, else by host.
+
+    The name key alone is fragile: a retailer added through the UI or the
+    onboarding flow gets whatever name was typed. Production's Champs row is
+    "Champs Sports" while the code says "Champs Sports Canada", and the
+    mismatch made every scrape fail with "No scraper implemented". The site's
+    host is what the scraper is actually written against, so it is the
+    fallback key.
     """
     cls = BESPOKE_SCRAPERS.get(retailer.name)
+    if cls is not None:
+        return cls
+    host = _host(retailer.base_url)
+    return _bespoke_by_host().get(host) if host else None
+
+
+def get_scraper(retailer: Retailer) -> Optional[BaseScraper]:
+    """
+    Return a scraper for the given retailer: bespoke subclass by name or host
+    first, else a dynamically-built generic scraper by platform, else None.
+    """
+    cls = bespoke_class_for(retailer)
     if cls is not None:
         return cls()
     return build_dynamic_scraper(retailer)
@@ -97,8 +132,10 @@ def build_registry(db: Session) -> dict[str, BaseScraper]:
     """
     Build the full name→scraper map for all scrapable retailers.
 
-    Bespoke scrapers are instantiated for every known name. Dynamic scrapers
-    are built from the DB for any shopify/algolia retailer not already covered.
+    Bespoke scrapers are instantiated for every known name, then for any DB
+    row whose name differs but whose host matches a bespoke scraper (see
+    bespoke_class_for). Dynamic scrapers are built from the DB for any
+    shopify/algolia retailer not already covered.
     Rebuilt from the DB on every construction, so newly-created retailers get
     a working scraper immediately without any extra in-memory registry.
     """
@@ -106,14 +143,10 @@ def build_registry(db: Session) -> dict[str, BaseScraper]:
         name: cls() for name, cls in BESPOKE_SCRAPERS.items()
     }
 
-    dynamic_candidates = db.query(Retailer).filter(
-        Retailer.platform.in_(["shopify", "algolia"])
-    ).all()
-
-    for retailer in dynamic_candidates:
+    for retailer in db.query(Retailer).all():
         if retailer.name in registry:
             continue
-        scraper = build_dynamic_scraper(retailer)
+        scraper = get_scraper(retailer)
         if scraper:
             registry[retailer.name] = scraper
 
