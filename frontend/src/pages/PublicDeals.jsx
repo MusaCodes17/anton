@@ -129,9 +129,7 @@ export default function PublicDeals() {
       <div className="space-y-4 sm:space-y-6">
         <PageHeader
           title="Musa's picks"
-          description={`Shoes I'd actually buy, on sale now at Canadian retailers.${
-            checkedAt ? ` Prices checked ${formatRelativeTime(checkedAt)}.` : ''
-          }`}
+          description={`Shoes I'd actually buy, on sale now at Canadian retailers.`}
         />
 
         <Card>
