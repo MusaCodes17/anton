@@ -6,13 +6,14 @@ fixtures (CLAUDE.md §10: retailer DOMs are verified live via the dry-run). The 
   - whole-word model matching, numbers included, brand verified from the name;
   - women's listings never match a men's watch;
   - sale blocks read as (current, original) whatever the markup order;
-  - the bespoke registration takes the retailer out of the onboarding queue.
+  - the bespoke registration takes the retailer out of the onboarding queue;
+  - a row named differently (production's "Champs Sports") still resolves by host.
 """
 from bs4 import BeautifulSoup
 
 from app.models.models import Retailer
 from app.scrapers.champs_sports import ChampsSportsScraper, _price_pair, name_matches
-from app.scrapers.registry import BESPOKE_SCRAPERS
+from app.scrapers.registry import BESPOKE_SCRAPERS, bespoke_class_for, build_registry, get_scraper
 from app.services.onboarding import retailers_needing_onboarding
 
 
@@ -59,3 +60,23 @@ def test_registered_and_out_of_onboarding_queue(db):
                     platform="custom", is_active=True, scraping_enabled=False))
     db.commit()
     assert "Champs Sports Canada" not in [r["name"] for r in retailers_needing_onboarding(db)]
+
+
+def test_differently_named_row_resolves_by_host(db):
+    # Production's row: added through the UI as "Champs Sports", URL with a
+    # trailing slash. Name lookup misses; the host must still find the scraper.
+    db.add(Retailer(name="Champs Sports", base_url="https://www.champssports.ca/",
+                    platform="custom", is_active=True, scraping_enabled=True))
+    db.commit()
+    row = db.query(Retailer).filter_by(name="Champs Sports").one()
+    assert bespoke_class_for(row) is ChampsSportsScraper
+    assert isinstance(get_scraper(row), ChampsSportsScraper)
+    assert isinstance(build_registry(db)["Champs Sports"], ChampsSportsScraper)
+    assert "Champs Sports" not in [r["name"] for r in retailers_needing_onboarding(db)]
+
+
+def test_unknown_host_is_not_matched(db):
+    row = Retailer(name="Foot Locker", base_url="https://www.footlocker.ca/",
+                   platform="custom", is_active=True)
+    assert bespoke_class_for(row) is None
+    assert get_scraper(row) is None
