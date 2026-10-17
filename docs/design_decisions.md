@@ -717,6 +717,47 @@ Supporting choices:
 
 ---
 
+### E23. Savanna header replaces the black hole (2026-10-17 — amends E22)
+
+**Chosen:**
+- Every page-header band's backdrop is now a Maasai savanna at the horizon (`components/layout/SavannaHeader.jsx`), recomposed in SVG and CSS from `frontend/template/maasai-template.html`. That is INSTALANDING.AI's "Maasai-Inspired Event Landing Page" (MIT), whose hero recreates the Rive Marketplace "Maasai-Inspired Event Hero Banner Concept". The credit stays in the component. `EventHorizon.jsx` is deleted.
+- It is a recomposition, not a crop. The template is a 1672×940 stage and the band is a wide strip, so the layers are sized to the band:
+  - a sky gradient;
+  - a low sun with a glow, at 74%;
+  - drifting clouds;
+  - the template's ridges and ground, stretched across the bottom of the band;
+  - three acacias;
+  - a small bird flock;
+  - the warriors standing on the ground line;
+  - a scrim on the left, so the title and the meta line keep their contrast.
+- **Warriors:** four between the title and the actions from `sm` up. On phones, two stand in whatever space is left between the title and the action buttons (`SavannaWarriorsInline`), and are clipped rather than drawn over either.
+- **Dropped from the template:** the MAASAI word, reeds, grass, grain, parallax and the frieze.
+- **Theming by tokens only:** every scene colour is a `--sv-*` token, defined for both themes.
+  - Dark is "night": a warm-black sky, a Horizon Amber sun and dark ridges.
+  - Light is "dusk", close to the template.
+  - The warriors keep their own fills. Dark only dims them a little (`--sv-warrior-filter`).
+  - The theme toggle repaints the scene with no React state.
+- **Calm motion:**
+  - The sun pulses, and the clouds and the flock drift.
+  - The template's adumu leap (Web Animations) plays once per app load, left to right, and when a warrior is tapped. The lift is scaled down to stay inside the band.
+  - There are no ambient leaps.
+  - Reduced motion stops the loops and the load leap; a tap still plays one leap.
+  - The warriors are a decorative easter egg: buttons kept out of the tab order, inside an `aria-hidden` backdrop.
+
+**Why:** the black hole was a night object. It did not render at all in the daylight theme, and on phones it ran a cut-down ray-march at reduced quality. The savanna is a few kilobytes of SVG and CSS that is sharp at any size, works in both themes, and costs no GPU budget.
+
+**Alternatives considered:**
+- Keep the black hole and add a daylight variant. Rejected: an accretion disc on paper reads as a stain, and the phone cost stays.
+- Crop the template stage as one SVG. Rejected: at band height the warriors are either too small or cut off.
+
+**Trade-offs:**
+- The Maasai and the adumu are a real people and a real ceremony. They are drawn as the template draws them, with no gimmicks, and the credit is kept.
+- `--sv-*` colours are tuned by eye, and nothing checks them automatically.
+
+**Verdict:** ✅ Keep.
+
+---
+
 ### E22. "Horizon" design system replaces Signal (2026-10-17 — supersedes E18 and E21; keeps E19's mechanism)
 
 **Chosen:**
@@ -729,7 +770,7 @@ Supporting choices:
 - `.panel` is the template's "signature glass": a warm six-radial mesh, an inset bottom glow, a deep shadow and a 1px gradient rim. The amber light that sweeps the rim runs only on `.panel-sweep` (the login card), and on hover for hover-capable pointers. `.panel-interactive` gives clickable cards the hover lift. Panels have no `backdrop-filter`.
 - Buttons have a 10px radius and mono uppercase labels. Default is filled amber with a bloom. Outline is amber-edged. Secondary is ghost glass. Inputs have a 10px radius; focus shows an amber border and no ring glow.
 - The sidebar and the phone tab bar use mono uppercase labels. The active item is marked by a glowing amber dot, not a raised pill. The brand is a mono "ANTON" wordmark beside the mark.
-- Motion: `rise` on page titles, a `latido` pulse on live dots, and the rim sweep as above. All motion stops under `prefers-reduced-motion`. The header band's background is the template's black hole (`components/layout/EventHorizon.jsx`, replacing `Iridescence.jsx`): the template's `FRAG_SIM` ray-march ported to one raw-WebGL pass (no three.js, no bloom passes; the composite grade is applied inline), framed right of the title and cropped by the band. It keeps the old effect's phone budget (90 steps and 0.75 scale on touch, ~30 fps, pause off-screen or hidden, adaptive step-down then freeze if under 28 fps, one still frame under reduced motion). It does not render in the daylight theme, where only the CSS glow shows. Each mount creates its own canvas, because React StrictMode's dev remount otherwise reuses a context the cleanup already lost.
+- Motion: `rise` on page titles, a `latido` pulse on live dots, and the rim sweep as above. All motion stops under `prefers-reduced-motion`. The header band's background was the template's black hole, superseded by the savanna in E23 (`components/layout/EventHorizon.jsx`, replacing `Iridescence.jsx`): the template's `FRAG_SIM` ray-march ported to one raw-WebGL pass (no three.js, no bloom passes; the composite grade is applied inline), framed right of the title and cropped by the band. It keeps the old effect's phone budget (90 steps and 0.75 scale on touch, ~30 fps, pause off-screen or hidden, adaptive step-down then freeze if under 28 fps, one still frame under reduced motion). It does not render in the daylight theme, where only the CSS glow shows. Each mount creates its own canvas, because React StrictMode's dev remount otherwise reuses a context the cleanup already lost.
 - The app icons change too, unlike E21, because the brand colour itself changed. `theme-color`, `lib/theme.js`, `public/theme-boot.js` and the manifest use `#070605` (dark) and `#f4f1ea` (light). The favicon, icon and six generated PNG/ICO files are re-toned to amber on warm black.
 - Same day, the runner found the near-black a touch too dark, so the dark ground was lifted about 7% in lightness with the same warm hue: ground `#070605` → `#141210`, panels `#0e0b09` → `#1a1714`, surface `#16120e` → `#221e1a`, rails `#0a0907` → `#161411`, and the panel mesh base to `rgba(26,23,20,…)`. `--faint` moves to `#908b80` to keep 4.5:1 on the lighter surface. `theme-color` and the manifest follow; the icons keep the template ink because they are brand marks.
 

@@ -109,8 +109,22 @@
     --selection: #ffb45e;
     --selection-foreground: #000;
     --grain-opacity: 0.035;
-    --iridescence-blend: screen;              /* Home hero shader */
-    --iridescence-opacity: 0.9;              /* header black hole (EventHorizon) strength */
+    /* Savanna header scene (SavannaHeader): "night" over the Night Ops ground. */
+    --sv-sky-top: #141210;
+    --sv-sky-mid: #1d1612;
+    --sv-sky-horizon: #3d2615;
+    --sv-sun: rgba(255, 180, 94, 0.85);
+    --sv-sun-glow: rgba(255, 180, 94, 0.32);
+    --sv-cloud: #2c2018;
+    --sv-cloud-opacity: 0.6;
+    --sv-ridge-far: #33231a;
+    --sv-ridge-near: #271b12;
+    --sv-ground-top: #1f1710;
+    --sv-ground-bottom: #130f0b;
+    --sv-tree: #0c0907;
+    --sv-bird: #0c0907;
+    --sv-shadow: rgba(0, 0, 0, 0.5);
+    --sv-warrior-filter: brightness(0.82) saturate(0.9);
 
     /* Signature glass panel (template .servicio / .cabecera …). */
     --panel-fill: rgba(26, 23, 20, 0.84);
@@ -201,8 +215,22 @@
     --selection: rgba(154, 82, 0, 0.2);
     --selection-foreground: #1a1712;
     --grain-opacity: 0;           /* white noise on paper only greys it */
-    --iridescence-blend: multiply;
-    --iridescence-opacity: 0.2;
+    /* Savanna header scene: "dusk", close to the Maasai template. */
+    --sv-sky-top: #f4f1ea;
+    --sv-sky-mid: #f3dcbc;
+    --sv-sky-horizon: #efbd85;
+    --sv-sun: #f5c993;
+    --sv-sun-glow: rgba(247, 211, 160, 0.85);
+    --sv-cloud: #f2b97c;
+    --sv-cloud-opacity: 0.5;
+    --sv-ridge-far: #dba46c;
+    --sv-ridge-near: #c88a52;
+    --sv-ground-top: #cb8749;
+    --sv-ground-bottom: #a8683a;
+    --sv-tree: #7a4a2a;
+    --sv-bird: #2a1208;
+    --sv-shadow: rgba(60, 22, 8, 0.35);
+    --sv-warrior-filter: none;
 
     --panel-fill: #fffdf8;
     --mesh-ink: rgba(255, 253, 248, 0.92);
@@ -481,4 +509,26 @@
     transition-duration: 0.001ms !important;
     animation: none !important;
   }
+}
+
+/* Savanna header loops (SavannaHeader). Names are sv- prefixed; the leap itself
+   is Web Animations in the component. */
+@keyframes sv-sun { to { opacity: 0.84; transform: translate(-50%, -50%) scale(1.025); } }
+@keyframes sv-cloud { to { transform: translateX(-70px); } }
+@keyframes sv-flock { from { transform: translateX(420%); } to { transform: translateX(-520%); } }
+@keyframes sv-bob { to { translate: 0 14%; } }
+@keyframes sv-flap { from { transform: scaleY(1); } to { transform: scaleY(-0.85); } }
+.sv-sun { animation: sv-sun 12s ease-in-out infinite alternate; }
+.sv-cloud { animation: sv-cloud 120s linear infinite alternate; }
+.sv-cloud-b { animation-duration: 150s; animation-direction: alternate-reverse; }
+.sv-flock { animation: sv-flock 34s linear infinite; }
+.sv-bird { animation: sv-bob 2.6s ease-in-out infinite alternate; }
+.sv-wing {
+  transform-box: view-box;
+  transform-origin: 460px 558px;
+  animation: sv-flap 0.46s ease-in-out infinite alternate;
+  animation-delay: var(--d, 0s);
+}
+@media (prefers-reduced-motion: reduce) {
+  .sv-sun, .sv-cloud, .sv-flock, .sv-bird, .sv-wing { animation: none !important; }
 }

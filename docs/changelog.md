@@ -5,6 +5,23 @@
 
 ---
 
+## Savanna header replaces the black hole — 2026-10-17
+
+Frontend only. Decision: `design_decisions.md` E23 (amends E22).
+
+**[CHANGED] Header background:** `SavannaHeader.jsx` replaces `EventHorizon.jsx` behind every page-header band. It is a Maasai savanna recomposed in SVG and CSS from `frontend/template/maasai-template.html` (MIT, credit kept):
+- a sky, a low sun, ridges, acacias and a small flock;
+- warriors between the title and the actions; on phones, two in the space left over;
+- a scrim on the left, behind the title.
+
+Every colour is a `--sv-*` token: night in dark, dusk in daylight. The black hole did not show in daylight and ran at reduced quality on phones. The `--iridescence-*` tokens are removed.
+
+**[ADDED] Adumu leap:** the warriors leap once per app load and again when tapped. There are no ambient leaps, and reduced motion stops the loops and the load leap.
+
+**Verified:** `vite build` clean. Checked locally on Home at 1280 px and 375 px in both themes. **Not verified:** an installed iPhone PWA, and lint (no working ESLint config in the frontend).
+
+---
+
 ## Horizon reskin — 2026-10-17
 
 The runner didn't take to Signal's blue-on-slate look. Frontend only: tokens, primitives, shell and icons. The runner supplied a new template, `frontend/template/redesign-template.html`, as the visual source of truth. Decision: `design_decisions.md` E22. It supersedes E18 and E21. E21 was built on `dark-lift` and never merged.
