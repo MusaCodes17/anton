@@ -1,7 +1,29 @@
 # Anton — Session Changelog
 
-**Last Updated:** 2026-10-16
+**Last Updated:** 2026-10-17
 **Status / current focus:** see `docs/project_state.md` (the perishable snapshot). This file is the append-only session log — the authoritative record of *what happened*; the `docs/` suite is the reference material.
+
+---
+
+## Horizon reskin — 2026-10-17
+
+The runner didn't take to Signal's blue-on-slate look. Frontend only: tokens, primitives, shell and icons. The runner supplied a new template, `frontend/template/redesign-template.html`, as the visual source of truth. Decision: `design_decisions.md` E22. It supersedes E18 and E21. E21 was built on `dark-lift` and never merged.
+
+**[CHANGED] Palette (`index.css`)** — warm black ground, one amber accent for actions, links, active nav and chart lines, ice blue for secondary readouts, butter yellow for warn. The light theme ("daylight") is re-toned to match. Token names are kept, so no component changed its colour logic.
+
+**[CHANGED] Type** — Archivo for body and UI; Archivo Narrow 700 uppercase as the display voice; JetBrains Mono for labels, nav, buttons, tags and figure meta. Replaces Bricolage Grotesque, Hanken Grotesk and IBM Plex Mono.
+
+**[ADDED] Panel and motion** — `.panel` takes the template's warm glass mesh and a 1px gradient rim. The amber rim sweep runs on the login card and on hover only. All motion stops under reduced motion. Home's shader is re-tinted amber.
+
+**[CHANGED] Components and shell** — buttons, badges, inputs and table heads use mono uppercase. The active nav item is marked by a glowing amber dot. The brand is a mono "ANTON" wordmark.
+
+**[CHANGED] Browser chrome and icons** — `theme-color`, `lib/theme.js`, `public/theme-boot.js` and the manifest use the new grounds. The favicon, icon and six PNG/ICO files are re-toned amber on warm black. An installed iOS PWA keeps the old icon and splash until it is reinstalled.
+
+**[FIXED] Training stat figures** — the bold narrow face is wider, so "3642.9km" truncated at 1024 px. Figures are now sized down at the sm and xl breakpoints.
+
+**Verified:** `vite build` clean. Ran locally against a throwaway DB copy, COROS polling off: public `/deals`, Home, Training and Shoes at 1024 px and 375 px, light theme on Home. 0 console errors. **Not verified:** an installed iPhone PWA, and lint (no working ESLint config in the frontend).
+
+Commits on branch `horizon-reskin`, prefix `redesign:`. Not pushed; no PR yet.
 
 ---
 
