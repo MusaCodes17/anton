@@ -3,9 +3,9 @@ import { cva } from 'class-variance-authority'
 import { cn } from '@/lib/utils'
 
 const badgeVariants = cva(
-  // Template .tags / .state: a small mono tag with a hairline in its own
-  // hue over a faint wash of it — status reads by colour AND by word.
-  'inline-flex items-center gap-1 rounded-[5px] border px-2 py-[3px] font-mono text-2xs font-medium leading-none tracking-[0.02em] transition-colors focus:outline-none',
+  // Horizon redesign (template .tag / .estado): a small mono-uppercase tag with a
+  // hairline in its own hue over a faint wash of it — status reads by colour AND by word.
+  'inline-flex items-center gap-1 rounded-[6px] border px-2 py-[3px] font-mono text-[10px] font-medium uppercase leading-none tracking-label transition-colors focus:outline-none',
   {
     variants: {
       variant: {
