@@ -96,11 +96,11 @@ function currentWeekKey(d = new Date()) {
 }
 
 // Template .stat: an open figure, not a tile. A rule on top, the value large
-// in display weight 200 with its unit in signal, the label underneath.
+// in the display voice (Archivo Narrow bold) with its unit in the accent, the label underneath.
 function Stat({ label, value, unit }) {
   return (
     <div className="min-w-0 border-t border-input pt-4 sm:pt-5">
-      <div className="truncate font-heading text-[42px] font-bold uppercase leading-[0.9] tracking-display text-foreground tabular-nums sm:text-[54px] lg:text-[64px]">
+      <div className="truncate font-heading text-[42px] font-bold uppercase leading-[0.9] tracking-display text-foreground tabular-nums sm:text-[46px] xl:text-[60px]">
         {value}
         {unit && <small className="ml-1 text-[0.4em] tracking-normal text-primary">{unit}</small>}
       </div>

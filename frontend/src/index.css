@@ -397,28 +397,6 @@
     -webkit-backdrop-filter: blur(22px) saturate(1.2);
     backdrop-filter: blur(22px) saturate(1.2);
   }
-
-  /* Template `.nav-centro`: a nav group framed by two open amber brackets. */
-  .chrome-bracket {
-    position: relative;
-  }
-  .chrome-bracket::before,
-  .chrome-bracket::after {
-    content: '';
-    position: absolute;
-    top: 0;
-    bottom: 0;
-    width: 8px;
-    border: 1px solid color-mix(in oklab, var(--primary) 55%, transparent);
-  }
-  .chrome-bracket::before {
-    left: 0;
-    border-right: none;
-  }
-  .chrome-bracket::after {
-    right: 0;
-    border-left: none;
-  }
 }
 
 @layer base {
