@@ -19,12 +19,12 @@ export default {
     },
     extend: {
       fontFamily: {
-        // Signal redesign: template --sans / --display / --mono. `heading` is
-        // the display voice (Bricolage Grotesque, set LIGHT — 200–300), kept
+        // Horizon: template --sans / --display / --mono. `heading` is the
+        // display voice (Archivo Narrow, set BOLD and UPPERCASE — 700), kept
         // under its old key so call sites didn't churn.
-        sans: ['Hanken Grotesk', 'Helvetica Neue', 'Helvetica', 'Arial', 'system-ui', 'sans-serif'],
-        heading: ['Bricolage Grotesque', 'Helvetica Neue', 'Helvetica', 'Arial', 'sans-serif'],
-        mono: ['IBM Plex Mono', 'ui-monospace', 'SFMono-Regular', 'Menlo', 'Consolas', 'monospace'],
+        sans: ['Archivo', 'system-ui', '-apple-system', 'Segoe UI', 'sans-serif'],
+        heading: ['Archivo Narrow', 'Arial Narrow', 'Helvetica Neue', 'Arial', 'sans-serif'],
+        mono: ['JetBrains Mono', 'Courier New', 'ui-monospace', 'monospace'],
       },
       // Named steps for the recurring arbitrary sizes that fall between
       // Tailwind's defaults. Plain strings (font-size only, no line-height) so
@@ -82,7 +82,7 @@ export default {
           DEFAULT: token('strava'),
           foreground: token('strava-foreground'),
         },
-        // "Velocity" design system: a second, slightly lighter dark tone used
+        // Horizon: a second, slightly lighter tone used
         // for nested tiles/rows inside a --card panel (stat tiles, table rows),
         // distinct from the panel background itself.
         surface: token('surface'),
@@ -108,6 +108,11 @@ export default {
           '0%, 100%': { opacity: '0.15' },
           '50%': { opacity: '1' },
         },
+        // Template .aparecer: content rises into place.
+        rise: {
+          from: { opacity: '0', transform: 'translateY(26px)' },
+          to: { opacity: '1', transform: 'none' },
+        },
         'accordion-down': {
           from: { height: '0' },
           to: { height: 'var(--radix-accordion-content-height)' },
@@ -118,15 +123,19 @@ export default {
         },
       },
       transitionTimingFunction: {
-        signal: 'cubic-bezier(0.6, 0, 0.2, 1)', // template --ease
+        signal: 'cubic-bezier(0.6, 0, 0.2, 1)', // Horizon easing
       },
       letterSpacing: {
-        display: '-0.035em', // template .display
+        display: '-0.01em', // template .display
+        label: '0.18em', // template .rotulo
+        eyebrow: '0.3em',
+        brand: '0.5em',
       },
       animation: {
         'accordion-down': 'accordion-down 0.2s ease-out',
         'accordion-up': 'accordion-up 0.2s ease-out',
         'tick-fade': 'tick-fade 1.2s ease-in-out infinite',
+        rise: 'rise 0.9s ease both',
       },
     },
   },

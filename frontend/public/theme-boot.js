@@ -5,7 +5,7 @@
 try {
   if (localStorage.getItem('anton-theme') === 'light') {
     document.documentElement.dataset.theme = 'light'
-    document.querySelector('meta[name="theme-color"]').setAttribute('content', '#f2f4f9')
+    document.querySelector('meta[name="theme-color"]').setAttribute('content', '#f4f1ea')
     // black-translucent draws WHITE status-bar text, unreadable on paper;
     // "default" gives dark text on its own bar. iOS reads this at launch,
     // so the installed app picks up a theme change on its next cold start.
