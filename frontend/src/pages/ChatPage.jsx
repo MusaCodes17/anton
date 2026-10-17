@@ -642,7 +642,7 @@ export default function ChatPage() {
               <span className="h-[5px] w-9 rounded-full bg-nav-inactive" />
             </div>
             <div className="flex shrink-0 items-center justify-between pl-5 pr-2">
-              <h2 className="font-heading text-[19px] font-light tracking-display text-foreground">
+              <h2 className="font-heading text-[19px] font-bold uppercase tracking-display text-foreground">
                 Conversations
               </h2>
               <button

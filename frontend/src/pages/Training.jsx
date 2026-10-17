@@ -100,7 +100,7 @@ function currentWeekKey(d = new Date()) {
 function Stat({ label, value, unit }) {
   return (
     <div className="min-w-0 border-t border-input pt-4 sm:pt-5">
-      <div className="truncate font-heading text-[42px] font-extralight leading-[0.9] tracking-[-0.02em] text-foreground tabular-nums sm:text-[54px] lg:text-[64px]">
+      <div className="truncate font-heading text-[42px] font-bold uppercase leading-[0.9] tracking-display text-foreground tabular-nums sm:text-[54px] lg:text-[64px]">
         {value}
         {unit && <small className="ml-1 text-[0.4em] tracking-normal text-primary">{unit}</small>}
       </div>
@@ -114,7 +114,7 @@ function SectionHeading({ id, icon: Icon, title, hint }) {
   return (
     <div id={id} className="flex items-baseline gap-2 scroll-mt-28 sm:scroll-mt-36 lg:scroll-mt-40">
       <Icon className="h-[18px] w-[18px] shrink-0 self-center text-accent-foreground" />
-      <h2 className="font-heading text-lg font-light tracking-display text-foreground">{title}</h2>
+      <h2 className="font-heading text-lg font-bold uppercase tracking-display text-foreground">{title}</h2>
       {hint && <span className="text-xs text-faint">{hint}</span>}
     </div>
   )

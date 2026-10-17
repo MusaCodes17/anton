@@ -305,7 +305,7 @@ function StatusTile({ count, label, tone }) {
     <div className="flex items-center gap-3.5 rounded-[13px] border border-border bg-surface p-[17px]">
       <span className={cn('h-2.5 w-2.5 shrink-0 rounded-full', STATUS_DOT[tone])} />
       <div>
-        <div className="font-heading text-2xl font-light leading-none text-foreground tracking-display">
+        <div className="font-heading text-2xl font-bold uppercase leading-none text-foreground tracking-display">
           {count}
         </div>
         <div className="mt-1 text-xs text-muted-foreground">{label}</div>

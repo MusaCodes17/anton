@@ -241,7 +241,7 @@ export default function Shoes() {
                       {onSale ? 'Lowest active' : 'Current price'}
                     </div>
                     <div className="flex items-baseline gap-1.5">
-                      <span className="mt-0.5 font-heading text-lg font-light text-foreground tracking-display">
+                      <span className="mt-0.5 font-heading text-lg font-bold uppercase text-foreground tracking-display">
                         {displayPrice != null ? formatCurrency(displayPrice) : '—'}
                       </span>
                       {shoe.msrp != null && (
@@ -258,7 +258,7 @@ export default function Shoes() {
                     <div className="font-mono text-2xs uppercase tracking-[0.06em] text-faint">
                       Retailers
                     </div>
-                    <div className="mt-0.5 font-heading text-lg font-light text-foreground tracking-display">
+                    <div className="mt-0.5 font-heading text-lg font-bold uppercase text-foreground tracking-display">
                       {retailersScraped ?? '—'}
                     </div>
                   </div>

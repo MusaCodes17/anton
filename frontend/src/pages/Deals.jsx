@@ -293,7 +293,7 @@ export default function Deals() {
       {/* ── On sale now ─────────────────────────────────────────── */}
       <section className="space-y-4">
         <div className="flex items-baseline gap-2">
-          <h2 className="font-heading text-lg font-light tracking-display text-foreground">
+          <h2 className="font-heading text-lg font-bold uppercase tracking-display text-foreground">
             On sale now
           </h2>
           {!deals.isLoading && !deals.isError && (
@@ -355,7 +355,7 @@ export default function Deals() {
               }`}
             />
             <Eye className="h-4 w-4 shrink-0 text-accent-foreground" />
-            <span className="font-heading text-lg font-light tracking-display text-foreground">
+            <span className="font-heading text-lg font-bold uppercase tracking-display text-foreground">
               Watching
             </span>
             <span className="text-sm text-faint">

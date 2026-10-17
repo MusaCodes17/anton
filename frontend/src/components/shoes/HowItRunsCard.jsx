@@ -139,7 +139,7 @@ export default function HowItRunsCard({ ownedShoeId }) {
           <>
             {perf.enough_data ? (
               <div className="space-y-1">
-                <div className="font-heading text-base font-light tabular-nums text-foreground sm:text-lg tracking-display">
+                <div className="font-heading text-base font-bold uppercase tabular-nums text-foreground sm:text-lg tracking-display">
                   <Numbers p={perf} />
                 </div>
                 <div className="text-xs text-muted-foreground">

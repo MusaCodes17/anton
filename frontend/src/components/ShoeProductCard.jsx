@@ -72,7 +72,7 @@ export default function ShoeProductCard({ group, onViewDetails }) {
         <div className="flex flex-wrap items-end justify-between gap-x-2 gap-y-1.5">
           <div className="min-w-0">
             <div className="flex items-baseline gap-2">
-              <p className="font-heading text-xl font-light text-foreground sm:text-2xl tracking-display">
+              <p className="font-heading text-xl font-bold uppercase text-foreground sm:text-2xl tracking-display">
                 {formatCurrency(selected.current_price)}
               </p>
               {shoe.msrp != null && (

@@ -133,7 +133,7 @@ function TrainingPulse({ pulse, loading }) {
               <div className="font-mono text-2xs font-medium uppercase tracking-[0.06em] text-faint">
                 This week
               </div>
-              <div className="mt-1 font-heading text-4xl font-light tracking-display text-foreground tabular-nums">
+              <div className="mt-1 font-heading text-4xl font-bold uppercase tracking-display text-foreground tabular-nums">
                 {(pulse?.this_week_km ?? 0).toFixed(1)}
                 <span className="ml-1 text-lg font-semibold text-faint">km</span>
               </div>
@@ -180,7 +180,7 @@ function LastRun({ run }) {
         <Badge variant={runSourceVariant(run.source)}>{runSourceLabel(run.source)}</Badge>
       </div>
       <div className="mt-1.5 flex flex-wrap items-baseline gap-x-3 gap-y-0.5">
-        <span className="font-heading text-xl font-light text-foreground tabular-nums tracking-display">
+        <span className="font-heading text-xl font-bold uppercase text-foreground tabular-nums tracking-display">
           {run.distance_km.toFixed(1)} km
         </span>
         {run.avg_pace && <span className="text-sm text-muted-foreground tabular-nums">{run.avg_pace}</span>}
