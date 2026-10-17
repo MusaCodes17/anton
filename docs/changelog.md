@@ -21,6 +21,8 @@ The runner didn't take to Signal's blue-on-slate look. Frontend only: tokens, pr
 
 **[FIXED] Training stat figures** — the bold narrow face is wider, so "3642.9km" truncated at 1024 px. Figures are now sized down at the sm and xl breakpoints.
 
+**[CHANGED] Dark ground lifted a step** — after a first look the runner found the near-black a touch too dark. The dark ground, panels, surfaces, rails and panel mesh are about 7% lighter in the same warm hue (`#070605` → `#141210`); `--faint` is re-checked for 4.5:1. `theme-color` and the manifest follow. Icons unchanged.
+
 **Verified:** `vite build` clean. Ran locally against a throwaway DB copy, COROS polling off: public `/deals`, Home, Training and Shoes at 1024 px and 375 px, light theme on Home. 0 console errors. **Not verified:** an installed iPhone PWA, and lint (no working ESLint config in the frontend).
 
 Commits on branch `horizon-reskin`, prefix `redesign:`. Not pushed; no PR yet.

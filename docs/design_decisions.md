@@ -721,7 +721,7 @@ Supporting choices:
 
 **Chosen:**
 - The runner did not take to Signal's cool blue-on-slate look. A new template, `frontend/template/redesign-template.html` (an "Event Horizon" landing page, MIT, fictional brand), is the visual source of truth. Only its visual language is taken. Routes, content, logic and app architecture are unchanged.
-- Dark is the default. The ground is warm black `#070605`, panels `#0e0b09`, ink `#efebe2`. There is one accent, amber `#ffb45e`, used for actions, links, active nav and chart lines. The filled primary button is `--lit`. Ice blue `#a9caff` (`--ice`) is for secondary readouts and the first chart series. Amber is left out of retailer series, because it is the accent and the Target line.
+- Dark is the default. The ground is warm black (`#070605` in the template, lifted to `#141210`, see below), panels `#1a1714`, ink `#efebe2`. There is one accent, amber `#ffb45e`, used for actions, links, active nav and chart lines. The filled primary button is `--lit`. Ice blue `#a9caff` (`--ice`) is for secondary readouts and the first chart series. Amber is left out of retailer series, because it is the accent and the Target line.
 - Status colours are ok `#8be0a4`, warn `#f2d16b` and alert `#ff6f61`. Warn moved off amber, which is now the accent. Hairlines are warm alpha.
 - Light ("Horizon, daylight") stays the per-device option. It uses paper `#f4f1ea`, cards `#fffdf8`, ink `#1a1712`, and a deeper accent `#9a5200` for 4.5:1 text. The E19 mechanism is unchanged.
 - Token names are kept (`--signal-deep`, `--signal-16`, `--panel-glow*`), so no call site changed. "Signal" in a token name now means "the accent". New tokens: `--ice`, `--lit*`, and the panel set (`--panel-fill`, `--mesh-ink`, `--mesh-1..3`, `--panel-inset*`, `--rim-a/b`, `--sweep`, `--sweep-hot`, `--panel-text-shadow`).
@@ -731,6 +731,7 @@ Supporting choices:
 - The sidebar and the phone tab bar use mono uppercase labels. The active item is marked by a glowing amber dot, not a raised pill. The brand is a mono "ANTON" wordmark beside the mark.
 - Motion: `rise` on page titles, a `latido` pulse on live dots, and the rim sweep as above. All motion stops under `prefers-reduced-motion`. Home's shader is re-tinted amber.
 - The app icons change too, unlike E21, because the brand colour itself changed. `theme-color`, `lib/theme.js`, `public/theme-boot.js` and the manifest use `#070605` (dark) and `#f4f1ea` (light). The favicon, icon and six generated PNG/ICO files are re-toned to amber on warm black.
+- Same day, the runner found the near-black a touch too dark, so the dark ground was lifted about 7% in lightness with the same warm hue: ground `#070605` → `#141210`, panels `#0e0b09` → `#1a1714`, surface `#16120e` → `#221e1a`, rails `#0a0907` → `#161411`, and the panel mesh base to `rgba(26,23,20,…)`. `--faint` moves to `#908b80` to keep 4.5:1 on the lighter surface. `theme-color` and the manifest follow; the icons keep the template ink because they are brand marks.
 
 **Why:** the runner wanted the new template's look across the app, not a retune of Signal's palette. The change sits mostly at the token and primitive layer, so no data flow or route changed.
 
