@@ -176,7 +176,10 @@ export default function Deals() {
 
   return (
     <div className="space-y-4 sm:space-y-6">
-      <PageHeader title="Deals" count={groups.length}>
+      <PageHeader
+        title="Deals"
+        meta={!deals.isLoading && !deals.isError ? [`${groups.length} shoe${groups.length === 1 ? '' : 's'}`, `${visible.length} deal${visible.length === 1 ? '' : 's'}`] : undefined}
+      >
         <ScrapeButton />
       </PageHeader>
 
@@ -292,17 +295,9 @@ export default function Deals() {
 
       {/* ── On sale now ─────────────────────────────────────────── */}
       <section className="space-y-4">
-        <div className="flex items-baseline gap-2">
-          <h2 className="font-heading text-lg font-bold uppercase tracking-display text-foreground">
-            On sale now
-          </h2>
-          {!deals.isLoading && !deals.isError && (
-            <span className="font-mono text-xs text-muted-foreground">
-              {groups.length} shoe{groups.length === 1 ? '' : 's'} · {visible.length} deal
-              {visible.length === 1 ? '' : 's'}
-            </span>
-          )}
-        </div>
+        <h2 className="font-heading text-lg font-bold uppercase tracking-display text-foreground">
+          On sale now
+        </h2>
 
         {deals.isLoading ? (
           <CardSkeletonGrid count={6} />

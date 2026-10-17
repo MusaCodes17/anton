@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { cn } from '@/lib/utils'
 
 /**
@@ -168,12 +168,30 @@ function Warrior({ w, className, style }) {
  * line; heights are px (tallest 56px) since the box has no band-relative height.
  */
 export function SavannaWarriorsInline() {
-  const pair = [
-    { ...WARRIORS[1], px: 48 },
-    { ...WARRIORS[2], px: 56 },
-  ]
+  const boxRef = useRef(null)
+  const [width, setWidth] = useState(0)
+
+  useEffect(() => {
+    const el = boxRef.current
+    if (!el || typeof ResizeObserver === 'undefined') return undefined
+    const ro = new ResizeObserver(([entry]) => setWidth(entry.contentRect.width))
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [])
+
+  // Never show a clipped warrior: the pair if both fit whole (plus breathing
+  // room), else w-b alone if it fits, else nothing. Width = height x aspect ratio.
+  const GAP = 4
+  const ROOM = 8
+  const s = { ...WARRIORS[1], px: 48 }
+  const b = { ...WARRIORS[2], px: 56 }
+  const wOf = (w) => (w.px * 250) / 865
+  let pair = []
+  if (width >= wOf(s) + GAP + wOf(b) + ROOM) pair = [s, b]
+  else if (width >= wOf(b) + ROOM) pair = [b]
+
   return (
-    <div aria-hidden="true" className="pointer-events-none relative -mb-4 flex-1 self-stretch overflow-hidden sm:hidden">
+    <div ref={boxRef} aria-hidden="true" className="pointer-events-none relative -mb-4 min-w-[44px] flex-1 self-stretch overflow-hidden sm:hidden">
       <div className="absolute inset-x-0 bottom-[10px] flex items-end justify-center gap-1">
         {pair.map((w) => (
           <Warrior key={w.id} w={w} className="relative" style={{ height: w.px }} />

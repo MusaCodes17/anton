@@ -10,7 +10,7 @@ import RecordsCard from '@/components/training/RecordsCard'
 import ActivityRow from '@/components/training/ActivityRow'
 import CustomizeSectionsDialog from '@/components/training/CustomizeSectionsDialog'
 import { useToast } from '@/components/ui/toast'
-import { SECTION_LABELS, layoutBlocks, normalizeLayout } from '@/lib/trainingLayout'
+import { layoutBlocks, normalizeLayout } from '@/lib/trainingLayout'
 import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
 import { Input } from '@/components/ui/input'
@@ -274,7 +274,6 @@ export default function Training() {
   const { toast } = useToast()
   const [customizing, setCustomizing] = useState(false)
   const blocks = layoutBlocks(layout.order, layout.hidden)
-  const visibleIds = layout.order.filter((id) => !layout.hidden.includes(id))
 
   const sectionContent = {
     now: (
@@ -482,19 +481,12 @@ export default function Training() {
 
   return (
     <div className="space-y-5 md:space-y-8">
-      <PageHeader title="Training">
-        <nav className="hidden gap-4 text-sm text-muted-foreground sm:flex">
-          {visibleIds.map((id) => (
-            <a key={id} href={`#${id}`} className="focus-ring rounded hover:text-foreground">
-              {SECTION_LABELS[id]}
-            </a>
-          ))}
-        </nav>
-        <Button
-          variant="outline" size="icon" aria-label="Customize sections"
-          onClick={() => setCustomizing(true)}
-        >
-          <SlidersHorizontal />
+      <PageHeader
+        title="Training"
+        meta={trailing365.data && recentWeekly.data ? [`${stats.thisWeek.toFixed(1)} km this week`, `${Math.round(stats.total12).toLocaleString()} km · last 12 mo`] : undefined}
+      >
+        <Button onClick={() => setCustomizing(true)}>
+          <SlidersHorizontal className="h-4 w-4" /> Customize
         </Button>
       </PageHeader>
 

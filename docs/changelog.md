@@ -16,6 +16,13 @@ Frontend only. Decision: `design_decisions.md` E23 (amends E22).
 
 Every colour is a `--sv-*` token: night in dark, dusk in daylight. The black hole did not show in daylight and ran at reduced quality on phones. The `--iridescence-*` tokens are removed.
 
+**[CHANGED] Header meta on Deals and Training:** the headers now carry a mono fact line, like Home and Shoes.
+- **Deals:** the shoe and deal totals move up from beside "On sale now" (the count superscript is gone).
+- **Training:** km this week and km over the last 12 months.
+- **Training nav and button:** the in-page section nav is removed from the header, and the customize button is a labelled "Customize" button, like "Run scan".
+- **Phone warriors:** they keep a minimum width beside the actions and render only when they fit whole.
+- **Meta items:** they never break mid-text, and Home's date uses the short weekday ("Sat, October 17").
+
 **[ADDED] Adumu leap:** the warriors leap once per app load and again when tapped. There are no ambient leaps, and reduced motion stops the loops and the load leap.
 
 **Verified:** `vite build` clean. Checked locally on Home at 1280 px and 375 px in both themes. **Not verified:** an installed iPhone PWA, and lint (no working ESLint config in the frontend).

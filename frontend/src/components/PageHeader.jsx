@@ -42,7 +42,7 @@ export default function PageHeader({ title, count, meta, description, plain = fa
         {metaItems.length > 0 && (
           <div className="mt-2.5 flex flex-wrap gap-x-4 gap-y-1 font-mono text-xs text-muted-foreground">
             {metaItems.map((item) => (
-              <span key={item} className="inline-flex items-center gap-2">
+              <span key={item} className="inline-flex items-center gap-2 whitespace-nowrap">
                 <span className="h-1 w-1 rounded-full bg-primary/70" aria-hidden="true" />
                 {item}
               </span>
