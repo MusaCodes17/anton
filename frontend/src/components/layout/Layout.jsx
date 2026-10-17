@@ -47,12 +47,13 @@ function NavLinks({ onNavigate }) {
           onClick={onNavigate}
           className={({ isActive }) =>
             cn(
-              // Template .tab[aria-selected]: the active row is a raised ink-3
-              // pill with a hairline inset; its dot is lit signal.
-              'focus-ring flex items-center gap-3 rounded-full px-3.5 py-[10px] text-sm font-medium transition-colors duration-300 ease-signal',
+              // Horizon nav rule (template nav ul / a.activo::before): a mono
+              // uppercase label. The active row is marked by its lit amber dot,
+              // not a raised pill; inactive rows keep an empty dot so text stays put.
+              'focus-ring flex items-center gap-3 rounded-[10px] px-3.5 py-[10px] font-mono text-xs uppercase tracking-label transition-colors duration-300 ease-signal',
               isActive
-                ? 'bg-secondary text-foreground shadow-[inset_0_0_0_1px_var(--input)]'
-                : 'text-muted-foreground hover:bg-accent hover:text-foreground'
+                ? 'text-foreground'
+                : 'text-muted-foreground hover:text-foreground'
             )
           }
         >
@@ -61,7 +62,7 @@ function NavLinks({ onNavigate }) {
               <span
                 className={cn(
                   'h-1.5 w-1.5 shrink-0 rounded-full transition-colors duration-300',
-                  isActive ? 'bg-primary shadow-[0_0_8px_var(--primary)]' : 'bg-nav-inactive'
+                  isActive ? 'bg-primary shadow-[0_0_10px_var(--primary)]' : 'bg-transparent'
                 )}
               />
               {label}
@@ -83,10 +84,10 @@ function SettingsLink({ onNavigate }) {
       onClick={onNavigate}
       className={({ isActive }) =>
         cn(
-          'focus-ring flex items-center gap-3 rounded-full px-3.5 py-[10px] text-sm font-medium transition-colors duration-300 ease-signal',
+          'focus-ring flex items-center gap-3 rounded-[10px] px-3.5 py-[10px] font-mono text-xs uppercase tracking-label transition-colors duration-300 ease-signal',
           isActive
-            ? 'bg-secondary text-foreground shadow-[inset_0_0_0_1px_var(--input)]'
-            : 'text-muted-foreground hover:bg-accent hover:text-foreground'
+            ? 'text-foreground'
+            : 'text-muted-foreground hover:text-foreground'
         )
       }
     >
@@ -124,7 +125,7 @@ function MobileTabBar({ onReselect }) {
             // Tapping the tab you're already on returns to the top (iOS convention).
             onClick={() => active && onReselect()}
             className={cn(
-              'focus-ring relative flex h-14 flex-col items-center justify-center gap-1 text-2xs font-medium transition-colors duration-300 ease-signal',
+              'focus-ring relative flex h-14 flex-col items-center justify-center gap-1 font-mono text-[10px] uppercase tracking-label transition-colors duration-300 ease-signal',
               active ? 'text-foreground' : 'text-muted-foreground hover:text-foreground'
             )}
           >
@@ -155,7 +156,7 @@ export function ThemeToggle({ compact = false }) {
         type="button"
         onClick={toggleTheme}
         aria-label={`Switch to ${label.toLowerCase()}`}
-        className="focus-ring flex h-11 w-11 items-center justify-center rounded-full text-muted-foreground transition-colors duration-300 ease-signal hover:bg-accent hover:text-foreground"
+        className="focus-ring flex h-11 w-11 items-center justify-center rounded-[10px] text-muted-foreground transition-colors duration-300 ease-signal hover:bg-accent hover:text-foreground"
       >
         <Icon className="h-5 w-5" />
       </button>
@@ -166,7 +167,7 @@ export function ThemeToggle({ compact = false }) {
       type="button"
       onClick={toggleTheme}
       aria-label={`Switch to ${label.toLowerCase()}`}
-      className="focus-ring flex w-full items-center gap-3 rounded-full px-3.5 py-[10px] text-sm font-medium text-muted-foreground transition-colors duration-300 ease-signal hover:bg-accent hover:text-foreground"
+      className="focus-ring flex w-full items-center gap-3 rounded-[10px] px-3.5 py-[10px] font-mono text-xs uppercase tracking-label text-muted-foreground transition-colors duration-300 ease-signal hover:text-foreground"
     >
       <Icon className="h-[15px] w-[15px] shrink-0" />
       {label}
@@ -192,7 +193,7 @@ export function LogoutButton({ onNavigate }) {
     <button
       type="button"
       onClick={handleLogout}
-      className="focus-ring flex w-full items-center gap-3 rounded-full px-3.5 py-[10px] text-sm font-medium text-muted-foreground transition-colors duration-300 ease-signal hover:bg-accent hover:text-foreground"
+      className="focus-ring flex w-full items-center gap-3 rounded-[10px] px-3.5 py-[10px] font-mono text-xs uppercase tracking-label text-muted-foreground transition-colors duration-300 ease-signal hover:text-foreground"
     >
       <LogOut className="h-[15px] w-[15px] shrink-0" />
       Sign out
@@ -211,10 +212,10 @@ export function Brand({ onHome, to = '/' }) {
       className="focus-ring flex items-center gap-2.5 rounded-full px-2"
     >
       {/* Template .logo-mark: a hairline-framed tile, the mark lit in signal. */}
-      <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[9px] border border-input text-primary">
+      <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[8px] border border-primary/55 text-primary">
         <BrandMark className="h-[17px] w-[17px]" />
       </span>
-      <span className="font-heading text-[21px] font-light tracking-display text-foreground">
+      <span className="font-mono text-sm font-medium uppercase tracking-brand text-foreground">
         Anton
       </span>
     </Link>
@@ -229,7 +230,7 @@ export function ScrapeStatus({ lastScrape, label = 'Last scraped' }) {
       {/* Static, coloured by freshness: a pulse would claim live activity
           (surface brief: pulses only on live data). */}
       <span aria-hidden="true" className={cn('h-1.5 w-1.5 shrink-0 rounded-full', scrapeDot(lastScrape))} />
-      <span className="font-mono text-2xs text-muted-foreground">
+      <span className="font-mono text-[10px] uppercase tracking-label text-muted-foreground">
         {lastScrape ? `${label} ${formatRelativeTime(lastScrape)}` : 'Not scraped yet'}
       </span>
     </div>
@@ -306,7 +307,7 @@ export default function Layout() {
             aria-label="Settings"
             className={({ isActive }) =>
               cn(
-                'focus-ring flex h-11 w-11 items-center justify-center rounded-full transition-colors duration-300 ease-signal hover:bg-accent',
+                'focus-ring flex h-11 w-11 items-center justify-center rounded-[10px] transition-colors duration-300 ease-signal hover:bg-accent',
                 isActive ? 'text-primary' : 'text-muted-foreground'
               )
             }

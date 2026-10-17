@@ -175,7 +175,7 @@ export function EmptyState({ onPromptClick, isStreaming }) {
         <span className="flex h-11 w-11 items-center justify-center rounded-[12px] border border-input bg-accent text-primary">
           <Sparkles className="h-6 w-6" />
         </span>
-        <h2 className="mt-1 font-heading text-[28px] font-light leading-[1.05] tracking-display text-foreground">
+        <h2 className="mt-1 font-heading text-[28px] font-bold uppercase leading-[1.05] tracking-display text-foreground">
           Son of Anton
         </h2>
         <p className="text-md-plus leading-normal text-muted-foreground md:text-sm">

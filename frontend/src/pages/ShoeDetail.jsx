@@ -140,7 +140,7 @@ export default function ShoeDetail() {
         <div className="min-w-0 flex-1 space-y-2">
           <div className="flex flex-wrap items-start justify-between gap-2">
             <div>
-              <h1 className="font-heading text-[30px] font-light leading-[1.02] text-foreground tracking-display sm:text-[38px]">
+              <h1 className="font-heading text-[30px] font-bold uppercase leading-[1.02] text-foreground tracking-display sm:text-[38px]">
                 {shoe.nickname || shoe.model}
               </h1>
               <div className="mt-1 font-mono text-xs text-muted-foreground">
@@ -442,7 +442,7 @@ function Stat({ label, value }) {
   return (
     <div className="space-y-1">
       <div className="font-mono text-2xs font-medium uppercase tracking-[0.06em] text-faint">{label}</div>
-      <div className="font-heading text-base font-light tabular-nums text-foreground sm:text-lg tracking-display">{value}</div>
+      <div className="font-heading text-base font-bold uppercase tabular-nums text-foreground sm:text-lg tracking-display">{value}</div>
     </div>
   )
 }

@@ -10,6 +10,8 @@ web
 
 One user: a competitive runner in Montreal. On the phone, Anton runs as an installed PWA, often opened right after a run to confirm a synced run, see which shoe it went on and check the week. On desktop at home it is for longer sessions: watching shoe deals, managing the shoe rotation and reading training analytics before a race block.
 
+A second, read-only audience: the runner's run club, who open the public "Musa's picks" page at `/deals` (logged out) to see the current shoe deals the runner would actually buy.
+
 ## Product Purpose
 
 A personal running platform with two deliberately independent domains:
@@ -33,7 +35,7 @@ Built for one runner's real data, not a generic tracker. Every shoe's mileage is
 
 ## Capabilities and Constraints
 
-- Routes: Home, Training (plus activity detail), Shoes (owned rotation, shoe detail, retirement pipeline), Deals and watchlist, Retailers, New Runs (COROS inbox), Son of Anton chat, Settings and Sync.
+- Routes: Home, Training (plus activity detail), Shoes (owned rotation, shoe detail, retirement pipeline), Deals and watchlist, Retailers, New Runs (COROS inbox), Son of Anton chat, Settings and Sync. Logged out, only `/deals` renders, as the public "Musa's picks" page (read-only, no watchlist or private data); everything else shows the login.
 - Frontend: React 18 + Vite + Tailwind + React Query, JSX only. Charts stay on recharts. No new heavy dependencies.
 - Every UI change must work on desktop and at about 380 px on a phone.
 - Derived numbers come from the server. The UI never recomputes them.
@@ -42,8 +44,9 @@ Built for one runner's real data, not a generic tracker. Every shoe's mileage is
 ## Brand Commitments
 
 - Name: Anton. The assistant is "Son of Anton."
-- The visual source of truth for the 2026-10 redesign is `frontend/template/redesign-template.html`. The user pinned its design language: deep ink ground, a cool signal-blue accent, light grotesque display type, mono data, glowing panels, and a lit primary button.
-- Signal blue is the action and brand accent. Green, amber and red mean only good, warning and alert states.
+- The visual source of truth is `frontend/template/redesign-template.html` (re-pinned 2026-10-17 for the "Horizon" reskin, replacing the earlier "Signal" look). The user pinned its design language: a warm black ground, one amber accent, warm glass panels, bold uppercase display type and mono labels. Treat the template as visual language only, never as a replacement for the app's architecture.
+- Amber is the single action and brand accent. Green, yellow and red mean only good, warning and alert states.
+- Dark is the default and should not read as pitch black: the runner asked for the ground one step lighter than the template's near-black. A per-device light theme exists for daylight.
 
 ## Evidence on Hand
 

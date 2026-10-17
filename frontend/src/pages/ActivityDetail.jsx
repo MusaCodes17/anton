@@ -25,7 +25,7 @@ function Figure({ label, value, unit }) {
   return (
     <div className="min-w-0 rounded-[14px] border border-border bg-surface p-3 sm:p-4">
       <div className="font-mono text-2xs uppercase tracking-[0.06em] text-faint">{label}</div>
-      <div className="mt-1 truncate font-heading text-xl font-light tabular-nums text-foreground tracking-display">
+      <div className="mt-1 truncate font-heading text-xl font-bold uppercase tabular-nums text-foreground tracking-display">
         {value ?? '—'}
         {value != null && unit ? <span className="ml-0.5 text-xs font-normal text-faint">{unit}</span> : null}
       </div>
@@ -101,7 +101,7 @@ export default function ActivityDetail() {
       </Link>
 
       <div className="flex flex-wrap items-center gap-3">
-        <h1 className="font-heading text-2xl font-light tracking-display text-foreground">
+        <h1 className="font-heading text-2xl font-bold uppercase tracking-display text-foreground">
           {d.name || 'Run'}
         </h1>
         <Badge variant={runSourceVariant(d.source)} className="text-[10px]">{runSourceLabel(d.source)}</Badge>

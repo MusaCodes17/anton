@@ -177,7 +177,7 @@ function PendingRunCard({ run, activeShoes, online }) {
           <div className="font-mono text-2xs font-medium uppercase tracking-[0.06em] text-faint">
             {formatDate(run.run_date)}
           </div>
-          <div className="mt-1 font-heading text-2xl font-light tabular-nums text-foreground tracking-display">
+          <div className="mt-1 font-heading text-2xl font-bold uppercase tabular-nums text-foreground tracking-display">
             {run.distance_km.toFixed(2)}
             <span className="ml-1 text-sm font-semibold text-faint">km</span>
           </div>

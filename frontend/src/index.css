@@ -3,181 +3,236 @@
 @tailwind utilities;
 
 /*
- * "Signal" design system (2026-10 redesign) — extracted from
- * frontend/template/redesign-template.html, the user-pinned visual source of
- * truth: deep ink ground, ONE cool signal-blue accent, light grotesque display
- * type, mono figures, near-black panels with a glow rising behind the top
- * edge. Dark is the default (an athlete's instrument, read mostly on a phone
- * right after a run); a light variant (`html[data-theme="light"]`, below)
- * re-tones every token for daylight viewing — same layout, type and motion.
- * The choice is per device (lib/theme.js) and applied before first paint by
- * the inline script in index.html, so there is no dark→light flash.
+ * "Horizon" design system (2026-10 reskin, design_decisions E22) — extracted
+ * from frontend/template/redesign-template.html, the user-pinned visual source
+ * of truth: warm black ground, warm off-white ink, ONE amber accent, warm
+ * hairlines, and the signature glass panel (a dark mesh with an amber light
+ * sweeping round its border). Type is Archivo (text), Archivo Narrow (display,
+ * bold uppercase) and JetBrains Mono (figures, labels). Dark is the default (an
+ * athlete's instrument, read mostly on a phone right after a run); a light
+ * variant (`:root[data-theme="light"]`, below) re-tones every token for
+ * daylight viewing — same layout, type and motion. The choice is per device
+ * (lib/theme.js) and applied before first paint by public/theme-boot.js, so
+ * there is no dark→light flash.
  *
- * Colour jobs: --primary (signal blue) = actions, links, active nav, chart
- * lines. Green/amber/red (--success/--warning/--destructive) mean ok/warn/
- * alert ONLY — never decoration. Hairlines are blue-tinted alpha, not greys.
+ * Colour jobs: --primary (amber) = actions, links, active nav, chart lines.
+ * Green/yellow/red (--success/--warning/--destructive) mean ok/warn/alert ONLY
+ * — never decoration. Hairlines are warm alpha, not greys. Ice blue (--ice) is
+ * for secondary readouts. Token names keep the old "signal" vocabulary
+ * (--signal-deep, --signal-16, …): "signal" now simply means "the accent".
+ *
+ * The dark ground sits one step above the template's near-black (2026-10-17,
+ * runner's request; design_decisions E22).
  */
 @layer base {
   :root {
     /* Native controls (date picker, number spinners, scrollbars) render dark. */
     color-scheme: dark;
-    /* Ink layers (template --ink / --ink-2 / --ink-3) */
-    --background: #070a13;
-    --foreground: #e9ecf5;
-    --card: #05070d;              /* template --panel: panels sit DARKER than the ground */
-    --card-foreground: #e9ecf5;
-    --popover: #0c1121;
-    --popover-foreground: #e9ecf5;
-    --primary: #8db5ff;           /* --signal */
-    --primary-foreground: #070a13;
-    --secondary: #121933;         /* --ink-3: raised control fill */
-    --secondary-foreground: #b8bfd5; /* --text-2 */
-    --muted: #0c1121;
-    --muted-foreground: #848ba5;  /* --mute, 5.7:1 on ink */
-    --accent: rgba(141, 181, 255, 0.1);  /* --signal-10: selected/active wash */
-    --accent-foreground: #8db5ff;
-    --destructive: #ff6b7d;       /* --alert */
-    --destructive-foreground: #070a13;
-    --success: #4fcf9f;           /* --ok */
-    --success-foreground: #070a13;
-    --warning: #f0b64e;           /* --warn */
-    --warning-foreground: #070a13;
+    --background: #141210;
+    --foreground: #efebe2;
+    --card: #1a1714;
+    --card-foreground: #efebe2;
+    --popover: #1e1b17;
+    --popover-foreground: #efebe2;
+    --primary: #ffb45e;           /* template --amber */
+    --primary-foreground: #0b0906;
+    --secondary: #282420;         /* raised control fill */
+    --secondary-foreground: #d4cfc4;
+    --muted: #221e1a;
+    --muted-foreground: #a39e92;
+    --accent: rgba(255, 180, 94, 0.12);  /* selected/active wash */
+    --accent-foreground: #ffb45e;
+    --destructive: #ff6f61;
+    --destructive-foreground: #0b0906;
+    --success: #8be0a4;
+    --success-foreground: #0b0906;
+    --warning: #f2d16b;
+    --warning-foreground: #0b0906;
     /* Strava brand-orange for backfilled runs (source='strava') — a third-party
-       mark, kept outside the signal palette on purpose. */
+       mark, kept outside the accent palette on purpose. */
     --strava: oklch(0.7 0.18 45);
-    --strava-foreground: #070a13;
-    --border: rgba(160, 182, 235, 0.14);  /* --panel-line */
-    --input: rgba(160, 182, 235, 0.22);   /* --line-2 */
-    --ring: #8db5ff;
+    --strava-foreground: #070605;
+    --border: rgba(239, 235, 226, 0.14);
+    --input: rgba(239, 235, 226, 0.30);
+    --ring: #ffb45e;
     --radius: 16px;               /* panel radius; md/sm step down 2px/4px */
 
-    /* Signal extras the shadcn set has no slot for */
-    --signal-deep: #2b56c9;       /* the lit primary pill's body */
-    --glow: rgb(176, 222, 255);
-    --glow-soft: rgba(176, 222, 255, 0.45);
-    --signal-16: rgba(141, 181, 255, 0.16);
-    --signal-50: rgba(141, 181, 255, 0.5);
-    --ease: cubic-bezier(0.6, 0, 0.2, 1); /* the template's one easing */
+    /* Accent extras the shadcn set has no slot for */
+    --signal-deep: #b8661f;       /* deep amber body */
+    --glow: rgb(255, 226, 189);
+    --glow-soft: rgba(255, 180, 94, 0.45);
+    --signal-16: rgba(255, 180, 94, 0.16);
+    --signal-50: rgba(255, 180, 94, 0.5);
+    --ease: cubic-bezier(0.6, 0, 0.2, 1);
+    --ice: #a9caff;               /* secondary readouts */
+    /* The filled primary button (.btn-lit), identical in both themes. */
+    --lit: #ffb45e;
+    --lit-hover: #ffc684;
+    --lit-foreground: #0b0906;
 
-    --surface: #0c1121;           /* nested tile/row inside a panel (--ink-2) */
-    --faint: #7a819b;             /* ≥ 4.5:1 on ink/panel/surface; below --muted-foreground */
-    --sidebar: #05070d;           /* shell rails (sidebar, phone bars) */
-    --divider: rgba(160, 182, 235, 0.09);  /* softer row divider than --border */
-    --edge: rgba(160, 182, 235, 0.22);     /* dashed "add" borders, hover edges */
-    --nav-inactive: #3d4b6d;      /* the template's blank-pill slate */
+    --surface: #221e1a;           /* nested tile/row inside a panel */
+    --faint: #908b80;
+    --sidebar: #161411;           /* shell rails (sidebar, phone bars) */
+    --divider: rgba(255, 240, 220, 0.10);  /* softer row divider than --border */
+    --edge: rgba(239, 235, 226, 0.30);     /* dashed "add" borders, hover edges */
+    --nav-inactive: #463f35;
 
-    /* Charts (recharts takes colour strings; SVG attributes accept var()). */
-    --chart-grid: rgba(160, 182, 235, 0.11);
-    /* Retailer series. Signal blue is left out on purpose: it's the primary
-       accent and the price chart's Target line, so retailers start at cyan. */
-    --chart-1: #5ad1d8;
-    --chart-2: #ff8a6a;
-    --chart-3: #c8f032;
-    --chart-4: #b49cff;
-    --chart-5: #ff79c6;
-    --chart-6: #d9b98a;
+    /* Charts (recharts takes colour strings; SVG attributes accept var()).
+       Amber is left out on purpose: it's the accent and the price chart's
+       Target line, so retailer series start at ice blue. */
+    --chart-grid: rgba(239, 235, 226, 0.10);
+    --chart-1: #a9caff;
+    --chart-2: #e58f6b;
+    --chart-3: #c9d77a;
+    --chart-4: #c3a6ff;
+    --chart-5: #ff8fb1;
+    --chart-6: #d4cfc4;
 
-    /* Product photos are shot on near-white; the card keeps a cool near-white
+    /* Product photos are shot on near-white; the card keeps a warm near-white
        backdrop so cut-out images don't float on the ink. */
-    --photo: #eef0f5;
-    --photo-foreground: #aab0c2;
+    --photo: #f1eee8;
+    --photo-foreground: #b3ab9d;
 
     /* Colours the component layer used to hard-code, tokenised so the light
        theme can re-tone them. */
-    --panel-glow: rgba(141, 181, 255, 0.16);
-    --panel-glow-tail: rgba(141, 181, 255, 0.05);
-    --panel-glow-hover: rgba(141, 181, 255, 0.26);
-    --panel-glow-hover-tail: rgba(141, 181, 255, 0.08);
-    --shadow-color: rgba(0, 0, 0, 1);         /* panel/popover drop shadows */
-    --glass: rgba(5, 7, 13, 0.78);            /* translucent shell bars */
-    --scrim: rgba(0, 0, 0, 0.45);             /* drawer/sheet backdrops */
-    --stripe-a: #0c1121;
-    --stripe-b: #111830;
-    --scrollbar: #1b2340;
-    --scrollbar-hover: #2a3560;
-    --selection: rgba(141, 181, 255, 0.3);
-    --selection-foreground: #fff;
-    --grain-opacity: 0.045;
+    --panel-glow: rgba(255, 180, 94, 0.12);
+    --panel-glow-tail: rgba(255, 180, 94, 0.05);
+    --panel-glow-hover: rgba(255, 180, 94, 0.2);
+    --panel-glow-hover-tail: rgba(255, 180, 94, 0.08);
+    --shadow-color: rgba(0, 0, 0, 0.7);       /* panel/popover drop shadows */
+    --glass: rgba(20, 18, 16, 0.82);              /* translucent shell bars */
+    --scrim: rgba(0, 0, 0, 0.6);              /* drawer/sheet backdrops */
+    --stripe-a: #221e1a;
+    --stripe-b: #292520;
+    --scrollbar: #36302a;
+    --scrollbar-hover: #4a423a;
+    --selection: #ffb45e;
+    --selection-foreground: #000;
+    --grain-opacity: 0.035;
     --iridescence-blend: screen;              /* Home hero shader */
-    --iridescence-opacity: 0.7;
+    --iridescence-opacity: 0.6;
+
+    /* Signature glass panel (template .servicio / .cabecera …). */
+    --panel-fill: rgba(26, 23, 20, 0.84);
+    --mesh-ink: rgba(26, 23, 20, 0.92);
+    --mesh-1: rgba(184, 102, 31, 0.42);
+    --mesh-2: rgba(255, 215, 161, 0.20);
+    --mesh-3: rgba(255, 150, 70, 0.36);
+    --panel-inset: rgba(255, 228, 196, 0.12);
+    --panel-inset-hover: rgba(255, 200, 140, 0.18);
+    --rim-a: rgba(255, 240, 220, 0.55);
+    --rim-b: rgba(255, 255, 255, 0.07);
+    --sweep: rgba(255, 180, 94, 0.95);
+    --sweep-hot: #ffe2bd;
+    --panel-text-shadow: 0 1px 12px rgba(0, 0, 0, 0.55);
   }
 
   /*
-   * Light variant ("Signal, daylight"). Same jobs, re-toned: paper ground with
-   * white panels lifted ABOVE it (the dark theme sinks panels below the ink —
-   * on paper the equivalent depth cue is lift), signal blue deepened to the
-   * --signal-deep body so links and figures clear 4.5:1 on white, and the
-   * status/chart hues darkened for contrast. Hairlines stay blue-tinted alpha.
+   * Light variant ("Horizon, daylight"). Same jobs, re-toned: warm paper ground
+   * with cream panels lifted ABOVE it (the dark theme sinks panels below the
+   * ink — on paper the equivalent depth cue is lift), the amber deepened to
+   * #9a5200 so links and figures clear 4.5:1 on cream, and the status/chart
+   * hues darkened for contrast. Hairlines stay warm alpha.
    */
   :root[data-theme='light'] {
     color-scheme: light;
-    --background: #f2f4f9;
-    --foreground: #0d1324;
-    --card: #ffffff;
-    --card-foreground: #0d1324;
-    --popover: #ffffff;
-    --popover-foreground: #0d1324;
-    --primary: #2b56c9;
+    --background: #f4f1ea;
+    --foreground: #1a1712;
+    --card: #fffdf8;
+    --card-foreground: #1a1712;
+    --popover: #fffdf8;
+    --popover-foreground: #1a1712;
+    --primary: #9a5200;
     --primary-foreground: #ffffff;
-    --secondary: #e6eaf4;
-    --secondary-foreground: #3a4361;
-    --muted: #edf0f7;
-    --muted-foreground: #556079;  /* 6.2:1 on white */
-    --accent: rgba(43, 86, 201, 0.08);
-    --accent-foreground: #2b56c9;
-    --destructive: #cf2d47;
-    --destructive-foreground: #ffffff;
-    --success: #12845a;
-    --success-foreground: #ffffff;
-    --warning: #9e6500;           /* amber deep enough for text on white */
-    --warning-foreground: #ffffff;
+    --secondary: #ece7dc;
+    --secondary-foreground: #3d362b;
+    --muted: #f0ebe1;
+    --muted-foreground: #5f574a;
+    --accent: rgba(154, 82, 0, 0.08);
+    --accent-foreground: #9a5200;
+    --destructive: #c2362a;
+    --destructive-foreground: #fff;
+    --success: #2f7d4a;
+    --success-foreground: #fff;
+    --warning: #8a6a00;
+    --warning-foreground: #fff;
     --strava: oklch(0.6 0.19 42);
     --strava-foreground: #ffffff;
-    --border: rgba(28, 48, 110, 0.12);
-    --input: rgba(28, 48, 110, 0.2);
-    --ring: #2b56c9;
+    --border: rgba(60, 45, 25, 0.13);
+    --input: rgba(60, 45, 25, 0.24);
+    --ring: #9a5200;
 
-    --signal-deep: #2b56c9;
-    --glow: rgb(176, 222, 255);
-    --glow-soft: rgba(43, 86, 201, 0.35);
-    --signal-16: rgba(43, 86, 201, 0.12);
-    --signal-50: rgba(43, 86, 201, 0.45);
+    --signal-deep: #9a5200;
+    --glow: rgb(255, 226, 189);
+    --glow-soft: rgba(154, 82, 0, 0.3);
+    --signal-16: rgba(154, 82, 0, 0.12);
+    --signal-50: rgba(154, 82, 0, 0.45);
+    --ice: #3d6fb8;
 
-    --surface: #f3f5fa;
-    --faint: #626b86;             /* ≥ 4.5:1 on white and on --surface */
-    --sidebar: #ffffff;
-    --divider: rgba(28, 48, 110, 0.08);
-    --edge: rgba(28, 48, 110, 0.22);
-    --nav-inactive: #bcc5da;
+    --surface: #f6f2ea;
+    --faint: #6b6356;
+    --sidebar: #fffdf8;
+    --divider: rgba(60, 45, 25, 0.08);
+    --edge: rgba(60, 45, 25, 0.24);
+    --nav-inactive: #cfc6b6;
 
-    --chart-grid: rgba(28, 48, 110, 0.09);
-    --chart-1: #0b939c;
-    --chart-2: #dc5530;
-    --chart-3: #5f8a00;
-    --chart-4: #7457e0;
-    --chart-5: #cc348f;
-    --chart-6: #9a7134;
+    --chart-grid: rgba(60, 45, 25, 0.09);
+    --chart-1: #3d6fb8;
+    --chart-2: #c0562f;
+    --chart-3: #6b7f12;
+    --chart-4: #7457c8;
+    --chart-5: #c23d74;
+    --chart-6: #857a68;
 
-    --photo: #eef0f5;
-    --photo-foreground: #8a91a6;
+    --photo: #f1eee8;
+    --photo-foreground: #9b9385;
 
-    --panel-glow: rgba(43, 86, 201, 0.07);
-    --panel-glow-tail: rgba(43, 86, 201, 0.02);
-    --panel-glow-hover: rgba(43, 86, 201, 0.12);
-    --panel-glow-hover-tail: rgba(43, 86, 201, 0.04);
-    --shadow-color: rgba(22, 36, 80, 0.28);
-    --glass: rgba(255, 255, 255, 0.8);
-    --scrim: rgba(13, 19, 36, 0.3);
-    --stripe-a: #eef1f7;
-    --stripe-b: #e4e8f2;
-    --scrollbar: #c9d0e0;
-    --scrollbar-hover: #a9b3ca;
-    --selection: rgba(43, 86, 201, 0.2);
-    --selection-foreground: #0d1324;
+    --panel-glow: rgba(154, 82, 0, 0.07);
+    --panel-glow-tail: rgba(154, 82, 0, 0.02);
+    --panel-glow-hover: rgba(154, 82, 0, 0.12);
+    --panel-glow-hover-tail: rgba(154, 82, 0, 0.04);
+    --shadow-color: rgba(60, 40, 15, 0.22);
+    --glass: rgba(255, 253, 248, 0.82);
+    --scrim: rgba(26, 23, 18, 0.3);
+    --stripe-a: #f0ebe1;
+    --stripe-b: #e6dfd2;
+    --scrollbar: #d6cdbd;
+    --scrollbar-hover: #bcb19e;
+    --selection: rgba(154, 82, 0, 0.2);
+    --selection-foreground: #1a1712;
     --grain-opacity: 0;           /* white noise on paper only greys it */
     --iridescence-blend: multiply;
-    --iridescence-opacity: 0.22;
+    --iridescence-opacity: 0.2;
+
+    --panel-fill: #fffdf8;
+    --mesh-ink: rgba(255, 253, 248, 0.92);
+    --mesh-1: rgba(214, 140, 60, 0.14);
+    --mesh-2: rgba(255, 215, 161, 0.25);
+    --mesh-3: rgba(255, 170, 90, 0.16);
+    --panel-inset: rgba(184, 102, 31, 0.06);
+    --panel-inset-hover: rgba(184, 102, 31, 0.10);
+    --rim-a: rgba(120, 80, 30, 0.28);
+    --rim-b: rgba(120, 80, 30, 0.06);
+    --sweep: rgba(200, 110, 20, 0.85);
+    --sweep-hot: #ffcf8f;
+    --panel-text-shadow: none;
   }
+}
+
+/* Template `@property --giro`: lets the conic-gradient's start angle animate. */
+@property --giro {
+  syntax: '<angle>';
+  inherits: false;
+  initial-value: 0deg;
+}
+@keyframes barrido {
+  to { --giro: 360deg; }
+}
+/* Template `latido`: a ring that radiates off the live dot. */
+@keyframes latido {
+  0% { box-shadow: 0 0 0 0 color-mix(in oklab, currentColor 55%, transparent); }
+  70% { box-shadow: 0 0 0 10px transparent; }
+  100% { box-shadow: 0 0 0 0 transparent; }
 }
 
 @layer components {
@@ -211,75 +266,111 @@
   }
 
   /*
-   * The template's panel — THE signature surface. A near-black card whose
-   * soft signal glow rises from behind its top edge and brightens on hover.
-   * Drawn as an isolated ::before gradient (not the template's blurred blob)
-   * so the panel never needs overflow:hidden: recharts tooltips, popovers
-   * and focus rings inside a panel are never clipped.
+   * Template signature glass panel (.servicio / .cabecera / #panel, redesign-
+   * template.html ~L374–385): a dark warm mesh of six radial gradients, an
+   * inset bottom glow and a deep drop shadow. No backdrop-filter — panels sit
+   * on an opaque ground and blur on dozens of cards costs the phone. The
+   * Card's own 1px border is made transparent: the ::before rim replaces it.
    */
   .panel {
     position: relative;
     isolation: isolate;
-    box-shadow: 0 40px 90px -50px var(--shadow-color);
+    border-color: transparent !important;
+    background-color: var(--panel-fill);
+    background-image:
+      radial-gradient(at 88% 40%, var(--mesh-ink) 0px, transparent 85%),
+      radial-gradient(at 49% 30%, var(--mesh-ink) 0px, transparent 85%),
+      radial-gradient(at 14% 26%, var(--mesh-ink) 0px, transparent 85%),
+      radial-gradient(at 0% 64%, var(--mesh-1) 0px, transparent 85%),
+      radial-gradient(at 41% 94%, var(--mesh-2) 0px, transparent 85%),
+      radial-gradient(at 100% 99%, var(--mesh-3) 0px, transparent 85%);
+    box-shadow: inset 0 -16px 24px 0 var(--panel-inset), 0 24px 60px -20px var(--shadow-color);
+    text-shadow: var(--panel-text-shadow);
+    transition: box-shadow 0.35s ease, transform 0.35s ease;
   }
+  /*
+   * Template ::before (~L387–394): a 1px gradient rim (masked to the border
+   * ring) with an amber conic light sweeping round it. E22: the sweep is OFF by
+   * default (its colours are transparent and nothing animates) so a data page
+   * with dozens of cards doesn't repaint constantly; it runs only on
+   * `.panel-sweep` and on hover for hover-capable pointers.
+   */
   .panel::before {
+    --sweep-on: transparent;
+    --sweep-hot-on: transparent;
     content: '';
     position: absolute;
-    inset: 0;
+    inset: -1px;
     z-index: -1;
-    border-radius: inherit;
     pointer-events: none;
-    /* Template geometry: an 18rem soft circle centred on the top edge, its
-       light reaching ~140px into the panel. Two layers so hover can cross-
-       fade (gradients don't interpolate): ::before rests, ::after brightens. */
-    background: radial-gradient(9rem 9rem at 50% 0, var(--panel-glow), var(--panel-glow-tail) 55%, transparent 100%);
-  }
-  .panel::after {
-    content: '';
-    position: absolute;
-    inset: 0;
-    z-index: -1;
     border-radius: inherit;
-    pointer-events: none;
-    background: radial-gradient(9rem 9rem at 50% 0, var(--panel-glow-hover), var(--panel-glow-hover-tail) 55%, transparent 100%);
-    opacity: 0;
-    transition: opacity 0.7s var(--ease);
+    padding: 1px;
+    background:
+      conic-gradient(from var(--giro), transparent 0deg, transparent 20deg, var(--sweep-on) 55deg, var(--sweep-hot-on) 75deg, var(--sweep-on) 95deg, transparent 130deg, transparent 360deg),
+      linear-gradient(0deg, var(--rim-a) -50%, var(--rim-b) 100%);
+    -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+    -webkit-mask-composite: xor;
+    mask: linear-gradient(#000 0 0) content-box exclude, linear-gradient(#000 0 0);
   }
-  .panel:hover::after {
-    opacity: 1;
+  .panel-sweep::before {
+    --sweep-on: var(--sweep);
+    --sweep-hot-on: var(--sweep-hot);
+    animation: barrido 8s linear infinite;
+  }
+  @media (hover: hover) {
+    .panel:hover::before {
+      --sweep-on: var(--sweep);
+      --sweep-hot-on: var(--sweep-hot);
+      animation: barrido 8s linear infinite;
+    }
+  }
+  /* Template ~L397–398: desynchronise the sweeps so a row of cards doesn't
+     pulse in lockstep. */
+  .panel:nth-child(3n + 2)::before {
+    animation-delay: -2.7s;
+  }
+  .panel:nth-child(3n)::before {
+    animation-delay: -5.3s;
+  }
+
+  /* Template `.servicio:hover`: a clickable panel lifts and its inset glow warms. */
+  .panel-interactive {
+    cursor: pointer;
+  }
+  .panel-interactive:hover {
+    transform: translateY(-4px);
+    box-shadow: inset 0 -18px 28px 0 var(--panel-inset-hover), 0 30px 70px -24px var(--shadow-color);
   }
 
   /*
-   * The lit pill: the template's "power switch" primary. Unlit it is a deep
-   * blue pill with a top highlight; on hover/focus current runs through it as
-   * a tight cyan inset and a short bloom.
+   * Template `.btn.lleno`: the filled amber primary button, same in both
+   * themes (--lit*), with a soft amber bloom that strengthens on hover/focus.
    */
   .btn-lit {
-    background: var(--signal-deep);
-    color: #fff;
-    border: 1px solid rgba(190, 215, 255, 0.4);
-    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.16), 0 12px 30px -14px rgba(43, 86, 201, 0.9);
-    transition: border-color 0.4s var(--ease), box-shadow 0.4s var(--ease), background 0.4s var(--ease);
+    background: var(--lit);
+    color: var(--lit-foreground);
+    border: 1px solid var(--lit);
+    box-shadow: 0 0 34px rgba(255, 180, 94, 0.28);
+    transition: background 0.2s, box-shadow 0.2s;
   }
   .btn-lit:hover,
   .btn-lit:focus-visible {
-    border-color: #fff;
-    box-shadow: inset 0 0 1px var(--glow), inset 0 0 10px var(--glow-soft), 0 0 18px var(--glow-soft),
-      0 0 52px rgba(43, 86, 201, 0.5);
+    background: var(--lit-hover);
+    box-shadow: 0 0 44px rgba(255, 180, 94, 0.4);
   }
 
-  /* Mono section/field label (template .label): units, dates, meta. */
+  /* Template `.rotulo`: mono section/field label — units, dates, meta. */
   .label-mono {
     font-family: theme('fontFamily.mono');
-    font-size: 11.5px;
-    letter-spacing: 0.06em;
+    font-size: 11px;
+    letter-spacing: 0.18em;
     text-transform: uppercase;
     color: var(--muted-foreground);
   }
 
-  /* A live data point: signal dot with a slow pulse ring (template .chart .ring). */
+  /* A live data point: accent dot radiating the template's `latido` ring
+     (template .pulso). The ring is the dot's own box-shadow, so no ::after. */
   .live-dot {
-    position: relative;
     display: inline-block;
     width: 6px;
     height: 6px;
@@ -287,15 +378,7 @@
     border-radius: 9999px;
     background: currentColor;
     box-shadow: 0 0 8px currentColor;
-  }
-  .live-dot::after {
-    content: '';
-    position: absolute;
-    inset: 0;
-    border-radius: inherit;
-    background: currentColor;
-    opacity: 0.5;
-    animation: pulse-ring 2.4s ease-out infinite;
+    animation: latido 2s infinite;
   }
 
   /* Film grain (template hero/CTA). Normal blend, not the template's overlay:
@@ -310,12 +393,12 @@
     background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='180' height='180'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 0.6 0'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>");
   }
 
-  /* Translucent shell bar (template .header-bar): only on chrome that content
+  /* Template `nav.solido`: translucent shell bar — only on chrome that content
      actually scrolls under or beside. */
   .glass-bar {
     background: var(--glass);
-    -webkit-backdrop-filter: blur(18px) saturate(140%);
-    backdrop-filter: blur(18px) saturate(140%);
+    -webkit-backdrop-filter: blur(22px) saturate(1.2);
+    backdrop-filter: blur(22px) saturate(1.2);
   }
 }
 

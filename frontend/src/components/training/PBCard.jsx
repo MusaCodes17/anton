@@ -30,7 +30,7 @@ export default function PBCard({ record }) {
       </div>
 
       <div>
-        <div className="font-heading text-[26px] font-light tracking-display text-foreground tabular-nums">
+        <div className="font-heading text-[26px] font-bold uppercase tracking-display text-foreground tabular-nums">
           {formatDuration(total_time_s)}
         </div>
         <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-muted-foreground tabular-nums">

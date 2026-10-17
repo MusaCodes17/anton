@@ -9,10 +9,10 @@ const PLAIN_CLASSES = 'mb-5 flex flex-row flex-wrap items-end justify-between ga
 /**
  * Page title + optional count, meta line, description and right-aligned actions.
  *
- * Signal redesign: the title is the template's display voice (Bricolage
- * Grotesque LIGHT, tight tracking, 0.98 leading). The old mono eyebrow above
- * the title is gone — it only repeated the title. The count reads as a mono
- * figure set beside the title, like the template's stat superscripts.
+ * Horizon redesign: the title is the template's h1 voice (Archivo 800 uppercase,
+ * tight tracking, 0.94 leading). The old mono eyebrow above the title is gone —
+ * it only repeated the title. The count reads as a mono figure set beside the
+ * title, like the template's stat superscripts.
  *
  * The outer element is the full-bleed hero band shared by every page: the
  * negative margins cancel Layout's page padding (p-4 sm:p-6 lg:px-[34px]
@@ -30,7 +30,7 @@ export default function PageHeader({ title, count, meta, description, plain = fa
     <div className={plain ? PLAIN_CLASSES : BAND_CLASSES}>
       {!plain && <Iridescence />}
       <div className="min-w-0">
-        <h1 className="font-heading text-[34px] font-light leading-[0.98] tracking-display text-foreground sm:text-[46px]">
+        <h1 className="font-sans text-[34px] font-extrabold uppercase leading-[0.94] tracking-[-0.03em] animate-rise text-foreground sm:text-[46px]">
           {title}
           {count != null && (
             <sup className="ml-2 align-top font-mono text-xs font-normal tracking-normal text-primary sm:text-sm">
@@ -38,7 +38,7 @@ export default function PageHeader({ title, count, meta, description, plain = fa
             </sup>
           )}
         </h1>
-        {/* Template .hero-meta: mono facts separated by small signal dots. */}
+        {/* Mono facts separated by small accent dots. */}
         {metaItems.length > 0 && (
           <div className="mt-2.5 flex flex-wrap gap-x-4 gap-y-1 font-mono text-xs text-muted-foreground">
             {metaItems.map((item) => (

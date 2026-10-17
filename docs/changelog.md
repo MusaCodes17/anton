@@ -1,7 +1,45 @@
 # Anton — Session Changelog
 
-**Last Updated:** 2026-10-15
+**Last Updated:** 2026-10-17
 **Status / current focus:** see `docs/project_state.md` (the perishable snapshot). This file is the append-only session log — the authoritative record of *what happened*; the `docs/` suite is the reference material.
+
+---
+
+## Horizon reskin — 2026-10-17
+
+The runner didn't take to Signal's blue-on-slate look. Frontend only: tokens, primitives, shell and icons. The runner supplied a new template, `frontend/template/redesign-template.html`, as the visual source of truth. Decision: `design_decisions.md` E22. It supersedes E18 and E21. E21 was built on `dark-lift` and never merged.
+
+**[CHANGED] Palette (`index.css`)** — warm black ground, one amber accent for actions, links, active nav and chart lines, ice blue for secondary readouts, butter yellow for warn. The light theme ("daylight") is re-toned to match. Token names are kept, so no component changed its colour logic.
+
+**[CHANGED] Type** — Archivo for body and UI; Archivo Narrow 700 uppercase as the display voice; JetBrains Mono for labels, nav, buttons, tags and figure meta. Replaces Bricolage Grotesque, Hanken Grotesk and IBM Plex Mono.
+
+**[ADDED] Panel and motion** — `.panel` takes the template's warm glass mesh and a 1px gradient rim. The amber rim sweep runs on the login card and on hover only. All motion stops under reduced motion. Home's shader is re-tinted amber.
+
+**[CHANGED] Components and shell** — buttons, badges, inputs and table heads use mono uppercase. The active nav item is marked by a glowing amber dot. The brand is a mono "ANTON" wordmark.
+
+**[CHANGED] Browser chrome and icons** — `theme-color`, `lib/theme.js`, `public/theme-boot.js` and the manifest use the new grounds. The favicon, icon and six PNG/ICO files are re-toned amber on warm black. An installed iOS PWA keeps the old icon and splash until it is reinstalled.
+
+**[FIXED] Training stat figures** — the bold narrow face is wider, so "3642.9km" truncated at 1024 px. Figures are now sized down at the sm and xl breakpoints.
+
+**[CHANGED] Dark ground lifted a step** — after a first look the runner found the near-black a touch too dark. The dark ground, panels, surfaces, rails and panel mesh are about 7% lighter in the same warm hue (`#070605` → `#141210`); `--faint` is re-checked for 4.5:1. `theme-color` and the manifest follow. Icons unchanged.
+
+**[ADDED] Impeccable design records** — `DESIGN.md` (Creative North Star "The Night Ops Console"; Horizon Amber; named rules: One Amber, Warm Hairline, Mono Means Data, Sweep Is Earned, Tokens Only) and its sidecar `.impeccable/design.json` are regenerated from the shipped code. `PRODUCT.md` is restored with the Horizon brand commitment and the public "Musa's picks" audience. The surface brief `.impeccable/surfaces/frontend-src.md` carries a Horizon direction contract, and the ten `.impeccable/review/` captures are retaken on Horizon (1280×800 desktop, 375×812 phone). The Impeccable detector reports 0 findings on `frontend/src`.
+
+**Verified:** `vite build` clean. Ran locally against a throwaway DB copy, COROS polling off: public `/deals`, Home, Training and Shoes at 1024 px and 375 px, light theme on Home. 0 console errors. **Not verified:** an installed iPhone PWA, and lint (no working ESLint config in the frontend).
+
+Commits on branch `horizon-reskin`, prefix `redesign:`. Not pushed; no PR yet.
+
+---
+
+## Dark theme lifted a step — 2026-10-16
+
+The runner wasn't getting used to the near-black dark theme. Frontend only, tokens only. Decision: `design_decisions.md` E21.
+
+**[CHANGED] Dark tokens (`index.css` `:root`)** — the ground, panels, rails, surfaces and raised fills move from near-black to a dim slate, in the same hue family and depth order. `--muted-foreground` and `--faint` are re-tuned so they still clear 4.5:1 on the lighter surfaces. Panel glow, drop shadows and grain are softened. The light theme is untouched.
+
+**[CHANGED] Browser chrome** — the `theme-color` meta (`index.html`), the dark value in `lib/theme.js` and the PWA manifest colours (`vite.config.js`) now use the new ground `#131a29`. The app icons are unchanged.
+
+**Verified:** Home and Training at 1280 px; Shoes at 380 px; 0 console errors; `vite build` clean. Ran against a throwaway DB copy (COROS polling off). An installed iOS PWA keeps the old splash and status-bar colour until it is reinstalled.
 
 ---
 

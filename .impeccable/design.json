@@ -1,665 +1,441 @@
 {
   "schemaVersion": 2,
-  "generatedAt": "2026-10-15T18:06:49+00:00",
-  "title": "Design System: Signal",
+  "generatedAt": "2026-10-17T16:57:00Z",
+  "title": "Design System: Anton",
   "extensions": {
     "colorMeta": {
+      "ground": {
+        "role": "neutral",
+        "displayName": "Warm Black Ground",
+        "canonical": "#141210",
+        "tonalRamp": [
+          "#2a2622",
+          "#4b433c",
+          "#6b6156",
+          "#8c7e70",
+          "#a69b90",
+          "#c0b8b0",
+          "#dad5d0",
+          "#f4f2f1"
+        ],
+        "daylight": "#f4f1ea"
+      },
       "ink": {
         "role": "neutral",
-        "displayName": "Deep Ink",
-        "canonical": "oklch(0.14 0.02 267)",
+        "displayName": "Warm Off-White Ink",
+        "canonical": "#efebe2",
         "tonalRamp": [
-          "oklch(15% 0.02 267)",
-          "oklch(26% 0.02 267)",
-          "oklch(37% 0.02 267)",
-          "oklch(48% 0.02 267)",
-          "oklch(59% 0.02 267)",
-          "oklch(70% 0.02 267)",
-          "oklch(82% 0.02 267)",
-          "oklch(95% 0.02 267)"
-        ]
+          "#312a1b",
+          "#574b30",
+          "#7c6b45",
+          "#a28c59",
+          "#b8a67e",
+          "#ccc0a3",
+          "#e1dac9",
+          "#f6f4ef"
+        ],
+        "daylight": "#1a1712"
       },
-      "panel-ink": {
+      "panel": {
         "role": "neutral",
-        "displayName": "Panel Ink",
-        "canonical": "oklch(0.11 0.012 265)",
+        "displayName": "Panel Brown-Black",
+        "canonical": "#1a1714",
         "tonalRamp": [
-          "oklch(15% 0.012 265)",
-          "oklch(26% 0.012 265)",
-          "oklch(37% 0.012 265)",
-          "oklch(48% 0.012 265)",
-          "oklch(59% 0.012 265)",
-          "oklch(70% 0.012 265)",
-          "oklch(82% 0.012 265)",
-          "oklch(95% 0.012 265)"
-        ]
+          "#2b2621",
+          "#4c433b",
+          "#6d6154",
+          "#8e7e6d",
+          "#a89b8e",
+          "#c1b8af",
+          "#dbd5d0",
+          "#f4f2f1"
+        ],
+        "daylight": "#fffdf8"
       },
-      "ink-2": {
+      "rail": {
         "role": "neutral",
-        "displayName": "Ink 2",
-        "canonical": "oklch(0.17 0.03 268)",
+        "displayName": "Rail Black",
+        "canonical": "#161411",
         "tonalRamp": [
-          "oklch(15% 0.03 268)",
-          "oklch(26% 0.03 268)",
-          "oklch(37% 0.03 268)",
-          "oklch(48% 0.03 268)",
-          "oklch(59% 0.03 268)",
-          "oklch(70% 0.03 268)",
-          "oklch(82% 0.03 268)",
-          "oklch(95% 0.03 268)"
+          "#2b2721",
+          "#4c453b",
+          "#6d6354",
+          "#8e816e",
+          "#a89d8e",
+          "#c1baaf",
+          "#dad6d0",
+          "#f4f3f1"
         ]
       },
-      "ink-3": {
+      "surface": {
         "role": "neutral",
-        "displayName": "Ink 3 (Raised)",
-        "canonical": "oklch(0.22 0.05 271)",
+        "displayName": "Surface Umber",
+        "canonical": "#221e1a",
         "tonalRamp": [
-          "oklch(15% 0.05 271)",
-          "oklch(26% 0.05 271)",
-          "oklch(37% 0.05 271)",
-          "oklch(48% 0.05 271)",
-          "oklch(59% 0.05 271)",
-          "oklch(70% 0.05 271)",
-          "oklch(82% 0.05 271)",
-          "oklch(95% 0.05 271)"
+          "#2b2621",
+          "#4c433a",
+          "#6d6154",
+          "#8e7e6d",
+          "#a89b8d",
+          "#c1b8ae",
+          "#dbd5d0",
+          "#f4f2f1"
         ]
       },
-      "text": {
-        "role": "neutral",
-        "displayName": "Cool Paper Text",
-        "canonical": "oklch(0.94 0.012 272)",
-        "tonalRamp": [
-          "oklch(15% 0.012 272)",
-          "oklch(26% 0.012 272)",
-          "oklch(37% 0.012 272)",
-          "oklch(48% 0.012 272)",
-          "oklch(59% 0.012 272)",
-          "oklch(70% 0.012 272)",
-          "oklch(82% 0.012 272)",
-          "oklch(95% 0.012 272)"
-        ]
-      },
-      "text-2": {
-        "role": "neutral",
-        "displayName": "Text 2",
-        "canonical": "oklch(0.80 0.025 272)",
-        "tonalRamp": [
-          "oklch(15% 0.025 272)",
-          "oklch(26% 0.025 272)",
-          "oklch(37% 0.025 272)",
-          "oklch(48% 0.025 272)",
-          "oklch(59% 0.025 272)",
-          "oklch(70% 0.025 272)",
-          "oklch(82% 0.025 272)",
-          "oklch(95% 0.025 272)"
-        ]
-      },
-      "mute": {
-        "role": "neutral",
-        "displayName": "Mute",
-        "canonical": "oklch(0.63 0.035 274)",
-        "tonalRamp": [
-          "oklch(15% 0.035 274)",
-          "oklch(26% 0.035 274)",
-          "oklch(37% 0.035 274)",
-          "oklch(48% 0.035 274)",
-          "oklch(59% 0.035 274)",
-          "oklch(70% 0.035 274)",
-          "oklch(82% 0.035 274)",
-          "oklch(95% 0.035 274)"
-        ]
-      },
-      "faint": {
-        "role": "neutral",
-        "displayName": "Faint",
-        "canonical": "oklch(0.60 0.03 274)",
-        "tonalRamp": [
-          "oklch(15% 0.03 274)",
-          "oklch(26% 0.03 274)",
-          "oklch(37% 0.03 274)",
-          "oklch(48% 0.03 274)",
-          "oklch(59% 0.03 274)",
-          "oklch(70% 0.03 274)",
-          "oklch(82% 0.03 274)",
-          "oklch(95% 0.03 274)"
-        ]
-      },
-      "signal": {
+      "horizon-amber": {
         "role": "primary",
-        "displayName": "Signal Blue",
-        "canonical": "oklch(0.77 0.11 262)",
+        "displayName": "Horizon Amber",
+        "canonical": "#ffb45e",
         "tonalRamp": [
-          "oklch(15% 0.11 262)",
-          "oklch(26% 0.11 262)",
-          "oklch(37% 0.11 262)",
-          "oklch(48% 0.11 262)",
-          "oklch(59% 0.11 262)",
-          "oklch(70% 0.11 262)",
-          "oklch(82% 0.11 262)",
-          "oklch(95% 0.11 262)"
+          "#4c2900",
+          "#874800",
+          "#c16700",
+          "#fb8600",
+          "#ffa237",
+          "#ffbd71",
+          "#ffd8ab",
+          "#fff3e5"
+        ],
+        "daylight": "#9a5200"
+      },
+      "horizon-amber-hover": {
+        "role": "primary",
+        "displayName": "Lit Amber",
+        "canonical": "#ffc684",
+        "tonalRamp": [
+          "#4c2900",
+          "#874800",
+          "#c16800",
+          "#fb8700",
+          "#ffa237",
+          "#ffbd71",
+          "#ffd8ab",
+          "#fff3e5"
         ]
       },
-      "signal-deep": {
+      "amber-deep": {
         "role": "primary",
-        "displayName": "Deep Signal",
-        "canonical": "oklch(0.49 0.18 264)",
+        "displayName": "Deep Amber",
+        "canonical": "#b8661f",
         "tonalRamp": [
-          "oklch(15% 0.18 264)",
-          "oklch(26% 0.18 264)",
-          "oklch(37% 0.18 264)",
-          "oklch(48% 0.18 264)",
-          "oklch(59% 0.18 264)",
-          "oklch(70% 0.18 264)",
-          "oklch(82% 0.18 264)",
-          "oklch(95% 0.18 264)"
+          "#41240b",
+          "#734013",
+          "#a55c1c",
+          "#d77724",
+          "#e29654",
+          "#ebb485",
+          "#f3d3b7",
+          "#fbf2e9"
         ]
       },
-      "signal-wash": {
-        "role": "primary",
-        "displayName": "Signal Wash (10%)",
-        "canonical": "rgba(141, 181, 255, 0.1)"
-      },
-      "glow": {
-        "role": "primary",
-        "displayName": "Glow",
-        "canonical": "oklch(0.88 0.07 236)",
+      "ice": {
+        "role": "secondary",
+        "displayName": "Ice Blue",
+        "canonical": "#a9caff",
         "tonalRamp": [
-          "oklch(15% 0.07 236)",
-          "oklch(26% 0.07 236)",
-          "oklch(37% 0.07 236)",
-          "oklch(48% 0.07 236)",
-          "oklch(59% 0.07 236)",
-          "oklch(70% 0.07 236)",
-          "oklch(82% 0.07 236)",
-          "oklch(95% 0.07 236)"
-        ]
-      },
-      "glow-soft": {
-        "role": "primary",
-        "displayName": "Soft Glow (45%)",
-        "canonical": "rgba(176, 222, 255, 0.45)"
-      },
-      "hairline": {
-        "role": "neutral",
-        "displayName": "Blue Hairline (14%)",
-        "canonical": "rgba(160, 182, 235, 0.14)"
-      },
-      "hairline-strong": {
-        "role": "neutral",
-        "displayName": "Strong Hairline (22%)",
-        "canonical": "rgba(160, 182, 235, 0.22)"
-      },
-      "divider": {
-        "role": "neutral",
-        "displayName": "Row Divider (9%)",
-        "canonical": "rgba(160, 182, 235, 0.09)"
-      },
-      "nav-inactive": {
-        "role": "neutral",
-        "displayName": "Blank-Pill Slate",
-        "canonical": "oklch(0.40 0.05 266)",
-        "tonalRamp": [
-          "oklch(15% 0.05 266)",
-          "oklch(26% 0.05 266)",
-          "oklch(37% 0.05 266)",
-          "oklch(48% 0.05 266)",
-          "oklch(59% 0.05 266)",
-          "oklch(70% 0.05 266)",
-          "oklch(82% 0.05 266)",
-          "oklch(95% 0.05 266)"
-        ]
+          "#001d4c",
+          "#003487",
+          "#004ac1",
+          "#0060fb",
+          "#3784ff",
+          "#71a7ff",
+          "#abcbff",
+          "#e5efff"
+        ],
+        "daylight": "#3d6fb8"
       },
       "ok": {
-        "role": "secondary",
-        "displayName": "Status Green",
-        "canonical": "oklch(0.77 0.13 165)",
+        "role": "status",
+        "displayName": "Mint OK",
+        "canonical": "#8be0a4",
         "tonalRamp": [
-          "oklch(15% 0.13 165)",
-          "oklch(26% 0.13 165)",
-          "oklch(37% 0.13 165)",
-          "oklch(48% 0.13 165)",
-          "oklch(59% 0.13 165)",
-          "oklch(70% 0.13 165)",
-          "oklch(82% 0.13 165)",
-          "oklch(95% 0.13 165)"
-        ]
+          "#103c1d",
+          "#1c6a33",
+          "#29984a",
+          "#35c660",
+          "#61d583",
+          "#8fe1a7",
+          "#bdedcb",
+          "#ebfaef"
+        ],
+        "daylight": "#2f7d4a"
       },
       "warn": {
-        "role": "secondary",
-        "displayName": "Status Amber",
-        "canonical": "oklch(0.81 0.14 75)",
+        "role": "status",
+        "displayName": "Straw Warn",
+        "canonical": "#f2d16b",
         "tonalRamp": [
-          "oklch(15% 0.14 75)",
-          "oklch(26% 0.14 75)",
-          "oklch(37% 0.14 75)",
-          "oklch(48% 0.14 75)",
-          "oklch(59% 0.14 75)",
-          "oklch(70% 0.14 75)",
-          "oklch(82% 0.14 75)",
-          "oklch(95% 0.14 75)"
-        ]
+          "#463706",
+          "#7c600b",
+          "#b18a10",
+          "#e7b414",
+          "#efc647",
+          "#f4d67c",
+          "#f8e7b2",
+          "#fdf8e8"
+        ],
+        "daylight": "#8a6a00"
       },
       "alert": {
-        "role": "secondary",
-        "displayName": "Status Red",
-        "canonical": "oklch(0.71 0.18 15)",
+        "role": "status",
+        "displayName": "Coral Alert",
+        "canonical": "#ff6f61",
         "tonalRamp": [
-          "oklch(15% 0.18 15)",
-          "oklch(26% 0.18 15)",
-          "oklch(37% 0.18 15)",
-          "oklch(48% 0.18 15)",
-          "oklch(59% 0.18 15)",
-          "oklch(70% 0.18 15)",
-          "oklch(82% 0.18 15)",
-          "oklch(95% 0.18 15)"
-        ]
+          "#4c0700",
+          "#870c00",
+          "#c11100",
+          "#fb1600",
+          "#ff4837",
+          "#ff7e71",
+          "#ffb3ab",
+          "#ffe8e5"
+        ],
+        "daylight": "#c2362a"
       },
-      "strava": {
-        "role": "tertiary",
-        "displayName": "Strava Orange (third-party)",
-        "canonical": "oklch(0.7 0.18 45)",
-        "tonalRamp": [
-          "oklch(15% 0.18 45)",
-          "oklch(26% 0.18 45)",
-          "oklch(37% 0.18 45)",
-          "oklch(48% 0.18 45)",
-          "oklch(59% 0.18 45)",
-          "oklch(70% 0.18 45)",
-          "oklch(82% 0.18 45)",
-          "oklch(95% 0.18 45)"
-        ]
-      },
-      "photo": {
+      "ink-muted": {
         "role": "neutral",
-        "displayName": "Photo Backdrop",
-        "canonical": "oklch(0.95 0.006 265)",
+        "displayName": "Muted Ink",
+        "canonical": "#a39e92",
         "tonalRamp": [
-          "oklch(15% 0.006 265)",
-          "oklch(26% 0.006 265)",
-          "oklch(37% 0.006 265)",
-          "oklch(48% 0.006 265)",
-          "oklch(59% 0.006 265)",
-          "oklch(70% 0.006 265)",
-          "oklch(82% 0.006 265)",
-          "oklch(95% 0.006 265)"
-        ]
-      },
-      "chart-grid": {
-        "role": "neutral",
-        "displayName": "Chart Grid (11%)",
-        "canonical": "rgba(160, 182, 235, 0.11)"
-      },
-      "chart-1": {
-        "role": "tertiary",
-        "displayName": "Retailer Cyan",
-        "tonalRamp": [
-          "oklch(15% 0.11 200)",
-          "oklch(26% 0.11 200)",
-          "oklch(37% 0.11 200)",
-          "oklch(48% 0.11 200)",
-          "oklch(59% 0.11 200)",
-          "oklch(70% 0.11 200)",
-          "oklch(82% 0.11 200)",
-          "oklch(95% 0.11 200)"
-        ]
-      },
-      "chart-2": {
-        "role": "tertiary",
-        "displayName": "Retailer Coral",
-        "tonalRamp": [
-          "oklch(15% 0.16 35)",
-          "oklch(26% 0.16 35)",
-          "oklch(37% 0.16 35)",
-          "oklch(48% 0.16 35)",
-          "oklch(59% 0.16 35)",
-          "oklch(70% 0.16 35)",
-          "oklch(82% 0.16 35)",
-          "oklch(95% 0.16 35)"
-        ]
-      },
-      "chart-3": {
-        "role": "tertiary",
-        "displayName": "Retailer Lime",
-        "tonalRamp": [
-          "oklch(15% 0.2 125)",
-          "oklch(26% 0.2 125)",
-          "oklch(37% 0.2 125)",
-          "oklch(48% 0.2 125)",
-          "oklch(59% 0.2 125)",
-          "oklch(70% 0.2 125)",
-          "oklch(82% 0.2 125)",
-          "oklch(95% 0.2 125)"
-        ]
-      },
-      "chart-4": {
-        "role": "tertiary",
-        "displayName": "Retailer Lilac",
-        "tonalRamp": [
-          "oklch(15% 0.14 295)",
-          "oklch(26% 0.14 295)",
-          "oklch(37% 0.14 295)",
-          "oklch(48% 0.14 295)",
-          "oklch(59% 0.14 295)",
-          "oklch(70% 0.14 295)",
-          "oklch(82% 0.14 295)",
-          "oklch(95% 0.14 295)"
-        ]
-      },
-      "chart-5": {
-        "role": "tertiary",
-        "displayName": "Retailer Pink",
-        "tonalRamp": [
-          "oklch(15% 0.17 345)",
-          "oklch(26% 0.17 345)",
-          "oklch(37% 0.17 345)",
-          "oklch(48% 0.17 345)",
-          "oklch(59% 0.17 345)",
-          "oklch(70% 0.17 345)",
-          "oklch(82% 0.17 345)",
-          "oklch(95% 0.17 345)"
-        ]
-      },
-      "chart-6": {
-        "role": "tertiary",
-        "displayName": "Retailer Sand",
-        "tonalRamp": [
-          "oklch(15% 0.07 75)",
-          "oklch(26% 0.07 75)",
-          "oklch(37% 0.07 75)",
-          "oklch(48% 0.07 75)",
-          "oklch(59% 0.07 75)",
-          "oklch(70% 0.07 75)",
-          "oklch(82% 0.07 75)",
-          "oklch(95% 0.07 75)"
+          "#292823",
+          "#49463e",
+          "#696458",
+          "#888273",
+          "#a39e92",
+          "#bebab2",
+          "#d9d7d2",
+          "#f3f3f1"
         ]
       }
     },
     "typographyMeta": {
+      "headline": {
+        "displayName": "Page title",
+        "purpose": "Page title: one h1 per page, Archivo 800 uppercase."
+      },
       "display": {
         "displayName": "Display",
-        "purpose": "Page titles only, via the shared page header; light, tight, 34px phone / 46px desktop."
-      },
-      "headline": {
-        "displayName": "Headline",
-        "purpose": "Dialog titles and the lead heading inside a section."
+        "purpose": "Card and dialog titles in Archivo Narrow bold uppercase."
       },
       "stat": {
         "displayName": "Stat",
-        "purpose": "Headline numbers in panels (fitness, predictions, PBs); display face, tabular."
-      },
-      "title": {
-        "displayName": "Title",
-        "purpose": "Panel titles in Hanken Grotesk."
+        "purpose": "Headline figures, tabular, Archivo Narrow bold."
       },
       "body": {
         "displayName": "Body",
-        "purpose": "All working copy; descriptions capped at 60ch."
+        "purpose": "Reading text and descriptions in Archivo."
       },
       "label": {
         "displayName": "Label",
-        "purpose": "Uppercase mono captions directly above a value, and table column headers. Never an eyebrow above a heading."
+        "purpose": "Mono uppercase section and field labels, units, dates."
       },
-      "figure": {
-        "displayName": "Figure",
-        "purpose": "Units, dates, paces, count superscripts and meta lines; always tabular."
+      "control": {
+        "displayName": "Control",
+        "purpose": "Mono uppercase buttons and nav."
+      },
+      "tag": {
+        "displayName": "Tag",
+        "purpose": "Mono 10px badges and table headers."
       }
     },
     "shadows": [
       {
-        "name": "panel-drop",
-        "value": "0 40px 90px -50px rgba(0, 0, 0, 1)",
-        "purpose": "Every panel; long, soft, nearly invisible lift."
+        "name": "panel",
+        "value": "inset 0 -16px 24px 0 var(--panel-inset), 0 24px 60px -20px var(--shadow-color)",
+        "purpose": "Resting glass panel."
       },
       {
-        "name": "panel-glow",
-        "value": "radial-gradient(9rem 9rem at 50% 0, rgba(141, 181, 255, 0.16), rgba(141, 181, 255, 0.05) 55%, transparent 100%)",
-        "purpose": "Signal light rising behind a panel's top edge (::before); cross-fades to 0.26/0.08 on hover over 0.7s (::after)."
+        "name": "panel-lifted",
+        "value": "inset 0 -18px 28px 0 var(--panel-inset-hover), 0 30px 70px -24px var(--shadow-color)",
+        "purpose": "Hover on a clickable panel, with translateY(-4px)."
       },
       {
-        "name": "dialog",
-        "value": "0 50px 100px -40px rgba(0, 0, 0, 1)",
-        "purpose": "Dialogs."
+        "name": "amber-bloom",
+        "value": "0 0 34px rgba(255, 180, 94, 0.28)",
+        "purpose": "Filled primary button; 0 0 44px at 0.4 on hover/focus."
       },
       {
-        "name": "toast",
-        "value": "0 30px 70px -30px rgba(0, 0, 0, 1)",
-        "purpose": "Toasts."
-      },
-      {
-        "name": "menu",
-        "value": "0 24px 60px -24px rgba(0, 0, 0, 0.9)",
-        "purpose": "Select and dropdown menus."
-      },
-      {
-        "name": "lit-pill-rest",
-        "value": "inset 0 1px 0 rgba(255, 255, 255, 0.16), 0 12px 30px -14px rgba(43, 86, 201, 0.9)",
-        "purpose": "Primary pill at rest."
-      },
-      {
-        "name": "lit-pill-on",
-        "value": "inset 0 0 1px var(--glow), inset 0 0 10px var(--glow-soft), 0 0 18px var(--glow-soft), 0 0 52px rgba(43, 86, 201, 0.5)",
-        "purpose": "Primary pill on hover/focus: current running through it."
-      },
-      {
-        "name": "point-glow",
+        "name": "live-glow",
         "value": "0 0 8px currentColor",
-        "purpose": "Live dots, active nav dot, status dots; the tab-bar indicator uses 10px."
+        "purpose": "Live dot and active nav dot."
       },
       {
-        "name": "glass",
-        "value": "background: rgba(5, 7, 13, 0.78); backdrop-filter: blur(18px) saturate(140%)",
-        "purpose": "Phone top bar and tab bar only: chrome content scrolls under."
+        "name": "glass-bar",
+        "value": "backdrop-filter: blur(22px) saturate(1.2)",
+        "purpose": "Translucent shell bars only, never cards."
       }
     ],
     "motion": [
       {
         "name": "ease-signal",
         "value": "cubic-bezier(0.6, 0, 0.2, 1)",
-        "purpose": "The one easing for every transition (controls 0.3-0.4s, panel glow 0.7s)."
+        "purpose": "The one easing for state transitions, 300ms."
       },
       {
-        "name": "tick-fade",
-        "value": "tick-fade 1.2s ease-in-out infinite; opacity 0.15 -> 1 -> 0.15; stagger 0.2s",
-        "purpose": "Working indicator: three signal dots while the assistant thinks."
+        "name": "rise",
+        "value": "0.9s ease both, translateY(26px) to none",
+        "purpose": "Page title enters."
+      },
+      {
+        "name": "latido",
+        "value": "2s infinite, 10px ring",
+        "purpose": "Live dot pulse ring."
+      },
+      {
+        "name": "barrido",
+        "value": "8s linear infinite, conic angle 0 to 360deg",
+        "purpose": "Rim sweep; only .panel-sweep and hover."
       },
       {
         "name": "pulse-ring",
-        "value": "pulse-ring 2.4s ease-out infinite; scale 1 -> 2.8, opacity 0.5 -> 0",
-        "purpose": "Live dot only; reserved for data that is live now."
+        "value": "2s ease-out infinite, scale 1 to 2.8",
+        "purpose": "Chart endpoint ring when live."
       },
       {
         "name": "reduced-motion",
-        "value": "@media (prefers-reduced-motion: reduce) { transition-duration: 0.001ms; animation: none }",
-        "purpose": "All motion stops; the WebGL bloom renders one still frame."
+        "value": "animation: none; transition-duration: 0.001ms",
+        "purpose": "All motion stops under prefers-reduced-motion."
       }
     ],
     "breakpoints": [
-      {
-        "name": "phone-check",
-        "value": "380px"
-      },
       {
         "name": "sm",
         "value": "640px"
       },
       {
         "name": "md",
-        "value": "768px (sidebar replaces the phone bars)"
+        "value": "768px"
       },
       {
         "name": "lg",
         "value": "1024px"
       },
       {
-        "name": "2xl-container",
+        "name": "2xl",
         "value": "1400px"
       }
     ]
   },
   "components": [
     {
-      "name": "Lit Pill (Primary Button)",
+      "name": "Primary Button",
       "kind": "button",
       "refersTo": "button-primary",
-      "description": "The one primary action in a view; current runs through it on hover/focus.",
-      "html": "<button class=\"ds-btn-lit\">Confirm run</button>",
-      "css": ".ds-btn-lit { font-family: 'Hanken Grotesk', 'Helvetica Neue', Arial, sans-serif; display:inline-flex; align-items:center; height:40px; padding:8px 20px; border-radius:9999px; font-size:14px; font-weight:500; background:#2b56c9; color:#fff; border:1px solid rgba(190,215,255,0.4); box-shadow: inset 0 1px 0 rgba(255,255,255,0.16), 0 12px 30px -14px rgba(43,86,201,0.9); transition: border-color .4s cubic-bezier(0.6, 0, 0.2, 1), box-shadow .4s cubic-bezier(0.6, 0, 0.2, 1); cursor:pointer; } .ds-btn-lit:hover, .ds-btn-lit:focus-visible { outline:none; border-color:#fff; box-shadow: inset 0 0 1px rgb(176,222,255), inset 0 0 10px rgba(176,222,255,0.45), 0 0 18px rgba(176,222,255,0.45), 0 0 52px rgba(43,86,201,0.5); }"
+      "description": "Filled Horizon Amber action with bloom.",
+      "html": "<button class=\"ds-btn-primary\">Save run</button>",
+      "css": ".ds-btn-primary { font-family: 'JetBrains Mono', 'Courier New', ui-monospace, monospace; display:inline-flex; align-items:center; justify-content:center; gap:8px; height:40px; padding:0 20px; border-radius:10px; font-size:12px; font-weight:500; letter-spacing:0.18em; text-transform:uppercase; background:var(--lit); color:var(--lit-foreground); border:1px solid var(--lit); box-shadow:0 0 34px rgba(255,180,94,0.28); cursor:pointer; transition:background 0.2s, box-shadow 0.2s; } .ds-btn-primary:hover, .ds-btn-primary:focus-visible { background:var(--lit-hover); box-shadow:0 0 44px rgba(255,180,94,0.4); outline:none; } .ds-btn-primary:focus-visible { outline:2px solid var(--ring); outline-offset:2px; }"
     },
     {
-      "name": "Outline Pill",
+      "name": "Outline Button",
       "kind": "button",
       "refersTo": "button-outline",
-      "description": "Quiet secondary action that picks up the signal on hover.",
-      "html": "<button class=\"ds-btn-outline\">Edit</button>",
-      "css": ".ds-btn-outline { font-family: 'Hanken Grotesk', 'Helvetica Neue', Arial, sans-serif; height:40px; padding:8px 20px; border-radius:9999px; font-size:14px; font-weight:500; background:rgba(233,236,245,0.02); color:#b8bfd5; border:1px solid rgba(160,182,235,0.22); transition: background-color .3s cubic-bezier(0.6, 0, 0.2, 1), border-color .3s cubic-bezier(0.6, 0, 0.2, 1), color .3s cubic-bezier(0.6, 0, 0.2, 1); cursor:pointer; } .ds-btn-outline:hover { border-color:rgba(141,181,255,0.5); background:rgba(141,181,255,0.1); color:#e9ecf5; } .ds-btn-outline:focus-visible { outline:none; box-shadow:0 0 0 2px #070a13, 0 0 0 4px #8db5ff; }"
+      "description": "Amber-edged action that floods amber on hover.",
+      "html": "<button class=\"ds-btn-outline\">Add shoe</button>",
+      "css": ".ds-btn-outline { font-family: 'JetBrains Mono', 'Courier New', ui-monospace, monospace; display:inline-flex; align-items:center; justify-content:center; height:40px; padding:0 20px; border-radius:10px; font-size:12px; font-weight:500; letter-spacing:0.18em; text-transform:uppercase; background:var(--background); color:var(--primary); border:1px solid var(--primary); cursor:pointer; transition:background-color 0.3s cubic-bezier(0.6,0,0.2,1), color 0.3s cubic-bezier(0.6,0,0.2,1); } .ds-btn-outline:hover { background:var(--primary); color:var(--primary-foreground); } .ds-btn-outline:focus-visible { outline:2px solid var(--ring); outline-offset:2px; }"
     },
     {
-      "name": "Signal Pill",
+      "name": "Secondary Button",
       "kind": "button",
-      "refersTo": "button-signal",
-      "description": "Signal-edged pill that floods with signal on hover.",
-      "html": "<button class=\"ds-btn-signal\">Sync now</button>",
-      "css": ".ds-btn-signal { font-family: 'Hanken Grotesk', 'Helvetica Neue', Arial, sans-serif; height:40px; padding:8px 20px; border-radius:9999px; font-size:14px; font-weight:500; background:transparent; color:#8db5ff; border:1px solid rgba(141,181,255,0.5); transition: background-color .3s cubic-bezier(0.6, 0, 0.2, 1), color .3s cubic-bezier(0.6, 0, 0.2, 1); cursor:pointer; } .ds-btn-signal:hover { background:#8db5ff; color:#070a13; } .ds-btn-signal:focus-visible { outline:none; box-shadow:0 0 0 2px #070a13, 0 0 0 4px #8db5ff; }"
+      "refersTo": "button-secondary",
+      "description": "Ghost glass control that inverts to ink on hover.",
+      "html": "<button class=\"ds-btn-secondary\">Cancel</button>",
+      "css": ".ds-btn-secondary { font-family: 'JetBrains Mono', 'Courier New', ui-monospace, monospace; display:inline-flex; align-items:center; justify-content:center; height:40px; padding:0 20px; border-radius:10px; font-size:12px; font-weight:500; letter-spacing:0.18em; text-transform:uppercase; background:var(--background); color:var(--foreground); border:1px solid var(--edge); cursor:pointer; transition:background-color 0.3s cubic-bezier(0.6,0,0.2,1), color 0.3s cubic-bezier(0.6,0,0.2,1); } .ds-btn-secondary:hover { background:var(--foreground); color:var(--background); border-color:var(--foreground); } .ds-btn-secondary:focus-visible { outline:2px solid var(--ring); outline-offset:2px; }"
     },
     {
-      "name": "Ghost Pill",
-      "kind": "button",
-      "refersTo": "button-ghost",
-      "description": "Lowest-weight action; a signal wash on hover.",
-      "html": "<button class=\"ds-btn-ghost\">Cancel</button>",
-      "css": ".ds-btn-ghost { font-family: 'Hanken Grotesk', 'Helvetica Neue', Arial, sans-serif; height:40px; padding:8px 20px; border-radius:9999px; font-size:14px; font-weight:500; background:transparent; color:#848ba5; border:0; transition: background-color .3s cubic-bezier(0.6, 0, 0.2, 1), color .3s cubic-bezier(0.6, 0, 0.2, 1); cursor:pointer; } .ds-btn-ghost:hover { background:rgba(141,181,255,0.1); color:#e9ecf5; } .ds-btn-ghost:focus-visible { outline:none; box-shadow:0 0 0 2px #070a13, 0 0 0 4px #8db5ff; }"
-    },
-    {
-      "name": "Field",
+      "name": "Text Input",
       "kind": "input",
-      "refersTo": "input-field",
-      "description": "Ink-2 field; focus shifts the border to signal with a soft halo.",
-      "html": "<input class=\"ds-input\" placeholder=\"Distance (km)\" />",
-      "css": ".ds-input { font-family: 'Hanken Grotesk', 'Helvetica Neue', Arial, sans-serif; height:40px; width:240px; padding:8px 12px; border-radius:10px; font-size:14px; background:#0c1121; color:#e9ecf5; border:1px solid rgba(160,182,235,0.22); transition: border-color .3s cubic-bezier(0.6, 0, 0.2, 1), box-shadow .3s cubic-bezier(0.6, 0, 0.2, 1); } .ds-input::placeholder { color:#7a819b; } .ds-input:hover { border-color:rgba(160,182,235,0.22); } .ds-input:focus-visible { outline:none; border-color:rgba(141,181,255,0.6); box-shadow:0 0 0 3px rgba(141,181,255,0.2); }"
+      "refersTo": "input",
+      "description": "Translucent field; border turns amber on focus.",
+      "html": "<input class=\"ds-input\" placeholder=\"Search shoes\" />",
+      "css": ".ds-input { display:flex; width:240px; height:40px; padding:8px 12px; border-radius:10px; border:1px solid var(--input); background:var(--background); color:var(--foreground); font-family:'Archivo', system-ui, sans-serif; font-size:14px; transition:border-color 0.3s cubic-bezier(0.6,0,0.2,1); } .ds-input::placeholder { color:var(--faint); } .ds-input:hover { border-color:var(--edge); } .ds-input:focus-visible { outline:none; border-color:var(--primary); }"
     },
     {
       "name": "Status Badges",
       "kind": "chip",
-      "refersTo": "badge-signal",
-      "description": "Mono tags: hairline in their own hue over a faint wash; status pairs hue with a word.",
-      "html": "<span class=\"ds-badge ds-badge-signal\">tempo</span> <span class=\"ds-badge ds-badge-ok\">fresh</span> <span class=\"ds-badge ds-badge-warn\">75% worn</span> <span class=\"ds-badge ds-badge-strava\">strava</span>",
-      "css": ".ds-badge { font-family: 'IBM Plex Mono', ui-monospace, Menlo, monospace; display:inline-flex; align-items:center; border-radius:5px; padding:3px 8px; font-size:11px; font-weight:500; line-height:1; letter-spacing:0.02em; border:1px solid; } .ds-badge-signal { color:#8db5ff; border-color:rgba(141,181,255,0.45); background:rgba(141,181,255,0.1); } .ds-badge-ok { color:#4fcf9f; border-color:rgba(79,207,159,0.45); background:rgba(79,207,159,0.1); } .ds-badge-warn { color:#f0b64e; border-color:rgba(240,182,78,0.45); background:rgba(240,182,78,0.1); } .ds-badge-strava { color:oklch(0.7 0.18 45); border-color:color-mix(in oklab, oklch(0.7 0.18 45) 50%, transparent); background:color-mix(in oklab, oklch(0.7 0.18 45) 10%, transparent); }"
+      "refersTo": "badge",
+      "description": "Mono tag, hairline and wash in its own hue.",
+      "html": "<span class=\"ds-badge ds-badge-amber\">Live</span> <span class=\"ds-badge ds-badge-ok\">OK</span> <span class=\"ds-badge ds-badge-warn\">Warn</span> <span class=\"ds-badge ds-badge-alert\">Alert</span>",
+      "css": ".ds-badge { font-family: 'JetBrains Mono', 'Courier New', ui-monospace, monospace; display:inline-flex; align-items:center; gap:4px; padding:3px 8px; border-radius:6px; border:1px solid; font-size:10px; font-weight:500; line-height:1; letter-spacing:0.18em; text-transform:uppercase; } .ds-badge-amber { color:var(--primary); border-color:color-mix(in oklab, var(--primary) 45%, transparent); background:color-mix(in oklab, var(--primary) 10%, transparent); } .ds-badge-ok { color:var(--success); border-color:color-mix(in oklab, var(--success) 45%, transparent); background:color-mix(in oklab, var(--success) 10%, transparent); } .ds-badge-warn { color:var(--warning); border-color:color-mix(in oklab, var(--warning) 45%, transparent); background:color-mix(in oklab, var(--warning) 10%, transparent); } .ds-badge-alert { color:var(--destructive); border-color:color-mix(in oklab, var(--destructive) 50%, transparent); background:color-mix(in oklab, var(--destructive) 10%, transparent); }"
     },
     {
-      "name": "Glowing Panel with Divided Rows",
+      "name": "Glass Panel",
       "kind": "card",
-      "refersTo": "card-panel",
-      "description": "The signature surface: darker than the ground, signal light rising behind its top edge, content as hairline-divided rows.",
-      "html": "<div class=\"ds-panel\"><h3 class=\"ds-panel-title\">This week</h3><div class=\"ds-row\"><span class=\"ds-cap\">Distance</span><span class=\"ds-stat\">62.4<small> km</small></span></div><div class=\"ds-row\"><span class=\"ds-cap\">Runs</span><span class=\"ds-stat\">6</span></div></div>",
-      "css": ".ds-panel { font-family: 'Hanken Grotesk', 'Helvetica Neue', Arial, sans-serif; position:relative; isolation:isolate; width:300px; padding:24px; border-radius:16px; background:#05070d; color:#e9ecf5; border:1px solid rgba(160,182,235,0.14); box-shadow:0 40px 90px -50px rgba(0,0,0,1); } .ds-panel::before, .ds-panel::after { content:''; position:absolute; inset:0; z-index:-1; border-radius:inherit; pointer-events:none; } .ds-panel::before { background:radial-gradient(9rem 9rem at 50% 0, rgba(141,181,255,0.16), rgba(141,181,255,0.05) 55%, transparent 100%); } .ds-panel::after { background:radial-gradient(9rem 9rem at 50% 0, rgba(141,181,255,0.26), rgba(141,181,255,0.08) 55%, transparent 100%); opacity:0; transition:opacity .7s cubic-bezier(0.6, 0, 0.2, 1); } .ds-panel:hover::after { opacity:1; } .ds-panel-title { margin:0 0 8px; font-size:15px; font-weight:600; } .ds-row { display:flex; justify-content:space-between; align-items:baseline; padding:12px 0; border-top:1px solid rgba(160,182,235,0.09); } .ds-cap { font-family: 'IBM Plex Mono', ui-monospace, Menlo, monospace; font-size:11px; font-weight:500; text-transform:uppercase; letter-spacing:0.06em; color:#7a819b; } .ds-stat { font-family: 'Bricolage Grotesque', 'Helvetica Neue', Arial, sans-serif; font-size:26px; font-weight:300; letter-spacing:-0.035em; font-variant-numeric:tabular-nums; } .ds-stat small { font-family: 'IBM Plex Mono', ui-monospace, Menlo, monospace; font-size:12px; color:#848ba5; letter-spacing:0; }"
+      "refersTo": "panel",
+      "description": "The signature warm glass card with stat and mono label; lifts on hover.",
+      "html": "<div class=\"ds-panel\"><div class=\"ds-panel-label\">Weekly distance</div><h3 class=\"ds-panel-title\">Long run</h3><div class=\"ds-panel-stat\">42.6 km</div></div>",
+      "css": ".ds-panel { position:relative; width:260px; padding:24px; border-radius:16px; border:1px solid var(--border); color:var(--card-foreground); background-color:var(--panel-fill); background-image:radial-gradient(at 88% 40%, var(--mesh-ink) 0px, transparent 85%), radial-gradient(at 49% 30%, var(--mesh-ink) 0px, transparent 85%), radial-gradient(at 14% 26%, var(--mesh-ink) 0px, transparent 85%), radial-gradient(at 0% 64%, var(--mesh-1) 0px, transparent 85%), radial-gradient(at 41% 94%, var(--mesh-2) 0px, transparent 85%), radial-gradient(at 100% 99%, var(--mesh-3) 0px, transparent 85%); box-shadow:inset 0 -16px 24px 0 var(--panel-inset), 0 24px 60px -20px var(--shadow-color); text-shadow:var(--panel-text-shadow); transition:box-shadow 0.35s ease, transform 0.35s ease; cursor:pointer; } .ds-panel:hover { transform:translateY(-4px); box-shadow:inset 0 -18px 28px 0 var(--panel-inset-hover), 0 30px 70px -24px var(--shadow-color); } .ds-panel-label { font-family: 'JetBrains Mono', 'Courier New', ui-monospace, monospace; font-size:11px; letter-spacing:0.18em; text-transform:uppercase; color:var(--muted-foreground); } .ds-panel-title { margin:8px 0 4px; font-family:'Archivo Narrow','Arial Narrow',sans-serif; font-size:18px; font-weight:700; line-height:1.25; letter-spacing:-0.01em; text-transform:uppercase; color:var(--foreground); } .ds-panel-stat { font-family:'Archivo Narrow','Arial Narrow',sans-serif; font-size:23px; font-weight:700; font-variant-numeric:tabular-nums; color:var(--primary); }"
     },
     {
-      "name": "Sidebar Navigation",
+      "name": "Sidebar Nav Item",
       "kind": "nav",
-      "refersTo": "nav-item-active",
-      "description": "Pill nav items with a leading dot; the active dot is lit signal.",
-      "html": "<nav class=\"ds-nav\"><a class=\"ds-nav-item is-active\" href=\"#\"><span class=\"ds-dot\"></span>Home</a><a class=\"ds-nav-item\" href=\"#\"><span class=\"ds-dot\"></span>Training</a><a class=\"ds-nav-item\" href=\"#\"><span class=\"ds-dot\"></span>Shoes</a></nav>",
-      "css": ".ds-nav { font-family: 'Hanken Grotesk', 'Helvetica Neue', Arial, sans-serif; display:flex; flex-direction:column; gap:4px; width:204px; padding:16px; background:#05070d; } .ds-nav-item { display:flex; align-items:center; gap:12px; padding:10px 14px; border-radius:9999px; font-size:14px; font-weight:500; color:#848ba5; text-decoration:none; transition:background-color .3s cubic-bezier(0.6, 0, 0.2, 1), color .3s cubic-bezier(0.6, 0, 0.2, 1); } .ds-nav-item:hover { background:rgba(141,181,255,0.1); color:#e9ecf5; } .ds-nav-item:focus-visible { outline:none; box-shadow:0 0 0 2px #05070d, 0 0 0 4px #8db5ff; } .ds-dot { width:6px; height:6px; border-radius:9999px; background:#3d4b6d; transition:background-color .3s; } .ds-nav-item.is-active { background:#121933; color:#e9ecf5; box-shadow: inset 0 0 0 1px rgba(160,182,235,0.22); } .ds-nav-item.is-active .ds-dot { background:#8db5ff; box-shadow:0 0 8px #8db5ff; }"
+      "refersTo": "nav-item",
+      "description": "Mono uppercase item; the active one gets a glowing amber dot.",
+      "html": "<nav class=\"ds-nav\"><a class=\"ds-nav-item ds-nav-active\" href=\"#\"><span class=\"ds-nav-dot\"></span>Runs</a><a class=\"ds-nav-item\" href=\"#\"><span class=\"ds-nav-dot\"></span>Shoes</a></nav>",
+      "css": ".ds-nav { display:flex; flex-direction:column; gap:4px; width:200px; padding:16px; background:var(--sidebar); border-radius:10px; } .ds-nav-item { font-family: 'JetBrains Mono', 'Courier New', ui-monospace, monospace; display:flex; align-items:center; gap:12px; padding:10px 14px; border-radius:10px; font-size:12px; letter-spacing:0.18em; text-transform:uppercase; text-decoration:none; color:var(--muted-foreground); transition:color 0.3s cubic-bezier(0.6,0,0.2,1); } .ds-nav-item:hover { color:var(--foreground); } .ds-nav-item:focus-visible { outline:2px solid var(--ring); outline-offset:2px; } .ds-nav-dot { width:6px; height:6px; border-radius:9999px; background:transparent; } .ds-nav-active { color:var(--foreground); } .ds-nav-active .ds-nav-dot { background:var(--primary); box-shadow:0 0 10px var(--primary); }"
     },
     {
-      "name": "Page Header",
+      "name": "Live Dot Readout",
       "kind": "custom",
-      "description": "Light display title with a mono signal count, and a mono meta line split by signal dots. No eyebrow.",
-      "html": "<header class=\"ds-ph\"><h1>Shoes<sup>7</sup></h1><div class=\"ds-meta\"><span>4 active</span><span>1,284 km this year</span></div></header>",
-      "css": ".ds-ph h1 { font-family: 'Bricolage Grotesque', 'Helvetica Neue', Arial, sans-serif; margin:0; font-size:46px; font-weight:300; line-height:0.98; letter-spacing:-0.035em; color:#e9ecf5; } .ds-ph sup { font-family: 'IBM Plex Mono', ui-monospace, Menlo, monospace; margin-left:8px; font-size:14px; font-weight:400; letter-spacing:0; color:#8db5ff; vertical-align:top; } .ds-meta { font-family: 'IBM Plex Mono', ui-monospace, Menlo, monospace; margin-top:10px; display:flex; gap:16px; font-size:12px; color:#848ba5; font-variant-numeric:tabular-nums; } .ds-meta span { display:inline-flex; align-items:center; gap:8px; } .ds-meta span::before { content:''; width:4px; height:4px; border-radius:9999px; background:rgba(141,181,255,0.7); }"
-    },
-    {
-      "name": "Live Dot and Tick-Fade",
-      "kind": "custom",
-      "description": "Pulse ring only on live data; tick-fade dots for 'working'. Both stop under reduced motion.",
-      "html": "<div class=\"ds-live\"><span class=\"ds-live-dot\"></span> Connected <span class=\"ds-ticks\"><i></i><i></i><i></i></span></div>",
-      "css": ".ds-live { font-family: 'IBM Plex Mono', ui-monospace, Menlo, monospace; display:flex; align-items:center; gap:10px; font-size:12px; color:#848ba5; } .ds-live-dot { position:relative; width:6px; height:6px; border-radius:9999px; color:#8db5ff; background:currentColor; box-shadow:0 0 8px currentColor; } .ds-live-dot::after { content:''; position:absolute; inset:0; border-radius:inherit; background:currentColor; opacity:.5; animation:ds-pulse 2.4s ease-out infinite; } @keyframes ds-pulse { from { transform:scale(1); opacity:.5; } to { transform:scale(2.8); opacity:0; } } .ds-ticks { display:inline-flex; gap:4px; margin-left:12px; } .ds-ticks i { width:6px; height:6px; border-radius:9999px; background:#8db5ff; animation:ds-tick 1.2s ease-in-out infinite; } .ds-ticks i:nth-child(2) { animation-delay:.2s; } .ds-ticks i:nth-child(3) { animation-delay:.4s; } @keyframes ds-tick { 0%,100% { opacity:.15; } 50% { opacity:1; } } @media (prefers-reduced-motion: reduce) { .ds-live-dot::after, .ds-ticks i { animation:none; } }"
+      "refersTo": "live-dot",
+      "description": "Accent dot with radiating pulse ring beside a mono label.",
+      "html": "<span class=\"ds-live\"><span class=\"ds-live-dot\"></span><span class=\"ds-live-label\">Synced just now</span></span>",
+      "css": ".ds-live { display:inline-flex; align-items:center; gap:10px; color:var(--primary); } .ds-live-dot { display:inline-block; width:6px; height:6px; border-radius:9999px; background:currentColor; box-shadow:0 0 8px currentColor; animation:ds-latido 2s infinite; } .ds-live-label { font-family: 'JetBrains Mono', 'Courier New', ui-monospace, monospace; font-size:11px; letter-spacing:0.18em; text-transform:uppercase; color:var(--muted-foreground); } @keyframes ds-latido { 0% { box-shadow:0 0 0 0 color-mix(in oklab, currentColor 55%, transparent); } 70% { box-shadow:0 0 0 10px transparent; } 100% { box-shadow:0 0 0 0 transparent; } } @media (prefers-reduced-motion: reduce) { .ds-live-dot { animation:none; } }"
     }
   ],
   "narrative": {
-    "northStar": "The Athlete's Instrument",
-    "overview": "Signal is a calm instrument panel for one runner's own data. The ground is deep ink. Panels sit darker than the ground, and a soft signal-blue glow rises behind each panel's top edge. A single cool blue accent marks everything the runner can act on. Display type is a light grotesque set large and tight. Every number, unit and date is set in mono, so data reads like a readout rather than marketing copy. The system was extracted from the user-pinned visual source `frontend/template/redesign-template.html` and adapted to a working app shell. Where the shipped build differs from the template (for example, the panel glow is drawn as a `::before` gradient instead of the template's blurred blob, so panels never clip tooltips), the build is canonical.\n\nThere is one look, and it is dark (`color-scheme: dark`). There is no light variant and no theme toggle. Density is moderate: on the phone it supports quick one-handed glances right after a run, and on desktop it holds deeper analysis. Shell chrome stays quiet so the accent stays rare. The system rejects the generic green-on-charcoal SaaS dashboard made of stacked, equal-weight cards.",
+    "northStar": "The Night Ops Console",
+    "overview": "**Creative North Star: \"The Night Ops Console\"**\n\nAn instrument panel read in the dark: warm black, amber readouts, mono labels; a runner checking data right after a run. The ground is warm black lifted one step off pitch (#141210) because the runner asked for it; it must never read as pure black. Panels are warm glass over that ground, each with a hairline rim, an inset glow along the bottom edge and a deep drop shadow. Everything is the runner's own live data, so the surfaces stay quiet and the numbers carry the screen.\n\nThe voice is bold and narrow for titles and figures, mono for everything that is a label, unit or control, and a plain grotesque for reading text. There is exactly one accent, Horizon Amber. Status hues exist only to say ok, warn or alert. The system is glanceable on a phone (about 380 px) and deeper on desktop; the same layout, type and motion serve both themes. Dark is the default; a per-device \"daylight\" variant re-tones the tokens without forking any component.\n\nThe look is taken from the pinned `redesign-template.html` as visual language only. Component philosophy: **\"Instrument-precise, warmly lit\"** — mono uppercase controls and hairline edges, warmth from the glass and the amber glow.",
     "keyCharacteristics": [
-      "Deep ink ground with tonal ink layers and blue-tinted alpha hairlines (never neutral greys).",
-      "One signal blue for actions, links, active navigation and chart lines.",
-      "Green, amber and red appear only as ok, warning and alert states.",
-      "Bricolage Grotesque light for display and stat values, Hanken Grotesk for body text, IBM Plex Mono for labels, units, dates and tabular figures.",
-      "The glowing panel and the lit pill are the two signature moves.",
-      "One easing curve. Motion is slow and quiet, and it stops entirely under reduced motion."
+      "Warm black ground (#141210), warm off-white ink (#efebe2), never pure black or pure white in dark.",
+      "One accent, Horizon Amber (#ffb45e), for actions, links, active nav and chart lines.",
+      "Glass panels with a six-radial warm mesh, gradient hairline rim and inset bottom glow, with no backdrop blur on cards.",
+      "Archivo Narrow bold uppercase for card and dialog titles and stat figures; Archivo 800 uppercase for page titles; JetBrains Mono for labels, nav, buttons, tags and units.",
+      "Warm alpha hairlines instead of grey borders.",
+      "Motion is rare and earned: page titles rise, live dots pulse, the rim sweep runs on hover or on the login card only."
     ],
     "rules": [
       {
-        "name": "The One Signal Rule",
-        "body": "Signal blue means \"you can act here\" or \"this is live.\" Do not use it for decoration, section tints or illustration.",
+        "name": "The One Amber Rule",
+        "body": "Amber is the only accent. Green, yellow and red mean ok, warn and alert and never decorate.",
         "section": "colors"
       },
       {
-        "name": "The Status-Only Rule",
-        "body": "Green, amber and red appear only when a state is ok, warning or alert. Decorative use of a status hue is a defect.",
+        "name": "The Warm Hairline Rule",
+        "body": "Borders and dividers are warm alpha lines, not grey. A grey border breaks the lamp-lit feel.",
         "section": "colors"
       },
       {
-        "name": "The Borrowed Mark Rule",
-        "body": "Strava orange is the only foreign hue in the UI, and it appears only on Strava-sourced runs.",
-        "section": "colors"
-      },
-      {
-        "name": "The Token-Only Rule",
-        "body": "Components take colour from the `index.css` custom properties through Tailwind's `color-mix` token helper (so `/N` alpha modifiers work). Never write hex in a component.",
-        "section": "colors"
-      },
-      {
-        "name": "The Mono-Means-Data Rule",
-        "body": "If it is a number, unit, date or pace, set it in mono with tabular figures (`.font-mono` is always tabular). If it is prose, never set it in mono.",
+        "name": "The Mono Means Data Rule",
+        "body": "Mono uppercase is for labels, nav, buttons, tags and units, and mono figures are always tabular so columns of paces line up. Reading text is never mono.",
         "section": "typography"
       },
       {
-        "name": "The Light Display Rule",
-        "body": "Bricolage Grotesque is always weight 300 with -0.035em tracking. A bold display face is off-system.",
-        "section": "typography"
-      },
-      {
-        "name": "The Caption-Not-Kicker Rule",
-        "body": "A mono uppercase label captions a *value* or a table column. It never sits above a heading as an eyebrow.",
-        "section": "typography"
-      },
-      {
-        "name": "The Kept Shell Rule",
-        "body": "The desktop sidebar plus the phone tab bar is the navigation. Restyle it, but do not replace it with a hamburger menu or top tabs.",
-        "section": "layout"
-      },
-      {
-        "name": "The Glass-Where-It-Scrolls Rule",
-        "body": "Translucent glass (78% panel ink, 18px blur) is only used on chrome that content actually scrolls under or beside: the phone top bar and the phone tab bar.",
-        "section": "layout"
-      },
-      {
-        "name": "The Light-Not-Lift Rule",
-        "body": "Elements never translate upward on hover. Interactivity shows as light: the glow brightens, a hairline sharpens, or a wash appears.",
+        "name": "The Sweep Is Earned Rule",
+        "body": "The amber light sweeping a panel's rim runs only on `.panel-sweep` (the login card) and on hover for hover-capable pointers, never on every card. It stops entirely under reduced motion.",
         "section": "elevation"
       },
       {
-        "name": "The Panels-Don't-Clip Rule",
-        "body": "The panel glow is an isolated pseudo-element, so panels never need `overflow: hidden` and never clip chart tooltips, popovers or focus rings.",
-        "section": "elevation"
+        "name": "The Tokens Only Rule",
+        "body": "No hex in components. Colour, glow, shadow and mesh all come from index.css variables, which is also what lets the light theme re-tone without a fork.",
+        "section": "components"
       }
     ],
     "dos": [
-      "Do route every colour through an `index.css` custom property and its Tailwind token. Use `/N` modifiers for alpha.",
-      "Do use the lit pill for the one primary action in a view, and quiet outline, ghost or signal pills for everything else.",
-      "Do set every number, unit, date and pace in IBM Plex Mono with tabular figures. Stat headline values use light Bricolage Grotesque.",
-      "Do divide a panel's content into rows with `divider` hairlines, or into ink-2 tiles.",
-      "Do pair every status hue with a word or icon.",
-      "Do use `ease-signal` for every transition, and check both desktop and about 380px."
+      "**Do** route every colour through the `index.css` variables so the daylight variant works for free.",
+      "**Do** use mono uppercase with 0.18em tracking for labels, nav, buttons, tags and units, and tabular figures for numbers.",
+      "**Do** express status by colour and by word together (a tag reading OK, WARN or ALERT).",
+      "**Do** keep panels as the one container language and let `.panel-interactive` signal that a card is clickable.",
+      "**Do** respect `prefers-reduced-motion`; all animation stops.",
+      "**Do** check every change at about 380 px."
     ],
     "donts": [
-      "Don't put an eyebrow kicker (a small uppercase label) above a heading or page title. Mono uppercase labels caption values and table columns only.",
-      "Don't nest a card or panel inside another card or panel. Use hairline-divided rows or ink-2 tiles.",
-      "Don't write hex or rgb colour literals in components.",
-      "Don't use signal blue as decoration, or green, amber or red for anything but status.",
-      "Don't pulse anything that isn't live data, and don't add easings beyond the one curve.",
-      "Don't set Bricolage Grotesque heavier than 300, or use it for body copy.",
-      "Don't add a light theme or a second accent hue."
+      "**Don't** use amber for status or green, yellow or red for decoration.",
+      "**Don't** run the rim sweep on every card; it is reserved for `.panel-sweep` and hover.",
+      "**Don't** put hex values in components; the Tokens Only Rule is that everything goes through index.css variables.",
+      "**Don't** use pure black or pure white as the dark theme ground or ink.",
+      "**Don't** put `backdrop-filter` on cards; blur belongs to shell bars and scrims.",
+      "**Don't** use grey borders in place of warm alpha hairlines.",
+      "**Don't** set reading text in mono or labels in the sans face."
     ]
   }
 }

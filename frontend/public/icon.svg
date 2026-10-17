@@ -1,17 +1,17 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
-  <!-- Signal redesign: the ink tile with the panel's signal glow rising from
-       the top edge, the Anton mark lit in signal blue. The mark stays inside
+  <!-- Horizon redesign: the warm ink tile with an amber glow rising from
+       the top edge, the Anton mark lit in Horizon amber. The mark stays inside
        the central ~65% maskable safe zone. -->
   <defs>
     <radialGradient id="glow" cx="50%" cy="0%" r="75%">
-      <stop offset="0%" stop-color="#2b56c9" stop-opacity="0.75" />
-      <stop offset="55%" stop-color="#2b56c9" stop-opacity="0.18" />
-      <stop offset="100%" stop-color="#2b56c9" stop-opacity="0" />
+      <stop offset="0%" stop-color="#b8661f" stop-opacity="0.75" />
+      <stop offset="55%" stop-color="#b8661f" stop-opacity="0.18" />
+      <stop offset="100%" stop-color="#b8661f" stop-opacity="0" />
     </radialGradient>
   </defs>
-  <rect width="512" height="512" fill="#070a13" />
+  <rect width="512" height="512" fill="#070605" />
   <rect width="512" height="512" fill="url(#glow)" />
-  <g transform="translate(64 64)" stroke="#8db5ff" stroke-width="41.6" stroke-linecap="round" stroke-linejoin="round" fill="none">
+  <g transform="translate(64 64)" stroke="#ffb45e" stroke-width="41.6" stroke-linecap="round" stroke-linejoin="round" fill="none">
     <path d="M201.6 70.4 L64 313.6" />
     <path d="M201.6 70.4 L249.6 313.6" />
     <path d="M112 240 L320 198.4" />

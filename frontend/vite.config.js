@@ -41,9 +41,9 @@ export default defineConfig({
         orientation: 'portrait',
         start_url: '/',
         scope: '/',
-        // From the design tokens: --background #070a13 (Signal ink).
-        background_color: '#070a13',
-        theme_color: '#070a13',
+        // From the design tokens: --background #141210 (Horizon ground).
+        background_color: '#141210',
+        theme_color: '#141210',
         icons: [
           { src: 'pwa-64x64.png', sizes: '64x64', type: 'image/png' },
           { src: 'pwa-192x192.png', sizes: '192x192', type: 'image/png' },

@@ -49,7 +49,7 @@ export default function PublicDealSheet({ deal, open, onOpenChange }) {
 
         <div className="space-y-1">
           <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-            <p className="font-heading text-3xl font-light tracking-display text-foreground">
+            <p className="font-heading text-3xl font-bold uppercase tracking-display text-foreground">
               {formatCurrency(deal.current_price)}
             </p>
             {deal.msrp != null && (

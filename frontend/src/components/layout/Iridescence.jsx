@@ -2,9 +2,9 @@ import { useEffect, useRef, useState } from 'react'
 import { cn } from '@/lib/utils'
 
 /**
- * The redesign's one atmospheric effect (Signal design system; ported from the
+ * The redesign's one atmospheric effect (Horizon design system; ported from the
  * template's hero shader in frontend/template/redesign-template.html): an
- * iridescent WebGL field tinted to the ink blue, screen-blended and masked to
+ * iridescent WebGL field tinted to the amber accent, screen-blended and masked to
  * an ellipse so it reads as a glow, not a picture. Sits behind the shared
  * PageHeader band on every page (the band is sticky, so it stays on screen).
  *
@@ -35,9 +35,9 @@ void main(){
   gl_FragColor=vec4(col,1.0);
 }`
 
-// The shader's tint can't read CSS tokens; this is --signal-deep's ink blue
-// in 0–1 RGB. Retheme it by hand alongside --primary / --signal-deep.
-const TINT = [0.3, 0.42, 0.82]
+// The shader's tint can't read CSS tokens; this is --signal-deep's amber
+// (#b8661f) in 0–1 RGB. Retheme it by hand alongside --primary / --signal-deep.
+const TINT = [0.72, 0.4, 0.12]
 
 const MASK = 'radial-gradient(55% 52% at 58% 46%, #000 0%, rgba(0,0,0,0.6) 46%, transparent 76%)'
 
@@ -168,7 +168,7 @@ export default function Iridescence({ className }) {
   return (
     <div aria-hidden="true" className={cn('grain pointer-events-none absolute inset-0 -z-10 overflow-hidden', className)}>
       {mode === 'off' ? (
-        <div className="absolute right-[-10%] top-0 h-full w-[70%] bg-[radial-gradient(40%_40%_at_55%_45%,rgba(43,86,201,0.45),transparent_70%)] blur-[30px]" />
+        <div className="absolute right-[-10%] top-0 h-full w-[70%] bg-[radial-gradient(40%_40%_at_55%_45%,rgba(255,170,80,0.16),transparent_70%)] blur-[30px]" />
       ) : (
         <canvas
           ref={canvasRef}

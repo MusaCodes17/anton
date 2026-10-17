@@ -5,7 +5,7 @@ import { cn } from '@/lib/utils'
 const Switch = React.forwardRef(({ className, ...props }, ref) => (
   <SwitchPrimitives.Root
     className={cn(
-      'peer inline-flex h-6 w-11 shrink-0 cursor-pointer items-center rounded-full border-2 border-transparent transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:cursor-not-allowed disabled:opacity-50 data-[state=checked]:bg-signal-deep data-[state=checked]:shadow-[inset_0_0_6px_var(--glow-soft),0_0_14px_var(--glow-soft)] data-[state=unchecked]:bg-secondary duration-300 ease-signal',
+      'peer inline-flex h-6 w-11 shrink-0 cursor-pointer items-center rounded-full border-2 border-transparent transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:cursor-not-allowed disabled:opacity-50 data-[state=checked]:bg-primary data-[state=checked]:shadow-[inset_0_0_6px_var(--glow-soft),0_0_14px_var(--glow-soft)] data-[state=unchecked]:bg-secondary data-[state=unchecked]:border-input duration-300 ease-signal',
       className
     )}
     {...props}

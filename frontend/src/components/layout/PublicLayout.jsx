@@ -9,7 +9,7 @@ import { Brand, ThemeToggle, ScrapeStatus } from '@/components/layout/Layout'
 // UNAUTHENTICATED_EVENT. The scrape line is fed by the caller from the public
 // payload's checked_at.
 const rowClass =
-  'focus-ring flex w-full items-center gap-3 rounded-full px-3.5 py-[10px] text-sm font-medium text-muted-foreground transition-colors duration-300 ease-signal hover:bg-accent hover:text-foreground'
+  'focus-ring flex w-full items-center gap-3 rounded-[10px] px-3.5 py-[10px] font-mono text-xs uppercase tracking-label text-muted-foreground transition-colors duration-300 ease-signal hover:text-foreground'
 
 export default function PublicLayout({ children, lastScrape }) {
   return (
@@ -24,10 +24,10 @@ export default function PublicLayout({ children, lastScrape }) {
             to="/deals"
             className={({ isActive }) =>
               cn(
-                'focus-ring flex items-center gap-3 rounded-full px-3.5 py-[10px] text-sm font-medium transition-colors duration-300 ease-signal',
+                'focus-ring flex items-center gap-3 rounded-[10px] px-3.5 py-[10px] font-mono text-xs uppercase tracking-label transition-colors duration-300 ease-signal',
                 isActive
-                  ? 'bg-secondary text-foreground shadow-[inset_0_0_0_1px_var(--input)]'
-                  : 'text-muted-foreground hover:bg-accent hover:text-foreground'
+                  ? 'text-foreground'
+                  : 'text-muted-foreground hover:text-foreground'
               )
             }
           >
@@ -36,7 +36,7 @@ export default function PublicLayout({ children, lastScrape }) {
                 <span
                   className={cn(
                     'h-1.5 w-1.5 shrink-0 rounded-full transition-colors duration-300',
-                    isActive ? 'bg-primary shadow-[0_0_8px_var(--primary)]' : 'bg-nav-inactive'
+                    isActive ? 'bg-primary shadow-[0_0_10px_var(--primary)]' : 'bg-transparent'
                   )}
                 />
                 Deals
@@ -63,7 +63,7 @@ export default function PublicLayout({ children, lastScrape }) {
           <Link
             to="/"
             aria-label="Sign in"
-            className="focus-ring flex h-11 w-11 items-center justify-center rounded-full text-muted-foreground transition-colors duration-300 ease-signal hover:bg-accent hover:text-foreground"
+            className="focus-ring flex h-11 w-11 items-center justify-center rounded-[10px] text-muted-foreground transition-colors duration-300 ease-signal hover:bg-accent hover:text-foreground"
           >
             <LogIn className="h-5 w-5" />
           </Link>

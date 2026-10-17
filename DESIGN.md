@@ -1,324 +1,289 @@
 ---
-name: Signal
-description: A calm dark instrument for one runner's own data, with deep ink, one cool signal-blue accent, light grotesque display type and mono figures.
+name: Anton
+description: A warm-black instrument console for one runner's own data, with a single Horizon Amber accent, bold narrow display type and mono labels.
 colors:
-  ink: "#070a13"
-  panel-ink: "#05070d"
-  ink-2: "#0c1121"
-  ink-3: "#121933"
-  text: "#e9ecf5"
-  text-2: "#b8bfd5"
-  mute: "#848ba5"
-  faint: "#7a819b"
-  signal: "#8db5ff"
-  signal-deep: "#2b56c9"
-  signal-wash: "rgba(141, 181, 255, 0.1)"
-  glow: "rgb(176, 222, 255)"
-  glow-soft: "rgba(176, 222, 255, 0.45)"
-  hairline: "rgba(160, 182, 235, 0.14)"
-  hairline-strong: "rgba(160, 182, 235, 0.22)"
-  divider: "rgba(160, 182, 235, 0.09)"
-  nav-inactive: "#3d4b6d"
-  ok: "#4fcf9f"
-  warn: "#f0b64e"
-  alert: "#ff6b7d"
+  ground: "#141210"
+  ink: "#efebe2"
+  panel: "#1a1714"
+  popover: "#1e1b17"
+  rail: "#161411"
+  surface: "#221e1a"
+  raised: "#282420"
+  ink-soft: "#d4cfc4"
+  ink-muted: "#a39e92"
+  ink-faint: "#908b80"
+  nav-inactive: "#463f35"
+  horizon-amber: "#ffb45e"
+  horizon-amber-hover: "#ffc684"
+  amber-deep: "#b8661f"
+  amber-on: "#0b0906"
+  amber-wash: "rgba(255, 180, 94, 0.12)"
+  glow: "rgb(255, 226, 189)"
+  sweep-hot: "#ffe2bd"
+  ice: "#a9caff"
+  ok: "#8be0a4"
+  warn: "#f2d16b"
+  alert: "#ff6f61"
   strava: "oklch(0.7 0.18 45)"
-  photo: "#eef0f5"
-  chart-grid: "rgba(160, 182, 235, 0.11)"
-  chart-1: "#5ad1d8"
-  chart-2: "#ff8a6a"
-  chart-3: "#c8f032"
-  chart-4: "#b49cff"
-  chart-5: "#ff79c6"
-  chart-6: "#d9b98a"
+  photo: "#f1eee8"
+  hairline: "rgba(239, 235, 226, 0.14)"
+  hairline-input: "rgba(239, 235, 226, 0.30)"
+  divider: "rgba(255, 240, 220, 0.10)"
+  chart-2: "#e58f6b"
+  chart-3: "#c9d77a"
+  chart-4: "#c3a6ff"
+  chart-5: "#ff8fb1"
 typography:
-  display:
-    fontFamily: "Bricolage Grotesque, Helvetica Neue, Helvetica, Arial, sans-serif"
-    fontSize: "46px"
-    fontWeight: 300
-    lineHeight: 0.98
-    letterSpacing: "-0.035em"
   headline:
-    fontFamily: "Bricolage Grotesque, Helvetica Neue, Helvetica, Arial, sans-serif"
-    fontSize: "24px"
-    fontWeight: 300
+    fontFamily: "Archivo, system-ui, -apple-system, Segoe UI, sans-serif"
+    fontSize: "46px"
+    fontWeight: 800
+    lineHeight: 0.94
+    letterSpacing: "-0.03em"
+  display:
+    fontFamily: "Archivo Narrow, Arial Narrow, Helvetica Neue, Arial, sans-serif"
+    fontSize: "18px"
+    fontWeight: 700
     lineHeight: 1.25
-    letterSpacing: "-0.035em"
+    letterSpacing: "-0.01em"
   stat:
-    fontFamily: "Bricolage Grotesque, Helvetica Neue, Helvetica, Arial, sans-serif"
-    fontSize: "26px"
-    fontWeight: 300
-    letterSpacing: "-0.035em"
+    fontFamily: "Archivo Narrow, Arial Narrow, Helvetica Neue, Arial, sans-serif"
+    fontSize: "23px"
+    fontWeight: 700
+    letterSpacing: "-0.01em"
     fontFeature: "\"tnum\" 1"
-  title:
-    fontFamily: "Hanken Grotesk, Helvetica Neue, Helvetica, Arial, system-ui, sans-serif"
-    fontSize: "15px"
-    fontWeight: 600
-    lineHeight: 1.25
   body:
-    fontFamily: "Hanken Grotesk, Helvetica Neue, Helvetica, Arial, system-ui, sans-serif"
+    fontFamily: "Archivo, system-ui, -apple-system, Segoe UI, sans-serif"
     fontSize: "14px"
     fontWeight: 400
     lineHeight: 1.55
   label:
-    fontFamily: "IBM Plex Mono, ui-monospace, SFMono-Regular, Menlo, Consolas, monospace"
+    fontFamily: "JetBrains Mono, Courier New, ui-monospace, monospace"
     fontSize: "11px"
-    fontWeight: 500
-    letterSpacing: "0.06em"
-  figure:
-    fontFamily: "IBM Plex Mono, ui-monospace, SFMono-Regular, Menlo, Consolas, monospace"
-    fontSize: "12px"
     fontWeight: 400
-    fontFeature: "\"tnum\" 1"
+    letterSpacing: "0.18em"
+  control:
+    fontFamily: "JetBrains Mono, Courier New, ui-monospace, monospace"
+    fontSize: "12px"
+    fontWeight: 500
+    letterSpacing: "0.18em"
+  tag:
+    fontFamily: "JetBrains Mono, Courier New, ui-monospace, monospace"
+    fontSize: "10px"
+    fontWeight: 500
+    lineHeight: 1
+    letterSpacing: "0.18em"
 rounded:
-  tag: "5px"
-  field: "10px"
-  menu: "12px"
-  tile: "14px"
+  tag: "6px"
+  control: "10px"
+  sm: "12px"
+  md: "14px"
   panel: "16px"
   pill: "9999px"
 spacing:
-  page-phone: "16px"
-  page-tablet: "24px"
-  page-desktop: "30px 34px"
-  panel-phone: "16px"
-  panel-desktop: "24px"
-  sidebar-width: "236px"
+  xs: "8px"
+  sm: "16px"
+  md: "24px"
+  page: "34px"
+  rail: "236px"
 components:
   button-primary:
-    backgroundColor: "{colors.signal-deep}"
-    textColor: "#ffffff"
-    rounded: "{rounded.pill}"
-    padding: "8px 20px"
+    backgroundColor: "{colors.horizon-amber}"
+    textColor: "{colors.amber-on}"
+    typography: "{typography.control}"
+    rounded: "{rounded.control}"
     height: "40px"
+    padding: "0 20px"
+  button-primary-hover:
+    backgroundColor: "{colors.horizon-amber-hover}"
   button-outline:
-    backgroundColor: "transparent"
-    textColor: "{colors.text-2}"
-    rounded: "{rounded.pill}"
-    padding: "8px 20px"
+    backgroundColor: "{colors.ground}"
+    textColor: "{colors.horizon-amber}"
+    typography: "{typography.control}"
+    rounded: "{rounded.control}"
     height: "40px"
-  button-outline-hover:
-    backgroundColor: "{colors.signal-wash}"
-    textColor: "{colors.text}"
+    padding: "0 20px"
   button-secondary:
-    backgroundColor: "{colors.ink-3}"
-    textColor: "{colors.text-2}"
-    rounded: "{rounded.pill}"
-    padding: "8px 20px"
-    height: "40px"
-  button-ghost:
-    backgroundColor: "transparent"
-    textColor: "{colors.mute}"
-    rounded: "{rounded.pill}"
-    padding: "8px 20px"
-    height: "40px"
-  button-signal:
-    backgroundColor: "transparent"
-    textColor: "{colors.signal}"
-    rounded: "{rounded.pill}"
-    padding: "8px 20px"
-    height: "40px"
-  button-signal-hover:
-    backgroundColor: "{colors.signal}"
+    backgroundColor: "{colors.ground}"
     textColor: "{colors.ink}"
-  badge-signal:
-    backgroundColor: "{colors.signal-wash}"
-    textColor: "{colors.signal}"
-    typography: "{typography.figure}"
-    rounded: "{rounded.tag}"
-    padding: "3px 8px"
-  card-panel:
-    backgroundColor: "{colors.panel-ink}"
-    textColor: "{colors.text}"
+    typography: "{typography.control}"
+    rounded: "{rounded.control}"
+    height: "40px"
+    padding: "0 20px"
+  panel:
+    backgroundColor: "{colors.panel}"
+    textColor: "{colors.ink}"
     rounded: "{rounded.panel}"
     padding: "24px"
-  input-field:
-    backgroundColor: "{colors.ink-2}"
-    textColor: "{colors.text}"
-    rounded: "{rounded.field}"
-    padding: "8px 12px"
+  input:
+    backgroundColor: "{colors.ground}"
+    textColor: "{colors.ink}"
+    typography: "{typography.body}"
+    rounded: "{rounded.control}"
     height: "40px"
-  nav-item-active:
-    backgroundColor: "{colors.ink-3}"
-    textColor: "{colors.text}"
-    rounded: "{rounded.pill}"
-    padding: "10px 14px"
+    padding: "8px 12px"
+  badge:
+    backgroundColor: "{colors.amber-wash}"
+    textColor: "{colors.horizon-amber}"
+    typography: "{typography.tag}"
+    rounded: "{rounded.tag}"
+    padding: "3px 8px"
   nav-item:
-    backgroundColor: "transparent"
-    textColor: "{colors.mute}"
-    rounded: "{rounded.pill}"
+    textColor: "{colors.ink-muted}"
+    typography: "{typography.control}"
+    rounded: "{rounded.control}"
     padding: "10px 14px"
+  nav-item-active:
+    textColor: "{colors.ink}"
 ---
 
-# Design System: Signal
+# Design System: Anton
 
 ## Overview
 
-**Creative North Star: "The Athlete's Instrument"**
+**Creative North Star: "The Night Ops Console"**
 
-Signal is a calm instrument panel for one runner's own data. The ground is deep ink. Panels sit darker than the ground, and a soft signal-blue glow rises behind each panel's top edge. A single cool blue accent marks everything the runner can act on. Display type is a light grotesque set large and tight. Every number, unit and date is set in mono, so data reads like a readout rather than marketing copy. The system was extracted from the user-pinned visual source `frontend/template/redesign-template.html` and adapted to a working app shell. Where the shipped build differs from the template (for example, the panel glow is drawn as a `::before` gradient instead of the template's blurred blob, so panels never clip tooltips), the build is canonical.
+An instrument panel read in the dark: warm black, amber readouts, mono labels; a runner checking data right after a run. The ground is warm black lifted one step off pitch (#141210) because the runner asked for it; it must never read as pure black. Panels are warm glass over that ground, each with a hairline rim, an inset glow along the bottom edge and a deep drop shadow. Everything is the runner's own live data, so the surfaces stay quiet and the numbers carry the screen.
 
-There is one look, and it is dark (`color-scheme: dark`). There is no light variant and no theme toggle. Density is moderate: on the phone it supports quick one-handed glances right after a run, and on desktop it holds deeper analysis. Shell chrome stays quiet so the accent stays rare. The system rejects the generic green-on-charcoal SaaS dashboard made of stacked, equal-weight cards.
+The voice is bold and narrow for titles and figures, mono for everything that is a label, unit or control, and a plain grotesque for reading text. There is exactly one accent, Horizon Amber. Status hues exist only to say ok, warn or alert. The system is glanceable on a phone (about 380 px) and deeper on desktop; the same layout, type and motion serve both themes. Dark is the default; a per-device "daylight" variant re-tones the tokens without forking any component.
+
+The look is taken from the pinned `redesign-template.html` as visual language only. Component philosophy: **"Instrument-precise, warmly lit"** — mono uppercase controls and hairline edges, warmth from the glass and the amber glow.
 
 **Key Characteristics:**
-- Deep ink ground with tonal ink layers and blue-tinted alpha hairlines (never neutral greys).
-- One signal blue for actions, links, active navigation and chart lines.
-- Green, amber and red appear only as ok, warning and alert states.
-- Bricolage Grotesque light for display and stat values, Hanken Grotesk for body text, IBM Plex Mono for labels, units, dates and tabular figures.
-- The glowing panel and the lit pill are the two signature moves.
-- One easing curve. Motion is slow and quiet, and it stops entirely under reduced motion.
+- Warm black ground (#141210), warm off-white ink (#efebe2), never pure black or pure white in dark.
+- One accent, Horizon Amber (#ffb45e), for actions, links, active nav and chart lines.
+- Glass panels with a six-radial warm mesh, gradient hairline rim and inset bottom glow, with no backdrop blur on cards.
+- Archivo Narrow bold uppercase for card and dialog titles and stat figures; Archivo 800 uppercase for page titles; JetBrains Mono for labels, nav, buttons, tags and units.
+- Warm alpha hairlines instead of grey borders.
+- Motion is rare and earned: page titles rise, live dots pulse, the rim sweep runs on hover or on the login card only.
 
 ## Colors
 
-A near-monochrome ink palette with one cool accent, three reserved status hues and one third-party exception.
+A warm-black and amber palette: every neutral leans toward brown-orange, and one amber carries all emphasis.
 
 ### Primary
-- **Signal Blue** (`signal`): the only action colour. It is used for links, the active nav dot and the tab-bar indicator, focus rings, the caret, count superscripts beside page titles, the signal button and badge, the price chart's Target line and the live dot. The `signal-wash` (10% alpha) fill is the hover and selected wash for quiet controls.
-- **Deep Signal** (`signal-deep`): the body of the lit primary pill and the checked switch track. Nothing else uses it.
-- **Glow** (`glow`, `glow-soft`): light only. It is used for the lit pill's hover current, the checked switch's bloom, and the glow behind panels (signal at 5–26% alpha). It is never used as a fill or as a text colour.
+- **Horizon Amber** (#ffb45e): the only accent. Filled primary buttons, links, active nav dot, focus ring, selection, chart lines, the live dot. Hover steps to Lit Amber (#ffc684).
+- **Deep Amber** (#b8661f): the deep body of the accent, used in the panel mesh glow and as the accent's darker partner.
+- **Amber Wash** (rgba(255, 180, 94, 0.12)): selected and active fill, row hover (at half strength), tag background at a lighter step.
+- **Ink on Amber** (#0b0906): text on filled amber and on status fills.
 
 ### Secondary
-- **Status Green** (`ok`), **Status Amber** (`warn`), **Status Red** (`alert`): these mean good, warning and alert. Examples are a fresh vs. stale scrape dot, retirement thresholds and destructive actions. A status badge pairs its hue with a word, so the state never depends on colour alone.
-
-### Tertiary
-- **Strava Orange** (`strava`, OKLCH): the single third-party exception, used only to mark runs backfilled from the Strava archive (`source='strava'`). It is a borrowed brand mark and stays outside the signal palette.
-- **Retailer series** (`chart-1` … `chart-6`): categorical lines for retailers in price-history charts only. These colours have no meaning outside charts. Signal blue is left out of the series on purpose because it already marks the Target line.
+- **Ice Blue** (#a9caff): secondary readouts and the first chart series. Amber is left out of retailer series because it is the accent and the price chart's Target line.
 
 ### Neutral
-- **Ink** (`ink`): the page ground.
-- **Panel Ink** (`panel-ink`): panels, the sidebar and the phone bars. Panels sit *darker* than the ground.
-- **Ink 2** (`ink-2`): popovers, input fields, and tiles or rows nested inside a panel.
-- **Ink 3** (`ink-3`): raised control fill, used for the secondary button and the active nav pill.
-- **Text / Text 2 / Mute / Faint**: primary copy, secondary copy, muted meta (5.7:1 on ink) and field captions or placeholders (≥ 4.5:1 on every ink layer).
-- **Hairlines**: blue-tinted alpha. `hairline` (14%) is the default border, `hairline-strong` (22%) is used for input borders, dashed add-borders and hover edges, and `divider` (9%) separates rows inside a panel.
-- **Photo** (`photo`): a cool near-white backdrop behind product photos, which are shot on white.
+- **Warm Black Ground** (#141210): the page background.
+- **Rail Black** (#161411): sidebar and phone bars, a half step below the ground.
+- **Panel Brown-Black** (#1a1714): card and panel fill. Popovers use Popover Umber (#1e1b17).
+- **Surface Umber** (#221e1a): nested tiles and rows inside a panel; also the muted fill. Raised controls use Raised Umber (#282420).
+- **Warm Off-White Ink** (#efebe2): primary text.
+- **Soft Ink** (#d4cfc4), **Muted Ink** (#a39e92), **Faint Ink** (#908b80): secondary text, labels and placeholders. Faint was lifted to keep 4.5:1 on the lighter surfaces.
+- **Inactive Nav** (#463f35): inactive tab icons.
+- **Hairline** (rgba(239, 235, 226, 0.14)), **Input Edge** (rgba(239, 235, 226, 0.30)), **Divider** (rgba(255, 240, 220, 0.10)): warm alpha borders, input strokes and row dividers.
+- **Photo Paper** (#f1eee8): the near-white backdrop behind cut-out product photos.
+
+### Status and data hues
+- **Mint OK** (#8be0a4), **Straw Warn** (#f2d16b), **Coral Alert** (#ff6f61): good, warning and alert only.
+- **Strava Orange** (oklch(0.7 0.18 45)): a third-party mark for backfilled Strava runs, deliberately outside the accent palette.
+- Chart series after ice: #e58f6b, #c9d77a, #c3a6ff, #ff8fb1 (plus Soft Ink as the sixth).
+
+### Daylight (light variant)
+`:root[data-theme='light']` keeps layout, type and motion and re-tones the tokens. Warm paper ground (#f4f1ea), cream panels (#fffdf8) lifted above the ground (dark sinks panels below the ink; on paper the depth cue is lift), ink (#1a1712). The accent deepens to #9a5200 so links and figures clear 4.5:1 on cream. Status hues darken (ok #2f7d4a, warn #8a6a00, alert #c2362a), ice becomes #3d6fb8, hairlines become warm brown alpha, and film grain is switched off. The filled primary button (`--lit`) stays #ffb45e in both themes.
 
 ### Named Rules
-**The One Signal Rule.** Signal blue means "you can act here" or "this is live." Do not use it for decoration, section tints or illustration.
+**The One Amber Rule.** Amber is the only accent. Green, yellow and red mean ok, warn and alert and never decorate.
 
-**The Status-Only Rule.** Green, amber and red appear only when a state is ok, warning or alert. Decorative use of a status hue is a defect.
-
-**The Borrowed Mark Rule.** Strava orange is the only foreign hue in the UI, and it appears only on Strava-sourced runs.
-
-**The Token-Only Rule.** Components take colour from the `index.css` custom properties through Tailwind's `color-mix` token helper (so `/N` alpha modifiers work). Never write hex in a component.
+**The Warm Hairline Rule.** Borders and dividers are warm alpha lines, not grey. A grey border breaks the lamp-lit feel.
 
 ## Typography
 
-**Display Font:** Bricolage Grotesque (with Helvetica Neue, Arial fallback)
-**Body Font:** Hanken Grotesk (with Helvetica Neue, system-ui fallback)
-**Label/Mono Font:** IBM Plex Mono (with ui-monospace, Menlo fallback)
+**Display Font:** Archivo Narrow (with Arial Narrow, Helvetica Neue, Arial, sans-serif)
+**Body Font:** Archivo (with system-ui, -apple-system, Segoe UI, sans-serif)
+**Label/Mono Font:** JetBrains Mono (with Courier New, ui-monospace, monospace)
 
-**Character:** The display face is set light (300) and tight (-0.035em). Large titles therefore read as calm and precise rather than shouted. A plain humanist grotesque carries the working text. Mono marks everything that is data.
+**Character:** A bold condensed voice for titles and figures set against a precise mono voice for instruments, with a plain grotesque in between for reading.
 
 ### Hierarchy
-- **Display** (300, 34px phone / 46px desktop, 0.98 leading, -0.035em): page titles only, via the shared page header. Detail pages scale it down (30px/38px).
-- **Headline** (300, 24px): dialog titles and the main heading inside a section.
-- **Stat** (300, 20px phone / 26px desktop, tabular): headline numbers in panels, such as fitness, predictions and PBs. Stat values use the display face, not mono.
-- **Title** (600, 15px, 1.25): panel titles, in Hanken Grotesk.
-- **Body** (400, 14px, 1.55): all working copy. Descriptions are capped at 60ch.
-- **Label** (500, 11px, 0.06em, UPPERCASE, faint): field captions directly above a value, and table column headers.
-- **Figure** (400, 12px mono, tabular): units, dates, paces, the count superscript beside a page title, and meta lines. The meta line separates its items with 4px signal dots.
+- **Page title** (Archivo 800, 34px / 46px from sm, 0.94 leading, -0.03em, uppercase): the one h1 per page, rising into place on load; an optional count sits beside it as a small mono amber superscript.
+- **Display** (Archivo Narrow 700, 18px card titles, 24px dialog titles, -0.01em, uppercase): card and dialog titles.
+- **Stat** (Archivo Narrow 700, 23px, tabular numbers): headline figures; sized down per breakpoint when the narrow bold face would truncate.
+- **Body** (Archivo 400, 14px, 1.55): reading text and descriptions; page descriptions are light weight, capped at 60ch.
+- **Label** (JetBrains Mono, 11px, 0.18em, uppercase, muted ink): section and field labels, units, dates, meta.
+- **Control** (JetBrains Mono 500, 12px, 0.18em, uppercase): buttons and nav.
+- **Tag** (JetBrains Mono 500, 10px, 0.18em, uppercase): badges and table headers.
 
 ### Named Rules
-**The Mono-Means-Data Rule.** If it is a number, unit, date or pace, set it in mono with tabular figures (`.font-mono` is always tabular). If it is prose, never set it in mono.
-
-**The Light Display Rule.** Bricolage Grotesque is always weight 300 with -0.035em tracking. A bold display face is off-system.
-
-**The Caption-Not-Kicker Rule.** A mono uppercase label captions a *value* or a table column. It never sits above a heading as an eyebrow.
+**The Mono Means Data Rule.** Mono uppercase is for labels, nav, buttons, tags and units, and mono figures are always tabular so columns of paces line up. Reading text is never mono.
 
 ## Layout
 
-The shell keeps the app's navigation model. On desktop (≥ 768px), a fixed 236px panel-ink sidebar sits on the left. It holds the wordmark, the nav pills, a pinned Settings link and a mono status line with a scrape-freshness dot. On phones, the layout is a glass top bar, then the scrolling page, then a 5-tab glass bar at the bottom. That bar respects `safe-area-inset-bottom` and hides when the keyboard is open.
-
-Page padding steps from `page-phone` to `page-tablet` to `page-desktop`. Panels pad 16px on phones and 24px from `sm` up. The page header sits 20px (phone) or 32px (desktop) above content, with actions aligned to the title's baseline. On Home only, the WebGL iridescence blooms behind the top-right of the content. Without WebGL it falls back to a blurred CSS radial glow. Every surface must work at about 380px.
-
-**The Kept Shell Rule.** The desktop sidebar plus the phone tab bar is the navigation. Restyle it, but do not replace it with a hamburger menu or top tabs.
-
-**The Glass-Where-It-Scrolls Rule.** Translucent glass (78% panel ink, 18px blur) is only used on chrome that content actually scrolls under or beside: the phone top bar and the phone tab bar.
+A fixed 236px rail on desktop (mono nav, glowing dot for the active item) and a five-tab glass bar at the bottom on phones. Content scrolls in the main region under a sticky, opaque page header band that carries a soft iridescent amber glow clipped to the band. Page padding steps 16px, 24px, then 34px horizontal with 30px vertical from lg. Card padding is 16px on phones and 24px from sm. Controls are 40px tall (36px small, 48px large). Every change must hold at about 380 px; the container caps at 1400px on 2xl. Spacing is Tailwind's 4px-based scale, with 8px and 16px as the common gaps.
 
 ## Elevation & Depth
 
-Depth comes from light, not lift. The page is flat ink. Panels are darker than the ground and are separated by a hairline, a very long, soft black drop shadow, and a signal glow rising from behind the top edge. On hover the glow cross-fades brighter over 0.7s. Floating layers (dialogs, menus, toasts) use the same long, soft black shadow at larger sizes. Brightness, not shadow, signals interactivity.
+Hybrid: tonal layering plus a glow. In dark, panels sink slightly below the page ink and carry an inset bottom glow and a deep, wide, low shadow; clickable panels lift on hover. Light inverts the cue: panels lift above the paper. Translucent chrome (phone bars, dialog scrim) uses blur; cards never do, because blur on dozens of cards costs the phone.
 
 ### Shadow Vocabulary
-- **Panel drop** (`0 40px 90px -50px rgba(0,0,0,1)`): every panel.
-- **Panel glow** (`radial-gradient(9rem 9rem at 50% 0, signal 16% → 5% → transparent)` at rest, 26% → 8% on hover): the rising light behind each panel's top edge.
-- **Dialog** (`0 50px 100px -40px rgba(0,0,0,1)`), **Toast** (`0 30px 70px -30px rgba(0,0,0,1)`), **Menu/Select** (`0 24px 60px -24px rgba(0,0,0,0.9)`): floating layers.
-- **Lit pill at rest** (`inset 0 1px 0 rgba(255,255,255,0.16), 0 12px 30px -14px rgba(43,86,201,0.9)`) and **lit** (`inset 0 0 1px glow, inset 0 0 10px glow-soft, 0 0 18px glow-soft, 0 0 52px rgba(43,86,201,0.5)`).
-- **Point glow** (`0 0 8px currentColor` / `var(--primary)`): live dots, the active nav dot, status dots, and the tab-bar indicator (10px).
+- **Panel** (`box-shadow: inset 0 -16px 24px 0 var(--panel-inset), 0 24px 60px -20px var(--shadow-color)`): the resting glass panel.
+- **Panel lifted** (`inset 0 -18px 28px 0 var(--panel-inset-hover), 0 30px 70px -24px var(--shadow-color)` with `translateY(-4px)`): hover on a clickable panel.
+- **Amber bloom** (`0 0 34px rgba(255, 180, 94, 0.28)`, 44px at 0.4 on hover/focus): the filled primary button.
+- **Live glow** (`0 0 8px currentColor` plus the pulse ring): the live dot and the active nav dot.
+- **Glass bar** (`backdrop-filter: blur(22px) saturate(1.2)` over `--glass`): shell bars only.
 
 ### Named Rules
-**The Light-Not-Lift Rule.** Elements never translate upward on hover. Interactivity shows as light: the glow brightens, a hairline sharpens, or a wash appears.
-
-**The Panels-Don't-Clip Rule.** The panel glow is an isolated pseudo-element, so panels never need `overflow: hidden` and never clip chart tooltips, popovers or focus rings.
+**The Sweep Is Earned Rule.** The amber light sweeping a panel's rim runs only on `.panel-sweep` (the login card) and on hover for hover-capable pointers, never on every card. It stops entirely under reduced motion.
 
 ## Shapes
 
-The shape language is soft and rounded. Corners step down as elements get smaller: panels are 16px, compact panels and image cards 14px, menus and selects 12px, fields and skeletons 10px, and tags 5px. Every button, nav item and segmented control is a full pill. Borders are always 1px blue-tinted hairlines. Dashed hairlines (`hairline-strong`) mark "add" slots. Image slots show 6px diagonal ink hatching until a photo loads. After that, the photo sits on the cool `photo` backdrop.
+Soft-cornered but precise. Panels are 16px, with medium and small steps at 14px and 12px; controls (buttons, inputs, selects, nav items) are 10px; tags are 6px; switches, the live dot and dialog close buttons are fully round. Panels replace their 1px border with a gradient rim ring; table rows and shell bars use hairline lines. Diagonal 6px stripes mark empty image slots until a photo loads.
 
 ## Components
 
 ### Buttons
-Pills throughout. Exactly one is lit.
-- **Shape:** full pill (`rounded.pill`). Sizes are 36px (sm), 40px (default) and 44px (lg).
-- **Primary (lit pill):** a deep-signal body with white text, a 40% pale-blue border and a top inner highlight. On hover or focus the border turns white and current runs through the pill: a tight inner glow and a short bloom over 0.4s.
-- **Outline:** a strong-hairline border on a 2% text-tinted fill, in text-2. On hover the border turns half signal, with a signal wash and text-colour copy.
-- **Secondary:** ink-3 fill with a hairline border.
-- **Ghost:** mute text. On hover it gets a signal wash and text-colour copy.
-- **Signal:** a half-signal border with signal text that floods solid signal on hover.
-- **Destructive:** an alert-hued outline that floods solid alert on hover.
-- **Focus:** a 2px signal ring offset from the ink. This is shared with custom links through `.focus-ring`.
+Mono uppercase, 10px radius, 40px tall with 20px side padding, 300ms on the shared easing `cubic-bezier(0.6, 0, 0.2, 1)`.
+- **Primary (default):** filled Horizon Amber with ink-on-amber text and an amber bloom that strengthens on hover and focus.
+- **Outline:** amber edge and text on a translucent ground, floods amber on hover.
+- **Secondary:** ghost glass with an edge stroke, inverts to ink on hover.
+- **Destructive:** alert-edged, fills alert on hover. **Ghost:** muted text, amber wash on hover. **Link:** the one non-mono, sentence-case control.
+- **Focus:** a 2px amber ring offset from the ground.
 
-### Chips
-- **Style (Badge):** a small mono tag (5px radius, 11px). Each tag has a hairline in its own hue at about 45%, over a 10% wash of that hue. Variants are signal, ok, warn, alert, strava, secondary (ink-3) and outline.
-- **Deal flag:** a solid signal tag with ink text showing "% OFF", with a faint signal point glow. It is used on product images.
+### Badges
+Mono 10px uppercase tag, 6px radius, a hairline and a faint wash in its own hue, so status reads by colour and by word. Variants: amber, secondary, alert, ok, warn, Strava, outline.
 
-### Cards / Containers
-- **Corner Style:** 16px (panel) or 14px (compact panel, product card).
-- **Background:** panel ink, darker than the ground.
-- **Shadow Strategy:** the panel drop plus the panel glow (see Elevation & Depth).
-- **Border:** 1px hairline. Proposal cards use the stronger hairline.
-- **Internal Padding:** 16px phone, 24px desktop. Content inside a panel is a list of rows separated by `divider` hairlines, or ink-2 tiles. A panel never contains another panel.
+### Panels (Cards)
+- **Corner Style:** 16px with the gradient rim.
+- **Background:** Panel Brown-Black over a warm six-radial mesh.
+- **Shadow Strategy:** see Elevation & Depth.
+- **Internal Padding:** 16px, 24px from sm. Titles are Archivo Narrow bold uppercase.
 
 ### Inputs / Fields
-- **Style:** an ink-2 fill with a strong-hairline border, 10px radius, 40px tall and a faint placeholder.
-- **Focus:** the border shifts to 60% signal, with a 3px signal halo at 20%. There is no offset ring.
-- **Hover:** the border sharpens to `hairline-strong`.
-- **Disabled:** 50% opacity, not-allowed cursor.
-- **Switch:** an ink-3 track that turns deep signal with a soft glow when checked.
+- **Style:** 40px tall, 10px radius, input-edge stroke, translucent ground fill, faint placeholder.
+- **Focus:** the border turns amber with no ring glow; hover brightens the edge.
+- **Disabled:** 50% opacity.
 
 ### Navigation
-- **Sidebar item:** a pill (10px × 14px padding, 14px medium text) with a 6px leading dot. When inactive, the text is mute and the dot is slate (`nav-inactive`). Hover adds a signal wash. When active, the pill is ink-3 with an inner hairline, the text is text-colour and the dot is lit signal with a point glow.
-- **Phone tab bar:** five 56px tabs on glass. When a tab is active, its icon turns signal and a 2px glowing signal bar appears along its top edge. Tapping the active tab again scrolls its page back to the top.
-- **Status line:** at the foot of the sidebar, a scrape-freshness dot (ok within 48h, warn after that, faint if the site has never been scraped) followed by mono 11px meta.
-
-### Page Header
-A light display title, with an optional mono count set as a signal superscript. Below it is a mono meta line whose items are separated by small signal dots, then an optional light description. Actions sit to the right. There is no eyebrow above the title.
+Mono uppercase labels at 12px with 0.18em tracking. The active item is marked by a glowing amber dot beside a full-ink label, never a raised pill; inactive items are muted ink and warm to ink on hover. On phones a five-tab glass bar marks the active tab with a short glowing amber bar above its icon. The brand is a mono "ANTON" wordmark with a wide 0.5em tracking beside an amber-outlined mark.
 
 ### Live Dot
-A 6px current-colour dot with a point glow. A ring expands from it every 2.4s. It marks only data that is live right now, such as the assistant being connected or streaming.
-
-### Motion
-- **Easing:** one curve, `cubic-bezier(0.6, 0, 0.2, 1)` (`ease-signal`). Controls transition over 0.3–0.4s and the panel glow over 0.7s.
-- **Tick-fade:** three signal dots brighten in sequence (1.2s, staggered 0.2s). This is the "working" indicator, used while the assistant is thinking.
-- **Pulse ring:** only on live data, through the live dot.
-- **Reduced motion:** under `prefers-reduced-motion: reduce`, every transition collapses and every animation stops. The WebGL bloom renders a single still frame.
+A 6px accent dot with a glow and a radiating pulse ring, for data that is live.
 
 ## Do's and Don'ts
 
 ### Do:
-- **Do** route every colour through an `index.css` custom property and its Tailwind token. Use `/N` modifiers for alpha.
-- **Do** use the lit pill for the one primary action in a view, and quiet outline, ghost or signal pills for everything else.
-- **Do** set every number, unit, date and pace in IBM Plex Mono with tabular figures. Stat headline values use light Bricolage Grotesque.
-- **Do** divide a panel's content into rows with `divider` hairlines, or into ink-2 tiles.
-- **Do** pair every status hue with a word or icon.
-- **Do** use `ease-signal` for every transition, and check both desktop and about 380px.
+- **Do** route every colour through the `index.css` variables so the daylight variant works for free.
+- **Do** use mono uppercase with 0.18em tracking for labels, nav, buttons, tags and units, and tabular figures for numbers.
+- **Do** express status by colour and by word together (a tag reading OK, WARN or ALERT).
+- **Do** keep panels as the one container language and let `.panel-interactive` signal that a card is clickable.
+- **Do** respect `prefers-reduced-motion`; all animation stops.
+- **Do** check every change at about 380 px.
 
 ### Don't:
-- **Don't** put an eyebrow kicker (a small uppercase label) above a heading or page title. Mono uppercase labels caption values and table columns only.
-- **Don't** nest a card or panel inside another card or panel. Use hairline-divided rows or ink-2 tiles.
-- **Don't** write hex or rgb colour literals in components.
-- **Don't** use signal blue as decoration, or green, amber or red for anything but status.
-- **Don't** pulse anything that isn't live data, and don't add easings beyond the one curve.
-- **Don't** set Bricolage Grotesque heavier than 300, or use it for body copy.
-- **Don't** add a light theme or a second accent hue.
+- **Don't** use amber for status or green, yellow or red for decoration.
+- **Don't** run the rim sweep on every card; it is reserved for `.panel-sweep` and hover.
+- **Don't** put hex values in components; the Tokens Only Rule is that everything goes through index.css variables.
+- **Don't** use pure black or pure white as the dark theme ground or ink.
+- **Don't** put `backdrop-filter` on cards; blur belongs to shell bars and scrims.
+- **Don't** use grey borders in place of warm alpha hairlines.
+- **Don't** set reading text in mono or labels in the sans face.
+
+### Named Rules
+**The Tokens Only Rule.** No hex in components. Colour, glow, shadow and mesh all come from index.css variables, which is also what lets the light theme re-tone without a fork.
