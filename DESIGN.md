@@ -216,7 +216,7 @@ A warm-black and amber palette: every neutral leans toward brown-orange, and one
 
 ## Layout
 
-A fixed 236px rail on desktop (mono nav, glowing dot for the active item) and a five-tab glass bar at the bottom on phones. Content scrolls in the main region under a sticky, opaque page header band that carries a soft iridescent amber glow clipped to the band. Page padding steps 16px, 24px, then 34px horizontal with 30px vertical from lg. Card padding is 16px on phones and 24px from sm. Controls are 40px tall (36px small, 48px large). Every change must hold at about 380 px; the container caps at 1400px on 2xl. Spacing is Tailwind's 4px-based scale, with 8px and 16px as the common gaps.
+A fixed 236px rail on desktop (mono nav, glowing dot for the active item) and a five-tab glass bar at the bottom on phones. Content scrolls in the main region under a sticky, opaque page header band that carries the template's black hole: a lensed amber accretion disc ray-marched in WebGL (`EventHorizon`), sitting right of the title and clipped to the band, with a CSS amber glow as the fallback and in the daylight theme. Page padding steps 16px, 24px, then 34px horizontal with 30px vertical from lg. Card padding is 16px on phones and 24px from sm. Controls are 40px tall (36px small, 48px large). Every change must hold at about 380 px; the container caps at 1400px on 2xl. Spacing is Tailwind's 4px-based scale, with 8px and 16px as the common gaps.
 
 ## Elevation & Depth
 

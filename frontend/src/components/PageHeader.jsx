@@ -1,4 +1,4 @@
-import Iridescence from '@/components/layout/Iridescence'
+import EventHorizon from '@/components/layout/EventHorizon'
 
 // The full-bleed hero band. Negative margins cancel Layout's page padding so the
 // glow reaches the edges of <main>; sticky + opaque keeps the title pinned.
@@ -16,10 +16,10 @@ const PLAIN_CLASSES = 'mb-5 flex flex-row flex-wrap items-end justify-between ga
  *
  * The outer element is the full-bleed hero band shared by every page: the
  * negative margins cancel Layout's page padding (p-4 sm:p-6 lg:px-[34px]
- * lg:py-[30px]) so the iridescent glow reaches the edges of <main>. The band
+ * lg:py-[30px]) so the black-hole backdrop (EventHorizon) reaches the edges of <main>. The band
  * is sticky + opaque so the title and actions stay pinned while content scrolls
  * beneath it. This works because <main> is the scroll container — never add
- * overflow to an ancestor. overflow-hidden clips the glow to the band.
+ * overflow to an ancestor. overflow-hidden clips the backdrop to the band.
  *
  * `plain` is for headers nested inside another page's band (Settings sub-pages),
  * so the animation and sticky band appear once.
@@ -28,7 +28,7 @@ export default function PageHeader({ title, count, meta, description, plain = fa
   const metaItems = (meta || []).filter(Boolean)
   return (
     <div className={plain ? PLAIN_CLASSES : BAND_CLASSES}>
-      {!plain && <Iridescence />}
+      {!plain && <EventHorizon />}
       <div className="min-w-0">
         <h1 className="font-sans text-[34px] font-extrabold uppercase leading-[0.94] tracking-[-0.03em] animate-rise text-foreground sm:text-[46px]">
           {title}
