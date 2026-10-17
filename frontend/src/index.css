@@ -20,22 +20,25 @@
  * — never decoration. Hairlines are warm alpha, not greys. Ice blue (--ice) is
  * for secondary readouts. Token names keep the old "signal" vocabulary
  * (--signal-deep, --signal-16, …): "signal" now simply means "the accent".
+ *
+ * The dark ground sits one step above the template's near-black (2026-10-17,
+ * runner's request; design_decisions E22).
  */
 @layer base {
   :root {
     /* Native controls (date picker, number spinners, scrollbars) render dark. */
     color-scheme: dark;
-    --background: #070605;
+    --background: #141210;
     --foreground: #efebe2;
-    --card: #0e0b09;
+    --card: #1a1714;
     --card-foreground: #efebe2;
-    --popover: #12100c;
+    --popover: #1e1b17;
     --popover-foreground: #efebe2;
     --primary: #ffb45e;           /* template --amber */
     --primary-foreground: #0b0906;
-    --secondary: #1c1813;         /* raised control fill */
+    --secondary: #282420;         /* raised control fill */
     --secondary-foreground: #d4cfc4;
-    --muted: #16120e;
+    --muted: #221e1a;
     --muted-foreground: #a39e92;
     --accent: rgba(255, 180, 94, 0.12);  /* selected/active wash */
     --accent-foreground: #ffb45e;
@@ -67,12 +70,12 @@
     --lit-hover: #ffc684;
     --lit-foreground: #0b0906;
 
-    --surface: #16120e;           /* nested tile/row inside a panel */
-    --faint: #8a857a;
-    --sidebar: #0a0907;           /* shell rails (sidebar, phone bars) */
+    --surface: #221e1a;           /* nested tile/row inside a panel */
+    --faint: #908b80;
+    --sidebar: #161411;           /* shell rails (sidebar, phone bars) */
     --divider: rgba(255, 240, 220, 0.10);  /* softer row divider than --border */
     --edge: rgba(239, 235, 226, 0.30);     /* dashed "add" borders, hover edges */
-    --nav-inactive: #3a342b;
+    --nav-inactive: #463f35;
 
     /* Charts (recharts takes colour strings; SVG attributes accept var()).
        Amber is left out on purpose: it's the accent and the price chart's
@@ -97,12 +100,12 @@
     --panel-glow-hover: rgba(255, 180, 94, 0.2);
     --panel-glow-hover-tail: rgba(255, 180, 94, 0.08);
     --shadow-color: rgba(0, 0, 0, 0.7);       /* panel/popover drop shadows */
-    --glass: rgba(4, 4, 6, 0.82);              /* translucent shell bars */
+    --glass: rgba(20, 18, 16, 0.82);              /* translucent shell bars */
     --scrim: rgba(0, 0, 0, 0.6);              /* drawer/sheet backdrops */
-    --stripe-a: #16120e;
-    --stripe-b: #1d1813;
-    --scrollbar: #2a241d;
-    --scrollbar-hover: #3d352b;
+    --stripe-a: #221e1a;
+    --stripe-b: #292520;
+    --scrollbar: #36302a;
+    --scrollbar-hover: #4a423a;
     --selection: #ffb45e;
     --selection-foreground: #000;
     --grain-opacity: 0.035;
@@ -110,8 +113,8 @@
     --iridescence-opacity: 0.6;
 
     /* Signature glass panel (template .servicio / .cabecera …). */
-    --panel-fill: rgba(14, 11, 9, 0.84);
-    --mesh-ink: rgba(14, 11, 9, 0.92);
+    --panel-fill: rgba(26, 23, 20, 0.84);
+    --mesh-ink: rgba(26, 23, 20, 0.92);
     --mesh-1: rgba(184, 102, 31, 0.42);
     --mesh-2: rgba(255, 215, 161, 0.20);
     --mesh-3: rgba(255, 150, 70, 0.36);

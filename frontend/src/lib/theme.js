@@ -9,7 +9,7 @@ export const STORAGE_KEY = 'anton-theme'
 export const THEMES = ['dark', 'light']
 
 // <meta name="theme-color"> per theme (iOS/Android browser chrome) = --background.
-const THEME_COLORS = { dark: '#070605', light: '#f4f1ea' }
+const THEME_COLORS = { dark: '#141210', light: '#f4f1ea' }
 
 export function getStoredTheme() {
   try {
