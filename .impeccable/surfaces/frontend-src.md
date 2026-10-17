@@ -21,7 +21,7 @@ OWN-WORLD: Warm black ground #141210 with panels #1a1714 and surfaces #221e1a; w
 
 STORY: Within one glance the runner sees the week, the shoe that needs attention and any deal worth acting on. Every action they can take is an amber control.
 
-FIRST VIEWPORT: Desktop: a 236px warm-black sidebar with the mono "ANTON" wordmark on an amber-edged tile, mono uppercase nav with a glowing amber dot on the active item, and a mono status line with a live dot; the page title in Archivo 800 uppercase at about 46px, rising in on load, with mono meta beneath. On Home the WebGL iridescence (CSS-glow fallback), tinted amber, blooms behind the top-right of the header band. Phone: a glass top bar, then the page, then a glass tab bar with mono labels and an amber active filament.
+FIRST VIEWPORT: Desktop: a 236px warm-black sidebar with the mono "ANTON" wordmark on an amber-edged tile, mono uppercase nav with a glowing amber dot on the active item, and a mono status line with a live dot; the page title in Archivo 800 uppercase at about 46px, rising in on load, with mono meta beneath. Behind every page header band, the template's black hole (EventHorizon: one-pass WebGL ray-march, CSS amber glow fallback, none in daylight) sits right of the title, its lensed disc cropped by the band. Phone: a glass top bar, then the page, then a glass tab bar with mono labels and an amber active filament.
 
 FORM: Pinned by the user (template = visual source of truth). No roll, no seed key: brief-pinned direction. Code-led (no image generation). Signature move: the warm glass panel whose amber light sweeps the rim, earned only on hover and on the login card, never on every card at once. Live data points pulse with the latido ring.
 

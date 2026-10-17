@@ -110,7 +110,7 @@
     --selection-foreground: #000;
     --grain-opacity: 0.035;
     --iridescence-blend: screen;              /* Home hero shader */
-    --iridescence-opacity: 0.6;
+    --iridescence-opacity: 0.9;              /* header black hole (EventHorizon) strength */
 
     /* Signature glass panel (template .servicio / .cabecera …). */
     --panel-fill: rgba(26, 23, 20, 0.84);
