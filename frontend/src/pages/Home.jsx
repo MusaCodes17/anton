@@ -54,7 +54,7 @@ export default function Home() {
 // Header meta: the runner's local calendar day (America/Toronto, like runs).
 function todayLabel() {
   return new Date().toLocaleDateString('en-CA', {
-    weekday: 'long', month: 'long', day: 'numeric', timeZone: 'America/Toronto',
+    weekday: 'short', month: 'long', day: 'numeric', timeZone: 'America/Toronto',
   })
 }
 
