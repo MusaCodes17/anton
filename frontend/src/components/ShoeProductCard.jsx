@@ -4,7 +4,7 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import PromoBadge from '@/components/PromoBadge'
 import ColorwaySelector from '@/components/ColorwaySelector'
-import { formatCurrency, formatPercent, bestPromo } from '@/lib/utils'
+import { cn, formatCurrency, formatPercent, bestPromo } from '@/lib/utils'
 
 /**
  * One compact card per tracked shoe model. Consolidates every active deal for
@@ -14,8 +14,9 @@ import { formatCurrency, formatPercent, bestPromo } from '@/lib/utils'
  *
  * Props: group = { shoeId, shoe: { brand, model }, deals: DealResponse[] }
  *        onViewDetails(deal) — optional, opens the detail modal.
+ *        compactMobile — public page: on phones, hide the struck-through MSRP, the In stock badge and the options count.
  */
-export default function ShoeProductCard({ group, onViewDetails }) {
+export default function ShoeProductCard({ group, onViewDetails, compactMobile = false }) {
   const { shoe, deals } = group
   // Deals arrive pre-sorted (best per the page's sort first), so default to the first.
   const [selectedId, setSelectedId] = useState(deals[0]?.id)
@@ -77,7 +78,7 @@ export default function ShoeProductCard({ group, onViewDetails }) {
               </p>
               {shoe.msrp != null && (
                 <span
-                  className="text-sm text-faint line-through"
+                  className={cn('text-sm text-faint line-through', compactMobile && 'max-sm:hidden')}
                   title={`Retail price ${formatCurrency(shoe.msrp)}`}
                 >
                   {formatCurrency(shoe.msrp)}
@@ -100,7 +101,10 @@ export default function ShoeProductCard({ group, onViewDetails }) {
           ) : (
             <Badge
               variant="outline"
-              className="shrink-0 rounded-full border-primary/40 text-accent-foreground"
+              className={cn(
+                'shrink-0 rounded-full border-primary/40 text-accent-foreground',
+                compactMobile && 'max-sm:hidden'
+              )}
             >
               In stock
             </Badge>
@@ -132,11 +136,20 @@ export default function ShoeProductCard({ group, onViewDetails }) {
         <div className="mt-auto flex items-center gap-1 border-t border-border pt-3 text-xs text-muted-foreground">
           <Store className="h-3.5 w-3.5" />
           {retailerName || 'Unknown retailer'}
-          {deals.length > 1 && <span className="ml-auto">{deals.length} options</span>}
+          {deals.length > 1 && (
+            <span className={cn('ml-auto', compactMobile && 'max-sm:hidden')}>
+              {deals.length} options
+            </span>
+          )}
         </div>
 
         {selected.product_url && (
-          <Button variant="outline" size="sm" className="w-full" asChild>
+          <Button
+            variant="outline"
+            size="sm"
+            className="w-full max-sm:gap-1 max-sm:px-2 max-sm:text-2xs max-sm:tracking-normal max-sm:[&_svg]:size-3"
+            asChild
+          >
             <a href={selected.product_url} target="_blank" rel="noreferrer">
               View at retailer <ExternalLink className="h-3.5 w-3.5" />
             </a>
