@@ -58,7 +58,7 @@ export default function PublicDeals() {
   const [minSavings, setMinSavings] = useState('')
   const [sort, setSort] = useState('savings_desc')
   const [selected, setSelected] = useState(null)
-  // Mobile: everything except Size collapses; Size is always visible.
+  // Mobile: the whole filter deck (Size included) collapses behind "Filters".
   const [filtersOpen, setFiltersOpen] = useState(false)
 
   const query = usePublicDeals()
@@ -113,16 +113,16 @@ export default function PublicDeals() {
     setSort('savings_desc')
   }
 
-  // Size is always visible on mobile, so the disclosure badge counts only the
-  // collapsible filters.
-  const collapsedActive = [
+  // Every filter (Size included) lives behind the mobile disclosure, so the badge counts them all.
+  const activeFilters = [
+    size !== ALL,
     brand !== ALL,
     retailerId !== ALL,
     shoeType !== ALL,
     minSavings !== '',
     sort !== 'savings_desc',
   ].filter(Boolean).length
-  const hasFilters = collapsedActive > 0 || size !== ALL
+  const hasFilters = activeFilters > 0
 
   return (
     <PublicLayout lastScrape={checkedAt}>
@@ -134,32 +134,32 @@ export default function PublicDeals() {
 
         <Card>
           <CardContent className="grid grid-cols-2 gap-3 p-4 sm:gap-4 md:grid-cols-3 lg:grid-cols-6">
-            <div className="col-span-2 space-y-1.5 md:col-span-1">
-              <Label>Size</Label>
-              <Select value={size} onValueChange={setSize}>
-                <SelectTrigger>
-                  <SelectValue placeholder="All sizes" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value={ALL}>All sizes</SelectItem>
-                  {sizes.map((s) => (
-                    <SelectItem key={s} value={s}>
-                      {s}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
             <FilterDisclosure
               className="col-span-2"
               open={filtersOpen}
               onToggle={() => setFiltersOpen((o) => !o)}
-              count={collapsedActive}
+              count={activeFilters}
             />
 
             {/* `contents` makes these grid items on md+; on phones they collapse. */}
             <div className={filtersOpen ? 'contents' : 'hidden md:contents'}>
+              <div className="col-span-2 space-y-1.5 md:col-span-1">
+                <Label>Size</Label>
+                <Select value={size} onValueChange={setSize}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="All sizes" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value={ALL}>All sizes</SelectItem>
+                    {sizes.map((s) => (
+                      <SelectItem key={s} value={s}>
+                        {s}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
               <div className="space-y-1.5">
                 <Label>Brand</Label>
                 <Select value={brand} onValueChange={setBrand}>
@@ -268,6 +268,7 @@ export default function PublicDeals() {
                   key={group.shoeId}
                   group={group}
                   onViewDetails={(deal) => setSelected(deal)}
+                  compactMobile
                 />
               ))}
             </div>

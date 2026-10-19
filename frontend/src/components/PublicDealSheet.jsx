@@ -53,7 +53,9 @@ export default function PublicDealSheet({ deal, open, onOpenChange }) {
               {formatCurrency(deal.current_price)}
             </p>
             {deal.msrp != null && (
-              <span className="text-sm text-faint line-through">{formatCurrency(deal.msrp)}</span>
+              <span className="text-sm text-faint line-through max-sm:hidden">
+                {formatCurrency(deal.msrp)}
+              </span>
             )}
             {deal.in_stock === false ? (
               <Badge variant="outline" className="border-border text-muted-foreground">
