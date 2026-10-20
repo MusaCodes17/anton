@@ -10,6 +10,7 @@ import RecordsCard from '@/components/training/RecordsCard'
 import RaceBlocksCard from '@/components/training/RaceBlocksCard'
 import ActivityRow from '@/components/training/ActivityRow'
 import CustomizeSectionsDialog from '@/components/training/CustomizeSectionsDialog'
+import DateRangeControls from '@/components/training/DateRangeControls'
 import { useToast } from '@/components/ui/toast'
 import { layoutBlocks, normalizeLayout } from '@/lib/trainingLayout'
 import { Button } from '@/components/ui/button'
@@ -35,6 +36,7 @@ import {
   usePreferences,
   useUpdateTrainingLayout,
 } from '@/hooks/useApi'
+import { isoDaysAgo, isoToday, useDateRange } from '@/hooks/useDateRange'
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
 const ALL = '__all__'
@@ -67,17 +69,6 @@ function labelWeek(period) {
     fullLabel: `Week ${parseInt(w, 10)} · ${y}`,
     monthAbbrev: MONTHS[thu.getUTCMonth()],
   }
-}
-
-// Local-date ISO strings (YYYY-MM-DD) for the date-range picker (T4b).
-function isoToday() {
-  const d = new Date()
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
-}
-function isoDaysAgo(n) {
-  const d = new Date()
-  d.setDate(d.getDate() - n)
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 }
 
 function currentMonthKey(d = new Date()) {
@@ -124,20 +115,15 @@ function SectionHeading({ id, icon: Icon, title, hint }) {
 export default function Training() {
   const [period, setPeriod] = useState('weekly')
 
+  // Activities "load more" depth. Declared before the date range so a range
+  // change can reset it (see useDateRange's onChange).
+  const [pages, setPages] = useState(1)
+  const resetPages = () => setPages(1)
+
   // Shared date range (T4b) — drives the volume chart, the summary, and the
-  // activities list. Default: last 365 days (the 1y preset), matching the
-  // claude.ai dashboard's 52-week view (R10.5). React state only (resets on nav).
-  const [dateFrom, setDateFrom] = useState(() => isoDaysAgo(365))
-  const [dateTo, setDateTo] = useState(() => isoToday())
-  // Drafts are bound to the date inputs; they commit to dateFrom/dateTo 400 ms
-  // after the last change. Committing per change fired 2 requests each time
-  // (iOS date wheels fire onChange repeatedly while spinning).
-  const [draftFrom, setDraftFrom] = useState(dateFrom)
-  const [draftTo, setDraftTo] = useState(dateTo)
-  const range = useMemo(() => ({
-    ...(dateFrom ? { date_from: dateFrom } : {}),
-    ...(dateTo ? { date_to: dateTo } : {}),
-  }), [dateFrom, dateTo])
+  // activities list. Default: last 365 days (the 1y preset). State lives in useDateRange.
+  const dr = useDateRange({ onChange: resetPages })
+  const { dateFrom, dateTo, range } = dr
 
   // Fixed trailing-365-day window for the "Last 12 mo" stat tile — computed
   // once at mount so the tile matches the Volume header total when 1y is selected.
@@ -167,8 +153,6 @@ export default function Training() {
     const t = setTimeout(() => setDebouncedMinKm(minKm), 400)
     return () => clearTimeout(t)
   }, [minKm])
-  const [pages, setPages] = useState(1)
-
   const activityParams = useMemo(() => {
     const p = { limit: pages * PAGE, offset: 0 }
     if (dateFrom) p.date_from = dateFrom
@@ -181,8 +165,6 @@ export default function Training() {
 
   const activities = useActivities(activityParams)
   const hasMore = activities.data && activities.data.length === pages * PAGE
-
-  const resetPages = () => setPages(1)
 
   // Stat strip — "Last 12 mo" sums the fixed trailing-365-day window so it
   // equals the Volume header total when the 1y preset is selected.
@@ -258,17 +240,6 @@ export default function Training() {
   const summaryLoading = trailing365.isLoading || recentWeekly.isLoading
   const summaryError = trailing365.isError ? trailing365 : recentWeekly.isError ? recentWeekly : null
 
-  // A range edit invalidates the current "load more" depth.
-  const setRange = (from, to) => { setDateFrom(from); setDateTo(to); resetPages() }
-  useEffect(() => {
-    if (draftFrom === dateFrom && draftTo === dateTo) return
-    const t = setTimeout(() => setRange(draftFrom, draftTo), 400)
-    return () => clearTimeout(t)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [draftFrom, draftTo])
-  // Presets set draft and committed values together, immediately.
-  const applyPreset = (from, to) => { setDraftFrom(from); setDraftTo(to); setRange(from, to) }
-
   // Section order/visibility is a server-side preference (same on phone and laptop).
   const prefs = usePreferences()
   const layout = normalizeLayout(prefs.data?.training_layout)
@@ -288,35 +259,7 @@ export default function Training() {
       <section className="space-y-4">
         <div className="flex flex-wrap items-baseline justify-between gap-3">
           <SectionHeading id="trends" icon={TrendingUp} title="Trends" />
-          <div className="flex flex-wrap items-center gap-2 text-xs">
-            <Input
-              type="date"
-              value={draftFrom}
-              max={draftTo || undefined}
-              onChange={(e) => setDraftFrom(e.target.value)}
-              className="h-8 w-[7.5rem] sm:w-[9.5rem] px-2 py-1"
-              aria-label="From date"
-            />
-            <span className="text-muted-foreground">→</span>
-            <Input
-              type="date"
-              value={draftTo}
-              min={draftFrom || undefined}
-              onChange={(e) => setDraftTo(e.target.value)}
-              className="h-8 w-[7.5rem] sm:w-[9.5rem] px-2 py-1"
-              aria-label="To date"
-            />
-            {[['90d', 90], ['6mo', 182], ['1y', 365]].map(([label, days]) => (
-              <button
-                key={label}
-                type="button"
-                onClick={() => applyPreset(isoDaysAgo(days), isoToday())}
-                className="focus-ring rounded-md border border-border px-2 py-1 font-medium text-muted-foreground hover:text-foreground"
-              >
-                {label}
-              </button>
-            ))}
-          </div>
+          <DateRangeControls range={dr} />
         </div>
 
         {summaryLoading ? (
