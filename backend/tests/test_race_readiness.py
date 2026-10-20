@@ -14,8 +14,9 @@ from contextlib import contextmanager
 from datetime import date, timedelta
 
 from app import mcp_server
-from app.models.models import Activity, ActivityBestEffort, ActivityEffortScan, PlannedRace
+from app.models.models import Activity, ActivityBestEffort, ActivityEffortScan, OwnedShoe, PlannedRace
 from app.routers.races import get_race_readiness
+from app.services import rotation
 from app.services.race_advisor import _consistency, _taper, race_block_context, race_readiness
 from types import SimpleNamespace
 
@@ -299,7 +300,7 @@ def test_endpoint_and_mcp_tool_agree(db, monkeypatch):
     assert rest == mcp
     assert rest["has_race"] is True and rest["heuristic"] is True
     assert [i["key"] for i in rest["checklist"]] == [
-        "weeks_to_go", "peak_week", "longest_run", "long_runs", "key_effort",
+        "weeks_to_go", "peak_week", "longest_run", "long_runs", "key_effort", "race_shoe",
         "weeks_with_running", "gaps", "taper_volume", "since_long_run"]   # R11.3 appends the info items
 
 
@@ -491,3 +492,135 @@ def test_past_build_carries_consistency_and_taper_at_its_cut(db):
     far = race_readiness(db, as_of=RACE_DAY - timedelta(days=22))
     assert far.taper is None and far.past_builds[0].taper is None
     assert far.past_builds[0].consistency is not None
+
+
+# --- R11.5 — the race shoe: projected race-day km vs its own limit, and block usage ---------
+# The race is 21 days after AS_OF, so the projection is today's ledger + 3 weeks of the
+# shoe's recent rate. Its only attributed run (60 km on Sep 20) sits in the 6-week window,
+# so the recent rate is 60 / 6 = 10 km/week and the projection is 60 + 10 × 21 / 7 = 90 km.
+
+SHOE_RACE_DAY = AS_OF + timedelta(days=21)     # Fri 2026-10-30
+
+
+def _shoe(db, *, limit=None, nickname=None, brand="Adios", model="Pro"):
+    s = OwnedShoe(brand=brand, model=model, nickname=nickname, starting_mileage=0,
+                  current_mileage=0, mileage_limit=limit)
+    db.add(s)
+    db.commit()
+    return s
+
+
+def _attr(db, shoe, day, km):
+    return rotation.log_run(db, shoe.id, distance_km=km, run_date=day).activity
+
+
+def _race_with_shoe(db, shoe=None, *, day=SHOE_RACE_DAY, km=42.195):
+    r = race(db, day=day, km=km)
+    r.planned_shoe_id = shoe.id if shoe else None
+    db.commit()
+    return r
+
+
+def _race_shoe_item(db):
+    return items(race_readiness(db, as_of=AS_OF))["race_shoe"]
+
+
+def test_race_shoe_projection_under_limit_is_met(db):
+    shoe = _shoe(db, limit=95)
+    _attr(db, shoe, date(2026, 9, 20), 60.0)
+    _race_with_shoe(db, shoe)
+    it = _race_shoe_item(db)
+    assert it.key == "race_shoe" and it.label == "Race shoe · Adios Pro" and it.unit == "km"
+    assert (it.value, it.target, it.status) == (90.0, 95.0, "met")
+    assert "Projected 90 km on race day, within its 95 km limit" in it.rule
+
+
+def test_race_shoe_projection_over_limit_is_not_met(db):
+    shoe = _shoe(db, limit=85)
+    _attr(db, shoe, date(2026, 9, 20), 60.0)
+    _race_with_shoe(db, shoe)
+    it = _race_shoe_item(db)
+    assert (it.value, it.target, it.status) == (90.0, 85.0, "not_met")
+    assert "Projected 90 km on race day passes its 85 km limit" in it.rule
+
+
+def test_race_shoe_projection_exactly_at_limit_is_met(db):
+    shoe = _shoe(db, limit=90)
+    _attr(db, shoe, date(2026, 9, 20), 60.0)
+    _race_with_shoe(db, shoe)
+    it = _race_shoe_item(db)
+    assert (it.value, it.target, it.status) == (90.0, 90.0, "met")
+
+
+def test_no_race_shoe_is_n_a(db):
+    _race_with_shoe(db, None)
+    it = _race_shoe_item(db)
+    assert it.status == "n/a" and it.value is None and it.target is None
+    assert it.rule == "No race shoe picked — choose one on the race"
+    assert race_readiness(db, as_of=AS_OF).race_shoe is None
+
+
+def test_deleted_race_shoe_is_nulled_and_n_a(db):
+    shoe = _shoe(db, limit=100)
+    r = _race_with_shoe(db, shoe)
+    rotation.delete_owned_shoe(db, shoe.id)
+    db.refresh(r)
+    assert r.planned_shoe_id is None
+    assert _race_shoe_item(db).status == "n/a"
+
+
+def test_race_shoe_without_limit_is_info(db):
+    shoe = _shoe(db, limit=None, nickname="Race day Adios")
+    _attr(db, shoe, date(2026, 9, 20), 60.0)
+    _race_with_shoe(db, shoe)
+    rs = race_readiness(db, as_of=AS_OF).race_shoe
+    it = _race_shoe_item(db)
+    assert rs.label == "Race day Adios" and rs.mileage_limit is None
+    assert (it.status, it.value, it.target) == ("info", 90.0, None)
+    assert "no mileage limit set" in it.rule
+
+
+def test_race_shoe_block_usage_and_evidence_count_only_this_shoes_block_runs(db):
+    shoe = _shoe(db, limit=200)
+    other = _shoe(db, limit=200, brand="Saucony", model="Endorphin")
+    before = _attr(db, shoe, date(2026, 7, 1), 15.0)       # before the block (starts Jul 13): out
+    early = _attr(db, shoe, date(2026, 9, 20), 60.0)       # in the block, this shoe
+    late = _attr(db, shoe, date(2026, 9, 25), 10.0)        # in the block, this shoe
+    _attr(db, other, date(2026, 9, 22), 30.0)              # in the block, another shoe: out
+    _race_with_shoe(db, shoe)
+
+    rd = race_readiness(db, as_of=AS_OF)
+    rs = rd.race_shoe
+    assert (rs.block_runs, rs.block_km, rs.longest_km, rs.last_run_date) == (2, 70.0, 60.0, "2026-09-25")
+    it = items(rd)["race_shoe"]
+    assert [e.activity_id for e in it.evidence] == [early.id, late.id]   # oldest first
+    assert before.id not in [e.activity_id for e in it.evidence]
+    assert (it.period_from, it.period_to) == (rd.block_start, rd.block_end)
+    assert it.rule.endswith("; in the block: 2 runs, 70 km, last 2026-09-25")
+
+
+def test_race_shoe_before_block_starts_has_no_usage(db):
+    shoe = _shoe(db, limit=200)
+    _attr(db, shoe, date(2026, 9, 20), 60.0)
+    _race_with_shoe(db, shoe, day=AS_OF + timedelta(days=200), km=None)   # block starts after as_of
+    rs = race_readiness(db, as_of=AS_OF).race_shoe
+    it = items(race_readiness(db, as_of=AS_OF))["race_shoe"]
+    assert (rs.block_runs, rs.block_km, rs.longest_km, rs.last_run_date) == (0, 0.0, None, None)
+    assert it.evidence == [] and it.period_from is None and "in the block" not in it.rule
+
+
+def test_race_shoe_label_names_the_shoe(db):
+    named = _shoe(db, limit=200, nickname="Race day Adios")
+    _race_with_shoe(db, named)
+    assert _race_shoe_item(db).label == "Race shoe · Race day Adios"
+
+
+def test_race_shoe_label_falls_back_to_brand_and_model(db):
+    plain = _shoe(db, limit=200, brand="Saucony", model="Endorphin Speed")
+    _race_with_shoe(db, plain)
+    assert _race_shoe_item(db).label == "Race shoe · Saucony Endorphin Speed"
+
+
+def test_race_shoe_label_is_plain_when_no_shoe(db):
+    _race_with_shoe(db, None)
+    assert _race_shoe_item(db).label == "Race shoe"

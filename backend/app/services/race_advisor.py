@@ -22,7 +22,7 @@ from zoneinfo import ZoneInfo
 from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
-from app.models.models import PlannedRace
+from app.models.models import OwnedShoe, PlannedRace
 from app.services import activities as activities_svc
 from app.services import fitness as fitness_svc
 from app.services import races as races_svc
@@ -323,7 +323,7 @@ class EvidenceRun:
 
 @dataclass
 class ChecklistItem:
-    key: str                          # weeks_to_go | peak_week | longest_run | long_runs | key_effort
+    key: str                          # weeks_to_go | peak_week | longest_run | long_runs | key_effort | race_shoe | (R11.3 info keys)
     label: str
     status: str                       # one of STATUSES
     rule: Optional[str]               # the stated rule (or why it can't apply)
@@ -391,6 +391,26 @@ class PastBuild:
 
 
 @dataclass
+class RaceShoe:
+    """The shoe picked for the race (PlannedRace.planned_shoe_id), with its
+    projected mileage on race day and how it was used in the block (R11.5).
+    Projection heuristic: today's ledger plus the shoe's recent rate over
+    FORECAST_WEEKS (R6.2). For a past `as_of` the ledger is still the current
+    one (it includes runs after `as_of`), so past-dated readiness is approximate."""
+    shoe_id: int
+    label: str                        # nickname if set, else "{brand} {model}"
+    status: str                       # the shoe's status: active | retired | for_sale
+    current_mileage: float
+    mileage_limit: Optional[float]    # the runner's own limit; None when not set
+    weekly_km: float                  # recent attributed km/week, 1 dp
+    projected_race_day_km: float      # current + weekly_km × days_to_race / 7, 1 dp
+    block_runs: int = 0               # runs in this shoe within the block; 0 before it starts
+    block_km: float = 0.0
+    longest_km: Optional[float] = None
+    last_run_date: Optional[str] = None   # ISO date of the latest block run in this shoe
+
+
+@dataclass
 class RaceReadiness:
     """"Am I ready for race X?" for the next race. `has_race` False means there
     is no race ahead: every other field is empty and the readiness card hides."""
@@ -414,6 +434,7 @@ class RaceReadiness:
     key_effort: Optional[str] = None
     recent_efforts: list = field(default_factory=list)  # list[ReadinessEffort], shortest first
     checklist: list = field(default_factory=list)       # list[ChecklistItem]
+    race_shoe: Optional[RaceShoe] = None                # the race's planned shoe (R11.5)
     days_before_race: Optional[int] = None   # race_date − block_end; set when the block has started
     past_builds: list = field(default_factory=list)     # list[PastBuild], newest race first
     consistency: Optional[Consistency] = None           # set when the block has started (R11.3)
@@ -482,6 +503,9 @@ def race_readiness(db: Session, *, as_of: Optional[date] = None) -> RaceReadines
       RECENT_EFFORT_WEEKS weeks vs. target pace: met at or faster than target
       pace; not_met when slower; no_data when there's no such effort; n/a
       with no target time.
+    - race_shoe (R11.5) — the shoe picked on the race: projected race-day km
+      vs its own mileage_limit (met/not_met), info without a limit, n/a with
+      no shoe picked; evidence is the block's runs in that shoe.
 
     Status honesty (R11.1): `not_met` only when evidence exists and falls
     short; a started block with no runs (or no key effort in the window) is
@@ -581,7 +605,10 @@ def race_readiness(db: Session, *, as_of: Optional[date] = None) -> RaceReadines
                 run_date=b.run_date, name=b.name, activity_id=b.activity_id, segment=b.segment,
             ))
 
-    out.checklist = _checklist(out, cls, block_runs)
+    out.race_shoe, shoe_runs = _race_shoe(
+        db, race, as_of=as_of, days_to_race=days, started=started,
+        block_start=block_start, block_end=block_end)
+    out.checklist = _checklist(out, cls, block_runs, shoe_runs)
 
     if started:
         out.consistency = _consistency([r.date for r in block_runs], block_start, block_end)
@@ -635,10 +662,12 @@ def _evidence(r) -> EvidenceRun:
                        distance_km=round(r.distance_km, 1), name=r.name)
 
 
-def _checklist(rd: RaceReadiness, cls: Optional[RaceClass], block_runs: Optional[list] = None) -> list[ChecklistItem]:
+def _checklist(rd: RaceReadiness, cls: Optional[RaceClass], block_runs: Optional[list] = None,
+               shoe_runs: Optional[list] = None) -> list[ChecklistItem]:
     """The checklist rows, in reading order. Rules are stated in words so every
     surface (page, MCP, Son of Anton) explains a status the same way. `block_runs`
-    are the raw unified-activity rows of the block, used for peak-week evidence."""
+    are the raw unified-activity rows of the block, used for peak-week evidence;
+    `shoe_runs` are the block's runs in the race shoe (race_shoe evidence, R11.5)."""
     race = rd.race
     block_runs = block_runs or []
     items = [ChecklistItem(
@@ -741,7 +770,85 @@ def _checklist(rd: RaceReadiness, cls: Optional[RaceClass], block_runs: Optional
         period_from=rd.effort_window_start, period_to=rd.block_end,
         evidence=effort_ev, age_days=age,
     ))
+    items.append(_race_shoe_item(rd, shoe_runs or []))
     return items
+
+
+def _race_shoe(db: Session, race: PlannedRace, *, as_of: date, days_to_race: int,
+               started: bool, block_start: date, block_end: date) -> tuple[Optional[RaceShoe], list]:
+    """The race's planned shoe with its race-day projection and block usage (R11.5).
+    Returns (RaceShoe, the block's raw runs in that shoe) — the raw rows are
+    checklist evidence only, not payload. (None, []) when no shoe is picked or
+    the picked shoe row is gone (its FK is nulled on delete, but guard anyway).
+
+    Heuristic: projection = today's ledger + the shoe's recent weekly rate
+    (rotation.recent_weekly_km, the R6.2 FORECAST_WEEKS window, anchored at
+    as_of) × days_to_race / 7. Usage is every run attributed to the shoe in the
+    block (not for_analysis: this is usage, not analytics, so excluded runs count).
+    """
+    if race.planned_shoe_id is None:
+        return None, []
+    shoe = db.query(OwnedShoe).filter(OwnedShoe.id == race.planned_shoe_id).first()
+    if shoe is None:
+        return None, []
+    weekly_km = round(rotation_svc.recent_weekly_km(db, today=as_of).get(shoe.id, 0.0), 1)
+    projected = round(shoe.current_mileage + weekly_km * days_to_race / 7, 1)
+
+    shoe_runs: list = []
+    if started:
+        shoe_runs = activities_svc.unified_activities(
+            db, date_from=block_start, date_to=block_end, shoe_id=shoe.id)
+    usage = dict(block_runs=len(shoe_runs))
+    if shoe_runs:
+        usage.update(
+            block_km=round(sum(r.distance_km for r in shoe_runs), 1),
+            longest_km=round(max(r.distance_km for r in shoe_runs), 1),
+            last_run_date=max(r.date for r in shoe_runs).isoformat(),
+        )
+    return RaceShoe(
+        shoe_id=shoe.id,
+        label=shoe.nickname or f"{shoe.brand} {shoe.model}",
+        status=shoe.status,
+        current_mileage=shoe.current_mileage,
+        mileage_limit=shoe.mileage_limit,
+        weekly_km=weekly_km,
+        projected_race_day_km=projected,
+        **usage,
+    ), shoe_runs
+
+
+def _race_shoe_item(rd: RaceReadiness, shoe_runs: list) -> ChecklistItem:
+    """The race_shoe checklist row (R11.5). not_met only when the projected
+    race-day mileage passes the runner's own limit; exactly at the limit is met.
+    No limit → info (a projection with no pass/fail rule)."""
+    s = rd.race_shoe
+    period = dict(period_from=rd.block_start, period_to=rd.block_end) if rd.block_started else {}
+    if s is None:
+        return ChecklistItem(
+            key="race_shoe", label="Race shoe", status=STATUS_NA,
+            rule="No race shoe picked — choose one on the race", value=None, target=None,
+            unit="km", **period)
+
+    status, rule = STATUS_INFO, (
+        f"Projected {s.projected_race_day_km:g} km on race day "
+        f"({s.weekly_km:g} km/week recently); no mileage limit set")
+    target = None
+    if s.mileage_limit is not None:
+        target = s.mileage_limit
+        if s.projected_race_day_km > s.mileage_limit:
+            status, rule = STATUS_NOT_MET, (
+                f"Projected {s.projected_race_day_km:g} km on race day passes its "
+                f"{s.mileage_limit:g} km limit")
+        else:
+            status, rule = STATUS_MET, (
+                f"Projected {s.projected_race_day_km:g} km on race day, "
+                f"within its {s.mileage_limit:g} km limit")
+    if s.block_runs > 0:
+        rule += f"; in the block: {s.block_runs} runs, {s.block_km:g} km, last {s.last_run_date}"
+    return ChecklistItem(
+        key="race_shoe", label=f"Race shoe · {s.label}", status=status, rule=rule,
+        value=s.projected_race_day_km, target=target, unit="km",
+        evidence=[_evidence(r) for r in sorted(shoe_runs, key=lambda r: r.date)], **period)
 
 
 def _monday(d: date) -> date:

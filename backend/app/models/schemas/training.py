@@ -125,7 +125,7 @@ class ReadinessEvidenceRun(BaseModel):
 
 
 class ReadinessChecklistItem(BaseModel):
-    key: str                          # weeks_to_go | peak_week | longest_run | long_runs | key_effort
+    key: str                          # weeks_to_go | peak_week | longest_run | long_runs | key_effort | race_shoe | (R11.3 info keys)
     label: str
     status: str                       # met | not_met | info | n/a | no_data
     rule: Optional[str] = None
@@ -136,6 +136,22 @@ class ReadinessChecklistItem(BaseModel):
     period_to: Optional[str] = None
     evidence: List[ReadinessEvidenceRun] = []
     age_days: Optional[int] = None
+
+
+class RaceShoeResponse(BaseModel):
+    """The race's planned shoe (R11.5). projected_race_day_km is today's ledger plus
+    the shoe's recent weekly rate over the race-day gap (a heuristic)."""
+    shoe_id: int
+    label: str
+    status: str
+    current_mileage: float
+    mileage_limit: Optional[float] = None
+    weekly_km: float
+    projected_race_day_km: float
+    block_runs: int = 0
+    block_km: float = 0.0
+    longest_km: Optional[float] = None
+    last_run_date: Optional[str] = None
 
 
 class BlockRaceResponse(BaseModel):
@@ -219,6 +235,7 @@ class RaceReadinessResponse(BaseModel):
     key_effort: Optional[str] = None
     recent_efforts: List[ReadinessEffortResponse] = []
     checklist: List[ReadinessChecklistItem] = []
+    race_shoe: Optional[RaceShoeResponse] = None
     days_before_race: Optional[int] = None
     past_builds: List[PastBuildResponse] = []
     consistency: Optional[ConsistencyResponse] = None

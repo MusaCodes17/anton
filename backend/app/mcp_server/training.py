@@ -602,7 +602,14 @@ def get_race_block_context(weeks_back: int = 12, as_of: Optional[str] = None) ->
       means the number is a stretch inside a longer run) and, for key_effort,
       `age_days` (days since that effort). Quote the numbers
       and the rule; it is a heuristic checklist, NOT a score — never sum it
-      into one. The block is `block_start`→`block_end` (a fixed number of
+      into one. The `race_shoe` item (R11.5) is the shoe picked for the race:
+      `readiness.race_shoe` ({shoe_id, label, status, current_mileage,
+      mileage_limit, weekly_km, projected_race_day_km, block_runs, block_km,
+      longest_km, last_run_date}) projects its km on race day from today's
+      mileage plus its recent weekly rate (a heuristic; a past `as_of` still
+      uses the current ledger). It is `not_met` only when that projection will
+      pass the runner's own mileage_limit; `met` at or under it; `info` when no
+      limit is set; `n/a` when no shoe is picked. The block is `block_start`→`block_end` (a fixed number of
       weeks ending race week, by race distance); `recent_efforts` carry
       `vs_target_s_per_km` (negative = faster than target pace).
       `readiness.past_builds` lists the past completed/DNF races of the same
