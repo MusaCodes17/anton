@@ -115,14 +115,27 @@ class ReadinessEffortResponse(BaseModel):
     segment: bool = False
 
 
+class ReadinessEvidenceRun(BaseModel):
+    """A run behind a checklist number (R11.1)."""
+    activity_id: Optional[int] = None
+    run_date: str
+    distance_km: float                # a segment's stretch distance when segment is true
+    name: Optional[str] = None
+    segment: bool = False
+
+
 class ReadinessChecklistItem(BaseModel):
     key: str                          # weeks_to_go | peak_week | longest_run | long_runs | key_effort
     label: str
-    status: str                       # met | not_met | info | n/a
+    status: str                       # met | not_met | info | n/a | no_data
     rule: Optional[str] = None
     value: Optional[float] = None
     target: Optional[float] = None
     unit: str
+    period_from: Optional[str] = None
+    period_to: Optional[str] = None
+    evidence: List[ReadinessEvidenceRun] = []
+    age_days: Optional[int] = None
 
 
 class RaceReadinessResponse(BaseModel):

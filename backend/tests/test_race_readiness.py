@@ -6,7 +6,7 @@ never, completed only before its date); the block's edges (its first Monday
 counts, race-day running doesn't); the distance-relative long-run threshold at
 its exact boundary (28.0 km counts for a marathon, 27.9 doesn't); 3 long runs
 needed; longest run at exactly the target; the key effort vs. target pace
-(at-or-faster is met, slower or missing is not_met, no target is n/a); the
+(at-or-faster is met, slower is not_met, none recorded is no_data, no target is n/a); the
 8-week effort window; n/a before the block starts and for a race with no
 distance; read-only (no prune); REST and MCP agree. All tests pin `as_of`.
 """
@@ -192,7 +192,7 @@ def test_key_effort_slower_than_target_is_not_met(db):
     assert items(rd)["key_effort"].status == "not_met"
 
 
-def test_no_recent_key_effort_is_not_met_and_old_efforts_drop_out(db):
+def test_no_recent_key_effort_is_no_data_and_old_efforts_drop_out(db):
     race(db)
     effort(db, AS_OF - timedelta(weeks=8), "half", 4800)            # one day outside the window
     effort(db, AS_OF - timedelta(days=10), "10k", 2400)             # inside, but not the key distance
@@ -200,7 +200,8 @@ def test_no_recent_key_effort_is_not_met_and_old_efforts_drop_out(db):
     assert rd.effort_window_start == "2026-08-15"
     assert [e.label for e in rd.recent_efforts] == ["10k"]
     ke = items(rd)["key_effort"]
-    assert ke.status == "not_met" and ke.value is None
+    assert ke.status == "no_data" and ke.value is None and ke.evidence == [] and ke.age_days is None
+    assert "No half effort recorded since 2026-08-15" in ke.rule
 
 
 def test_no_target_lists_efforts_without_a_comparison(db):
@@ -210,6 +211,68 @@ def test_no_target_lists_efforts_without_a_comparison(db):
     assert rd.recent_efforts[0].vs_target_s_per_km is None
     ke = items(rd)["key_effort"]
     assert ke.status == "n/a" and "No target time" in ke.rule
+
+
+# --- R11.1: evidence, periods, no_data ---------------------------------------------------------
+
+def test_started_block_with_no_runs_is_no_data_not_not_met(db):
+    race(db)
+    it = items(race_readiness(db, as_of=AS_OF))
+    for key in ("peak_week", "longest_run", "long_runs"):
+        assert it[key].status == "no_data" and it[key].evidence == []
+        assert (it[key].period_from, it[key].period_to) == ("2026-06-22", "2026-10-09")
+    assert it["longest_run"].rule == "No runs in the block yet"
+    assert it["peak_week"].rule == "No running in the block yet"
+
+
+def test_runs_but_none_long_is_not_met_with_empty_evidence(db):
+    race(db)
+    run(db, date(2026, 9, 6), 10)
+    it = items(race_readiness(db, as_of=AS_OF))
+    assert it["long_runs"].status == "not_met" and it["long_runs"].evidence == []
+    assert it["longest_run"].status == "not_met" and len(it["longest_run"].evidence) == 1
+
+
+def test_evidence_matches_the_numbers_and_periods(db):
+    race(db)
+    a = run(db, date(2026, 9, 14), 40)              # 2026-W38, the peak
+    b = run(db, date(2026, 9, 16), 50)
+    c = run(db, date(2026, 9, 22), 29.0)            # W39: a long run
+    d = run(db, date(2026, 10, 1), 30.0)            # W40: a long run
+    k = effort(db, AS_OF - timedelta(days=20), "half", round(256 * 21.0975))
+    rd = race_readiness(db, as_of=AS_OF)
+    it = items(rd)
+    assert it["weeks_to_go"].evidence == [] and it["weeks_to_go"].period_from is None
+
+    assert [e.activity_id for e in it["peak_week"].evidence] == [a.id, b.id, k.id]   # oldest first; the effort run (Sep 19) is in W38 too
+    assert it["peak_week"].evidence[0].run_date == "2026-09-14"
+    assert round(sum(e.distance_km for e in it["peak_week"].evidence), 1) == rd.peak_week.total_km
+
+    assert [e.activity_id for e in it["longest_run"].evidence] == [rd.longest_run.activity_id]
+    assert [e.activity_id for e in it["long_runs"].evidence] == [r.activity_id for r in rd.long_runs]
+    assert d.id in [e.activity_id for e in it["long_runs"].evidence]
+
+    for key in ("peak_week", "longest_run", "long_runs"):
+        assert (it[key].period_from, it[key].period_to) == (rd.block_start, rd.block_end)
+
+    ke = it["key_effort"]
+    assert (ke.period_from, ke.period_to) == (rd.effort_window_start, rd.block_end)
+    assert [e.activity_id for e in ke.evidence] == [k.id]
+    assert ke.evidence[0].segment is True and ke.evidence[0].distance_km == 21.1
+    assert ke.age_days == 20
+
+
+def test_key_effort_without_target_still_carries_evidence(db):
+    race(db, target_s=None)
+    k = effort(db, AS_OF - timedelta(days=20), "half", 5000)
+    ke = items(race_readiness(db, as_of=AS_OF))["key_effort"]
+    assert ke.status == "n/a" and ke.age_days == 20 and [e.activity_id for e in ke.evidence] == [k.id]
+    assert ke.period_from == "2026-08-15"
+
+
+def test_no_data_is_a_known_status():
+    from app.services.race_advisor import STATUSES
+    assert "no_data" in STATUSES
 
 
 # --- surfaces ---------------------------------------------------------------------------------

@@ -223,7 +223,10 @@ STATUS_MET = "met"
 STATUS_NOT_MET = "not_met"
 STATUS_INFO = "info"        # a number worth seeing, with no pass/fail rule
 STATUS_NA = "n/a"           # the rule can't apply (no target, no distance, block not started)
-STATUSES = (STATUS_MET, STATUS_NOT_MET, STATUS_INFO, STATUS_NA)
+# The rule applies but there is no evidence yet — never shown as not_met
+# ("no data is never not met"): not_met means evidence exists and falls short.
+STATUS_NO_DATA = "no_data"
+STATUSES = (STATUS_MET, STATUS_NOT_MET, STATUS_INFO, STATUS_NA, STATUS_NO_DATA)
 
 
 @dataclass(frozen=True)
@@ -308,6 +311,16 @@ class ReadinessEffort:
 
 
 @dataclass
+class EvidenceRun:
+    """A run behind a checklist number (R11.1), so the page can drill down."""
+    activity_id: Optional[int]
+    run_date: str                     # ISO date
+    distance_km: float                # rounded 1 dp; for a segment, the stretch's distance
+    name: Optional[str]
+    segment: bool = False             # the number is a stretch inside a longer run (R8.2)
+
+
+@dataclass
 class ChecklistItem:
     key: str                          # weeks_to_go | peak_week | longest_run | long_runs | key_effort
     label: str
@@ -316,6 +329,10 @@ class ChecklistItem:
     value: Optional[float]            # the runner's number
     target: Optional[float]           # the rule's number, when there is one
     unit: str                         # weeks | km | runs | s/km (pace: lower is faster)
+    period_from: Optional[str] = None  # ISO date, inclusive: the period the number was computed over
+    period_to: Optional[str] = None    # ISO date, inclusive
+    evidence: list = field(default_factory=list)   # list[EvidenceRun] behind the number
+    age_days: Optional[int] = None     # key_effort only: days from the effort's run to as_of
 
 
 @dataclass
@@ -404,8 +421,14 @@ def race_readiness(db: Session, *, as_of: Optional[date] = None) -> RaceReadines
       long-run distance (28 km for a marathon). Exactly the threshold counts.
     - key_effort — the best effort at ~half race distance over the last
       RECENT_EFFORT_WEEKS weeks vs. target pace: met at or faster than target
-      pace; not_met when slower or when there's no such effort; n/a with no
-      target time.
+      pace; not_met when slower; no_data when there's no such effort; n/a
+      with no target time.
+
+    Status honesty (R11.1): `not_met` only when evidence exists and falls
+    short; a started block with no runs (or no key effort in the window) is
+    `no_data`. Every item except weeks_to_go carries `period_from`/`period_to`
+    (the span it was computed over) and `evidence` (the runs behind the
+    number); key_effort also carries `age_days`.
 
     The block is read from `block_start` up to `as_of`, never past the day
     before the race (race-day running isn't training for it). Before the block
@@ -448,6 +471,7 @@ def race_readiness(db: Session, *, as_of: Optional[date] = None) -> RaceReadines
     )
 
     # ── the block: volume, peak week, long runs ───────────────────────────────
+    block_runs: list = []   # raw rows, for checklist evidence only (not in the payload)
     if started:
         runs = [r for r in activities_svc.unified_activities(db, date_from=block_start, date_to=block_end)
                 if r.distance_km]
@@ -463,6 +487,7 @@ def race_readiness(db: Session, *, as_of: Optional[date] = None) -> RaceReadines
         cur = next((w for w in weeks if w.period == current_key), None)
         out.current_week = ReadinessWeek(current_key, round(cur.total_km, 1) if cur else 0.0,
                                          cur.run_count if cur else 0)
+        block_runs = runs
         if runs:
             out.longest_run = _run(max(runs, key=lambda r: r.distance_km))
         if cls:
@@ -485,14 +510,21 @@ def race_readiness(db: Session, *, as_of: Optional[date] = None) -> RaceReadines
                 run_date=b.run_date, name=b.name, activity_id=b.activity_id, segment=b.segment,
             ))
 
-    out.checklist = _checklist(out, cls)
+    out.checklist = _checklist(out, cls, block_runs)
     return out
 
 
-def _checklist(rd: RaceReadiness, cls: Optional[RaceClass]) -> list[ChecklistItem]:
+def _evidence(r) -> EvidenceRun:
+    return EvidenceRun(activity_id=r.activity_id, run_date=r.date.isoformat(),
+                       distance_km=round(r.distance_km, 1), name=r.name)
+
+
+def _checklist(rd: RaceReadiness, cls: Optional[RaceClass], block_runs: Optional[list] = None) -> list[ChecklistItem]:
     """The checklist rows, in reading order. Rules are stated in words so every
-    surface (page, MCP, Son of Anton) explains a status the same way."""
+    surface (page, MCP, Son of Anton) explains a status the same way. `block_runs`
+    are the raw unified-activity rows of the block, used for peak-week evidence."""
     race = rd.race
+    block_runs = block_runs or []
     items = [ChecklistItem(
         key="weeks_to_go", label="Weeks to go", status=STATUS_INFO,
         rule=f"{race.days_to_race} days to race day", value=race.weeks_to_race, target=None, unit="weeks",
@@ -500,26 +532,38 @@ def _checklist(rd: RaceReadiness, cls: Optional[RaceClass]) -> list[ChecklistIte
 
     not_started = None if rd.block_started else f"The {rd.block_weeks}-week block starts {rd.block_start}"
     no_class = "The race has no distance, so there's no distance-relative rule"
+    block_period = dict(period_from=rd.block_start, period_to=rd.block_end)
+    no_runs = rd.block_started and not block_runs   # started, but nothing to compute from
 
+    peak_evidence: list = []
     if not rd.block_started:
         peak_rule = not_started
     elif rd.peak_week:
         peak_rule = (f"Biggest ISO week of the block ({rd.peak_week.period}); "
                      f"this week so far {rd.current_week.total_km:g} km")
+        peak_evidence = [
+            _evidence(r) for r in sorted(block_runs, key=lambda r: r.date)
+            if "{}-W{:02d}".format(*r.date.isocalendar()[:2]) == rd.peak_week.period
+        ]
     else:
         peak_rule = "No running in the block yet"
     items.append(ChecklistItem(
         key="peak_week", label="Peak week",
-        status=STATUS_INFO if rd.block_started else STATUS_NA, rule=peak_rule,
+        status=(STATUS_NO_DATA if no_runs or (rd.block_started and not rd.peak_week)
+                else STATUS_INFO if rd.block_started else STATUS_NA),
+        rule=peak_rule,
         value=rd.peak_week.total_km if rd.peak_week else None, target=None, unit="km",
+        evidence=peak_evidence, **block_period,
     ))
 
     def gate() -> Optional[tuple[str, str]]:
-        """(n/a, why) when a block rule can't apply, else None."""
+        """(status, why) when a block rule can't apply or has no evidence, else None."""
         if cls is None:
             return STATUS_NA, no_class
         if not rd.block_started:
             return STATUS_NA, not_started
+        if no_runs:
+            return STATUS_NO_DATA, "No runs in the block yet"
         return None
 
     longest = rd.longest_run.distance_km if rd.longest_run else None
@@ -527,9 +571,15 @@ def _checklist(rd: RaceReadiness, cls: Optional[RaceClass]) -> list[ChecklistIte
         STATUS_MET if (longest or 0) >= cls.longest_target_km else STATUS_NOT_MET,
         f"Longest run in the block at least {cls.longest_target_km:g} km",
     )
+    longest_ev = []
+    if rd.longest_run:
+        lr = rd.longest_run
+        longest_ev = [EvidenceRun(activity_id=lr.activity_id, run_date=lr.run_date,
+                                  distance_km=lr.distance_km, name=lr.name)]
     items.append(ChecklistItem(
         key="longest_run", label="Longest run", status=status, rule=rule,
         value=longest, target=cls.longest_target_km if cls else None, unit="km",
+        evidence=longest_ev, **block_period,
     ))
 
     status, rule = gate() or (
@@ -542,6 +592,9 @@ def _checklist(rd: RaceReadiness, cls: Optional[RaceClass]) -> list[ChecklistIte
         status=status, rule=rule,
         value=len(rd.long_runs) if cls and rd.block_started else None,
         target=rd.long_runs_needed if cls else None, unit="runs",
+        evidence=[EvidenceRun(activity_id=lr.activity_id, run_date=lr.run_date,
+                              distance_km=lr.distance_km, name=lr.name) for lr in rd.long_runs],
+        **block_period,
     ))
 
     # Key effort: needs a class (which distance) and a target (which pace).
@@ -550,16 +603,27 @@ def _checklist(rd: RaceReadiness, cls: Optional[RaceClass]) -> list[ChecklistIte
         status, rule = STATUS_NA, no_class
     elif race.target_pace_s_per_km is None:
         status, rule = STATUS_NA, "No target time set, so there's no target pace to compare with"
+    elif effort is None:
+        status = STATUS_NO_DATA
+        rule = f"No {cls.key_effort} effort recorded since {rd.effort_window_start}"
     else:
-        status = STATUS_MET if effort and effort.pace_s_per_km <= race.target_pace_s_per_km else STATUS_NOT_MET
+        status = STATUS_MET if effort.pace_s_per_km <= race.target_pace_s_per_km else STATUS_NOT_MET
         rule = (f"Best {cls.key_effort} effort since {rd.effort_window_start} "
                 f"at or faster than target pace ({race.target_pace})")
+    effort_ev, age = [], None
+    if effort and effort.run_date:
+        effort_ev = [EvidenceRun(activity_id=effort.activity_id, run_date=effort.run_date,
+                                 distance_km=round(effort.distance_km, 1), name=effort.name,
+                                 segment=effort.segment)]
+        age = (date.fromisoformat(rd.as_of) - date.fromisoformat(effort.run_date)).days
     items.append(ChecklistItem(
         key="key_effort",
         label=f"Recent {cls.key_effort} effort vs. target pace" if cls else "Recent effort vs. target pace",
         status=status, rule=rule,
         value=effort.pace_s_per_km if effort else None,
         target=race.target_pace_s_per_km if cls else None, unit="s/km",
+        period_from=rd.effort_window_start, period_to=rd.block_end,
+        evidence=effort_ev, age_days=age,
     ))
     return items
 

@@ -592,7 +592,15 @@ def get_race_block_context(weeks_back: int = 12, as_of: Optional[str] = None) ->
       peak_week are `info`; longest_run, long_runs (runs ≥ `long_run_km` in the
       block — 28 km for a marathon) and key_effort (the recent best effort at
       ~half race distance vs. target pace, in s/km — lower is faster) are
-      `met` / `not_met`, or `n/a` with the reason in `rule`. Quote the numbers
+      `met` / `not_met`, or `n/a` with the reason in `rule`. `not_met` means
+      there is evidence and it falls short. `no_data` means there is NO
+      evidence yet (a block with no runs, no key effort in the window): say
+      what is missing, never call it a shortfall. Each item except
+      weeks_to_go also has `period_from`/`period_to` (the ISO-date span the
+      number was computed over), `evidence` (the runs behind the number:
+      {activity_id, run_date, distance_km, name, segment} — `segment` true
+      means the number is a stretch inside a longer run) and, for key_effort,
+      `age_days` (days since that effort). Quote the numbers
       and the rule; it is a heuristic checklist, NOT a score — never sum it
       into one. The block is `block_start`→`block_end` (a fixed number of
       weeks ending race week, by race distance); `recent_efforts` carry
@@ -791,6 +799,7 @@ Average: [avg_weekly_km] km/week
 - [label]: [value][" " + unit] [" (target " + target + ")" if target set] — [status] · [rule]
   [For s/km values show them as M:SS/km.]
 [Then one sentence naming the not_met items — no score, no verdict word.]
+[Name any no_data items separately, as missing evidence — not as shortfalls.]
 
 ### Rotation
 [If pipeline is non-empty:]
