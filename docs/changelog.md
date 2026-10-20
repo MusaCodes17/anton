@@ -1,7 +1,35 @@
 # Anton — Session Changelog
 
-**Last Updated:** 2026-10-17
+**Last Updated:** 2026-10-20
 **Status / current focus:** see `docs/project_state.md` (the perishable snapshot). This file is the append-only session log — the authoritative record of *what happened*; the `docs/` suite is the reference material.
+
+---
+
+## R10.3 — DNF race status; non-race runs untagged — 2026-10-20
+
+Branch `r10-race-fixes`. Decision: `design_decisions.md` B24.
+
+**[ADDED] `dnf` race status.** The Beneva Marathon (2026-10-11) was a DNF at ~14 km, so its 3059 s "result" was the 14 km run, not a bad link. `races.mark_dnf` sets `dnf`, clears the result, keeps the linked run; REST `POST /api/races/{id}/dnf`, MCP `mark_race_dnf` (confirm-first docstring). Future races are refused; "today" is the Toronto date. A DNF counts as done for the next race (`races.DONE_STATUSES`, shared by `weekly_summary` and `race_advisor`) and readiness skips it. A run linked to a DNF race is never a Race PB; best efforts still count. No migration (free-text status column).
+
+**[ADDED] Mark DNF in the Races card:** a FlagOff action on past completed/planned races; DNF rows show a "DNF" label in place of a result.
+
+**[CHANGED] Data (in the app, not code):** the runner confirmed 8 Race-tagged runs were not races — "Race Week: Easy run…", "First Solo Run since marathon", "Pacing / Support Duties at the Comrades Marathon", "Half Marathon on a random Tuesday", the three Marathon Pilgrimage runs (2025-08-13, 09-01, 09-17) and "10K Race" (2025-03-15). Their tag is cleared (untagged) so they leave Past races and Race PBs. "Practice HM Race" stays a race. Several of these likely came from the R5.5.3 archive-tag inference; tightening that rule is not in scope.
+
+**Verified:** backend suite **963 passed, 1 skipped** (949 + 14 in `tests/test_races_dnf.py`); `vite build` clean. **Not verified:** the desktop + ~380 px visual pass of the Races card (no browser against a seeded backend this session).
+
+---
+
+## R10 scoped; training dashboard page 1 built on claude.ai — 2026-10-20
+
+Docs only in this repo; no Anton code changed. Cowork session.
+
+**[ADDED] Roadmap §R10 — Training dashboard on claude.ai** (scheduled at the runner's request): R10.1 page 1 Load · Form · Records, R10.2 page 2 race-block retrospective (backend `get_block_comparison` + tests first), R10.3 race data fixes. R10.2 reverses R8.4's "not chosen: block-vs-block comparison" — the runner asked for it on 2026-10-20. Order: R10.1 → R10.3 → R10.2.
+
+**[ADDED] R10.1 built** as a claude.ai Dashboard artifact ("Training"), outside this repo. It reads Anton live through the `anton` MCP connector — `get_training_summary(period="weekly")`, `get_training_trends`, `get_personal_bests` — and only reshapes the answers into rows; no number is computed or typed in the page (CLAUDE.md §2.1). Sections: weekly km (52 weeks) with the 4-week rolling line and the load verdict; monthly m-per-beat, the form verdict and COROS VO₂ max / threshold pace; recent vs all-time 5k/10k, race PBs and best efforts. Each viewer's page calls the connector with their own access.
+
+**[BLOCKED / found] R10.3 data issues**, seen in live tool answers: Beneva Marathon (2026-10-11) `result_time_s` = 3059 s for 42.2 km; past-race list includes Race-tagged non-races ("Race Week: Easy run to get legs moving", "First Solo Run since marathon").
+
+**Verified:** each tool call returned the expected shape when run this session; the dashboard's own page check was started. Suite count unchanged (no code touched); no PR.
 
 ---
 

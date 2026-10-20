@@ -286,6 +286,7 @@ export const racesApi = {
   readiness: () => client.get('/api/races/readiness').then((r) => r.data),
   linkActivity: (id, activityId) =>
     client.post(`/api/races/${id}/link-activity`, { activity_id: activityId }).then((r) => r.data),
+  markDnf: (id) => client.post(`/api/races/${id}/dnf`).then((r) => r.data),
 }
 
 // ============== HOME ==============
