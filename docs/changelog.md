@@ -5,6 +5,40 @@
 
 ---
 
+## R10.6 — Training page in tabs — 2026-10-20
+
+Branch `training-tabs` (commits `f7e1090`, `2d375e4`), on top of R10.5. Frontend only; no backend change, no migration. Decision: `design_decisions.md` E25 (supersedes E16).
+
+**[CHANGED] The Training page is three tabs** (runner: the page was too busy). Tab state is in the URL: `?tab=races`, `?tab=activities`, Overview by default.
+- **Overview**, after the claude.ai Training dashboard's first page: the Now strip; Volume (heading renamed from Trends) with its own date range (default 1y), the stat row and the chart; then Fitness and Records side by side.
+- **Races**: Planned races and Predictions side by side, then Race blocks full width.
+- **Activities**: the run list with its own date range (default 1y), shoe and min-distance filters, Load more.
+- Each tab is a page-local component, so its queries run only while it is shown. `ActivityDetail` links go to `?tab=races` / `?tab=activities` (they were `#races` / `#activities` anchors).
+
+**[CHANGED] Date range extracted** into `hooks/useDateRange.js` and `components/training/DateRangeControls.jsx` (same 400 ms debounce, presets immediate), so Overview and Activities each hold their own range.
+
+**[REMOVED] Customize (E16) from the frontend:** the button, `CustomizeSectionsDialog.jsx`, `lib/trainingLayout.js`, `useUpdateTrainingLayout` and `preferencesApi.updateTrainingLayout`. The backend `training_layout` setting, its PUT endpoint and tests stay until R10.7.
+
+**Verified:** backend suite **987 passed, 1 skipped** (unchanged; no backend change). `vite build` clean. Live pass against the scratch copy of the 2026-10-20 prod backup: desktop and 380 px for all three tabs, no horizontal scroll; tabs update `?tab=` without adding history entries; a direct load of `?tab=races` opens Races; Overview order Now → Volume → Fitness → Records; both ranges open on 2025-10-20 → today; no Customize button. Switching all three tabs with `console.error` trapped: no errors, no failed requests (the console's earlier `ERR_CONNECTION_REFUSED` lines date from the previous preview's shutdown).
+
+---
+
+## R10.5 — R10 follow-ups — 2026-10-20
+
+Branch `r10-5-followups` (commits `f3224fe`, `a2705b3`). Frontend only; no backend change, no migration. The runner decided all three items.
+
+**[CHANGED] Training range defaults to 1y.** The shared date range (Volume chart, summary, activities list) now opens on the last 365 days, the 1y preset, matching the claude.ai dashboard's 52 weeks. 90d and 6mo stay as presets.
+
+**[CHANGED] Race blocks chart draws the newest 6 blocks.** `MAX_CHART_BLOCKS = 6` matches the six `--chart-*` tokens, so line colours never repeat. Older blocks stay in the table with a hollow dot, and a note says "Chart shows the 6 newest of N blocks; the table lists all." A shared `chartSlot` helper keeps chart and table colours in step. With 6 or fewer blocks the card is unchanged.
+
+**[CHANGED] `ChartLegend` takes an optional per-item `key`.** Found in the live pass: two half blocks truncate to the same label ("Marathon Pilgrima… '25"), which raised React's duplicate-key warning; the Race blocks legend now keys by race id. Other callers are unchanged.
+
+**Data question closed:** Toronto block activity 423 (2025-07-20 "Sunday Long Run", 42.29 km) is not a race (runner). It stays tagged Long Run; no data change.
+
+**Verified:** backend suite **987 passed, 1 skipped** (unchanged). `vite build` clean. Live pass against the scratch copy of the 2026-10-20 prod backup (8 half blocks): desktop shows 6 distinct lines and the note; the table's colour dots match the lines and the 2 oldest rows are hollow; 380 px legend has 6 entries, no horizontal scroll; the range opens on 2025-10-20 → today. No new console errors after the legend fix (class switched Marathon → Half → 10k → Half with `console.error` trapped; legend fiber keys are the race ids).
+
+---
+
 ## R10.4 — Race blocks in the app — 2026-10-20
 
 Branch `r10-blocks-in-app` (commits `57a1e2b`, `b7071d1`, `5f9730d`, `dc4e664`), not merged. Frontend plus one settings constant; no backend logic change, no migration. Decision: `design_decisions.md` E24.

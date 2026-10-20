@@ -31,6 +31,13 @@ function readStoredClass() {
 
 const MINUS = '−'
 const colorFor = (i) => `var(--chart-${(i % 6) + 1})`
+// Matches the six --chart-* tokens, so chart colours never repeat (R10.5).
+const MAX_CHART_BLOCKS = 6
+const hiddenCount = (count) => Math.max(0, count - MAX_CHART_BLOCKS)
+// Colour slot of block i (response order, oldest first) among the charted
+// blocks, or a negative number when it is an older, uncharted block. Chart and
+// table both use this so their colours cannot disagree.
+const chartSlot = (i, count) => i - hiddenCount(count)
 const offsetLabel = (o) => (o === 0 ? 'race wk' : `wk ${MINUS}${-o}`)
 const shortName = (name) => (name.length > 18 ? `${name.slice(0, 17)}…` : name)
 // End labels live in a 110px margin: name capped at 12 chars + " 'YY" = 16 max.
@@ -96,12 +103,15 @@ function takeaway(data, noun) {
 function BlocksChart({ data }) {
   const wide = useMediaQuery('(min-width: 640px)')
   const { blocks, block_weeks } = data
+  // Only the newest blocks get lines; the older ones stay in the table.
+  const hidden = hiddenCount(blocks.length)
+  const charted = useMemo(() => blocks.slice(hidden), [blocks, hidden])
 
   const rows = useMemo(() => {
     const out = []
     for (let offset = -(block_weeks - 1); offset <= 0; offset++) {
       const row = { offset }
-      for (const b of blocks) {
+      for (const b of charted) {
         const w = b.weeks.find((x) => x.offset === offset)
         row[`b${b.race.id}`] = w ? w.km : null
         row[`r${b.race.id}`] = w ? w.runs : null
@@ -109,11 +119,11 @@ function BlocksChart({ data }) {
       out.push(row)
     }
     return out
-  }, [blocks, block_weeks])
+  }, [charted, block_weeks])
 
   // Label value per block: the race-week km, or the last non-null week for an
   // in-progress block that has no race-week point yet.
-  const endItems = blocks.map((b, i) => {
+  const endItems = charted.map((b, i) => {
     const at0 = b.weeks.find((w) => w.offset === 0)
     const last = at0 ?? (b.in_progress ? [...b.weeks].reverse().find((w) => w.km != null) : null)
     return {
@@ -131,7 +141,7 @@ function BlocksChart({ data }) {
       <div className="font-sans font-semibold text-foreground">
         {row.offset === 0 ? 'Race week' : `Week ${MINUS}${-row.offset}`}
       </div>
-      {blocks.map((b, i) => {
+      {charted.map((b, i) => {
         const km = row[`b${b.race.id}`]
         if (km == null) return null
         const runs = row[`r${b.race.id}`]
@@ -164,7 +174,7 @@ function BlocksChart({ data }) {
             />
             <YAxis {...axisProps} width={44} tickCount={4} />
             <Tooltip cursor={lineCursor} content={<ChartTooltip render={renderTooltip} />} />
-            {blocks.map((b, i) => (
+            {charted.map((b, i) => (
               <Line
                 key={b.race.id}
                 type="monotone"
@@ -184,12 +194,18 @@ function BlocksChart({ data }) {
       {!wide && (
         <ChartLegend
           className="mt-3"
-          items={blocks.map((b, i) => ({
+          items={charted.map((b, i) => ({
+            key: b.race.id,
             kind: b.in_progress ? 'dashed' : 'line',
             color: colorFor(i),
             label: `${shortName(b.race.name)} ${yearTag(b.race)}`,
           }))}
         />
+      )}
+      {hidden > 0 && (
+        <p className="mt-2 text-xs text-faint">
+          Chart shows the {MAX_CHART_BLOCKS} newest of {blocks.length} blocks; the table lists all.
+        </p>
       )}
     </>
   )
@@ -204,7 +220,8 @@ function Result({ block }) {
 
 function BlocksTable({ data }) {
   const { blocks, long_run_km } = data
-  // Newest race first; colour index stays tied to the chart line (response order).
+  // Newest race first. Dot colour comes from chartSlot, so it matches the chart
+  // line; older blocks past the chart limit get a hollow placeholder instead.
   const rows = blocks.map((block, i) => ({ block, i })).reverse()
   const th = 'px-2 py-1.5 text-right font-semibold'
   const td = 'px-2 py-2 text-right tabular-nums'
@@ -226,44 +243,51 @@ function BlocksTable({ data }) {
           </tr>
         </thead>
         <tbody>
-          {rows.map(({ block: b, i }) => (
-            <tr key={b.race.id} className="border-b border-border/60 last:border-0">
-              <td className="px-2 py-2 text-left">
-                <div className="flex items-start gap-2">
-                  <i aria-hidden="true" className="mt-1 inline-block h-2 w-2 shrink-0 rounded-full" style={{ background: colorFor(i) }} />
-                  <div className="min-w-0">
-                    {b.race.activity_id != null ? (
-                      <Link to={`/activities/${b.race.activity_id}`} className="focus-ring font-semibold text-foreground hover:underline">
-                        {b.race.name}
-                      </Link>
+          {rows.map(({ block: b, i }) => {
+            const slot = chartSlot(i, blocks.length)
+            return (
+              <tr key={b.race.id} className="border-b border-border/60 last:border-0">
+                <td className="px-2 py-2 text-left">
+                  <div className="flex items-start gap-2">
+                    {slot >= 0 ? (
+                      <i aria-hidden="true" className="mt-1 inline-block h-2 w-2 shrink-0 rounded-full" style={{ background: colorFor(slot) }} />
                     ) : (
-                      <span className="font-semibold text-foreground">{b.race.name}</span>
+                      <i aria-hidden="true" className="mt-1 inline-block h-2 w-2 shrink-0 rounded-full border border-border" />
                     )}
-                    <div className="text-2xs text-faint">{formatDate(b.race.race_date)}</div>
-                  </div>
-                </div>
-              </td>
-              <td className={td}><Result block={b} /></td>
-              <td className={td}>{b.total_km.toFixed(0)}</td>
-              <td className={td}>{b.avg_week_km.toFixed(0)}</td>
-              <td className={td}>
-                {b.peak_week ? (
-                  <>
-                    {b.peak_week.km.toFixed(0)} km
-                    <div className="text-2xs text-faint">
-                      {b.peak_week.offset === 0 ? 'race wk' : `wk ${MINUS}${-b.peak_week.offset}`}
+                    <div className="min-w-0">
+                      {b.race.activity_id != null ? (
+                        <Link to={`/activities/${b.race.activity_id}`} className="focus-ring font-semibold text-foreground hover:underline">
+                          {b.race.name}
+                        </Link>
+                      ) : (
+                        <span className="font-semibold text-foreground">{b.race.name}</span>
+                      )}
+                      <div className="text-2xs text-faint">{formatDate(b.race.race_date)}</div>
                     </div>
-                  </>
-                ) : '—'}
-              </td>
-              <td className={cn(td, WIDE)}>{b.longest_run ? `${b.longest_run.distance_km.toFixed(1)} km` : '—'}</td>
-              <td className={cn(td, WIDE)}>{b.long_runs ?? '—'}</td>
-              <td className={cn(td, WIDE)}>
-                {b.median_steady_pace_s_per_km != null ? `${formatDuration(b.median_steady_pace_s_per_km)}/km` : '—'}
-              </td>
-              <td className={cn(td, WIDE)}>{b.median_steady_hr != null ? `${b.median_steady_hr} bpm` : '—'}</td>
-            </tr>
-          ))}
+                  </div>
+                </td>
+                <td className={td}><Result block={b} /></td>
+                <td className={td}>{b.total_km.toFixed(0)}</td>
+                <td className={td}>{b.avg_week_km.toFixed(0)}</td>
+                <td className={td}>
+                  {b.peak_week ? (
+                    <>
+                      {b.peak_week.km.toFixed(0)} km
+                      <div className="text-2xs text-faint">
+                        {b.peak_week.offset === 0 ? 'race wk' : `wk ${MINUS}${-b.peak_week.offset}`}
+                      </div>
+                    </>
+                  ) : '—'}
+                </td>
+                <td className={cn(td, WIDE)}>{b.longest_run ? `${b.longest_run.distance_km.toFixed(1)} km` : '—'}</td>
+                <td className={cn(td, WIDE)}>{b.long_runs ?? '—'}</td>
+                <td className={cn(td, WIDE)}>
+                  {b.median_steady_pace_s_per_km != null ? `${formatDuration(b.median_steady_pace_s_per_km)}/km` : '—'}
+                </td>
+                <td className={cn(td, WIDE)}>{b.median_steady_hr != null ? `${b.median_steady_hr} bpm` : '—'}</td>
+              </tr>
+            )
+          })}
         </tbody>
       </table>
     </div>
