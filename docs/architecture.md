@@ -132,11 +132,12 @@ anton/
         │                        # ActivityDetail, NewRuns, ChatPage, Shoes, Retailers,
         │                        # Settings + SettingsSync
         ├── components/          # Feature components + auth/, chat/, icons/, layout/, pwa/,
-        │                        # shoes/, training/, ui/ subfolders
+        │                        # shoes/, training/ (NowStrip, VolumeChart, RecordsCard, FitnessCard,
+        │                        # RaceBlocksCard — R10.4, …), ui/ subfolders
         ├── hooks/useApi.js      # ALL React Query hooks, per API family
         ├── hooks/               # + useChatStream, useKeyboardViewport, useMediaQuery, useOnline
         ├── services/api.js      # Single axios API client, grouped per domain
-        └── lib/                 # pure helpers: queryClient, trainingLayout, pipeline, forecast,
+        └── lib/                 # pure helpers: queryClient, trainingLayout (section ids incl. full-width `blocks`, R10.4), pipeline, forecast,
                                  # conversations, shoeTypes, runSource, utils
 ```
 

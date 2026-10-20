@@ -5,6 +5,26 @@
 
 ---
 
+## R10.4 — Race blocks in the app — 2026-10-20
+
+Branch `r10-blocks-in-app` (commits `57a1e2b`, `b7071d1`, `5f9730d`, `dc4e664`), not merged. Frontend plus one settings constant; no backend logic change, no migration. Decision: `design_decisions.md` E24.
+
+**[ADDED] Race blocks section on the Training page.** The claude.ai dashboard's page 2 is now also in the app (the artifact stays as the shareable view).
+- New section id `blocks` ("Race blocks"), full-width rather than a card, in the hand-matched `TRAINING_SECTIONS` (`services/settings.py`, `lib/trainingLayout.js`), default slot after `races`. Saved layouts get it appended at the end through `normalizeLayout` (new test `test_old_seven_id_layout_appends_blocks_visible`).
+- Data: `racesApi.blocks(raceClass)` → `GET /api/races/blocks`, `useRaceBlocks`, keys `raceBlocks(cls)` and `raceBlocksAll()`. Race writes are covered by the `['races']` prefix; run writes (activity edit/reassign/promote, log run, delete run, COROS confirm) invalidate `raceBlocksAll()` next to readiness.
+- `components/training/RaceBlocksCard.jsx`: Marathon/Half/10k switch remembered per device (localStorage, try/catch); a takeaway line built from the response only; a Recharts weekly-km-by-offset chart, one line per block in `--chart-1..6`, the in-progress block dashed (desktop gets collision-aware end labels, <= 640 px a legend; tooltip shows km and runs per block); a side-by-side table, newest first, deep-linking to each race's run, DNF in the warning colour, last four columns hidden below 520 px; a heuristic footnote (with a half-class note that long-run counts run high inside marathon builds); loading, empty and error states.
+- Every number is served by `block_comparison` (B25); the card only formats and picks rows.
+
+**[ADDED] Threshold-pace step line on the Fitness card** (`ThresholdSparkline`) from `trends.form.fitness[].threshold_pace_s_per_km`; reversed axis so faster reads up, values as M:SS/km. This was the one page-1 gap.
+
+**[CHANGED] Page-1 audit (R6).** NowStrip, VolumeChart, RecordsCard and FitnessCard cover dashboard page 1. The one difference: the in-app Volume chart defaults to the last 90 days, the dashboard shows 52 weeks (the 1y preset gives the same view). Reported to the runner, not built (roadmap R10.5).
+
+**Verified:** backend suite **987 passed, 1 skipped** (was 986 + 1). `vite build` clean. Live pass against a scratch copy of the 2026-10-20 09:30 prod backup, with Beneva marked DNF on the copy via `races.mark_dnf` to match production and COROS polling disabled, desktop and 380 px, no horizontal scroll. Marathon: TCS Toronto 2025 (2:48:12), Ottawa 2026 (2:43:38), Beneva 2026 (DNF, no result). Half: Two Oceans, Practice HM, Spring Half (35 long runs at 16 km). The snapshot predates the production untagging of 8 non-race runs, so the half list also showed 5 since-untagged runs; production's race list (checked through the connector) no longer has them. Customize: Race blocks hid, reordered, saved and reset. The threshold line renders (Jul 3:22/km to Oct 3:25/km). 0 console errors from the app; the only errors were two 403s from the local preview's CSRF Origin check before the harness set `ANTON_HOST_URL`, a test-setup artefact.
+
+**Open data question for the runner:** the Toronto block's longest run is activity 423, 2025-07-20 "Sunday Long Run", 42.29 km, 3:23:28 moving / 3:33:54 elapsed, tagged Long Run. Is it a race? Not retagged.
+
+---
+
 ## Weekly local test-DB refresh from prod snapshots — 2026-10-20
 
 Branch `local-db-refresh`. Ops only; no app code changed.
