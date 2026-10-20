@@ -95,8 +95,8 @@ export function ChartTooltip({ active, payload, render }) {
 export function ChartLegend({ items, className = '' }) {
   return (
     <div className={`flex flex-wrap gap-x-[18px] gap-y-2 font-mono text-2xs text-muted-foreground ${className}`}>
-      {items.map(({ kind = 'line', color = SIGNAL, label }) => (
-        <span key={label} className="inline-flex items-center gap-[7px]">
+      {items.map(({ key: itemKey, kind = 'line', color = SIGNAL, label }) => (
+        <span key={itemKey ?? label} className="inline-flex items-center gap-[7px]">
           <Swatch kind={kind} color={color} />
           {label}
         </span>
