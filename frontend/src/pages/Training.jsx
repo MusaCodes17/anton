@@ -125,8 +125,9 @@ export default function Training() {
   const [period, setPeriod] = useState('weekly')
 
   // Shared date range (T4b) — drives the volume chart, the summary, and the
-  // activities list. Default: last 90 days. React state only (resets on nav).
-  const [dateFrom, setDateFrom] = useState(() => isoDaysAgo(90))
+  // activities list. Default: last 365 days (the 1y preset), matching the
+  // claude.ai dashboard's 52-week view (R10.5). React state only (resets on nav).
+  const [dateFrom, setDateFrom] = useState(() => isoDaysAgo(365))
   const [dateTo, setDateTo] = useState(() => isoToday())
   // Drafts are bound to the date inputs; they commit to dateFrom/dateTo 400 ms
   // after the last change. Committing per change fired 2 requests each time
