@@ -29,6 +29,11 @@ export default function RaceForm({ initial, shoes = [], onSubmit, onCancel, subm
   }))
   const [errors, setErrors] = useState({})
 
+  // Live pace hint: only when distance and a parseable target time are both present.
+  const targetS = parseDuration(values.target_time)
+  const distKm = parseFloat(values.distance_km)
+  const paceHint = targetS > 0 && distKm > 0 ? formatDuration(targetS / distKm) : null
+
   const set = (key) => (e) => setValues((v) => ({ ...v, [key]: e.target.value }))
 
   const validate = () => {
@@ -36,7 +41,7 @@ export default function RaceForm({ initial, shoes = [], onSubmit, onCancel, subm
     if (!values.name.trim()) next.name = 'Name is required'
     if (!values.race_date) next.race_date = 'Race date is required'
     if (values.target_time && parseDuration(values.target_time) == null)
-      next.target_time = 'Use H:MM:SS or M:SS'
+      next.target_time = 'Use H:MM:SS (or M:SS for under an hour)'
     setErrors(next)
     return Object.keys(next).length === 0
   }
@@ -80,8 +85,10 @@ export default function RaceForm({ initial, shoes = [], onSubmit, onCancel, subm
       <div className="grid grid-cols-2 gap-3">
         <div className="space-y-1.5">
           <Label>Target time</Label>
-          <Input value={values.target_time} onChange={set('target_time')} placeholder="3:15:00" />
+          <Input value={values.target_time} onChange={set('target_time')} placeholder="H:MM:SS" />
           {errors.target_time && <p className="text-xs text-destructive">{errors.target_time}</p>}
+          {paceHint && <p className="text-xs font-medium text-foreground tabular-nums">≈ {paceHint}/km</p>}
+          <p className="text-xs text-faint">2:30 = 2 min 30 s; use 2:30:00 for hours</p>
         </div>
         <div className="space-y-1.5">
           <Label>Planned shoe</Label>

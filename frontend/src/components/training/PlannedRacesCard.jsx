@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { Flag, Plus, Pencil, Trash2, Check, Footprints, MapPin, Link2, Ban, FlagOff } from 'lucide-react'
+import { Flag, Plus, Trash2, Check, Footprints, Link2, Ban, FlagOff } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -29,7 +29,9 @@ import { formatDate, formatDuration, parseDuration, cn } from '@/lib/utils'
 const URGENT_DAYS = 14
 const VISIBLE_LIMIT = 2
 
-function Countdown({ race }) {
+/** Countdown to race day. `compact` is the one-line row form ("25 wks");
+ *  the full form ("25 weeks · 181 days") is for the details summary. */
+function Countdown({ race, compact = false }) {
   const { days_remaining, weeks_remaining } = race
   if (days_remaining === 0)
     return <span className="font-bold text-warning">Race day</span>
@@ -37,6 +39,12 @@ function Countdown({ race }) {
     return (
       <span className="font-bold text-warning tabular-nums">
         {days_remaining} day{days_remaining === 1 ? '' : 's'}
+      </span>
+    )
+  if (compact)
+    return (
+      <span className="font-semibold text-foreground tabular-nums">
+        {weeks_remaining} wk{weeks_remaining === 1 ? '' : 's'}
       </span>
     )
   return (
@@ -61,43 +69,36 @@ function ShoeChip({ shoe }) {
   )
 }
 
+/** Upcoming race: one line, same shell as PastRow. The body opens the edit
+ *  dialog (which carries the full details); trailing buttons are the quick actions. */
 function UpcomingRow({ race, onEdit, onDone, onDelete }) {
   return (
-    <div className="flex flex-col gap-3 rounded-[12px] border border-border bg-surface p-3.5 sm:flex-row sm:items-center">
-      <div className="min-w-0 flex-1">
-        <div className="truncate text-sm font-bold text-foreground">{race.name}</div>
-        <div className="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-muted-foreground">
-          <span>{formatDate(race.race_date)}</span>
-          {race.distance_km != null && <span className="tabular-nums">{race.distance_km} km</span>}
-          {race.location && (
-            <span className="inline-flex items-center gap-0.5">
-              <MapPin className="h-3 w-3" />
-              {race.location}
+    <div className="flex items-center rounded-[10px] border border-border/60 bg-surface/60 text-xs">
+      <button
+        type="button"
+        onClick={() => onEdit(race)}
+        title="Edit race"
+        className="focus-ring flex min-w-0 flex-1 items-center justify-between gap-3 rounded-[10px] px-3.5 py-2.5 text-left transition-colors hover:bg-surface"
+      >
+        <div className="min-w-0 truncate">
+          <span className="font-semibold text-foreground">{race.name}</span>
+          <span className="ml-2 text-faint">{formatDate(race.race_date)}</span>
+          {race.distance_km != null && (
+            <span className="ml-1 hidden text-faint tabular-nums sm:inline">· {race.distance_km} km</span>
+          )}
+        </div>
+        <div className="flex shrink-0 items-center gap-3 text-muted-foreground">
+          <Countdown race={race} compact />
+          {race.target_time_s != null && (
+            <span className="font-semibold text-foreground tabular-nums">
+              {formatDuration(race.target_time_s)}
             </span>
           )}
         </div>
-      </div>
-
-      <div className="text-sm sm:w-[150px]">
-        <Countdown race={race} />
-      </div>
-
-      <div className="flex items-center gap-4 sm:w-[150px]">
-        {race.target_time_s != null && (
-          <div className="text-xs tabular-nums">
-            <div className="font-semibold text-foreground">{formatDuration(race.target_time_s)}</div>
-            {race.target_pace && <div className="text-2xs text-faint">{race.target_pace}</div>}
-          </div>
-        )}
-        <ShoeChip shoe={race.planned_shoe} />
-      </div>
-
-      <div className="flex items-center gap-1 sm:justify-end">
+      </button>
+      <div className="flex shrink-0 items-center pr-1.5">
         <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => onDone(race)} title="Mark complete">
           <Check className="h-4 w-4" />
-        </Button>
-        <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => onEdit(race)} title="Edit">
-          <Pencil className="h-4 w-4" />
         </Button>
         <Button
           variant="ghost"
@@ -110,6 +111,32 @@ function UpcomingRow({ race, onEdit, onDone, onDelete }) {
         </Button>
       </div>
     </div>
+  )
+}
+
+function Fact({ label, children }) {
+  return (
+    <div className="min-w-0">
+      <dt className="text-2xs text-faint">{label}</dt>
+      <dd className="mt-0.5 text-sm font-medium text-foreground">{children}</dd>
+    </div>
+  )
+}
+
+/** Details summary shown above the form when editing an existing race. */
+function RaceSummary({ race }) {
+  return (
+    <dl className="grid grid-cols-2 gap-x-4 gap-y-3 rounded-[10px] border border-border/60 bg-surface/60 p-3.5">
+      <Fact label="Countdown"><Countdown race={race} /></Fact>
+      <Fact label="Date">{formatDate(race.race_date)}</Fact>
+      {race.distance_km != null && <Fact label="Distance"><span className="tabular-nums">{race.distance_km} km</span></Fact>}
+      {race.location && <Fact label="Location"><span className="break-words">{race.location}</span></Fact>}
+      {race.target_time_s != null && (
+        <Fact label="Target time"><span className="tabular-nums">{formatDuration(race.target_time_s)}</span></Fact>
+      )}
+      {race.target_pace && <Fact label="Target pace"><span className="tabular-nums">{race.target_pace}</span></Fact>}
+      {race.planned_shoe && <Fact label="Planned shoe"><ShoeChip shoe={race.planned_shoe} /></Fact>}
+    </dl>
   )
 }
 
@@ -462,7 +489,34 @@ export default function PlannedRacesCard() {
               {editing ? 'Update the details for this race.' : 'Plan a race to train toward.'}
             </DialogDescription>
           </DialogHeader>
+          {editing && (
+            <>
+              <RaceSummary race={editing} />
+              {editing.status === 'planned' && (
+                <div className="flex items-center gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => { setFormOpen(false); setDoneRace(editing); setResultTime('') }}
+                  >
+                    <Check className="h-4 w-4" /> Mark complete
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="text-muted-foreground hover:text-destructive"
+                    onClick={() => { setFormOpen(false); setDeleting(editing) }}
+                  >
+                    <Trash2 className="h-4 w-4" /> Delete
+                  </Button>
+                </div>
+              )}
+            </>
+          )}
           <RaceForm
+            key={editing?.id ?? 'new'}
             initial={editing}
             shoes={shoes.data || []}
             onSubmit={submitForm}
