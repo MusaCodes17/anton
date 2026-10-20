@@ -18,6 +18,10 @@ import { Group, GroupError, Tile, TileSkeletons } from '@/components/training/St
  * Past builds (R11.2): under the checklist, a table sets this build beside each
  * past build of the same class cut at the same days-before-race, with its
  * result. Numbers only, no ranking or better/worse colouring.
+ *
+ * Consistency and taper (R11.3): weeks run, breaks, and the last three weeks as
+ * % of peak week (plus days since the long run) sit beside each past build, cut
+ * at the same point. Descriptive only: neutral styling, no pass/fail, no targets.
  */
 
 const READINESS_PANEL_ID = 'readiness-detail'
@@ -33,8 +37,13 @@ const STATUS = {
   no_data: { icon: CircleDashed, tone: 'text-muted-foreground', word: 'No data' },
 }
 
-function itemValue(item) {
-  const { value, target, unit } = item
+function itemValue(item, weeksElapsed) {
+  const { key, value, target, unit } = item
+  // Consistency (R11.3): weeks with a run out of the weeks the block has run so far.
+  if (key === 'weeks_with_running') return `${value ?? '—'} / ${weeksElapsed ?? '—'}`
+  if (unit === '% of peak') return value == null ? '—' : `${value}%`
+  if (unit === 'days') return value == null ? '—' : `${value} d`
+  if (unit === 'breaks') return value == null ? '—' : String(value)
   if (unit === 's/km') {
     if (value == null) return target != null ? `— vs ${pace(target)}` : '—'
     return target != null ? `${pace(value)} vs ${pace(target)}` : pace(value)
@@ -108,6 +117,19 @@ function ReadinessDetail({ item }) {
 const MINUS = '−'
 const oneDp = (v) => (v == null ? '—' : Number(v).toFixed(1))
 
+// R11.3 cells. Consistency is the whole block; taper is the last weeks up to the
+// cut date. Weeks are listed oldest first, with the unit "%" only on the last one.
+const weeksRun = (c) => (c ? `${c.weeks_with_runs}/${c.weeks_elapsed}` : '—')
+const breakCount = (c) => (c?.gaps ? c.gaps.length : '—')
+const taperPcts = (taper, cutDate) => {
+  const weeks = (taper?.weeks ?? []).filter((w) => cutDate != null && w.week_start <= cutDate)
+  if (weeks.length === 0) return '—'
+  const last = weeks[weeks.length - 1].pct_of_peak
+  const parts = weeks.map((w) => (w.pct_of_peak == null ? '—' : String(w.pct_of_peak)))
+  return parts.join(' · ') + (last == null ? '' : '%')
+}
+const sinceLongRun = (taper) => (taper?.days_since_long_run == null ? '—' : `${taper.days_since_long_run} d`)
+
 function PastBuildResult({ build }) {
   const { race, result_vs_target_s: vs } = build
   if (race.status === 'dnf') return <span className="font-semibold text-warning">DNF</span>
@@ -132,6 +154,7 @@ function PastBuilds({ rd }) {
   const th = 'px-2 py-1.5 text-right font-semibold'
   const td = 'whitespace-nowrap px-2 py-2 text-right tabular-nums'
   const longRuns = (rd.long_runs ?? []).length
+  const taperOn = rd.taper != null
 
   return (
     <div className="min-w-0 space-y-2.5">
@@ -144,7 +167,7 @@ function PastBuilds({ rd }) {
         )}
       </div>
       <div className="panel min-w-0 overflow-x-auto rounded-2xl border border-border bg-card">
-        <table className="w-full min-w-[30rem] text-xs">
+        <table className={cn('w-full text-xs', taperOn ? 'min-w-[44rem]' : 'min-w-[36rem]')}>
           <thead className="text-2xs uppercase tracking-wide text-faint">
             <tr className="border-b border-border">
               <th className="px-2 py-1.5 text-left font-semibold">Build</th>
@@ -154,6 +177,10 @@ function PastBuilds({ rd }) {
               <th className={th}>Long runs</th>
               <th className={th}>Longest</th>
               <th className={th}>Peak week</th>
+              <th className={th}>Weeks run</th>
+              <th className={th}>Breaks</th>
+              {taperOn && <th className={th}>Taper</th>}
+              {taperOn && <th className={th}>Since long run</th>}
             </tr>
           </thead>
           <tbody>
@@ -165,6 +192,10 @@ function PastBuilds({ rd }) {
               <td className={td}>{longRuns}</td>
               <td className={td}>{oneDp(rd.longest_run?.distance_km)}</td>
               <td className={td}>{oneDp(rd.peak_week?.total_km)}</td>
+              <td className={td}>{weeksRun(rd.consistency)}</td>
+              <td className={td}>{breakCount(rd.consistency)}</td>
+              {taperOn && <td className={td}>{taperPcts(rd.taper, rd.block_end)}</td>}
+              {taperOn && <td className={td}>{sinceLongRun(rd.taper)}</td>}
             </tr>
             {builds.map((b) => (
               <tr key={b.race.id} className="border-b border-border/60 last:border-0">
@@ -184,11 +215,20 @@ function PastBuilds({ rd }) {
                 <td className={td}>{b.long_runs ?? '—'}</td>
                 <td className={td}>{oneDp(b.longest_km)}</td>
                 <td className={td}>{oneDp(b.peak_week_km)}</td>
+                <td className={td}>{weeksRun(b.consistency)}</td>
+                <td className={td}>{breakCount(b.consistency)}</td>
+                {taperOn && <td className={td}>{taperPcts(b.taper, b.cut_date)}</td>}
+                {taperOn && <td className={td}>{sinceLongRun(b.taper)}</td>}
               </tr>
             ))}
           </tbody>
         </table>
       </div>
+      {taperOn && (
+        <p className="text-xs text-muted-foreground">
+          Taper: each of the last weeks as % of that build's peak week, oldest first.
+        </p>
+      )}
     </div>
   )
 }
@@ -224,7 +264,7 @@ function ReadinessGroup({ rd }) {
             <Tile
               label={item.label}
               compact
-              value={itemValue(item)}
+              value={itemValue(item, rd.consistency?.weeks_elapsed)}
               sub={
                 <span className="inline-flex items-center gap-1">
                   <Icon className={`h-3 w-3 shrink-0 ${s.tone}`} aria-hidden="true" />

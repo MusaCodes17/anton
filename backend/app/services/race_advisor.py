@@ -264,6 +264,7 @@ RACE_CLASSES: tuple[RaceClass, ...] = (
 )
 DEFAULT_BLOCK_WEEKS = 12    # race with no distance → no class; a middle-of-the-road block
 LONG_RUNS_NEEDED = 3        # three long runs make a habit; one is a one-off
+GAP_DAYS = 7                # a week off is an interruption worth explaining (heuristic); the parked training notes / R11.4 reasons would explain it
 RECENT_EFFORT_WEEKS = 8     # "recent" bests: ~2 months — older efforts describe a different you
 
 
@@ -336,6 +337,43 @@ class ChecklistItem:
 
 
 @dataclass
+class Gap:
+    """A stretch of GAP_DAYS+ consecutive days without a run inside the block (R11.3)."""
+    start: str                        # ISO date, first day off
+    end: str                          # ISO date, last day off
+    days: int
+
+
+@dataclass
+class Consistency:
+    """How steadily the block was run (R11.3). Descriptive — no pass/fail."""
+    weeks_elapsed: int                # Monday-aligned weeks from block_start through block_end's week
+    weeks_with_runs: int              # of those, weeks with at least one run
+    median_runs_per_week: float       # zero weeks included; 1 dp
+    gaps: list = field(default_factory=list)   # list[Gap], oldest first
+
+
+@dataclass
+class TaperWeek:
+    offset: int                       # -2, -1, 0 (0 = race week), as BlockWeek.offset
+    week_start: str                   # ISO Monday
+    km: float                         # runs on or before block_end (race week is partial)
+    pct_of_peak: Optional[int]        # None when the block has no peak week
+    complete: bool                    # the week's Sunday <= block_end
+
+
+@dataclass
+class Taper:
+    """The final TAPER_DAYS: each of the last three weeks against the block's
+    peak week, plus recency of the last long run / key effort (R11.3). Numbers
+    to set beside past builds — there is no target percentage."""
+    peak_week_km: Optional[float]
+    weeks: list = field(default_factory=list)   # list[TaperWeek], oldest first
+    days_since_long_run: Optional[int] = None   # to block_end; None if none in the block
+    days_since_key_effort: Optional[int] = None # the key_effort item's age_days
+
+
+@dataclass
 class PastBuild:
     """One past race of the readiness race's class, with its build cut at the
     same number of days before its race as today's block is (R11.2). Numbers
@@ -348,6 +386,8 @@ class PastBuild:
     long_runs: int
     longest_km: Optional[float]        # None with no runs
     peak_week_km: Optional[float]      # None with no runs
+    consistency: Optional[Consistency] = None   # the same numbers at the same cut (R11.3)
+    taper: Optional[Taper] = None
 
 
 @dataclass
@@ -376,6 +416,8 @@ class RaceReadiness:
     checklist: list = field(default_factory=list)       # list[ChecklistItem]
     days_before_race: Optional[int] = None   # race_date − block_end; set when the block has started
     past_builds: list = field(default_factory=list)     # list[PastBuild], newest race first
+    consistency: Optional[Consistency] = None           # set when the block has started (R11.3)
+    taper: Optional[Taper] = None                       # only within training_trends.TAPER_DAYS of the race
     heuristic: bool = True
 
 
@@ -446,6 +488,12 @@ def race_readiness(db: Session, *, as_of: Optional[date] = None) -> RaceReadines
     `no_data`. Every item except weeks_to_go carries `period_from`/`period_to`
     (the span it was computed over) and `evidence` (the runs behind the
     number); key_effort also carries `age_days`.
+
+    R11.3 appends descriptive `info` items once the block has started (no
+    pass/fail, no target percentages): weeks_with_running, gaps (breaks of
+    GAP_DAYS+ days), and — only within training_trends.TAPER_DAYS of the race —
+    taper_volume and since_long_run. Their numbers also sit on `consistency` /
+    `taper` and on each past build at the same cut.
 
     The block is read from `block_start` up to `as_of`, never past the day
     before the race (race-day running isn't training for it). Before the block
@@ -529,24 +577,47 @@ def race_readiness(db: Session, *, as_of: Optional[date] = None) -> RaceReadines
 
     out.checklist = _checklist(out, cls, block_runs)
 
+    if started:
+        out.consistency = _consistency([r.date for r in block_runs], block_start, block_end)
+        key_item = next((i for i in out.checklist if i.key == "key_effort"), None)
+        if cls:
+            out.taper = _taper(
+                block_runs, race.race_date, block_start, block_end,
+                out.peak_week.total_km if out.peak_week else None, as_of,
+                long_run_km=cls.long_run_km,
+                key_effort_age_days=key_item.age_days if key_item else None,
+            )
+        out.checklist.extend(_descriptive_items(out, block_runs, cls))
+
     if started and cls:
         d = (race.race_date - block_end).days   # >= 1: block_end <= race_date − 1
         out.days_before_race = d
-        # Whole-table cost: one unified_activities read per past block, filtered
-        # in Python — fine at personal scale (a handful of races of a class).
+        # Whole-table cost: one unified_activities read per past block (two since
+        # R11.3, which re-reads the block's runs for consistency/taper because
+        # _build_block doesn't return them), filtered in Python — fine at
+        # personal scale (a handful of races of a class).
         for e in reversed(_class_entries(db, cls, as_of)):
             if e.id == race.id or e.race_date >= as_of or e.status not in races_svc.DONE_STATUSES:
                 continue
             _, bw, bstart = block_window(e.race_date, e.distance_km)
             # as_of = race_date − d makes _build_block cut block_end at race_date − d.
             b = _build_block(db, e, cls, bw, bstart, as_of=e.race_date - timedelta(days=d))
+            b_end = date.fromisoformat(b.block_end)
+            b_runs = ([r for r in activities_svc.unified_activities(db, date_from=bstart, date_to=b_end)
+                       if r.distance_km] if bstart <= b_end else [])
+            b_peak = b.peak_week.km if b.peak_week else None
             out.past_builds.append(PastBuild(
                 race=b.race,
                 result_vs_target_s=(e.result_time_s - e.target_time_s
                                     if e.result_time_s is not None and e.target_time_s is not None else None),
                 cut_date=b.block_end, km=b.total_km, runs=b.runs, long_runs=b.long_runs,
                 longest_km=b.longest_run.distance_km if b.longest_run else None,
-                peak_week_km=b.peak_week.km if b.peak_week else None,
+                peak_week_km=b_peak,
+                consistency=_consistency([r.date for r in b_runs], bstart, b_end),
+                # as_of = race_date − d, so the taper gate matches today's exactly.
+                # key-effort age isn't derived for past builds (no effort scan per block).
+                taper=_taper(b_runs, e.race_date, bstart, b_end, b_peak,
+                             e.race_date - timedelta(days=d), long_run_km=cls.long_run_km),
             ))
     return out
 
@@ -662,6 +733,114 @@ def _checklist(rd: RaceReadiness, cls: Optional[RaceClass], block_runs: Optional
         period_from=rd.effort_window_start, period_to=rd.block_end,
         evidence=effort_ev, age_days=age,
     ))
+    return items
+
+
+def _monday(d: date) -> date:
+    return d - timedelta(days=d.weekday())
+
+
+def _consistency(run_dates: list, block_start: date, block_end: date) -> Consistency:
+    """Weeks-with-running, median runs a week and breaks of GAP_DAYS+ days over
+    [block_start, block_end]. Pure (no DB), shared by the current block and
+    each past build so the numbers are comparable. Weeks are Monday-aligned and
+    a partial current week counts; the median includes zero weeks. Gaps are
+    measured between runs with the block edges as sentinels, so time before the
+    first run or after the last (ongoing) counts too."""
+    n_weeks = (_monday(block_end) - block_start).days // 7 + 1
+    per_week = [0] * n_weeks
+    for d in run_dates:
+        if block_start <= d <= block_end:
+            per_week[(_monday(d) - block_start).days // 7] += 1
+
+    edges = ([block_start - timedelta(days=1)]
+             + sorted({d for d in run_dates if block_start <= d <= block_end})
+             + [block_end + timedelta(days=1)])
+    gaps = []
+    for a, b in zip(edges, edges[1:]):
+        days = (b - a).days - 1
+        if days >= GAP_DAYS:
+            gaps.append(Gap(start=(a + timedelta(days=1)).isoformat(),
+                            end=(b - timedelta(days=1)).isoformat(), days=days))
+    return Consistency(
+        weeks_elapsed=n_weeks, weeks_with_runs=sum(1 for c in per_week if c),
+        median_runs_per_week=round(float(statistics.median(per_week)), 1), gaps=gaps,
+    )
+
+
+def _taper(runs: list, race_date: date, block_start: date, block_end: date,
+           peak_week_km: Optional[float], as_of: date, *, long_run_km: Optional[float] = None,
+           key_effort_age_days: Optional[int] = None) -> Optional[Taper]:
+    """The taper numbers, or None unless the race is within
+    training_trends.TAPER_DAYS of `as_of`. Pure (no DB). Weeks are race week
+    (offset 0, Monday-aligned) and the two before; km counts runs on or before
+    block_end, so race week is partial and a week that hasn't started reads
+    0.0 with complete=False. Descriptive: no target percentage."""
+    if (race_date - as_of).days > training_trends.TAPER_DAYS:
+        return None
+    race_monday = _monday(race_date)
+    weeks = []
+    for offset in (-2, -1, 0):
+        ws = race_monday + timedelta(weeks=offset)
+        km = round(sum(r.distance_km for r in runs
+                       if ws <= r.date < ws + timedelta(days=7) and block_start <= r.date <= block_end), 1)
+        weeks.append(TaperWeek(
+            offset=offset, week_start=ws.isoformat(), km=km,
+            pct_of_peak=round(100 * km / peak_week_km) if peak_week_km else None,
+            complete=ws + timedelta(days=6) <= block_end,
+        ))
+    last_long = max((r.date for r in runs if long_run_km is not None and r.distance_km >= long_run_km
+                     and block_start <= r.date <= block_end), default=None)
+    return Taper(
+        peak_week_km=peak_week_km, weeks=weeks,
+        days_since_long_run=(block_end - last_long).days if last_long else None,
+        days_since_key_effort=key_effort_age_days,
+    )
+
+
+def _descriptive_items(rd: RaceReadiness, block_runs: list, cls: Optional[RaceClass]) -> list[ChecklistItem]:
+    """R11.3 checklist rows — consistency, and the taper inside TAPER_DAYS. All
+    `info`: descriptive numbers with no pass/fail rule and no target
+    percentages. Only called once the block has started."""
+    period = dict(period_from=rd.block_start, period_to=rd.block_end)
+    c = rd.consistency
+    items = [
+        ChecklistItem(
+            key="weeks_with_running", label="Weeks with running", status=STATUS_INFO,
+            rule=f"{c.weeks_with_runs} of {c.weeks_elapsed} weeks had a run; "
+                 f"median {c.median_runs_per_week:g} runs a week",
+            value=c.weeks_with_runs, target=None, unit="weeks", **period),
+        ChecklistItem(
+            key="gaps", label=f"Breaks of {GAP_DAYS}+ days", status=STATUS_INFO,
+            rule=("; ".join(f"{g.start} → {g.end} ({g.days} days)" for g in c.gaps)
+                  or f"No break of {GAP_DAYS}+ days"),
+            value=len(c.gaps), target=None, unit="breaks", **period),
+    ]
+    t = rd.taper
+    if t is not None:
+        done = [w for w in t.weeks if w.complete]
+        parts = []
+        for w in t.weeks:
+            if w.week_start > rd.block_end:
+                continue   # hasn't started
+            pct = f"{w.pct_of_peak}%" if w.pct_of_peak is not None else "n/a"
+            name = f"week \u2212{-w.offset}" if w.offset else "race week so far"
+            parts.append(f"{name}: {pct}")
+        peak = f"{t.peak_week_km:g} km" if t.peak_week_km is not None else "n/a"
+        items.append(ChecklistItem(
+            key="taper_volume", label="Taper volume", status=STATUS_INFO,
+            rule=f"Peak week {peak}. " + ", ".join(parts),
+            value=done[-1].pct_of_peak if done else None, target=None, unit="% of peak", **period))
+        last_long = None
+        if cls:
+            longs = [r for r in block_runs if r.distance_km >= cls.long_run_km]
+            last_long = max(longs, key=lambda r: r.date, default=None)
+        items.append(ChecklistItem(
+            key="since_long_run", label="Days since last long run", status=STATUS_INFO,
+            rule=(f"Last run of {cls.long_run_km:g} km or more: {last_long.date.isoformat()}"
+                  if last_long else "No long run in the block"),
+            value=t.days_since_long_run, target=None, unit="days",
+            evidence=[_evidence(last_long)] if last_long else [], **period))
     return items
 
 

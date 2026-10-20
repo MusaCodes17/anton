@@ -152,6 +152,36 @@ class BlockRaceResponse(BaseModel):
     from_activity: bool = False
 
 
+class GapResponse(BaseModel):
+    start: str                        # ISO date, first day off
+    end: str                          # ISO date, last day off
+    days: int
+
+
+class ConsistencyResponse(BaseModel):
+    """Block consistency (R11.3) — descriptive, no pass/fail."""
+    weeks_elapsed: int
+    weeks_with_runs: int
+    median_runs_per_week: float
+    gaps: List[GapResponse] = []
+
+
+class TaperWeekResponse(BaseModel):
+    offset: int                       # -2, -1, 0 (race week)
+    week_start: str                   # ISO Monday
+    km: float
+    pct_of_peak: Optional[int] = None
+    complete: bool
+
+
+class TaperResponse(BaseModel):
+    """The final three weeks against the block's peak (R11.3) — no target percentage."""
+    peak_week_km: Optional[float] = None
+    weeks: List[TaperWeekResponse] = []
+    days_since_long_run: Optional[int] = None
+    days_since_key_effort: Optional[int] = None
+
+
 class PastBuildResponse(BaseModel):
     """A past race's build cut at the same days-before-race as today (R11.2)."""
     race: BlockRaceResponse
@@ -162,6 +192,8 @@ class PastBuildResponse(BaseModel):
     long_runs: int
     longest_km: Optional[float] = None
     peak_week_km: Optional[float] = None
+    consistency: Optional[ConsistencyResponse] = None
+    taper: Optional[TaperResponse] = None
 
 
 class RaceReadinessResponse(BaseModel):
@@ -189,6 +221,8 @@ class RaceReadinessResponse(BaseModel):
     checklist: List[ReadinessChecklistItem] = []
     days_before_race: Optional[int] = None
     past_builds: List[PastBuildResponse] = []
+    consistency: Optional[ConsistencyResponse] = None
+    taper: Optional[TaperResponse] = None
     heuristic: bool = True
 
 

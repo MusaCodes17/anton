@@ -613,6 +613,17 @@ def get_race_block_context(weeks_back: int = 12, as_of: Optional[str] = None) ->
       a DNF). Compare them to the current `block_km`, `block_runs`,
       `long_runs`, `longest_run`, `peak_week`. Present them beside the current
       numbers; never rank builds or say more km is better.
+      Once the block has started, `readiness.consistency` ({weeks_elapsed,
+      weeks_with_runs, median_runs_per_week, gaps: [{start, end, days}]} — gaps
+      are 7+ consecutive days without a run) and, only inside the final 3 weeks
+      (21 days) of the race, `readiness.taper` ({peak_week_km, weeks: [{offset
+      -2/-1/0, week_start, km, pct_of_peak, complete}], days_since_long_run,
+      days_since_key_effort}) describe the block; each past build carries the
+      same two objects at its own cut. The checklist gains `info` items
+      weeks_with_running and gaps (and taper_volume, since_long_run within the
+      taper). They are descriptive: describe the taper numbers beside the past
+      builds' numbers, never against a target percentage, and never call a gap
+      or a taper week good or bad.
 
     This is read-only — no writes, no confirmation gate needed.
     Call this before running the race_block_advisor prompt, or for "am I ready

@@ -16,7 +16,8 @@ from datetime import date, timedelta
 from app import mcp_server
 from app.models.models import Activity, ActivityBestEffort, ActivityEffortScan, PlannedRace
 from app.routers.races import get_race_readiness
-from app.services.race_advisor import race_block_context, race_readiness
+from app.services.race_advisor import _consistency, _taper, race_block_context, race_readiness
+from types import SimpleNamespace
 
 AS_OF = date(2026, 10, 9)              # a Friday
 RACE_DAY = date(2026, 10, 11)          # Sunday; race week starts Mon 2026-10-05
@@ -298,7 +299,8 @@ def test_endpoint_and_mcp_tool_agree(db, monkeypatch):
     assert rest == mcp
     assert rest["has_race"] is True and rest["heuristic"] is True
     assert [i["key"] for i in rest["checklist"]] == [
-        "weeks_to_go", "peak_week", "longest_run", "long_runs", "key_effort"]
+        "weeks_to_go", "peak_week", "longest_run", "long_runs", "key_effort",
+        "weeks_with_running", "gaps", "taper_volume", "since_long_run"]   # R11.3 appends the info items
 
 
 def test_endpoint_without_a_race_says_so(db):
@@ -372,3 +374,120 @@ def test_no_past_races_or_block_not_started_means_empty(db):
     race(db, day=PAST_DAY, status="completed")
     assert race_readiness(db, as_of=BLOCK_START - timedelta(days=1)).past_builds == []
     assert race_readiness(db, as_of=BLOCK_START - timedelta(days=1)).days_before_race is None
+
+
+# --- R11.3 — consistency + taper -----------------------------------------------------------
+
+D = date
+MON = date(2026, 6, 22)                # a Monday
+
+
+def days(*offsets):
+    return [MON + timedelta(days=o) for o in offsets]
+
+
+def test_gap_spanning_a_week_boundary_is_one_gap(db):
+    # Fri 06-26 → Sun 07-05: eight days off across a Monday boundary.
+    runs = days(0, 1, 2, 3, 4) + days(13) + days(14, 15, 16, 17, 18, 19, 20)
+    c = _consistency(runs, MON, MON + timedelta(days=20))
+    assert [(g.start, g.end, g.days) for g in c.gaps] == [("2026-06-27", "2026-07-04", 8)]
+
+
+def test_exactly_seven_days_off_counts_six_does_not():
+    base = days(0, 1, 2, 3, 4)                       # ... Fri 06-26
+    seven = _consistency(base + days(12, 13, 14), MON, MON + timedelta(days=14))   # next run Sat 07-04
+    six = _consistency(base + days(11, 12, 13, 14), MON, MON + timedelta(days=14))  # next run Fri 07-03
+    assert [g.days for g in seven.gaps] == [7]
+    assert six.gaps == []
+
+
+def test_leading_and_trailing_gaps_count():
+    # Block starts Mon 06-22, first run Wed 07-01 (9 days off); last run Fri 07-03, block ends Sun 07-12 (9 off, 07-04 → 07-12).
+    c = _consistency(days(9, 11), MON, MON + timedelta(days=20))
+    assert [(g.start, g.end, g.days) for g in c.gaps] == [
+        ("2026-06-22", "2026-06-30", 9), ("2026-07-04", "2026-07-12", 9)]
+    assert _consistency([], MON, MON + timedelta(days=9)).gaps[0].days == 10   # no runs: the whole block
+
+
+def test_one_week_block_and_partial_week_count():
+    c = _consistency(days(0, 2, 3), MON, MON + timedelta(days=3))   # block ended Thursday
+    assert (c.weeks_elapsed, c.weeks_with_runs, c.median_runs_per_week) == (1, 1, 3.0)
+    assert c.gaps == []
+
+
+def test_multi_week_block_with_a_zero_week_counts_the_zero_in_the_median():
+    # weeks: 3 runs, 0 runs, 2 runs, 1 run → median of [3,0,2,1] = 1.5
+    runs = days(0, 1, 2) + days(14, 16) + days(21)
+    c = _consistency(runs, MON, MON + timedelta(days=27))
+    assert (c.weeks_elapsed, c.weeks_with_runs, c.median_runs_per_week) == (4, 3, 1.5)
+
+
+def _taper_race(db):
+    race(db)                                          # Sunday 2026-10-11, marathon
+    run(db, date(2026, 9, 15), 40.0)                  # peak week, and a long run
+    run(db, date(2026, 9, 22), 20.0)                  # week -2
+    run(db, date(2026, 9, 29), 10.0)                  # week -1
+    run(db, date(2026, 10, 6), 4.0)                   # race week so far
+
+
+def test_taper_hidden_at_22_days_shown_at_21(db):
+    _taper_race(db)
+    far = race_readiness(db, as_of=RACE_DAY - timedelta(days=22))
+    assert far.taper is None
+    assert not {"taper_volume", "since_long_run"} & set(items(far))
+    near = race_readiness(db, as_of=RACE_DAY - timedelta(days=21))
+    assert near.taper is not None
+    assert {"taper_volume", "since_long_run"} <= set(items(near))
+
+
+def test_taper_percentages_complete_flag_and_long_run_age(db):
+    _taper_race(db)
+    rd = race_readiness(db, as_of=AS_OF)              # Fri 10-09
+    t = rd.taper
+    assert t.peak_week_km == 40.0
+    assert [(w.offset, w.km, w.pct_of_peak, w.complete) for w in t.weeks] == [
+        (-2, 20.0, 50, True), (-1, 10.0, 25, True), (0, 4.0, 10, False)]
+    assert t.days_since_long_run == 24                # 09-15 → block_end 10-09
+    assert t.days_since_key_effort is None
+    its = items(rd)
+    assert its["taper_volume"].value == 25 and its["taper_volume"].status == "info"
+    assert its["taper_volume"].target is None
+    assert "race week so far: 10%" in its["taper_volume"].rule
+    assert its["since_long_run"].value == 24 and its["since_long_run"].evidence[0].distance_km == 40.0
+
+
+def test_taper_week_not_yet_started_is_listed_with_zero_km():
+    runs = [SimpleNamespace(date=date(2026, 9, 15), distance_km=40.0)]
+    t = _taper(runs, RACE_DAY, BLOCK_START, date(2026, 9, 20), 40.0, date(2026, 9, 20))
+    assert [(w.offset, w.km, w.complete) for w in t.weeks] == [(-2, 0.0, False), (-1, 0.0, False), (0, 0.0, False)]
+    assert _taper(runs, RACE_DAY, BLOCK_START, date(2026, 9, 20), None, date(2026, 9, 20)).weeks[0].pct_of_peak is None
+
+
+def test_consistency_items_are_info_only_and_omitted_before_the_block(db):
+    race(db)
+    run(db, date(2026, 10, 1), 10.0)
+    rd = race_readiness(db, as_of=AS_OF)
+    its = items(rd)
+    assert its["weeks_with_running"].status == "info" and its["gaps"].status == "info"
+    assert its["weeks_with_running"].rule.startswith(f"1 of {rd.consistency.weeks_elapsed} weeks had a run")
+    assert its["gaps"].value == 2                      # block start → first run, and the ongoing stretch after it
+    assert "→" in its["gaps"].rule
+    early = race_readiness(db, as_of=BLOCK_START - timedelta(days=1))
+    assert early.consistency is None
+    assert not {"weeks_with_running", "gaps"} & set(items(early))
+
+
+def test_past_build_carries_consistency_and_taper_at_its_cut(db):
+    race(db)
+    race(db, day=PAST_DAY, status="completed", name="Spring Marathon")
+    run(db, date(2026, 2, 10), 40.0)
+    run(db, date(2026, 3, 3), 20.0)                    # Tuesday of that race week, before the cut
+    rd = race_readiness(db, as_of=AS_OF)
+    [pb] = rd.past_builds
+    assert pb.consistency.weeks_with_runs == 2
+    assert pb.taper is not None and pb.taper.peak_week_km == 40.0
+    assert [(w.offset, w.pct_of_peak) for w in pb.taper.weeks] == [(-2, 0), (-1, 0), (0, 50)]
+    assert rd.taper is not None
+    far = race_readiness(db, as_of=RACE_DAY - timedelta(days=22))
+    assert far.taper is None and far.past_builds[0].taper is None
+    assert far.past_builds[0].consistency is not None
