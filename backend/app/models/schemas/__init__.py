@@ -59,12 +59,16 @@ from app.models.schemas.rotation import (
 )
 
 from app.models.schemas.training import (
+    BlockComparisonResponse,
+    BlockRaceResponse,
+    BlockWeekResponse,
     PlannedRaceBase,
     PlannedRaceCreate,
     PlannedRaceLinkActivity,
     PlannedRaceResponse,
     PlannedRaceUpdate,
     PlannedShoeBrief,
+    RaceBlockResponse,
     RaceReadinessResponse,
     ReadinessChecklistItem,
     ReadinessEffortResponse,

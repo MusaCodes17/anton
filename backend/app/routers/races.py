@@ -12,6 +12,7 @@ from sqlalchemy.orm import Session
 from app.database import get_db
 from app.models.models import PlannedRace
 from app.models.schemas import (
+    BlockComparisonResponse,
     PlannedRaceCreate,
     PlannedRaceLinkActivity,
     PlannedRaceResponse,
@@ -37,6 +38,19 @@ def get_race_readiness(as_of: Optional[date] = None, db: Session = Depends(get_d
     score. `as_of` defaults to today (Toronto); `has_race` False when no race is
     ahead. Same data as the MCP tool get_race_block_context's `readiness`."""
     return RaceReadinessResponse(**asdict(race_advisor.race_readiness(db, as_of=as_of)))
+
+
+@router.get("/blocks", response_model=BlockComparisonResponse)
+def get_race_blocks(race_class: str = "marathon", as_of: Optional[date] = None,
+                    db: Session = Depends(get_db)):
+    """Race-block retrospective (R10.2): the training blocks before every race of
+    one class (marathon, half, 10k, 5k), oldest first; `race_class` outside those
+    → 400. Same data as the MCP tool get_block_comparison."""
+    try:
+        result = race_advisor.block_comparison(db, race_class=race_class, as_of=as_of)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    return BlockComparisonResponse(**asdict(result))
 
 
 @router.post("", response_model=PlannedRaceResponse, status_code=status.HTTP_201_CREATED)

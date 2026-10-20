@@ -149,3 +149,56 @@ class RaceReadinessResponse(BaseModel):
     recent_efforts: List[ReadinessEffortResponse] = []
     checklist: List[ReadinessChecklistItem] = []
     heuristic: bool = True
+
+
+# --- Race-block retrospective (R10.2) — mirrors services.race_advisor.BlockComparison ---
+
+class BlockWeekResponse(BaseModel):
+    offset: int                       # weeks relative to race week: 0 = race week, -1 = the week before
+    week_start: str                   # ISO Monday
+    km: float
+    runs: int
+    longest_km: float                 # 0.0 with no runs
+
+
+class BlockRaceResponse(BaseModel):
+    id: int                           # negative for a Race-tagged run with no plan row
+    name: str
+    race_date: str                    # ISO date
+    distance_km: Optional[float] = None
+    status: str                       # completed | dnf | planned
+    result_time_s: Optional[int] = None
+    result_pace: Optional[str] = None     # "M:SS/km"
+    target_time_s: Optional[int] = None
+    target_pace: Optional[str] = None     # "M:SS/km"
+    activity_id: Optional[int] = None
+    from_activity: bool = False
+
+
+class RaceBlockResponse(BaseModel):
+    race: BlockRaceResponse
+    block_start: str                  # ISO Monday
+    block_end: str                    # ISO date, inclusive
+    in_progress: bool                 # the race is today or ahead
+    weeks: List[BlockWeekResponse] = []
+    total_km: float
+    runs: int
+    avg_week_km: float
+    peak_week: Optional[BlockWeekResponse] = None
+    longest_run: Optional[ReadinessRunResponse] = None
+    long_run_km: Optional[float] = None
+    long_runs: int                    # runs at or above long_run_km
+    steady_runs: int                  # runs training_trends.m_per_beat accepts
+    median_m_per_beat: Optional[float] = None
+    median_steady_pace_s_per_km: Optional[int] = None
+    median_steady_hr: Optional[int] = None
+
+
+class BlockComparisonResponse(BaseModel):
+    """Race-block retrospective (R10.2): the blocks before every race of one class, oldest first."""
+    as_of: str
+    race_class: str
+    block_weeks: int
+    long_run_km: float
+    blocks: List[RaceBlockResponse] = []
+    heuristic: bool = True

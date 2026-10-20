@@ -237,6 +237,16 @@ def list_races(db: Session, today: Optional[date] = None) -> list:
     # stale plan regardless of whether COROS is connected.
     prune_unrun_races(db, today)
 
+    return race_entries(db, today)
+
+
+def race_entries(db: Session, today: Optional[date] = None) -> list:
+    """Every race entry exactly as `list_races` returns it — PlannedRace rows
+    with derived fields plus synthetic tagged-activity entries — but read-only:
+    no prune, so nothing is written or deleted. Use this from read-only services
+    (readiness, block comparison); `list_races` is prune + this."""
+    today = today or date.today()
+
     races = db.query(PlannedRace).order_by(PlannedRace.race_date.asc()).all()
     for r in races:
         attach_derived(r, today)

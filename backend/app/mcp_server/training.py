@@ -679,6 +679,58 @@ def get_race_block_context(weeks_back: int = 12, as_of: Optional[str] = None) ->
     return result
 
 
+@mcp.tool()
+def get_block_comparison(race_class: str = "marathon", as_of: Optional[str] = None) -> dict:
+    """
+    Compare the training blocks before every past race of one class, side by
+    side, oldest race first. Use this for "compare my marathon builds", "how did
+    this block compare with Ottawa?", or "was my half-marathon build bigger than
+    my last one?".
+
+    A block is the same window the readiness checklist uses (get_race_block_context's
+    `readiness`): for a marathon, 16 Monday-aligned calendar weeks ending the day
+    before race day (race-day running isn't training for it). Other classes use
+    their own block length (half 12, 10k 10, 5k 8). Blocks of nearby races can
+    overlap, so the same run may appear in two blocks.
+
+    Each block includes:
+    - race: name, race_date, distance_km, status, result_time_s, result_pace,
+      target_time_s, target_pace. Status is one of completed, dnf, planned.
+      A dnf race has result_time_s and result_pace null: say the runner did not
+      finish. Never present a DNF as a result.
+    - weeks: one entry per week, oldest first, each with offset (0 = race week,
+      -1 = the week before, and so on), week_start (Monday), km, runs, longest_km.
+      Zero-km weeks are included.
+    - in_progress: true for a planned race today or later. Its block is cut at
+      as_of, so it shows only the training so far, not a finished block.
+    - summary: total_km, runs, avg_week_km, peak_week, longest_run, long_run_km,
+      long_runs (runs at or above long_run_km, 28 km for a marathon), steady_runs,
+      median_steady_pace_s_per_km (s/km), median_steady_hr (bpm),
+      median_m_per_beat (metres per heartbeat on steady runs).
+
+    Blocks that haven't started yet are listed with empty weeks and zero totals.
+    Missing values (null) mean there was no data, not zero.
+
+    This is a heuristic retrospective, not a physiological model. The long-run
+    and steady-run rules are readiness thresholds. Quote the numbers and say
+    they are comparisons, not a verdict on the training. Read-only.
+
+    Args:
+        race_class: marathon (default), half, 10k or 5k. Ultras count as marathon.
+        as_of: ISO date to end the comparison on (default today). Use it to ask
+            about a past point in time.
+    """
+    from dataclasses import asdict
+    from datetime import date as _date
+    try:
+        day = _date.fromisoformat(as_of) if as_of else None
+        with _core.get_session() as db:
+            result = race_advisor_svc.block_comparison(db, race_class=race_class, as_of=day)
+    except ValueError as e:
+        return {"error": str(e)}
+    return asdict(result)
+
+
 @mcp.prompt()
 def race_block_advisor() -> str:
     """

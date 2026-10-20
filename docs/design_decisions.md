@@ -266,6 +266,14 @@ Intervals and Track **count** (the runner's call). A stretch is continuous runni
 
 ---
 
+### B25. The race-block comparison reuses readiness' block window (R10.2, 2026-10-20)
+**Chosen:** `race_advisor.block_comparison(db, *, race_class, as_of)` lists every race of one class — completed or DNF before `as_of`, plus a planned race on or after it (`in_progress`, cut at `as_of`) — each with its block: the same `block_window` readiness uses (16 Monday-aligned weeks for a marathon, ending the day before the race). Per block: weeks by offset from race week (0 = race week, zero-km weeks included), total and average week km, peak week (a tie picks the later week), longest run, long runs at the class threshold, and steady-run medians (training_trends' steady rule). Races come from `races.race_entries`, a new read-only seam (`list_races` = prune + it). Blocks may overlap. REST `GET /api/races/blocks`, MCP `get_block_comparison`.
+**Why:** The runner asked on 2026-10-20 to compare marathon builds (Toronto 2025, Ottawa 2026, Beneva 2026). This **reverses R8.4's "not chosen: block-vs-block comparison"** (2026-10-09). One block definition means the readiness checklist and the comparison can never disagree about what "the block" was.
+**Trade-offs:** A fixed window, not "since the previous race": a marathon 16 weeks after another shares weeks with it. Classes come from distance only, so a 30 km race counts as a marathon (the RACE_CLASSES floor).
+**Verdict:** ✅ Keep.
+
+---
+
 ## C. AI Layer
 
 ### C1. MCP as the single AI substrate; the assistant is a client of its own server
