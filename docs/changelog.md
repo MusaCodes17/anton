@@ -26,6 +26,8 @@ Branch `training-ui-polish` (commits `e5aef89`, `14dc501`, `4ed19ec`, `de814b5`)
 - 0 console errors on a fresh load (trapped `console.error`).
 - Backend untouched (suite last run at 966 passed + 1 skipped).
 
+**Closed:** PR #91 merged with both CI checks green. Earlier the same session the 12 merged remote branches were deleted (only `origin/main` remains). Wrap-up on `main` after the merge: suite **966 passed + 1 skipped**; B20 gained an update note (the tiles drop the on-page heuristic label; the API keeps it); `project_state.md` §11 now leads with one deploy step.
+
 ---
 
 ## R10.7 — Training-layout backend retired — 2026-10-20

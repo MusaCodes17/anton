@@ -214,6 +214,7 @@
 Exact thresholds read the conservative way (1.10 and 0.90 are holding; ±3.0% is steady; 28.0 km counts). Every response carries its thresholds and `heuristic: true`, so each surface labels the verdict. Nothing is stored (INV-7).
 **Why:** the runner asked for answers, not totals. Read-time verdicts over the canonical feed can't drift from the Records card or the Volume chart; the shared `strava_stats.best_efforts_among` keeps the Records card, the 90-day bests and readiness on one rule.
 **Trade-offs:** all thresholds are judgment calls, tuned on one runner's archive. Heat and hills move HR, so m per beat dips in summer, uncorrected. Where runs aren't scanned yet, the whole-run fallback can put an easy run in as a "recent best" (a 10k at 9:00/km reads 160% off the all-time best); scanning (R8.2) fixes this as the backfill and COROS FITs fill in.
+**Update 2026-10-20 (PR #91, Training UI polish):** at the runner's request the strip is now plain stat tiles under question headings. The small charts and the on-page "Heuristic:" footers are gone. The API still returns `heuristic: true` and the thresholds, so MCP and claude.ai surfaces keep labelling the verdicts; only the app's tile view drops the label.
 **Verdict:** ✅ Keep. 🔁 Revisit thresholds after a season of real use; revisit form if COROS exposes a usable training-load or HRV history.
 
 ### B19. Best efforts are segments, stored per run, scanned off the request path (R8.2, 2026-10-09)
