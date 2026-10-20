@@ -336,6 +336,21 @@ class ChecklistItem:
 
 
 @dataclass
+class PastBuild:
+    """One past race of the readiness race's class, with its build cut at the
+    same number of days before its race as today's block is (R11.2). Numbers
+    beside a result — no ranking, no verdict."""
+    race: BlockRace
+    result_vs_target_s: Optional[int]  # result − target; negative = faster than target; None without both (DNF)
+    cut_date: str                      # ISO — the past block's end at the cut
+    km: float                          # cumulative block km up to the cut
+    runs: int
+    long_runs: int
+    longest_km: Optional[float]        # None with no runs
+    peak_week_km: Optional[float]      # None with no runs
+
+
+@dataclass
 class RaceReadiness:
     """"Am I ready for race X?" for the next race. `has_race` False means there
     is no race ahead: every other field is empty and the readiness card hides."""
@@ -359,6 +374,8 @@ class RaceReadiness:
     key_effort: Optional[str] = None
     recent_efforts: list = field(default_factory=list)  # list[ReadinessEffort], shortest first
     checklist: list = field(default_factory=list)       # list[ChecklistItem]
+    days_before_race: Optional[int] = None   # race_date − block_end; set when the block has started
+    past_builds: list = field(default_factory=list)     # list[PastBuild], newest race first
     heuristic: bool = True
 
 
@@ -511,6 +528,26 @@ def race_readiness(db: Session, *, as_of: Optional[date] = None) -> RaceReadines
             ))
 
     out.checklist = _checklist(out, cls, block_runs)
+
+    if started and cls:
+        d = (race.race_date - block_end).days   # >= 1: block_end <= race_date − 1
+        out.days_before_race = d
+        # Whole-table cost: one unified_activities read per past block, filtered
+        # in Python — fine at personal scale (a handful of races of a class).
+        for e in reversed(_class_entries(db, cls, as_of)):
+            if e.id == race.id or e.race_date >= as_of or e.status not in races_svc.DONE_STATUSES:
+                continue
+            _, bw, bstart = block_window(e.race_date, e.distance_km)
+            # as_of = race_date − d makes _build_block cut block_end at race_date − d.
+            b = _build_block(db, e, cls, bw, bstart, as_of=e.race_date - timedelta(days=d))
+            out.past_builds.append(PastBuild(
+                race=b.race,
+                result_vs_target_s=(e.result_time_s - e.target_time_s
+                                    if e.result_time_s is not None and e.target_time_s is not None else None),
+                cut_date=b.block_end, km=b.total_km, runs=b.runs, long_runs=b.long_runs,
+                longest_km=b.longest_run.distance_km if b.longest_run else None,
+                peak_week_km=b.peak_week.km if b.peak_week else None,
+            ))
     return out
 
 
@@ -761,6 +798,23 @@ def _build_block(db: Session, e, cls: RaceClass, block_weeks: int, block_start: 
     )
 
 
+def _class_entries(db: Session, cls: RaceClass, as_of: date) -> list:
+    """Race entries of one class that belong in a block comparison, sorted by
+    (date, id): done before `as_of` (completed or dnf, incl. Race-tagged runs
+    with no plan row) or still planned on or after it. Read-only."""
+    kept = []
+    for e in races_svc.race_entries(db, as_of):
+        rc = race_class_for(e.distance_km)
+        if rc is None or rc.name != cls.name:
+            continue
+        done = e.race_date < as_of and e.status in races_svc.DONE_STATUSES
+        upcoming = e.status == "planned" and e.race_date >= as_of
+        if done or upcoming:
+            kept.append(e)
+    kept.sort(key=lambda e: (e.race_date, e.id))
+    return kept
+
+
 def block_comparison(
     db: Session, *, race_class: str = "marathon", as_of: Optional[date] = None,
 ) -> BlockComparison:
@@ -790,16 +844,7 @@ def block_comparison(
                          + ", ".join(c.name for c in RACE_CLASSES))
     as_of = as_of or toronto_today()
 
-    kept = []
-    for e in races_svc.race_entries(db, as_of):
-        rc = race_class_for(e.distance_km)
-        if rc is None or rc.name != race_class:
-            continue
-        done = e.race_date < as_of and e.status in races_svc.DONE_STATUSES
-        upcoming = e.status == "planned" and e.race_date >= as_of
-        if done or upcoming:
-            kept.append(e)
-    kept.sort(key=lambda e: (e.race_date, e.id))
+    kept = _class_entries(db, cls, as_of)
 
     # Whole-table pass: one unified_activities read per block, filtered in Python
     # — fine at personal scale (~1k runs, a handful of races).

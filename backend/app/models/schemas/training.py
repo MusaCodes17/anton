@@ -138,6 +138,32 @@ class ReadinessChecklistItem(BaseModel):
     age_days: Optional[int] = None
 
 
+class BlockRaceResponse(BaseModel):
+    id: int                           # negative for a Race-tagged run with no plan row
+    name: str
+    race_date: str                    # ISO date
+    distance_km: Optional[float] = None
+    status: str                       # completed | dnf | planned
+    result_time_s: Optional[int] = None
+    result_pace: Optional[str] = None     # "M:SS/km"
+    target_time_s: Optional[int] = None
+    target_pace: Optional[str] = None     # "M:SS/km"
+    activity_id: Optional[int] = None
+    from_activity: bool = False
+
+
+class PastBuildResponse(BaseModel):
+    """A past race's build cut at the same days-before-race as today (R11.2)."""
+    race: BlockRaceResponse
+    result_vs_target_s: Optional[int] = None   # negative = faster than target; None for a DNF
+    cut_date: str
+    km: float
+    runs: int
+    long_runs: int
+    longest_km: Optional[float] = None
+    peak_week_km: Optional[float] = None
+
+
 class RaceReadinessResponse(BaseModel):
     """"Am I ready for race X?" — a checklist with numbers, not a score (R8.4.4).
     `has_race` False → no race ahead; the readiness card hides."""
@@ -161,6 +187,8 @@ class RaceReadinessResponse(BaseModel):
     key_effort: Optional[str] = None
     recent_efforts: List[ReadinessEffortResponse] = []
     checklist: List[ReadinessChecklistItem] = []
+    days_before_race: Optional[int] = None
+    past_builds: List[PastBuildResponse] = []
     heuristic: bool = True
 
 
@@ -172,20 +200,6 @@ class BlockWeekResponse(BaseModel):
     km: float
     runs: int
     longest_km: float                 # 0.0 with no runs
-
-
-class BlockRaceResponse(BaseModel):
-    id: int                           # negative for a Race-tagged run with no plan row
-    name: str
-    race_date: str                    # ISO date
-    distance_km: Optional[float] = None
-    status: str                       # completed | dnf | planned
-    result_time_s: Optional[int] = None
-    result_pace: Optional[str] = None     # "M:SS/km"
-    target_time_s: Optional[int] = None
-    target_pace: Optional[str] = None     # "M:SS/km"
-    activity_id: Optional[int] = None
-    from_activity: bool = False
 
 
 class RaceBlockResponse(BaseModel):

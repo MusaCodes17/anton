@@ -14,6 +14,10 @@ import { Group, GroupError, Tile, TileSkeletons } from '@/components/training/St
  * to open one detail panel below the tiles, showing the period and the runs
  * behind the number. One item is open at a time. `no_data` means the window
  * had no source data at all, so it renders as "No data", not as a failure.
+ *
+ * Past builds (R11.2): under the checklist, a table sets this build beside each
+ * past build of the same class cut at the same days-before-race, with its
+ * result. Numbers only, no ranking or better/worse colouring.
  */
 
 const READINESS_PANEL_ID = 'readiness-detail'
@@ -101,6 +105,94 @@ function ReadinessDetail({ item }) {
   )
 }
 
+const MINUS = '−'
+const oneDp = (v) => (v == null ? '—' : Number(v).toFixed(1))
+
+function PastBuildResult({ build }) {
+  const { race, result_vs_target_s: vs } = build
+  if (race.status === 'dnf') return <span className="font-semibold text-warning">DNF</span>
+  if (race.result_time_s == null) return '—'
+  return (
+    <>
+      {formatDuration(race.result_time_s)}
+      {vs != null && (
+        <span className="ml-1 text-xs text-muted-foreground">
+          ({vs < 0 ? MINUS : '+'}
+          {formatDuration(Math.abs(vs))} vs target)
+        </span>
+      )}
+    </>
+  )
+}
+
+function PastBuilds({ rd }) {
+  const builds = rd.past_builds ?? []
+  if (builds.length === 0) return null
+  const d = rd.days_before_race
+  const th = 'px-2 py-1.5 text-right font-semibold'
+  const td = 'whitespace-nowrap px-2 py-2 text-right tabular-nums'
+  const longRuns = (rd.long_runs ?? []).length
+
+  return (
+    <div className="min-w-0 space-y-2.5">
+      <div>
+        <h3 className="text-sm font-semibold text-foreground">At this point in past builds</h3>
+        {d != null && (
+          <p className="mt-0.5 text-xs text-muted-foreground">
+            {`Each build up to ${d} day${d === 1 ? '' : 's'} before its race.`}
+          </p>
+        )}
+      </div>
+      <div className="panel min-w-0 overflow-x-auto rounded-2xl border border-border bg-card">
+        <table className="w-full min-w-[30rem] text-xs">
+          <thead className="text-2xs uppercase tracking-wide text-faint">
+            <tr className="border-b border-border">
+              <th className="px-2 py-1.5 text-left font-semibold">Build</th>
+              <th className={th}>Result</th>
+              <th className={th}>km</th>
+              <th className={th}>Runs</th>
+              <th className={th}>Long runs</th>
+              <th className={th}>Longest</th>
+              <th className={th}>Peak week</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr className="border-b border-border/60">
+              <td className="px-2 py-2 text-left font-bold text-foreground">This build</td>
+              <td className={td}>—</td>
+              <td className={td}>{oneDp(rd.block_km)}</td>
+              <td className={td}>{rd.block_runs ?? '—'}</td>
+              <td className={td}>{longRuns}</td>
+              <td className={td}>{oneDp(rd.longest_run?.distance_km)}</td>
+              <td className={td}>{oneDp(rd.peak_week?.total_km)}</td>
+            </tr>
+            {builds.map((b) => (
+              <tr key={b.race.id} className="border-b border-border/60 last:border-0">
+                <td className="px-2 py-2 text-left">
+                  {b.race.activity_id != null ? (
+                    <Link to={`/activities/${b.race.activity_id}`} className="focus-ring font-semibold text-foreground hover:underline">
+                      {b.race.name}
+                    </Link>
+                  ) : (
+                    <span className="font-semibold text-foreground">{b.race.name}</span>
+                  )}
+                  <div className="text-xs text-muted-foreground">{formatDate(b.race.race_date)}</div>
+                </td>
+                <td className={td}><PastBuildResult build={b} /></td>
+                <td className={td}>{oneDp(b.km)}</td>
+                <td className={td}>{b.runs ?? '—'}</td>
+                <td className={td}>{b.long_runs ?? '—'}</td>
+                <td className={td}>{oneDp(b.longest_km)}</td>
+                <td className={td}>{oneDp(b.peak_week_km)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  )
+}
+
 function ReadinessGroup({ rd }) {
   const race = rd.race
   const [openKey, setOpenKey] = useState(null)
@@ -117,49 +209,52 @@ function ReadinessGroup({ rd }) {
   const openItem = rows.find((c) => c.key === openKey && isTappable(c)) ?? null
 
   return (
-    <Group title={`Ready for ${race.name}?`}>
-      <Tile label="Race" value={when} sub={`${raceSub}${block}`} />
-      <Tile
-        label="Target"
-        value={race.target_time_s ? formatDuration(race.target_time_s) : '—'}
-        sub={race.target_time_s ? race.target_pace : 'No target time'}
-      />
-      {rows.map((item) => {
-        const s = STATUS[item.status] ?? STATUS.info
-        const Icon = s.icon
-        const tile = (
-          <Tile
-            label={item.label}
-            compact
-            value={itemValue(item)}
-            sub={
-              <span className="inline-flex items-center gap-1">
-                <Icon className={`h-3 w-3 shrink-0 ${s.tone}`} aria-hidden="true" />
-                <span>{s.word}</span>
-              </span>
-            }
-          />
-        )
-        if (!isTappable(item)) return <div key={item.key} className="min-w-0">{tile}</div>
-        const isOpen = openItem?.key === item.key
-        return (
-          <button
-            key={item.key}
-            type="button"
-            onClick={() => setOpenKey(isOpen ? null : item.key)}
-            aria-expanded={isOpen}
-            aria-controls={isOpen ? READINESS_PANEL_ID : undefined}
-            className={cn(
-              'focus-ring min-w-0 rounded-2xl text-left',
-              isOpen && 'ring-2 ring-primary',
-            )}
-          >
-            {tile}
-          </button>
-        )
-      })}
-      {openItem && <ReadinessDetail item={openItem} />}
-    </Group>
+    <div className="space-y-4">
+      <Group title={`Ready for ${race.name}?`}>
+        <Tile label="Race" value={when} sub={`${raceSub}${block}`} />
+        <Tile
+          label="Target"
+          value={race.target_time_s ? formatDuration(race.target_time_s) : '—'}
+          sub={race.target_time_s ? race.target_pace : 'No target time'}
+        />
+        {rows.map((item) => {
+          const s = STATUS[item.status] ?? STATUS.info
+          const Icon = s.icon
+          const tile = (
+            <Tile
+              label={item.label}
+              compact
+              value={itemValue(item)}
+              sub={
+                <span className="inline-flex items-center gap-1">
+                  <Icon className={`h-3 w-3 shrink-0 ${s.tone}`} aria-hidden="true" />
+                  <span>{s.word}</span>
+                </span>
+              }
+            />
+          )
+          if (!isTappable(item)) return <div key={item.key} className="min-w-0">{tile}</div>
+          const isOpen = openItem?.key === item.key
+          return (
+            <button
+              key={item.key}
+              type="button"
+              onClick={() => setOpenKey(isOpen ? null : item.key)}
+              aria-expanded={isOpen}
+              aria-controls={isOpen ? READINESS_PANEL_ID : undefined}
+              className={cn(
+                'focus-ring min-w-0 rounded-2xl text-left',
+                isOpen && 'ring-2 ring-primary',
+              )}
+            >
+              {tile}
+            </button>
+          )
+        })}
+        {openItem && <ReadinessDetail item={openItem} />}
+      </Group>
+      <PastBuilds rd={rd} />
+    </div>
   )
 }
 

@@ -605,6 +605,14 @@ def get_race_block_context(weeks_back: int = 12, as_of: Optional[str] = None) ->
       into one. The block is `block_start`→`block_end` (a fixed number of
       weeks ending race week, by race distance); `recent_efforts` carry
       `vs_target_s_per_km` (negative = faster than target pace).
+      `readiness.past_builds` lists the past completed/DNF races of the same
+      class, newest first, each with its block cut the same number of days
+      before its race as today (`readiness.days_before_race`): `km`, `runs`,
+      `long_runs`, `longest_km`, `peak_week_km` so far, beside the race's
+      result and `result_vs_target_s` (negative = faster than target; null for
+      a DNF). Compare them to the current `block_km`, `block_runs`,
+      `long_runs`, `longest_run`, `peak_week`. Present them beside the current
+      numbers; never rank builds or say more km is better.
 
     This is read-only — no writes, no confirmation gate needed.
     Call this before running the race_block_advisor prompt, or for "am I ready

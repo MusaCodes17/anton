@@ -307,3 +307,68 @@ def test_endpoint_without_a_race_says_so(db):
 
 def test_mcp_tool_rejects_a_bad_date():
     assert "error" in mcp_server.get_race_block_context(as_of="next sunday")
+
+
+# --- R11.2 — "at this point in past builds" ------------------------------------------------
+# Readiness AS_OF is 2 days before RACE_DAY, so every past block is cut at race_date − 2.
+
+PAST_DAY = date(2026, 3, 8)            # a Sunday; cut = Fri 2026-03-06
+
+
+def test_past_build_counts_only_runs_up_to_the_cut(db):
+    race(db)
+    race(db, day=PAST_DAY, status="completed", name="Spring Marathon")
+    run(db, date(2026, 2, 1), 20.0)
+    run(db, date(2026, 2, 8), 30.0)        # long
+    run(db, date(2026, 3, 6), 10.0)        # exactly on the cut: counts
+    run(db, date(2026, 3, 7), 35.0)        # after the cut: doesn't
+    run(db, PAST_DAY, 42.2)                # race day: never
+    rd = race_readiness(db, as_of=AS_OF)
+    assert rd.days_before_race == 2
+    [pb] = rd.past_builds
+    assert pb.cut_date == "2026-03-06"
+    assert (pb.km, pb.runs, pb.long_runs) == (60.0, 3, 1)
+    assert pb.longest_km == 30.0
+    assert pb.peak_week_km == 30.0       
+
+
+def test_past_build_with_no_runs_before_the_cut_is_zeros_but_listed(db):
+    race(db)
+    race(db, day=PAST_DAY, status="completed")
+    run(db, date(2026, 3, 7), 35.0)        # only after the cut
+    [pb] = race_readiness(db, as_of=AS_OF).past_builds
+    assert (pb.km, pb.runs, pb.long_runs) == (0.0, 0, 0)
+    assert pb.longest_km is None and pb.peak_week_km is None
+
+
+def test_dnf_past_race_is_included_without_a_result_delta(db):
+    race(db)
+    race(db, day=PAST_DAY, status="dnf", name="Bad Day")
+    [pb] = race_readiness(db, as_of=AS_OF).past_builds
+    assert pb.race.status == "dnf" and pb.result_vs_target_s is None
+
+
+def test_result_vs_target_is_negative_when_faster(db):
+    race(db)
+    r = race(db, day=PAST_DAY, status="completed", target_s=10800)
+    r.result_time_s = 10500
+    db.commit()
+    [pb] = race_readiness(db, as_of=AS_OF).past_builds
+    assert pb.result_vs_target_s == -300
+
+
+def test_past_builds_same_class_only_newest_first(db):
+    race(db)
+    race(db, day=date(2026, 3, 8), status="completed", name="Older")
+    race(db, day=date(2026, 5, 3), status="completed", name="Newer")
+    race(db, day=date(2026, 4, 5), km=10.0, status="completed", name="Ten K")   # other class
+    race(db, day=date(2026, 6, 7), status="skipped", name="Skipped")
+    assert [b.race.name for b in race_readiness(db, as_of=AS_OF).past_builds] == ["Newer", "Older"]
+
+
+def test_no_past_races_or_block_not_started_means_empty(db):
+    race(db)
+    assert race_readiness(db, as_of=AS_OF).past_builds == []
+    race(db, day=PAST_DAY, status="completed")
+    assert race_readiness(db, as_of=BLOCK_START - timedelta(days=1)).past_builds == []
+    assert race_readiness(db, as_of=BLOCK_START - timedelta(days=1)).days_before_race is None
