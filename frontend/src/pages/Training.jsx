@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Activity, Compass, ListOrdered, SlidersHorizontal, TrendingUp } from 'lucide-react'
+import { Activity, Compass, Layers, ListOrdered, SlidersHorizontal, TrendingUp } from 'lucide-react'
 import PageHeader from '@/components/PageHeader'
 import PlannedRacesCard from '@/components/training/PlannedRacesCard'
 import VolumeChart from '@/components/training/VolumeChart'
@@ -7,6 +7,7 @@ import NowStrip from '@/components/training/NowStrip'
 import FitnessCard from '@/components/training/FitnessCard'
 import PredictionsCard from '@/components/training/PredictionsCard'
 import RecordsCard from '@/components/training/RecordsCard'
+import RaceBlocksCard from '@/components/training/RaceBlocksCard'
 import ActivityRow from '@/components/training/ActivityRow'
 import CustomizeSectionsDialog from '@/components/training/CustomizeSectionsDialog'
 import { useToast } from '@/components/ui/toast'
@@ -391,6 +392,12 @@ export default function Training() {
       <div id="races" className="scroll-mt-28 sm:scroll-mt-36 lg:scroll-mt-40">
         <PlannedRacesCard />
       </div>
+    ),
+    blocks: (
+      <section className="space-y-4">
+        <SectionHeading id="blocks" icon={Layers} title="Race blocks" hint="the weeks before each race" />
+        <RaceBlocksCard />
+      </section>
     ),
     records: (
       <div id="records" className="scroll-mt-28 sm:scroll-mt-36 lg:scroll-mt-40">
