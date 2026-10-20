@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { Flag, Plus, Pencil, Trash2, Check, Footprints, MapPin, Link2, Ban } from 'lucide-react'
+import { Flag, Plus, Pencil, Trash2, Check, Footprints, MapPin, Link2, Ban, FlagOff } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -21,6 +21,7 @@ import {
   useUpdateRace,
   useDeleteRace,
   useLinkRaceActivity,
+  useMarkRaceDnf,
   useActivities,
 } from '@/hooks/useApi'
 import { formatDate, formatDuration, parseDuration, cn } from '@/lib/utils'
@@ -128,12 +129,19 @@ function ResultDelta({ race }) {
  * A past race. Planned races still open past their date (the prune kept them
  * because a run exists that day — R8.3) get Link run / Skipped. A completed
  * race with no run attached can be linked too, so it counts as a Race PB
- * (R8.1). Every real race row can be deleted. Activity-synthesized rows stay
+ * (R8.1). A race can also be marked DNF (did not finish) from completed or
+ * planned; the DNF label replaces the result, and any linked run is kept.
+ * Every real race row can be deleted. Activity-synthesized rows stay
  * deep-link only.
  */
-function PastRow({ race, onLink, onSkip, onDelete }) {
+function PastRow({ race, onLink, onSkip, onDnf, onDelete }) {
   const unresolved = race.status === 'planned'
-  const label = race.status === 'skipped' ? 'Skipped' : unresolved ? 'Not marked' : null
+  const label =
+    race.status === 'dnf' ? 'DNF'
+    : race.status === 'skipped' ? 'Skipped'
+    : unresolved ? 'Not marked'
+    : null
+  const labelClass = unresolved || race.status === 'dnf' ? 'text-warning' : 'text-faint'
   const body = (
     <>
       <div className="min-w-0">
@@ -147,7 +155,7 @@ function PastRow({ race, onLink, onSkip, onDelete }) {
           </span>
         )}
         <ResultDelta race={race} />
-        {label && <span className={unresolved ? 'text-warning' : 'text-faint'}>{label}</span>}
+        {label && <span className={labelClass}>{label}</span>}
       </div>
     </>
   )
@@ -175,6 +183,11 @@ function PastRow({ race, onLink, onSkip, onDelete }) {
           {unresolved && (
             <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => onSkip(race)} title="Mark skipped">
               <Ban className="h-4 w-4" />
+            </Button>
+          )}
+          {(race.status === 'completed' || race.status === 'planned') && (
+            <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => onDnf(race)} title="Mark DNF">
+              <FlagOff className="h-4 w-4" />
             </Button>
           )}
           <Button
@@ -249,6 +262,7 @@ export default function PlannedRacesCard() {
   const updateRace = useUpdateRace()
   const deleteRace = useDeleteRace()
   const linkRace = useLinkRaceActivity()
+  const markDnf = useMarkRaceDnf()
   const { toast } = useToast()
 
   const [formOpen, setFormOpen] = useState(false)
@@ -315,6 +329,11 @@ export default function PlannedRacesCard() {
     )
   }
 
+  const markRaceDnf = (race) => markDnf.mutate(race.id, {
+    onSuccess: () => toast({ title: 'Marked DNF' }),
+    onError: (e) => toast({ variant: 'destructive', title: 'Could not save', description: e?.message }),
+  })
+
   const confirmLink = (activityId) => {
     linkRace.mutate(
       { id: linking.id, activityId },
@@ -328,6 +347,7 @@ export default function PlannedRacesCard() {
   const pastHandlers = (closeDialog) => ({
     onLink: (r) => { closeDialog?.(); setLinking(r) },
     onSkip: markSkipped,
+    onDnf: markRaceDnf,
     onDelete: (r) => { closeDialog?.(); setDeleting(r) },
   })
 

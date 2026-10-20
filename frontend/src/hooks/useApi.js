@@ -554,6 +554,19 @@ export function useLinkRaceActivity() {
   })
 }
 
+// Mark a past race as did-not-finish. The linked run (if any) is kept.
+export function useMarkRaceDnf() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (id) => racesApi.markDnf(id),
+    onSuccess: () => {
+      invalidateAfterRaceWrite(qc)
+      qc.invalidateQueries({ queryKey: queryKeys.trainingRecords() })
+      qc.invalidateQueries({ queryKey: ['home'] })
+    },
+  })
+}
+
 export function useDeleteRace() {
   const qc = useQueryClient()
   return useMutation({

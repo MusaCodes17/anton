@@ -115,11 +115,11 @@ def race_block_context(
     """
     today = today or toronto_today()
 
-    # Soonest upcoming race with days_remaining ≥ 0 and not completed
+    # Soonest upcoming race with days_remaining ≥ 0 and not done (completed or DNF)
     all_races = races_svc.list_races(db, today)
     upcoming = [
         r for r in all_races
-        if r.days_remaining >= 0 and getattr(r, "status", None) != "completed"
+        if r.days_remaining >= 0 and getattr(r, "status", None) not in races_svc.DONE_STATUSES
     ]
     next_race: Optional[RaceInfo] = None
     if upcoming:
@@ -355,8 +355,9 @@ def race_class_for(distance_km: Optional[float]) -> Optional[RaceClass]:
 
 
 def _readiness_race(db: Session, as_of: date) -> Optional[PlannedRace]:
-    """The race readiness is about: the soonest non-skipped race on or after
-    `as_of`. A direct read, not races.list_races (which prunes stale plans — a
+    """The race readiness is about: the soonest race on or after `as_of` that
+    isn't skipped or DNF (a DNF'd race was started and is over, so it can't be
+    the one you're getting ready for). A direct read, not races.list_races (which prunes stale plans — a
     write). A *completed* race still counts while `as_of` is before its date:
     that only happens when asking about the past ("was I ready for the Spring
     Half?"), and it was a planned race then. On race day a completed race is
@@ -365,7 +366,7 @@ def _readiness_race(db: Session, as_of: date) -> Optional[PlannedRace]:
         db.query(PlannedRace)
         .filter(
             PlannedRace.race_date >= as_of,
-            PlannedRace.status != "skipped",
+            PlannedRace.status.notin_(("skipped", "dnf")),
             or_(PlannedRace.status != "completed", PlannedRace.race_date > as_of),
         )
         .order_by(PlannedRace.race_date.asc(), PlannedRace.id.asc())

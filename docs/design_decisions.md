@@ -257,6 +257,15 @@ Intervals and Track **count** (the runner's call). A stretch is continuous runni
 
 ---
 
+### B24. A DNF is a race status, set by one path; it is never a result (R10.3, 2026-10-20)
+**Chosen:** `planned_races.status` gains `dnf` (no migration: a free `String(20)`, no DB constraint). It is set only by `races.mark_dnf` (REST `POST /api/races/{id}/dnf`, MCP `mark_race_dnf`), which clears `result_time_s` and **keeps** `activity_id`. The generic PATCH can't set `dnf` but can revert one to completed or planned. A run linked to a DNF race is never a Race PB, even if the run is tagged Race; its best efforts still count. A DNF counts as "done" wherever completed does (`races.DONE_STATUSES` for the next race; readiness skips it like skipped). `mark_dnf` refuses a future race and defaults "today" to the Toronto date.
+**Why:** The runner DNF'd the Beneva Marathon (2026-10-11) at ~14 km. Before this, the only honest options were "completed" (which showed a 51-minute marathon "result" and made the 14 km run a race-linked PB candidate) or "skipped" (false: the race was started), or deleting the race (loses the record of the attempt).
+**Advantages:** The attempt stays on record and deep-links to its run; records and readiness can't mistake it for a finish; one write path, on REST and MCP.
+**Trade-offs:** Another status for every status check to consider. Synthetic races from Race-tagged runs can't be DNF'd (they're not rows); retag the run instead.
+**Verdict:** ✅ Keep.
+
+---
+
 ## C. AI Layer
 
 ### C1. MCP as the single AI substrate; the assistant is a client of its own server

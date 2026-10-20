@@ -218,7 +218,9 @@ def personal_bests(
     - **Race PBs** (R8.1) — whole race results: runs tagged Race/Parkrun, or
       linked to a planned race (`planned_races.activity_id`, R8.3), banded by
       the run's distance (5k → full). Computed live, so re-tagging a race
-      removes it on the next load.
+      removes it on the next load. A run linked to a DNF race is never a Race
+      PB (R10.3), even if the run itself is tagged Race/Parkrun; best efforts
+      are unaffected (that stretch was really run).
     - **Best efforts** (R8.2) — the fastest stretch of any run at 1k, mile, 5k,
       10k, half and full, from `activity_best_efforts` (the 5k inside a 10k
       race counts). Every run counts, intervals included: a stretch is
@@ -235,15 +237,20 @@ def personal_bests(
     the race-readiness checklist asks "what are my *recent* bests?" under the
     exact same rules as the Records card, so the two can never disagree.
     """
-    race_linked = {
-        aid for (aid,) in db.query(PlannedRace.activity_id).filter(PlannedRace.activity_id.isnot(None))
-    }
+    race_linked: set[int] = set()
+    dnf_linked: set[int] = set()
+    for aid, status in db.query(PlannedRace.activity_id, PlannedRace.status).filter(
+        PlannedRace.activity_id.isnot(None)
+    ):
+        (dnf_linked if status == "dnf" else race_linked).add(aid)
     runs = activities_svc.unified_activities(db, date_from=date_from, date_to=date_to)
     races: list[tuple[UnifiedActivity, float, str]] = []
     for r in runs:
         if not r.distance_km:
             continue
         total_s, clock = _record_time_s(r)
+        if r.activity_id in dnf_linked:
+            continue  # a DNF is not a race result, even if the run is tagged Race
         if total_s and (r.activity_tag in RACE_RESULT_TAGS or r.activity_id in race_linked):
             races.append((r, total_s, clock))
     return PersonalBestsResult(race_pbs=_band_bests(races), best_efforts=best_efforts_among(db, runs))

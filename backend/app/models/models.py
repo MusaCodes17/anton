@@ -423,7 +423,7 @@ class PlannedRace(Base):
     location = Column(String(200), nullable=True)
     planned_shoe_id = Column(Integer, ForeignKey("owned_shoes.id"), nullable=True)
     notes = Column(Text, nullable=True)
-    status = Column(String(20), nullable=False, default="planned", server_default="planned")  # planned | completed | skipped
+    status = Column(String(20), nullable=False, default="planned", server_default="planned")  # planned | completed | skipped | dnf
     result_time_s = Column(Integer, nullable=True)   # actual finish time, set on completion
     # R2.7 T7: the canonical run this race *was*, set on completion/promotion so the
     # past-race row deep-links to the activity's full stats. Nullable — planned and

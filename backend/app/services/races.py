@@ -16,6 +16,7 @@ from sqlalchemy.orm import Session
 
 from app.models.models import Activity, PendingCorosRun, PlannedRace, ShoeRun
 from app.services import rotation
+from app.services.training_trends import toronto_today
 from app.utils.activity_tags import RACE_RESULT_TAGS
 
 logger = logging.getLogger(__name__)
@@ -26,6 +27,10 @@ logger = logging.getLogger(__name__)
 # before we conclude there's nothing to sync. It also leaves a few days to mark
 # a race done by hand.
 UNRUN_RACE_GRACE_DAYS = 3
+
+# Statuses that mean "this race is over" for the next-race pick: a DNF was
+# started and is finished with, just like a completed race (R10.3).
+DONE_STATUSES = ("completed", "dnf")
 
 
 def _activity_result_s(a: Activity) -> Optional[int]:
@@ -96,6 +101,30 @@ def link_activity(db: Session, race_id: int, activity_id: int) -> PlannedRace:
     race.activity_id = activity_id
     race.status = "completed"
     race.result_time_s = _activity_result_s(a)
+    db.commit()
+    db.refresh(race)
+    return race
+
+
+def mark_dnf(db: Session, race_id: int, *, today: Optional[date] = None) -> PlannedRace:
+    """Record that the runner started a race but did not finish (R10.3).
+
+    Sets status "dnf" and clears the result time (a DNF has no result). The
+    linked activity, if any, is KEPT: the run happened and still deep-links to
+    its stats. A race that hasn't happened yet can't be DNF'd; race day itself
+    is allowed. Reversible through the generic update (back to completed or
+    planned).
+
+    Raises LookupError if the race is missing; ValueError if the race is dated
+    after `today` (default: the Toronto date, per CLAUDE.md §6). Owns the commit.
+    """
+    race = db.query(PlannedRace).filter(PlannedRace.id == race_id).first()
+    if race is None:
+        raise LookupError(f"Race {race_id} not found")
+    if race.race_date > (today or toronto_today()):
+        raise ValueError("Can't DNF a race that hasn't happened yet")
+    race.status = "dnf"
+    race.result_time_s = None
     db.commit()
     db.refresh(race)
     return race

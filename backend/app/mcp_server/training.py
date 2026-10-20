@@ -202,10 +202,38 @@ def get_planned_races() -> dict:
     Use this to answer "how many weeks until my next race", to reason about
     where the user is in a training block, or to relate recent volume/pace to
     an upcoming goal. A negative days_remaining means the race is in the past.
+
+    Each race's status is one of: planned, completed, skipped, dnf. "dnf" means
+    the runner started but did not finish; its result_time_s is null (the
+    linked run, if any, is still there via activity_id).
     """
     with _core.get_session() as db:
         races = races_svc.list_races(db)
         return {"races": [races_svc.race_to_dict(r) for r in races]}
+
+
+@mcp.tool()
+def mark_race_dnf(race_id: int) -> dict:
+    """
+    Mark a past race as did-not-finish (DNF): sets its status to "dnf", clears
+    the result time, and keeps the linked run (the run still happened). A race
+    that hasn't happened yet can't be marked; race day itself is fine.
+
+    This is a write. Only call it after the runner has explicitly said they
+    DNF'd that specific race. Never infer a DNF from a short or slow run, and
+    confirm which race first if there is any doubt.
+
+    Args:
+        race_id: The planned race's id (from get_planned_races).
+
+    Returns {"success": True, "race": {...}} or {"success": False, "error": "..."}.
+    """
+    with _core.get_session() as db:
+        try:
+            race = races_svc.mark_dnf(db, race_id)
+        except (LookupError, ValueError) as e:
+            return {"success": False, "error": str(e)}
+        return {"success": True, "race": races_svc.race_to_dict(race)}
 
 
 @mcp.tool()

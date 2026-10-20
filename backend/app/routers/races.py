@@ -73,6 +73,18 @@ def link_activity(race_id: int, payload: PlannedRaceLinkActivity, db: Session = 
     return races_svc.attach_derived(race)
 
 
+@router.post("/{race_id}/dnf", response_model=PlannedRaceResponse)
+def mark_dnf(race_id: int, db: Session = Depends(get_db)):
+    """Record a past race as did-not-finish (R10.3): clears the result, keeps the linked run."""
+    try:
+        race = races_svc.mark_dnf(db, race_id)
+    except LookupError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    return races_svc.attach_derived(race)
+
+
 @router.delete("/{race_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_race(race_id: int, db: Session = Depends(get_db)):
     race = db.query(PlannedRace).filter(PlannedRace.id == race_id).first()

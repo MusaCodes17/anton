@@ -214,11 +214,12 @@ def weekly_summary(db: Session, today: Optional[date] = None) -> WeeklySummary:
         for note, shoe in checkpoint_rows
     ]
 
-    # Soonest upcoming race with days_remaining ≥ 0 and status ≠ completed
+    # Soonest upcoming race with days_remaining ≥ 0 that isn't done (a DNF is
+    # done: the race was started and is over, like a completed one)
     all_races = races_svc.list_races(db, today)
     upcoming = [
         r for r in all_races
-        if r.days_remaining >= 0 and getattr(r, "status", None) != "completed"
+        if r.days_remaining >= 0 and getattr(r, "status", None) not in races_svc.DONE_STATUSES
     ]
     next_race: Optional[NextRace] = None
     if upcoming:
