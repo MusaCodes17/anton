@@ -679,7 +679,7 @@ Supporting choices:
 - **Exception to REST/MCP parity (CLAUDE.md §4.2), deliberately:** this is presentation state for one page. No assistant question needs it, and an MCP tool would only add surface.
 
 **Trade-offs:** the id list exists twice, backend and frontend, and the two must be kept in step. The server validates, so drift shows up as a 422, never as silent corruption.
-**Verdict:** ❌ Superseded by E25 (2026-10-20). The frontend no longer reads or writes the layout; the backend pieces await a cleanup.
+**Verdict:** ❌ Superseded by E25 (2026-10-20). The frontend stopped using the layout in R10.6; the backend pieces were deleted in R10.7.
 ---
 
 ### E17. MCP payloads render through the REST response schemas; deals keep a flat MCP projection (§7 debt phase, 2026-10-10)
@@ -747,7 +747,7 @@ Supporting choices:
 **Why:** with eight sections in one scroll the page was too busy (runner, 2026-10-20). The dashboard's grouping already read well, so the app adopts it. With three short tabs, a reorder control has little left to do.
 
 **Trade-offs:**
-- The backend `training_layout` setting, `PUT /api/preferences/training-layout`, `TRAINING_SECTIONS` and their tests stay for now. Nothing calls them; removing them is a follow-up cleanup (roadmap).
+- The backend `training_layout` setting, `PUT /api/preferences/training-layout`, `TRAINING_SECTIONS` and their tests were deleted in R10.7 (2026-10-20). A stored `training_layout` row may remain in `app_settings`; nothing reads it.
 - The Volume chart and the activities list no longer share one range. They are set separately.
 
 **Verdict:** ✅ Keep.
