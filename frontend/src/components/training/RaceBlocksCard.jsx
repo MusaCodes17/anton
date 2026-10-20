@@ -78,7 +78,7 @@ function EndLabels({ items, yAxisMap, offset }) {
   return (
     <g>
       {placed.map((it) => (
-        <text key={it.key} x={x} y={it.y} dy={4} fontSize={10.5} fill={it.color} fontFamily="IBM Plex Mono, ui-monospace, monospace">
+        <text key={it.key} x={x} y={it.y} dy={4} fontSize={10.5} fill={it.color} fontFamily="JetBrains Mono, Courier New, ui-monospace, monospace">
           {it.text}
         </text>
       ))}

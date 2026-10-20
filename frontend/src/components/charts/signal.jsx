@@ -17,7 +17,7 @@ import { useId } from 'react'
 export const SIGNAL = 'var(--primary)'
 export const ALERT = 'var(--destructive)'
 export const MUTED = 'var(--muted-foreground)'
-const MONO = 'IBM Plex Mono, ui-monospace, monospace'
+const MONO = 'JetBrains Mono, Courier New, ui-monospace, monospace'
 
 /** Spread onto <XAxis>/<YAxis>: mono 10.5px muted labels, no axis or tick lines. */
 export const axisProps = {
