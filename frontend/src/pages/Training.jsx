@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Activity, Compass, Layers, ListOrdered, SlidersHorizontal, TrendingUp } from 'lucide-react'
+import { useSearchParams } from 'react-router-dom'
+import { Activity, Compass, Flag, Layers, ListOrdered, TrendingUp } from 'lucide-react'
 import PageHeader from '@/components/PageHeader'
 import PlannedRacesCard from '@/components/training/PlannedRacesCard'
 import VolumeChart from '@/components/training/VolumeChart'
@@ -9,10 +10,7 @@ import PredictionsCard from '@/components/training/PredictionsCard'
 import RecordsCard from '@/components/training/RecordsCard'
 import RaceBlocksCard from '@/components/training/RaceBlocksCard'
 import ActivityRow from '@/components/training/ActivityRow'
-import CustomizeSectionsDialog from '@/components/training/CustomizeSectionsDialog'
 import DateRangeControls from '@/components/training/DateRangeControls'
-import { useToast } from '@/components/ui/toast'
-import { layoutBlocks, normalizeLayout } from '@/lib/trainingLayout'
 import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
 import { Input } from '@/components/ui/input'
@@ -33,8 +31,6 @@ import {
   useRaceReadiness,
   useActivities,
   useOwnedShoes,
-  usePreferences,
-  useUpdateTrainingLayout,
 } from '@/hooks/useApi'
 import { isoDaysAgo, isoToday, useDateRange } from '@/hooks/useDateRange'
 
@@ -112,59 +108,17 @@ function SectionHeading({ id, icon: Icon, title, hint }) {
   )
 }
 
-export default function Training() {
-  const [period, setPeriod] = useState('weekly')
-
-  // Activities "load more" depth. Declared before the date range so a range
-  // change can reset it (see useDateRange's onChange).
-  const [pages, setPages] = useState(1)
-  const resetPages = () => setPages(1)
-
-  // Shared date range (T4b) — drives the volume chart, the summary, and the
-  // activities list. Default: last 365 days (the 1y preset). State lives in useDateRange.
-  const dr = useDateRange({ onChange: resetPages })
-  const { dateFrom, dateTo, range } = dr
-
+// Fixed windows behind the header meta line, the stat row and the Now strip's
+// Load chart. Called by both the page (header) and OverviewTab; React Query
+// dedupes on identical keys, so it's one request each.
+function useVolumeStats() {
   // Fixed trailing-365-day window for the "Last 12 mo" stat tile — computed
   // once at mount so the tile matches the Volume header total when 1y is selected.
   const trailing365Range = useMemo(() => ({ date_from: isoDaysAgo(365), date_to: isoToday() }), [])
-
   const trailing365 = useTrainingSummary('monthly', trailing365Range) // fixed 365-day window for 12-mo tile
-  const ranged = useTrainingSummary(period, range)       // the volume chart honours the range
-  const records = useTrainingRecords()
-  const fitness = useTrainingFitness()
-
-  // "Now" strip (R8.4.5). The Load card's chart is the last 12 ISO weeks of
-  // the weekly summary — fixed at mount, independent of the range picker.
-  const trends = useTrainingTrends()
-  const readiness = useRaceReadiness()
+  // Last 12 ISO weeks for the Now strip's Load card — independent of any range picker.
   const recentWeeksRange = useMemo(() => ({ date_from: isoDaysAgo(7 * 12 + 6), date_to: isoToday() }), [])
   const recentWeekly = useTrainingSummary('weekly', recentWeeksRange)
-  const ownedShoes = useOwnedShoes()
-
-  // Activities filters + "load more" (limit grows; offset stays 0 so the list
-  // is one coherent page — cheap at personal scale and avoids client accumulation).
-  const [shoeId, setShoeId] = useState(ALL)
-  const [minKm, setMinKm] = useState('')
-  // Debounced copy of minKm feeds the query key: every keystroke used to create
-  // a new key (and a request).
-  const [debouncedMinKm, setDebouncedMinKm] = useState('')
-  useEffect(() => {
-    const t = setTimeout(() => setDebouncedMinKm(minKm), 400)
-    return () => clearTimeout(t)
-  }, [minKm])
-  const activityParams = useMemo(() => {
-    const p = { limit: pages * PAGE, offset: 0 }
-    if (dateFrom) p.date_from = dateFrom
-    if (dateTo) p.date_to = dateTo
-    if (shoeId !== ALL) p.shoe_id = Number(shoeId)
-    const min = parseFloat(debouncedMinKm)
-    if (!Number.isNaN(min) && min > 0) p.min_distance_km = min
-    return p
-  }, [dateFrom, dateTo, shoeId, debouncedMinKm, pages])
-
-  const activities = useActivities(activityParams)
-  const hasMore = activities.data && activities.data.length === pages * PAGE
 
   // Stat strip — "Last 12 mo" sums the fixed trailing-365-day window so it
   // equals the Volume header total when the 1y preset is selected.
@@ -180,6 +134,27 @@ export default function Training() {
     const thisWeek = w.find((b) => b.period === currentWeekKey())?.total_km ?? 0
     return { thisWeek, thisMonth, total12, runs12 }
   }, [trailing365.data, recentWeekly.data])
+
+  return { trailing365, recentWeekly, stats }
+}
+
+function OverviewTab() {
+  const [period, setPeriod] = useState('weekly')
+
+  // Volume's own date range (T4b). Default: last 365 days (the 1y preset).
+  // Independent of the Activities tab's range.
+  const dr = useDateRange()
+  const { range } = dr
+
+  const { trailing365, recentWeekly, stats } = useVolumeStats()
+  const ranged = useTrainingSummary(period, range) // the volume chart honours the range
+  const records = useTrainingRecords()
+  const fitness = useTrainingFitness()
+
+  // "Now" strip (R8.4.5). The Load card's chart is the last 12 ISO weeks of
+  // the weekly summary — fixed at mount, independent of the range picker.
+  const trends = useTrainingTrends()
+  const readiness = useRaceReadiness()
 
   // Chart data (chronological). Shows every period inside the selected range —
   // no fixed 12-bar cap, so widening the range visibly extends the weekly chart
@@ -240,25 +215,16 @@ export default function Training() {
   const summaryLoading = trailing365.isLoading || recentWeekly.isLoading
   const summaryError = trailing365.isError ? trailing365 : recentWeekly.isError ? recentWeekly : null
 
-  // Section order/visibility is a server-side preference (same on phone and laptop).
-  const prefs = usePreferences()
-  const layout = normalizeLayout(prefs.data?.training_layout)
-  const saveLayout = useUpdateTrainingLayout()
-  const { toast } = useToast()
-  const [customizing, setCustomizing] = useState(false)
-  const blocks = layoutBlocks(layout.order, layout.hidden)
-
-  const sectionContent = {
-    now: (
+  return (
+    <div className="space-y-5 md:space-y-8">
       <section className="space-y-4">
         <SectionHeading id="now" icon={Compass} title="Now" />
         <NowStrip trends={trends} readiness={readiness} weeks={recentWeeks} />
       </section>
-    ),
-    trends: (
+
       <section className="space-y-4">
         <div className="flex flex-wrap items-baseline justify-between gap-3">
-          <SectionHeading id="trends" icon={TrendingUp} title="Trends" />
+          <SectionHeading id="volume" icon={TrendingUp} title="Volume" />
           <DateRangeControls range={dr} />
         </div>
 
@@ -331,133 +297,200 @@ export default function Training() {
           </>
         )}
       </section>
-    ),
-    races: (
-      <div id="races" className="scroll-mt-28 sm:scroll-mt-36 lg:scroll-mt-40">
-        <PlannedRacesCard />
-      </div>
-    ),
-    blocks: (
+
+      <section className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+        <div id="fitness" className="scroll-mt-28 sm:scroll-mt-36 lg:scroll-mt-40">
+          <FitnessCard data={fitness.data} history={trends.data?.form?.fitness} />
+        </div>
+        <div id="records" className="scroll-mt-28 sm:scroll-mt-36 lg:scroll-mt-40">
+          <RecordsCard records={records} />
+        </div>
+      </section>
+    </div>
+  )
+}
+
+function RacesTab() {
+  const fitness = useTrainingFitness()
+  return (
+    <div className="space-y-5 md:space-y-8">
+      <section className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+        <div id="races" className="scroll-mt-28 sm:scroll-mt-36 lg:scroll-mt-40">
+          <PlannedRacesCard />
+        </div>
+        <div id="predictions" className="scroll-mt-28 sm:scroll-mt-36 lg:scroll-mt-40">
+          <PredictionsCard data={fitness.data} />
+        </div>
+      </section>
+
       <section className="space-y-4">
         <SectionHeading id="blocks" icon={Layers} title="Race blocks" hint="the weeks before each race" />
         <RaceBlocksCard />
       </section>
-    ),
-    records: (
-      <div id="records" className="scroll-mt-28 sm:scroll-mt-36 lg:scroll-mt-40">
-        <RecordsCard records={records} />
-      </div>
-    ),
-    fitness: (
-      <div id="fitness" className="scroll-mt-28 sm:scroll-mt-36 lg:scroll-mt-40">
-        <FitnessCard data={fitness.data} history={trends.data?.form?.fitness} />
-      </div>
-    ),
-    predictions: (
-      <div id="predictions" className="scroll-mt-28 sm:scroll-mt-36 lg:scroll-mt-40">
-        <PredictionsCard data={fitness.data} />
-      </div>
-    ),
-    activities: (
-      <section className="space-y-4">
-        <SectionHeading id="activities" icon={ListOrdered} title="Activities" hint="within the selected date range" />
+    </div>
+  )
+}
 
-        <div className="grid grid-cols-2 gap-3">
-          <div className="space-y-1.5">
-            <Label>Shoe</Label>
-            <Select value={shoeId} onValueChange={(v) => { setShoeId(v); resetPages() }}>
-              <SelectTrigger><SelectValue placeholder="All shoes" /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value={ALL}>All shoes</SelectItem>
-                {(ownedShoes.data || []).map((s) => (
-                  <SelectItem key={s.id} value={String(s.id)}>
-                    {s.nickname || `${s.brand} ${s.model}`}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="space-y-1.5">
-            <Label>Min. distance (km)</Label>
-            <Input
-              type="number"
-              min="0"
-              placeholder="e.g. 10"
-              value={minKm}
-              onChange={(e) => { setMinKm(e.target.value); resetPages() }}
-            />
-          </div>
+function ActivitiesTab() {
+  // Activities "load more" depth. Declared before the date range so a range
+  // change can reset it (see useDateRange's onChange).
+  const [pages, setPages] = useState(1)
+  const resetPages = () => setPages(1)
+
+  // The list's own date range — independent of the Volume range on Overview.
+  // Default: last 365 days.
+  const dr = useDateRange({ onChange: resetPages })
+  const { dateFrom, dateTo } = dr
+
+  const ownedShoes = useOwnedShoes()
+
+  // Activities filters + "load more" (limit grows; offset stays 0 so the list
+  // is one coherent page — cheap at personal scale and avoids client accumulation).
+  const [shoeId, setShoeId] = useState(ALL)
+  const [minKm, setMinKm] = useState('')
+  // Debounced copy of minKm feeds the query key: every keystroke used to create
+  // a new key (and a request).
+  const [debouncedMinKm, setDebouncedMinKm] = useState('')
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedMinKm(minKm), 400)
+    return () => clearTimeout(t)
+  }, [minKm])
+  const activityParams = useMemo(() => {
+    const p = { limit: pages * PAGE, offset: 0 }
+    if (dateFrom) p.date_from = dateFrom
+    if (dateTo) p.date_to = dateTo
+    if (shoeId !== ALL) p.shoe_id = Number(shoeId)
+    const min = parseFloat(debouncedMinKm)
+    if (!Number.isNaN(min) && min > 0) p.min_distance_km = min
+    return p
+  }, [dateFrom, dateTo, shoeId, debouncedMinKm, pages])
+
+  const activities = useActivities(activityParams)
+  const hasMore = activities.data && activities.data.length === pages * PAGE
+
+  return (
+    <section className="space-y-4">
+      <SectionHeading id="activities" icon={ListOrdered} title="Activities" hint="filter by date, shoe and distance" />
+
+      <DateRangeControls range={dr} />
+
+      <div className="grid grid-cols-2 gap-3">
+        <div className="space-y-1.5">
+          <Label>Shoe</Label>
+          <Select value={shoeId} onValueChange={(v) => { setShoeId(v); resetPages() }}>
+            <SelectTrigger><SelectValue placeholder="All shoes" /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value={ALL}>All shoes</SelectItem>
+              {(ownedShoes.data || []).map((s) => (
+                <SelectItem key={s.id} value={String(s.id)}>
+                  {s.nickname || `${s.brand} ${s.model}`}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </div>
+        <div className="space-y-1.5">
+          <Label>Min. distance (km)</Label>
+          <Input
+            type="number"
+            min="0"
+            placeholder="e.g. 10"
+            value={minKm}
+            onChange={(e) => { setMinKm(e.target.value); resetPages() }}
+          />
+        </div>
+      </div>
 
-        {activities.isLoading ? (
-          <div className="space-y-3">
-            {Array.from({ length: 5 }).map((_, i) => (
-              <Skeleton key={i} className="h-[74px] rounded-[14px]" />
+      {activities.isLoading ? (
+        <div className="space-y-3">
+          {Array.from({ length: 5 }).map((_, i) => (
+            <Skeleton key={i} className="h-[74px] rounded-[14px]" />
+          ))}
+        </div>
+      ) : activities.isError ? (
+        <ErrorState error={activities.error} onRetry={activities.refetch} />
+      ) : activities.data?.length ? (
+        <>
+          <div className="space-y-2 sm:space-y-3">
+            {activities.data.map((a) => (
+              <ActivityRow key={a.strava_activity_id ?? `run-${a.shoe_run_id}`} activity={a} />
             ))}
           </div>
-        ) : activities.isError ? (
-          <ErrorState error={activities.error} onRetry={activities.refetch} />
-        ) : activities.data?.length ? (
-          <>
-            <div className="space-y-2 sm:space-y-3">
-              {activities.data.map((a) => (
-                <ActivityRow key={a.strava_activity_id ?? `run-${a.shoe_run_id}`} activity={a} />
-              ))}
+          {hasMore && (
+            <div className="flex justify-center pt-1">
+              <Button variant="outline" onClick={() => setPages((p) => p + 1)} disabled={activities.isFetching}>
+                {activities.isFetching ? 'Loading…' : 'Load more'}
+              </Button>
             </div>
-            {hasMore && (
-              <div className="flex justify-center pt-1">
-                <Button variant="outline" onClick={() => setPages((p) => p + 1)} disabled={activities.isFetching}>
-                  {activities.isFetching ? 'Loading…' : 'Load more'}
-                </Button>
-              </div>
-            )}
-          </>
-        ) : (
-          <EmptyState
-            icon={ListOrdered}
-            title="No activities match"
-            description="Try widening the filters."
-          />
-        )}
-      </section>
-    ),
+          )}
+        </>
+      ) : (
+        <EmptyState
+          icon={ListOrdered}
+          title="No activities match"
+          description="Try widening the filters."
+        />
+      )}
+    </section>
+  )
+}
+
+// Tab ids double as the ?tab= values; Overview is the default and carries no param.
+const TABS = [
+  { id: 'overview', label: 'Overview', icon: Compass },
+  { id: 'races', label: 'Races', icon: Flag },
+  { id: 'activities', label: 'Activities', icon: ListOrdered },
+]
+
+export default function Training() {
+  const [searchParams, setSearchParams] = useSearchParams()
+  const tabParam = searchParams.get('tab')
+  const tab = TABS.some((t) => t.id === tabParam) ? tabParam : 'overview' // unknown → Overview
+
+  const selectTab = (id) => {
+    const next = new URLSearchParams(searchParams)
+    if (id === 'overview') next.delete('tab')
+    else next.set('tab', id)
+    setSearchParams(next, { replace: true })
   }
 
-  const onSaveLayout = (next) =>
-    saveLayout.mutate(next, {
-      onSuccess: () => setCustomizing(false),
-      onError: (err) =>
-        toast({ variant: 'destructive', title: "Couldn't save layout", description: err.message }),
-    })
+  // The header meta line is all the page itself needs; OverviewTab calls the same hooks (deduped).
+  const { trailing365, recentWeekly, stats } = useVolumeStats()
 
   return (
     <div className="space-y-5 md:space-y-8">
       <PageHeader
         title="Training"
         meta={trailing365.data && recentWeekly.data ? [`${stats.thisWeek.toFixed(1)} km this week`, `${Math.round(stats.total12).toLocaleString()} km · last 12 mo`] : undefined}
-      >
-        <Button onClick={() => setCustomizing(true)}>
-          <SlidersHorizontal className="h-4 w-4" /> Customize
-        </Button>
-      </PageHeader>
-
-      {blocks.map((b) =>
-        b.kind === 'cards' ? (
-          <section key={b.ids.join('-')} className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-            {b.ids.map((id) => <div key={id} className="contents">{sectionContent[id]}</div>)}
-          </section>
-        ) : (
-          <div key={b.id}>{sectionContent[b.id]}</div>
-        )
-      )}
-
-      <CustomizeSectionsDialog
-        open={customizing}
-        onOpenChange={setCustomizing}
-        layout={layout}
-        onSave={onSaveLayout}
-        saving={saveLayout.isPending}
       />
+
+      {/* Segmented tab bar — same idiom as the Weekly/Monthly switch, sized up. */}
+      <div role="tablist" aria-label="Training sections" className="flex rounded-lg border border-border p-0.5 sm:inline-flex">
+        {TABS.map(({ id, label, icon: Icon }) => (
+          <button
+            key={id}
+            type="button"
+            role="tab"
+            id={`training-tab-${id}`}
+            aria-selected={tab === id}
+            aria-controls={`training-panel-${id}`}
+            onClick={() => selectTab(id)}
+            className={
+              'focus-ring inline-flex flex-1 items-center justify-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-semibold transition-colors sm:flex-none ' +
+              (tab === id
+                ? 'bg-accent text-accent-foreground'
+                : 'text-muted-foreground hover:text-foreground')
+            }
+          >
+            <Icon className="h-4 w-4 shrink-0" />
+            {label}
+          </button>
+        ))}
+      </div>
+
+      <div role="tabpanel" id={`training-panel-${tab}`} aria-labelledby={`training-tab-${tab}`}>
+        {tab === 'races' ? <RacesTab /> : tab === 'activities' ? <ActivitiesTab /> : <OverviewTab />}
+      </div>
     </div>
   )
 }

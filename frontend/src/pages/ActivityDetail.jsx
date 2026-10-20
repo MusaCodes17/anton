@@ -89,14 +89,14 @@ export default function ActivityDetail() {
 
   const onPromote = () => {
     promote.mutate(undefined, {
-      onSuccess: () => { toast({ variant: 'success', title: 'Added to races' }); navigate('/training#races') },
+      onSuccess: () => { toast({ variant: 'success', title: 'Added to races' }); navigate('/training?tab=races') },
       onError: (e) => toast({ variant: 'destructive', title: 'Could not add race', description: e?.response?.data?.detail }),
     })
   }
 
   return (
     <div className="space-y-4 sm:space-y-6">
-      <Link to="/training#activities" className="focus-ring inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground">
+      <Link to="/training?tab=activities" className="focus-ring inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground">
         <ArrowLeft className="h-4 w-4" /> Activities
       </Link>
 
