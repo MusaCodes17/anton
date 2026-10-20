@@ -13,6 +13,7 @@ the race_block_advisor prompt and the Training page read the same answer
 """
 from __future__ import annotations
 
+import statistics
 from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta
 from typing import Optional
@@ -27,6 +28,7 @@ from app.services import fitness as fitness_svc
 from app.services import races as races_svc
 from app.services import rotation as rotation_svc
 from app.services import strava_stats
+from app.services import training_trends
 from app.utils.pace import seconds_to_pace
 
 
@@ -354,6 +356,17 @@ def race_class_for(distance_km: Optional[float]) -> Optional[RaceClass]:
     return next(c for c in RACE_CLASSES if distance_km >= c.min_distance_km)
 
 
+def block_window(race_date: date, distance_km: Optional[float]) -> tuple[Optional[RaceClass], int, date]:
+    """The block definition shared by readiness and the block comparison:
+    (class, block_weeks, block_start). The block is `block_weeks` calendar weeks
+    (Monday-aligned) ending with race week; block_start is that first Monday."""
+    cls = race_class_for(distance_km)
+    block_weeks = cls.block_weeks if cls else DEFAULT_BLOCK_WEEKS
+    race_monday = race_date - timedelta(days=race_date.weekday())
+    block_start = race_monday - timedelta(weeks=block_weeks - 1)
+    return cls, block_weeks, block_start
+
+
 def _readiness_race(db: Session, as_of: date) -> Optional[PlannedRace]:
     """The race readiness is about: the soonest race on or after `as_of` that
     isn't skipped or DNF (a DNF'd race was started and is over, so it can't be
@@ -406,10 +419,7 @@ def race_readiness(db: Session, *, as_of: Optional[date] = None) -> RaceReadines
     if race is None:
         return RaceReadiness(has_race=False, as_of=as_of.isoformat())
 
-    cls = race_class_for(race.distance_km)
-    block_weeks = cls.block_weeks if cls else DEFAULT_BLOCK_WEEKS
-    race_monday = race.race_date - timedelta(days=race.race_date.weekday())
-    block_start = race_monday - timedelta(weeks=block_weeks - 1)
+    cls, block_weeks, block_start = block_window(race.race_date, race.distance_km)
     block_end = min(as_of, race.race_date - timedelta(days=1))
     started = block_start <= block_end
 
@@ -552,3 +562,187 @@ def _checklist(rd: RaceReadiness, cls: Optional[RaceClass]) -> list[ChecklistIte
         target=race.target_pace_s_per_km if cls else None, unit="s/km",
     ))
     return items
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# R10.2 — race-block retrospective: the blocks before past races, side by side
+# ═══════════════════════════════════════════════════════════════════════════
+
+@dataclass
+class BlockRace:
+    """The race a block led up to (a projection of a races.race_entries row)."""
+    id: int                            # negative for a Race-tagged activity with no plan row
+    name: str
+    race_date: str                     # ISO date
+    distance_km: Optional[float]
+    status: str                        # completed | dnf | planned
+    result_time_s: Optional[int]
+    result_pace: Optional[str]         # "M:SS/km"
+    target_time_s: Optional[int]
+    target_pace: Optional[str]         # "M:SS/km"
+    activity_id: Optional[int]
+    from_activity: bool                # synthesized from a Race/Parkrun-tagged run
+
+
+@dataclass
+class BlockWeek:
+    """One calendar week (Monday-aligned) of a block."""
+    offset: int                        # weeks relative to race week: 0 = race week, -1 = the week before
+    week_start: str                    # ISO Monday
+    km: float
+    runs: int
+    longest_km: float                  # 0.0 with no runs
+
+
+@dataclass
+class RaceBlock:
+    """One race's training block with its week-by-week shape and summary."""
+    race: BlockRace
+    block_start: str                   # ISO Monday
+    block_end: str                     # ISO date, inclusive
+    in_progress: bool                  # the race is today or ahead
+    weeks: list                        # list[BlockWeek], oldest first
+    total_km: float
+    runs: int
+    avg_week_km: float                 # total_km / number of week entries
+    peak_week: Optional[BlockWeek]     # on a tie the later week
+    longest_run: Optional[ReadinessRun]
+    long_run_km: Optional[float]       # the class's long-run threshold
+    long_runs: int                     # runs at or above long_run_km (exactly the threshold counts)
+    steady_runs: int                   # runs training_trends.m_per_beat accepts
+    median_m_per_beat: Optional[float]
+    median_steady_pace_s_per_km: Optional[int]
+    median_steady_hr: Optional[int]
+
+
+@dataclass
+class BlockComparison:
+    """Every block of one race class, oldest race first."""
+    as_of: str
+    race_class: str
+    block_weeks: int
+    long_run_km: float
+    blocks: list = field(default_factory=list)   # list[RaceBlock]
+    heuristic: bool = True
+
+
+def _pace(time_s: Optional[int], distance_km: Optional[float]) -> Optional[str]:
+    return seconds_to_pace(time_s / distance_km) if time_s and distance_km else None
+
+
+def _block_race(e) -> BlockRace:
+    return BlockRace(
+        id=e.id, name=(e.name or "").strip(), race_date=e.race_date.isoformat(),
+        distance_km=e.distance_km, status=e.status, result_time_s=e.result_time_s,
+        result_pace=_pace(e.result_time_s, e.distance_km),
+        target_time_s=e.target_time_s, target_pace=_pace(e.target_time_s, e.distance_km),
+        activity_id=e.activity_id, from_activity=bool(getattr(e, "from_activity", False)),
+    )
+
+
+def _median_or_none(values: list):
+    return statistics.median(values) if values else None
+
+
+def _build_block(db: Session, e, cls: RaceClass, block_weeks: int, block_start: date,
+                 as_of: date) -> RaceBlock:
+    in_progress = e.race_date >= as_of
+    day_before = e.race_date - timedelta(days=1)
+    block_end = min(as_of, day_before) if in_progress else day_before
+
+    runs = []
+    if block_start <= block_end:
+        runs = [r for r in activities_svc.unified_activities(db, date_from=block_start, date_to=block_end)
+                if r.distance_km]
+
+    # One entry per calendar week from block_start through block_end's week.
+    weeks: list[BlockWeek] = []
+    if block_start <= block_end:
+        end_monday = block_end - timedelta(days=block_end.weekday())
+        n_weeks = (end_monday - block_start).days // 7 + 1
+        for i in range(n_weeks):
+            ws = block_start + timedelta(weeks=i)
+            wr = [r for r in runs if ws <= r.date < ws + timedelta(days=7)]
+            weeks.append(BlockWeek(
+                offset=i - (block_weeks - 1), week_start=ws.isoformat(),
+                km=round(sum(r.distance_km for r in wr), 1), runs=len(wr),
+                longest_km=round(max((r.distance_km for r in wr), default=0.0), 1),
+            ))
+
+    total_km = round(sum(r.distance_km for r in runs), 1)
+    # max() keeps the first maximum, so scan newest-first: a tie picks the later week.
+    peak = max(reversed(weeks), key=lambda w: w.km) if runs else None
+
+    steady = [(r, mpb) for r in runs if (mpb := training_trends.m_per_beat(r)) is not None]
+    # Pace uses the same effective moving time m_per_beat does. That helper is
+    # private to activities.py; importing it across modules is the established
+    # pattern (training_trends, strava_stats, insights do the same).
+    paces = [activities_svc._effective_moving_s(r) / r.distance_km for r, _ in steady]
+    med_pace = _median_or_none(paces)
+    med_hr = _median_or_none([r.avg_hr for r, _ in steady])
+    med_mpb = _median_or_none([m for _, m in steady])
+
+    return RaceBlock(
+        race=_block_race(e), block_start=block_start.isoformat(), block_end=block_end.isoformat(),
+        in_progress=in_progress, weeks=weeks, total_km=total_km, runs=len(runs),
+        avg_week_km=round(total_km / len(weeks), 1) if weeks else 0.0,
+        peak_week=peak,
+        longest_run=_run(max(runs, key=lambda r: r.distance_km)) if runs else None,
+        long_run_km=cls.long_run_km,
+        long_runs=sum(1 for r in runs if r.distance_km >= cls.long_run_km),
+        steady_runs=len(steady),
+        median_m_per_beat=round(med_mpb, 3) if med_mpb is not None else None,
+        median_steady_pace_s_per_km=round(med_pace) if med_pace is not None else None,
+        median_steady_hr=round(med_hr) if med_hr is not None else None,
+    )
+
+
+def block_comparison(
+    db: Session, *, race_class: str = "marathon", as_of: Optional[date] = None,
+) -> BlockComparison:
+    """
+    Side-by-side training blocks for every race of one class (R10.2).
+
+    Block: the same definition as `race_readiness` (`block_window`) —
+    `block_weeks` calendar weeks, Monday-aligned, ending with race week — read
+    up to the day BEFORE race day (race-day running isn't training for it).
+    Blocks of nearby races may overlap; a run then appears in both.
+
+    Races: `races.race_entries` (read-only — no prune, nothing is written),
+    keeping races of `race_class` that are either done before `as_of`
+    (completed or dnf, including Race/Parkrun-tagged runs with no plan row) or
+    still planned on or after `as_of` (an in-progress or future block, cut at
+    `as_of`). Skipped races and past plans that never happened are excluded.
+    A block that hasn't started is listed with empty weeks and zero totals.
+
+    Heuristic: the long-run and steady-run rules are the readiness thresholds
+    and training_trends' steady filter, not a physiological model.
+
+    Raises ValueError if `race_class` isn't a RACE_CLASSES name.
+    """
+    cls = next((c for c in RACE_CLASSES if c.name == race_class), None)
+    if cls is None:
+        raise ValueError(f"Unknown race_class {race_class!r}; valid: "
+                         + ", ".join(c.name for c in RACE_CLASSES))
+    as_of = as_of or toronto_today()
+
+    kept = []
+    for e in races_svc.race_entries(db, as_of):
+        rc = race_class_for(e.distance_km)
+        if rc is None or rc.name != race_class:
+            continue
+        done = e.race_date < as_of and e.status in races_svc.DONE_STATUSES
+        upcoming = e.status == "planned" and e.race_date >= as_of
+        if done or upcoming:
+            kept.append(e)
+    kept.sort(key=lambda e: (e.race_date, e.id))
+
+    # Whole-table pass: one unified_activities read per block, filtered in Python
+    # — fine at personal scale (~1k runs, a handful of races).
+    blocks = []
+    for e in kept:
+        _, block_weeks, block_start = block_window(e.race_date, e.distance_km)
+        blocks.append(_build_block(db, e, cls, block_weeks, block_start, as_of))
+
+    return BlockComparison(as_of=as_of.isoformat(), race_class=cls.name, block_weeks=cls.block_weeks,
+                           long_run_km=cls.long_run_km, blocks=blocks)

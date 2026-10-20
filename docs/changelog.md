@@ -5,6 +5,22 @@
 
 ---
 
+## R10.2 — race-block comparison — 2026-10-20
+
+Uncommitted in the working tree (the cloud session couldn't push). Decision: `design_decisions.md` B25 (reverses R8.4's "not chosen: block-vs-block comparison").
+
+**[ADDED] `race_advisor.block_comparison`** — every race of one class (marathon default; half, 10k, 5k) with its training block side by side: completed and DNF races before `as_of`, plus a planned race's block so far (`in_progress`). The block is readiness' window, now one helper `block_window` that `race_readiness` also calls (16 Monday-aligned weeks for a marathon, ending the day before the race). Per block: weeks by offset from race week (zero-km weeks included), total/average km, peak week, longest run, long runs ≥ the class threshold, steady-run medians (m/beat, pace, HR). Overlapping blocks share runs.
+
+**[ADDED] `races.race_entries`** — the read-only half of `list_races` (no prune), so read-only services don't delete stale plans as a side effect. `list_races` = prune + `race_entries`; behaviour unchanged.
+
+**[ADDED] `GET /api/races/blocks?race_class=&as_of=`** (400 on an unknown class) and MCP read tool **`get_block_comparison`** over the same function.
+
+**[ADDED] Training dashboard (claude.ai artifact) page 2 "Race blocks"** over `get_block_comparison` — weekly km aligned on race week per block, and a side-by-side summary table. It loads once this is deployed.
+
+**Verified:** backend suite **986 passed, 1 skipped** (963 + 15 service tests in `test_block_comparison.py` + 8 adapter tests in `test_block_comparison_api.py`); the existing readiness tests pass unchanged on the shared window. Not run against production data (needs deploy).
+
+---
+
 ## R10.3 — DNF race status; non-race runs untagged — 2026-10-20
 
 Branch `r10-race-fixes`. Decision: `design_decisions.md` B24.

@@ -80,6 +80,7 @@ from app.mcp_server.training import (
     training_fitness_resource,
     sync_fitness,
     get_race_block_context,
+    get_block_comparison,
     race_block_advisor,
 )
 from app.mcp_server.onboarding import (
@@ -146,6 +147,7 @@ __all__ = [
     "training_fitness_resource",
     "sync_fitness",
     "get_race_block_context",
+    "get_block_comparison",
     "race_block_advisor",
     "get_onboarding_queue",
     "probe_retailer",
