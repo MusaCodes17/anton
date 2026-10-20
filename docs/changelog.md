@@ -5,6 +5,27 @@
 
 ---
 
+## R11 scoped — Race readiness v2 — 2026-10-20
+
+Docs only (`docs/roadmap.md` §R11 + Parked & gated). No code, no migration.
+
+**[ADDED]** §R11, at the runner's request. It turns the Readiness ideas noted below ("not specified yet, no roadmap row") into seven tasks. An external readiness spec was triaged with the runner into build / nice-to-have / decline, and the outcome is grounded in a read of `services/race_advisor.py`. Much of the spec already exists (R8.4.4 checklist, R10.2/R10.4 block comparison), so R11 extends `race_advisor` instead of adding a parallel feature:
+- R11.1 evidence + drill-down and a `no_data` status;
+- R11.2 past builds at the same week offset;
+- R11.3 consistency + taper;
+- R11.4 exclude an activity from analysis;
+- R11.5 race-shoe readiness;
+- R11.6 fast finish in long runs (spike-gated, may reopen R5.4.3);
+- R11.7 finish-time range + evidence grade (backtest-gated, needs a decision entry).
+
+**[CHANGED]** Parked & gated:
+- Four R11 nice-to-haves added with reopen triggers.
+- The COROS recovery/HRV row was re-checked: it stays deferred even with a readiness view.
+
+**Why:** the runner wants readiness to answer "how likely, on what evidence, what's missing" without bloating Anton. The rule kept throughout is no single score, and no data is never shown as not met.
+
+---
+
 ## Training tab reorder — 2026-10-20
 
 Branch `training-ui-tweaks` (commit `d18964b`). Frontend only; no backend change, no migration.
