@@ -284,6 +284,8 @@ export const racesApi = {
   remove: (id) => client.delete(`/api/races/${id}`).then((r) => r.data),
   // "Am I ready for my next race?" checklist (R8.4.4); has_race false → hide the card.
   readiness: () => client.get('/api/races/readiness').then((r) => r.data),
+  // Race-block comparison (R10.2/R10.4): every block of one class, oldest first.
+  blocks: (raceClass) => client.get('/api/races/blocks', { params: { race_class: raceClass } }).then((r) => r.data),
   linkActivity: (id, activityId) =>
     client.post(`/api/races/${id}/link-activity`, { activity_id: activityId }).then((r) => r.data),
   markDnf: (id) => client.post(`/api/races/${id}/dnf`).then((r) => r.data),

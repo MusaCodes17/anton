@@ -59,6 +59,9 @@ export const queryKeys = {
   races: () => ['races'],
   // Under the ['races'] prefix, so every race mutation's invalidation covers it.
   raceReadiness: () => ['races', 'readiness'],
+  // Also under ['races'], so race mutations cover it. Run writes invalidate raceBlocksAll() explicitly.
+  raceBlocksAll: () => ['races', 'blocks'],
+  raceBlocks: (raceClass) => ['races', 'blocks', raceClass],
   home: () => ['home'],
   conversations: () => ['conversations'],
   conversation: (id) => ['conversations', 'detail', id],
@@ -370,6 +373,14 @@ export function useRaceReadiness() {
   })
 }
 
+// Runs and races both feed the block comparison, like readiness above.
+export function useRaceBlocks(raceClass) {
+  return useQuery({
+    queryKey: queryKeys.raceBlocks(raceClass),
+    queryFn: () => racesApi.blocks(raceClass),
+  })
+}
+
 // Race edits move the load verdict's taper window, so race mutations refresh it.
 function invalidateAfterRaceWrite(qc) {
   qc.invalidateQueries({ queryKey: queryKeys.races() })
@@ -491,6 +502,7 @@ function invalidateAfterActivityWrite(qc, id) {
   qc.invalidateQueries({ queryKey: ['training'] })
   qc.invalidateQueries({ queryKey: ['home'] })
   qc.invalidateQueries({ queryKey: queryKeys.raceReadiness() })
+  qc.invalidateQueries({ queryKey: queryKeys.raceBlocksAll() })
 }
 
 export function useUpdateActivity(id) {
@@ -719,6 +731,7 @@ export function useLogRun() {
       qc.invalidateQueries({ queryKey: ['activities'] })
       qc.invalidateQueries({ queryKey: ['training'] })
       qc.invalidateQueries({ queryKey: queryKeys.raceReadiness() })
+      qc.invalidateQueries({ queryKey: queryKeys.raceBlocksAll() })
     },
   })
 }
@@ -756,6 +769,7 @@ export function useDeleteShoeRun() {
       qc.invalidateQueries({ queryKey: ['activities'] })
       qc.invalidateQueries({ queryKey: ['training'] })
       qc.invalidateQueries({ queryKey: queryKeys.raceReadiness() })
+      qc.invalidateQueries({ queryKey: queryKeys.raceBlocksAll() })
     },
   })
 }
@@ -815,6 +829,7 @@ export function useConfirmPendingRun() {
       qc.invalidateQueries({ queryKey: ['activities'] })
       qc.invalidateQueries({ queryKey: ['training'] })
       qc.invalidateQueries({ queryKey: queryKeys.raceReadiness() })
+      qc.invalidateQueries({ queryKey: queryKeys.raceBlocksAll() })
     },
   })
 }

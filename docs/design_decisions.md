@@ -734,6 +734,22 @@ Supporting choices:
 
 ---
 
+### E24. The race-block class choice is per device; the section is full-width (R10.4, 2026-10-20)
+
+**Chosen:**
+- The Marathon/Half/10k switch on `RaceBlocksCard` is stored in `localStorage` (`anton.raceBlocks.class`, read and written inside try/catch), not in the server-side training layout preference.
+- `blocks` is a **full-width** Training section, not a 2-up card, because the weekly-km chart and the side-by-side table need the width.
+
+**Why:** the class is a view toggle, like the theme; a server round trip per tap isn't worth it, and nothing server-side reads it. The chart has up to six lines with end labels, and the table has up to nine columns, so a half-width card would not fit either on desktop.
+
+**Trade-offs:**
+- The class can differ between phone and desktop, while the section order and hidden state are synced across devices through the layout preference.
+- In the default order, Races now sits alone on its row on desktop, because cards pair only when adjacent. The runner can reorder in Customize.
+
+**Verdict:** ✅ Keep.
+
+---
+
 ### E23. Savanna header replaces the black hole (2026-10-17 — amends E22)
 
 **Chosen:**
