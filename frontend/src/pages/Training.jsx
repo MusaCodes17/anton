@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { Activity, Compass, Flag, Layers, ListOrdered, TrendingUp } from 'lucide-react'
+import { Activity, ClipboardCheck, Compass, Flag, Layers, ListOrdered, TrendingUp } from 'lucide-react'
 import PageHeader from '@/components/PageHeader'
 import SyncRunsButton from '@/components/SyncRunsButton'
 import PlannedRacesCard from '@/components/training/PlannedRacesCard'
 import VolumeChart from '@/components/training/VolumeChart'
 import NowStrip from '@/components/training/NowStrip'
+import RaceReadiness from '@/components/training/RaceReadiness'
 import FitnessCard from '@/components/training/FitnessCard'
 import PredictionsCard from '@/components/training/PredictionsCard'
 import RecordsCard from '@/components/training/RecordsCard'
@@ -151,9 +152,8 @@ function OverviewTab() {
   const records = useTrainingRecords()
   const fitness = useTrainingFitness()
 
-  // "Now" strip (R8.4.5): server-computed trends + race readiness.
+  // "Now" strip (R8.4.5): server-computed load and form trends. Race readiness lives on the Races tab.
   const trends = useTrainingTrends()
-  const readiness = useRaceReadiness()
 
   // Chart data (chronological). Shows every period inside the selected range —
   // no fixed 12-bar cap, so widening the range visibly extends the weekly chart
@@ -196,11 +196,6 @@ function OverviewTab() {
 
   return (
     <div className="space-y-5 md:space-y-8">
-      <section className="space-y-4">
-        <SectionHeading id="now" icon={Compass} title="Now" />
-        <NowStrip trends={trends} readiness={readiness} />
-      </section>
-
       <section className="space-y-4">
         <div className="flex flex-wrap items-baseline justify-between gap-3">
           <SectionHeading id="volume" icon={TrendingUp} title="Volume" />
@@ -277,6 +272,11 @@ function OverviewTab() {
         )}
       </section>
 
+      <section className="space-y-4">
+        <SectionHeading id="now" icon={Compass} title="Now" />
+        <NowStrip trends={trends} />
+      </section>
+
       <section className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         <div id="fitness" className="scroll-mt-28 sm:scroll-mt-36 lg:scroll-mt-40">
           <FitnessCard data={fitness.data} history={trends.data?.form?.fitness} />
@@ -291,6 +291,9 @@ function OverviewTab() {
 
 function RacesTab() {
   const fitness = useTrainingFitness()
+  const readiness = useRaceReadiness()
+  // Hide the whole readiness section (heading included) only once we know there's no race.
+  const readinessHidden = readiness.data && !readiness.data.has_race
   return (
     <div className="space-y-5 md:space-y-8">
       <section className="grid grid-cols-1 gap-4 lg:grid-cols-2">
@@ -306,6 +309,13 @@ function RacesTab() {
         <SectionHeading id="blocks" icon={Layers} title="Race blocks" hint="the weeks before each race" />
         <RaceBlocksCard />
       </section>
+
+      {!readinessHidden && (
+        <section className="space-y-4">
+          <SectionHeading id="readiness" icon={ClipboardCheck} title="Readiness" hint="the next race's checklist" />
+          <RaceReadiness readiness={readiness} />
+        </section>
+      )}
     </div>
   )
 }
