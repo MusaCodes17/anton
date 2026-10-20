@@ -23,7 +23,7 @@ def test_default_when_unset(db):
 
 
 def test_roundtrip_save_and_read(db):
-    order = ["fitness", "now", "trends", "races", "records", "predictions", "activities"]
+    order = ["fitness", "now", "trends", "races", "blocks", "records", "predictions", "activities"]
     saved = settings_svc.set_training_layout(db, order=order, hidden=["races", "records"])
     db.commit()
     assert saved == {"order": order, "hidden": ["races", "records"]}
@@ -65,7 +65,7 @@ def test_all_hidden_raises(db):
 def test_missing_sections_appended_in_default_order(db):
     saved = settings_svc.set_training_layout(db, order=["fitness", "now"], hidden=[])
     assert saved["order"] == [
-        "fitness", "now", "trends", "races", "records", "predictions", "activities",
+        "fitness", "now", "trends", "races", "blocks", "records", "predictions", "activities",
     ]
 
 
@@ -115,9 +115,22 @@ def test_put_training_layout_persists_and_returns_response(db):
     body = prefs_router.TrainingLayoutUpdate(order=["now", "trends"], hidden=["now"])
     out = prefs_router.update_training_layout(body, db)
     assert out["training_layout"] == {
-        "order": ["now", "trends", "races", "records", "fitness", "predictions", "activities"],
+        "order": ["now", "trends", "races", "blocks", "records", "fitness", "predictions", "activities"],
         "hidden": ["now"],
     }
+
+
+def test_old_seven_id_layout_appends_blocks_visible(db):
+    # A layout saved before the R10.4 "blocks" section existed must pick it up
+    # at the end (not in its default slot) and must not hide it.
+    old_order = ["trends", "now", "races", "records", "fitness", "predictions", "activities"]
+    blob = json.dumps({"order": old_order, "hidden": ["now"]})
+    db.add(AppSettings(key=TRAINING_LAYOUT_KEY, value=blob))
+    db.commit()
+    layout = settings_svc.get_training_layout(db)
+    assert layout["order"] == old_order + ["blocks"]
+    assert layout["hidden"] == ["now"]
+    assert "blocks" not in layout["hidden"]
 
 
 def test_put_training_layout_invalid_returns_422(db):

@@ -16,7 +16,8 @@ TRAINING_LAYOUT_KEY = "training_layout"
 # Default order AND the closed set of section ids for the Training page. Must
 # match the section ids the Training page renders; Trends first is the runner's
 # choice. Unknown ids are rejected on write and dropped on read.
-TRAINING_SECTIONS = ("trends", "now", "races", "records", "fitness", "predictions", "activities")
+# "blocks" is the R10.4 race-block comparison section (full-width, not a card).
+TRAINING_SECTIONS = ("trends", "now", "races", "blocks", "records", "fitness", "predictions", "activities")
 
 
 def get_setting(db: Session, key: str) -> Optional[str]:

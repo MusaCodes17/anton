@@ -2,12 +2,13 @@
 
 // Must match TRAINING_SECTIONS in backend/app/services/settings.py (ids and
 // default order). The server validates; this copy only drives rendering.
-export const TRAINING_SECTIONS = ['trends', 'now', 'races', 'records', 'fitness', 'predictions', 'activities']
+export const TRAINING_SECTIONS = ['trends', 'now', 'races', 'blocks', 'records', 'fitness', 'predictions', 'activities']
 
 export const SECTION_LABELS = {
   trends: 'Trends',
   now: 'Now',
   races: 'Races',
+  blocks: 'Race blocks',
   records: 'Records',
   fitness: 'Fitness',
   predictions: 'Predictions',
