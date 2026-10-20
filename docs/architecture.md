@@ -137,7 +137,7 @@ anton/
         ├── hooks/useApi.js      # ALL React Query hooks, per API family
         ├── hooks/               # + useChatStream, useKeyboardViewport, useMediaQuery, useOnline
         ├── services/api.js      # Single axios API client, grouped per domain
-        └── lib/                 # pure helpers: queryClient, trainingLayout (section ids incl. full-width `blocks`, R10.4), pipeline, forecast,
+        └── lib/                 # pure helpers: queryClient, pipeline, forecast,
                                  # conversations, shoeTypes, runSource, utils
 ```
 
@@ -287,7 +287,7 @@ Twenty-one router modules: nineteen under `/api`, all behind the shared bearer t
 - `GET /api/activities` — canonical run feed with filters/pagination.
 - `GET /api/training/summary|records|trends`, `GET /api/races` (+ CRUD, `GET /api/races/readiness`, `GET /api/races/blocks`, `POST /api/races/{id}/dnf`), `GET /api/owned-shoes/rotation-overview` (id-keyed, lightweight — the page merges it with full shoe rows client-side).
 - `GET /api/strava/status` — import health for Settings; post-Phase-5 it reports over `activities` filtered to `source='strava'`.
-- `GET /api/preferences` (size preference + `training_layout`), `PUT /api/preferences` (size only), `PUT /api/preferences/training-layout` (the Training page's section order and visibility, E16 — REST-only by design, no MCP tool).
+- `GET /api/preferences` (size preference + `training_layout`), `PUT /api/preferences` (size only), `PUT /api/preferences/training-layout` (the Training page's section order and visibility, E16 — REST-only by design, no MCP tool; **unused since E25**, which made the page three fixed tabs; removal is a pending cleanup).
 
 **Domain CRUD**: `shoes` (incl. scrapability dry-run test), `retailers` (incl. promo CRUD), `deals` (list/deactivate), `owned-shoes` (CRUD + log-run + runs + notes + replacement-deals + `adjust-mileage`; `PUT` with `mileage_limit: null` resets the limit to the type default, and every shoe response carries the derived `recommended_limit_km`; the list endpoint attaches lifetime stats and images in bulk — 4 queries, not 1 + 11 per shoe); COROS connection, sync and inbox under `/api/coros/*` (`routers/coros_connect.py`).
 

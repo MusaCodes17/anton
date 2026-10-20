@@ -679,7 +679,7 @@ Supporting choices:
 - **Exception to REST/MCP parity (CLAUDE.md §4.2), deliberately:** this is presentation state for one page. No assistant question needs it, and an MCP tool would only add surface.
 
 **Trade-offs:** the id list exists twice, backend and frontend, and the two must be kept in step. The server validates, so drift shows up as a 422, never as silent corruption.
-**Verdict:** ✅ Keep.
+**Verdict:** ❌ Superseded by E25 (2026-10-20). The frontend no longer reads or writes the layout; the backend pieces await a cleanup.
 ---
 
 ### E17. MCP payloads render through the REST response schemas; deals keep a flat MCP projection (§7 debt phase, 2026-10-10)
@@ -734,6 +734,26 @@ Supporting choices:
 
 ---
 
+### E25. The Training page is three fixed tabs; the section Customize is retired (2026-10-20 — supersedes E16)
+
+**Chosen:**
+- `/training` has three tabs, held in the URL (`?tab=races`, `?tab=activities`; Overview carries no param, an unknown value falls back to Overview):
+  - **Overview** follows the claude.ai Training dashboard's first page: Now strip, Volume (stat row + chart with its own date range, default 1y), then Fitness and Records side by side.
+  - **Races**: Planned races and Predictions side by side, then Race blocks full width.
+  - **Activities**: the run list with its own date range (default 1y), shoe and distance filters.
+- Each tab is a page-local component, so a tab's queries run only while it is shown.
+- The layout is fixed. The reorder/hide dialog, `lib/trainingLayout.js` and `useUpdateTrainingLayout` are deleted from the frontend.
+
+**Why:** with eight sections in one scroll the page was too busy (runner, 2026-10-20). The dashboard's grouping already read well, so the app adopts it. With three short tabs, a reorder control has little left to do.
+
+**Trade-offs:**
+- The backend `training_layout` setting, `PUT /api/preferences/training-layout`, `TRAINING_SECTIONS` and their tests stay for now. Nothing calls them; removing them is a follow-up cleanup (roadmap).
+- The Volume chart and the activities list no longer share one range. They are set separately.
+
+**Verdict:** ✅ Keep.
+
+---
+
 ### E24. The race-block class choice is per device; the section is full-width (R10.4, 2026-10-20)
 
 **Chosen:**
@@ -744,7 +764,7 @@ Supporting choices:
 
 **Trade-offs:**
 - The class can differ between phone and desktop, while the section order and hidden state are synced across devices through the layout preference.
-- In the default order, Races now sits alone on its row on desktop, because cards pair only when adjacent. The runner can reorder in Customize.
+- In the default order, Races now sits alone on its row on desktop, because cards pair only when adjacent. The runner can reorder in Customize. *(Moot since E25: Race blocks lives on the Races tab, and the layout is fixed.)*
 
 **Verdict:** ✅ Keep.
 
@@ -877,6 +897,7 @@ Supporting choices:
 | `scraper_manager.py` compat shim (`ScraperManager` alias) | Post-refactor transition scaffolding | D7 — deleted; consumers import `ScrapeOrchestrator`/`lock`/`registry` directly | 2026-07-07 (R1.5b) |
 | APScheduler dependency (declared, unused) | Anticipatory install for scheduled scraping | E5 — dropped from `requirements.txt`; reinstate with an R4.1 design | 2026-07-07 (R1.6) |
 | Per-size shoe tracking | Original watchlist shape | B2 — size-less tracking | recorded in code comment |
+| E16 — Training section order/visibility as a synced preference (Customize) | One long Training page the runner could reorder and hide | E25 — three fixed tabs (Overview · Races · Activities) | 2026-10-20 |
 | No authentication anywhere (`0.0.0.0` default bind) | Trust = network posture, single trusted machine | E7 — shared bearer token on `/api`+`/mcp`, `127.0.0.1` default bind | 2026-07-07 (R2.1) |
 | Single shared `ANTON_SECRET` for all clients (E7) | One baked-in secret; acceptable for trusted LAN; no per-client revocation | E9 — named per-client tokens + OAuth 2.1; `ANTON_SECRET` rotated | 2026-07-09 (RA1.1) |
 | Capability-URL connector auth (`ANTON_CONNECTOR_TOKEN`) — RA1.1 Path 2 | URL as credential (`/mcp/<token>/...`); shipped as dark fallback | E9 RA1.1b Path 1 — OAuth 2.1 chosen; capability-URL code deleted from middleware, tests, env examples; never went public | 2026-07-09 (RA1.1b) |

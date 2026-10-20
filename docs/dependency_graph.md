@@ -192,8 +192,7 @@ ScrapeButton et al. ⇢ GET /api/scrape/stream (EventSource)
 hooks/useApi.js ⇢ /api/chat/conversations (server-side since R2.6; lib/conversations.js only builds objects)
 lib/shoeTypes.js — presentation only since R2.4 (vocabulary served by GET /api/shoe-types)
 lib/queryClient.js ⇢ IndexedDB (persisted GET cache, RA2.2; busted by the build hash)
-pages/Training → lib/trainingLayout.js ⇢ PUT /api/preferences/training-layout (section ids are
-                 a hand-matched list with services/settings.TRAINING_SECTIONS ⚠)
+pages/Training ⇢ ?tab=overview|races|activities (E25; ActivityDetail links to ?tab=races / ?tab=activities)
 vite.config.js ⇢ dev proxy /api → 127.0.0.1:8000; Workbox runtime cache for /api GETs,
                  excluding /stream (SSE)
 ```

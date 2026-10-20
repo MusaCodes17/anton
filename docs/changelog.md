@@ -5,6 +5,24 @@
 
 ---
 
+## R10.6 — Training page in tabs — 2026-10-20
+
+Branch `training-tabs` (commits `f7e1090`, `2d375e4`), on top of R10.5. Frontend only; no backend change, no migration. Decision: `design_decisions.md` E25 (supersedes E16).
+
+**[CHANGED] The Training page is three tabs** (runner: the page was too busy). Tab state is in the URL: `?tab=races`, `?tab=activities`, Overview by default.
+- **Overview**, after the claude.ai Training dashboard's first page: the Now strip; Volume (heading renamed from Trends) with its own date range (default 1y), the stat row and the chart; then Fitness and Records side by side.
+- **Races**: Planned races and Predictions side by side, then Race blocks full width.
+- **Activities**: the run list with its own date range (default 1y), shoe and min-distance filters, Load more.
+- Each tab is a page-local component, so its queries run only while it is shown. `ActivityDetail` links go to `?tab=races` / `?tab=activities` (they were `#races` / `#activities` anchors).
+
+**[CHANGED] Date range extracted** into `hooks/useDateRange.js` and `components/training/DateRangeControls.jsx` (same 400 ms debounce, presets immediate), so Overview and Activities each hold their own range.
+
+**[REMOVED] Customize (E16) from the frontend:** the button, `CustomizeSectionsDialog.jsx`, `lib/trainingLayout.js`, `useUpdateTrainingLayout` and `preferencesApi.updateTrainingLayout`. The backend `training_layout` setting, its PUT endpoint and tests stay until R10.7.
+
+**Verified:** backend suite **987 passed, 1 skipped** (unchanged; no backend change). `vite build` clean. Live pass against the scratch copy of the 2026-10-20 prod backup: desktop and 380 px for all three tabs, no horizontal scroll; tabs update `?tab=` without adding history entries; a direct load of `?tab=races` opens Races; Overview order Now → Volume → Fitness → Records; both ranges open on 2025-10-20 → today; no Customize button. Switching all three tabs with `console.error` trapped: no errors, no failed requests (the console's earlier `ERR_CONNECTION_REFUSED` lines date from the previous preview's shutdown).
+
+---
+
 ## R10.5 — R10 follow-ups — 2026-10-20
 
 Branch `r10-5-followups` (commits `f3224fe`, `a2705b3`). Frontend only; no backend change, no migration. The runner decided all three items.
