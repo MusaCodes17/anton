@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { Activity, Compass, Flag, Layers, ListOrdered, TrendingUp } from 'lucide-react'
 import PageHeader from '@/components/PageHeader'
+import SyncRunsButton from '@/components/SyncRunsButton'
 import PlannedRacesCard from '@/components/training/PlannedRacesCard'
 import VolumeChart from '@/components/training/VolumeChart'
 import NowStrip from '@/components/training/NowStrip'
@@ -461,8 +462,10 @@ export default function Training() {
     <div className="space-y-5 md:space-y-8">
       <PageHeader
         title="Training"
-        meta={trailing365.data && recentWeekly.data ? [`${stats.thisWeek.toFixed(1)} km this week`, `${Math.round(stats.total12).toLocaleString()} km · last 12 mo`] : undefined}
-      />
+        meta={trailing365.data && recentWeekly.data ? [`${stats.thisWeek.toFixed(1)} km this week`] : undefined}
+      >
+        <SyncRunsButton />
+      </PageHeader>
 
       {/* Segmented tab bar — same idiom as the Weekly/Monthly switch, sized up. */}
       <div role="tablist" aria-label="Training sections" className="flex rounded-lg border border-border p-0.5 sm:inline-flex">

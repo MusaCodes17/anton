@@ -1,7 +1,8 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
-import { Watch, RefreshCw, Check, X, Heart, AlertTriangle } from 'lucide-react'
+import { Watch, Check, X, Heart, AlertTriangle } from 'lucide-react'
 import PageHeader from '@/components/PageHeader'
+import SyncRunsButton from '@/components/SyncRunsButton'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -12,10 +13,9 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select'
 import { ErrorState } from '@/components/StatusViews'
-import { useToast } from '@/components/ui/toast'
 import { useOnline } from '@/hooks/useOnline'
 import {
-  useCorosPending, useCorosStatus, useOwnedShoes, useSyncCoros,
+  useCorosPending, useCorosStatus, useOwnedShoes,
   useConfirmPendingRun, useDismissPendingRun,
 } from '@/hooks/useApi'
 import { formatDate, formatRelativeTime } from '@/lib/utils'
@@ -34,8 +34,6 @@ export default function NewRuns() {
   const pending = useCorosPending()
   const status = useCorosStatus()
   const shoes = useOwnedShoes()
-  const sync = useSyncCoros()
-  const { toast } = useToast()
   const { online } = useOnline()
 
   const activeShoes = (shoes.data ?? []).filter((s) => s.status === 'active')
@@ -43,30 +41,10 @@ export default function NewRuns() {
   const lastSync = pending.data?.last_success_at
   const conn = status.data?.status
 
-  function syncNow() {
-    sync.mutate(undefined, {
-      onSuccess: (r) =>
-        toast({
-          title: r.ok ? 'Synced with COROS' : 'Sync finished with problems',
-          description: r.ok
-            ? r.queued ? `${r.queued} new run${r.queued === 1 ? '' : 's'} found.` : 'No new runs.'
-            : r.errors?.[0],
-          variant: r.ok ? undefined : 'destructive',
-        }),
-      onError: (err) =>
-        toast({ variant: 'destructive', title: 'Sync failed', description: err.message }),
-    })
-  }
-
   return (
     <div className="space-y-5">
       <PageHeader title="New runs" count={runs.length}>
-        {conn === 'connected' && (
-          <Button onClick={syncNow}
-            disabled={!online || sync.isPending} title={!online ? OFFLINE_MSG : undefined}>
-            <RefreshCw className={sync.isPending ? 'h-4 w-4 animate-spin' : 'h-4 w-4'} /> Sync now
-          </Button>
-        )}
+        <SyncRunsButton label="Sync now" />
       </PageHeader>
 
       {conn && conn !== 'connected' && (
