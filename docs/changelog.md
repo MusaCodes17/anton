@@ -5,6 +5,26 @@
 
 ---
 
+## R10.7 — Training-layout backend retired — 2026-10-20
+
+Branch `r10-7-layout-cleanup`, cut from `main` after PR #89 (R10.6) merged. Backend deletion plus docs; no migration. The code was built in a separate session on `claude/awesome-hellman-63b3e7` and cherry-picked here; its docs were rewritten on top of the R10.6 entries.
+
+**[REMOVED]** Nothing has called these since E25:
+- `training_layout` from `GET /api/preferences`;
+- `PUT /api/preferences/training-layout`, with its `TrainingLayoutUpdate` schema;
+- `TRAINING_SECTIONS`, `TRAINING_LAYOUT_KEY`, `get_training_layout`, `set_training_layout` and `_normalize_layout` from `services/settings.py`;
+- `tests/test_training_layout.py`: 21 tests, including `test_old_seven_id_layout_appends_blocks_visible`.
+
+The size preference is unchanged, and `test_size_preference` now asserts the two-key response. Any stored `training_layout` row in `app_settings` is left in place: nothing reads it, and it is harmless.
+
+**Verified:**
+- Backend suite **966 passed, 1 skipped**, down from 987 + 1; the 21 are the deleted tests.
+- `test_public_surface.py` and the route-coverage tests pass.
+- `grep -rn "training_layout\|TRAINING_SECTIONS\|training-layout"` finds nothing in `backend/app`, `backend/tests` or `frontend/src`.
+- `vite build` is clean.
+
+---
+
 ## R10.6 — Training page in tabs — 2026-10-20
 
 Branch `training-tabs` (commits `f7e1090`, `2d375e4`), on top of R10.5. Frontend only; no backend change, no migration. Decision: `design_decisions.md` E25 (supersedes E16).
