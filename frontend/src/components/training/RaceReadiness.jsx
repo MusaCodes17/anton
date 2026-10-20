@@ -273,7 +273,7 @@ function ReadinessGroup({ rd }) {
               }
             />
           )
-          if (!isTappable(item)) return <div key={item.key} className="min-w-0">{tile}</div>
+          if (!isTappable(item)) return <div key={item.key} className="grid min-w-0">{tile}</div>
           const isOpen = openItem?.key === item.key
           return (
             <button
@@ -283,7 +283,7 @@ function ReadinessGroup({ rd }) {
               aria-expanded={isOpen}
               aria-controls={isOpen ? READINESS_PANEL_ID : undefined}
               className={cn(
-                'focus-ring min-w-0 rounded-2xl text-left',
+                'focus-ring grid min-w-0 rounded-2xl text-left',
                 isOpen && 'ring-2 ring-primary',
               )}
             >
