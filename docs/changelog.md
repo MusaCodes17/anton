@@ -5,6 +5,16 @@
 
 ---
 
+## Weekly local test-DB refresh from prod snapshots — 2026-10-20
+
+Branch `local-db-refresh`. Ops only; no app code changed.
+
+**[ADDED] `deploy/refresh-local-db.sh` + `deploy/com.anton.local-db-refresh.plist`** — a launchd agent, Mondays 10:00 (after the 09:30 prod-backup agent), copies the newest `*-prod-auto.bak` that `backup-prod.sh` wrote over `~/anton-data/shoe_deals.db`. No network: it only reads that job's files. Before it replaces anything it checks the snapshot (`integrity_check` + activities > 0, opened `immutable=1` so no sidecars are created), keeps the current local DB as `shoe_deals.db.<date>-local-pre-refresh.bak` (newest 4 kept; a same-day re-run keeps the first copy), copies to a temp file and renames it, and removes the old `-wal`/`-shm`. Interlocks: it refuses while anything has the DB open (a running dev server), and when the local `.env` sets `COROS_TOKEN_KEY`. Prod's encrypted COROS tokens come along in the copy. A local poller that could decrypt them would refresh them, and COROS rotates refresh tokens, so prod would be logged out. Without the key, local COROS reads "reconnect needed". A snapshot older than 7 days logs a warning (the backup job has probably stopped).
+
+**Verified:** on scratch copies: the COROS-key guard and the open-DB guard both refuse; refresh x3 gives 1020 activities and `integrity_check` ok; same-day re-runs and retention behave. Then installed under `~/anton-data/bin/` + `~/Library/LaunchAgents/` and fired once with `launchctl kickstart`: local DB ← `2026-10-20-prod-auto.bak` (1020 activities, alembic `e4f5a6b7c8d9`, same as before), stale copy kept. No backend/frontend change, so no suite or build run.
+
+---
+
 ## R10.2 — race-block comparison — 2026-10-20
 
 Uncommitted in the working tree (the cloud session couldn't push). Decision: `design_decisions.md` B25 (reverses R8.4's "not chosen: block-vs-block comparison").

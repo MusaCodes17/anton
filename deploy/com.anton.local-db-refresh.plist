@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  launchd agent for deploy/refresh-local-db.sh — template; install steps are in
+  that script's header (__HOME__ / __REPO__ are filled in by sed).
+  Fires Mondays at 10:00, after the 09:30 prod-backup agent; a run missed while
+  asleep fires on wake.
+-->
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.anton.local-db-refresh</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>/bin/bash</string>
+        <string>__HOME__/anton-data/bin/refresh-local-db.sh</string>
+    </array>
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>ANTON_LOCAL_ENV</key>
+        <string>__REPO__/backend/.env</string>
+        <key>PATH</key>
+        <string>/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+    </dict>
+    <key>StartCalendarInterval</key>
+    <dict>
+        <key>Weekday</key>
+        <integer>1</integer>
+        <key>Hour</key>
+        <integer>10</integer>
+        <key>Minute</key>
+        <integer>0</integer>
+    </dict>
+    <key>StandardOutPath</key>
+    <string>__HOME__/Library/Logs/anton-local-db-refresh.log</string>
+    <key>StandardErrorPath</key>
+    <string>__HOME__/Library/Logs/anton-local-db-refresh.log</string>
+</dict>
+</plist>
