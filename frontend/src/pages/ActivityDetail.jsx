@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useParams, useNavigate, Link } from 'react-router-dom'
-import { ArrowLeft, Flag, Footprints, MapPin, Save, Thermometer } from 'lucide-react'
+import { ArrowLeft, EyeOff, Flag, Footprints, MapPin, Save, Thermometer } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
@@ -20,6 +20,16 @@ import {
 } from '@/hooks/useApi'
 
 const NO_TAG = '__none__'
+
+// Reason labels for excluding a run from analysis. Keys match the backend's
+// exclude_reason values (PATCH /api/activities/{id}).
+const EXCLUDE_REASONS = {
+  gps_error: 'GPS error',
+  wrong_sport: 'Wrong sport',
+  duplicate: 'Duplicate',
+  treadmill_calibration: 'Treadmill calibration',
+  other: 'Other',
+}
 
 function Figure({ label, value, unit }) {
   return (
@@ -49,6 +59,10 @@ export default function ActivityDetail() {
   const [tag, setTag] = useState(NO_TAG)
   const [name, setName] = useState('')
   const [description, setDescription] = useState('')
+  // Exclude-from-analysis form (shown only while the run is included).
+  const [excludeOpen, setExcludeOpen] = useState(false)
+  const [excludeReason, setExcludeReason] = useState('')
+  const [excludeNote, setExcludeNote] = useState('')
 
   // Seed the form once the activity loads (and re-seed if it changes underneath).
   const d = activity.data
@@ -75,6 +89,31 @@ export default function ActivityDetail() {
       {
         onSuccess: () => toast({ variant: 'success', title: 'Activity updated' }),
         onError: (e) => toast({ variant: 'destructive', title: 'Update failed', description: e?.response?.data?.detail }),
+      },
+    )
+  }
+
+  const excluded = !!d.exclude_from_analysis
+  const excludedLabel = EXCLUDE_REASONS[d.exclude_reason] || d.exclude_reason
+
+  const resetExcludeForm = () => { setExcludeOpen(false); setExcludeReason(''); setExcludeNote('') }
+
+  const excludeRun = () => {
+    update.mutate(
+      { exclude_from_analysis: true, exclude_reason: excludeReason, exclude_note: excludeNote.trim() || null },
+      {
+        onSuccess: () => { resetExcludeForm(); toast({ variant: 'success', title: 'Excluded from analysis' }) },
+        onError: (e) => toast({ variant: 'destructive', title: 'Could not exclude run', description: e?.response?.data?.detail }),
+      },
+    )
+  }
+
+  const includeRun = () => {
+    update.mutate(
+      { exclude_from_analysis: false },
+      {
+        onSuccess: () => toast({ variant: 'success', title: 'Included in analysis' }),
+        onError: (e) => toast({ variant: 'destructive', title: 'Could not include run', description: e?.response?.data?.detail }),
       },
     )
   }
@@ -108,6 +147,12 @@ export default function ActivityDetail() {
         {d.activity_tag && <Badge variant="secondary" className="text-[10px]">{d.activity_tag}</Badge>}
         <span className="text-sm text-muted-foreground">{d.run_date ? formatDate(d.run_date) : '—'}</span>
       </div>
+
+      {excluded && (
+        <div className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
+          <EyeOff className="h-3.5 w-3.5" /> Excluded from analysis: {excludedLabel}
+        </div>
+      )}
 
       {(() => {
         const place = d.location_label
@@ -194,6 +239,58 @@ export default function ActivityDetail() {
             </Link>
           )}
         </div>
+      </div>
+
+      {/* Analysis: whether this run feeds readiness, trends and records */}
+      <div className="panel space-y-4 rounded-2xl border border-border bg-card p-4 sm:p-5">
+        <h2 className="text-md-plus font-semibold text-foreground">Analysis</h2>
+        {excluded ? (
+          <div className="space-y-3">
+            <p className="text-sm text-muted-foreground">
+              Excluded from analysis: <span className="text-foreground">{excludedLabel}</span>
+              {d.exclude_note ? ` — ${d.exclude_note}` : ''}
+            </p>
+            <p className="text-xs text-faint">Shoe mileage and weekly totals still count this run.</p>
+            <Button variant="outline" onClick={includeRun} disabled={update.isPending}>Include again</Button>
+          </div>
+        ) : excludeOpen ? (
+          <form
+            className="space-y-3"
+            onSubmit={(e) => { e.preventDefault(); if (excludeReason) excludeRun() }}
+          >
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div className="min-w-0 space-y-1.5">
+                <Label>Reason</Label>
+                <Select value={excludeReason} onValueChange={setExcludeReason} disabled={update.isPending}>
+                  <SelectTrigger><SelectValue placeholder="Pick a reason" /></SelectTrigger>
+                  <SelectContent>
+                    {Object.entries(EXCLUDE_REASONS).map(([value, label]) => (
+                      <SelectItem key={value} value={value}>{label}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="min-w-0 space-y-1.5">
+                <Label>Note (optional)</Label>
+                <Input
+                  value={excludeNote}
+                  onChange={(e) => setExcludeNote(e.target.value)}
+                  maxLength={200}
+                  placeholder="Why it should not count"
+                />
+              </div>
+            </div>
+            <div className="flex flex-wrap items-center gap-3">
+              <Button type="submit" disabled={!excludeReason || update.isPending}>Exclude</Button>
+              <Button type="button" variant="secondary" onClick={resetExcludeForm} disabled={update.isPending}>Cancel</Button>
+            </div>
+          </form>
+        ) : (
+          <div className="space-y-3">
+            <p className="text-sm text-muted-foreground">Counted in readiness, trends and records.</p>
+            <Button variant="outline" onClick={() => setExcludeOpen(true)}>Exclude from analysis</Button>
+          </div>
+        )}
       </div>
     </div>
   )

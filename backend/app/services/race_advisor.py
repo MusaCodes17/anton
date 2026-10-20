@@ -538,20 +538,26 @@ def race_readiness(db: Session, *, as_of: Optional[date] = None) -> RaceReadines
     # ── the block: volume, peak week, long runs ───────────────────────────────
     block_runs: list = []   # raw rows, for checklist evidence only (not in the payload)
     if started:
-        runs = [r for r in activities_svc.unified_activities(db, date_from=block_start, date_to=block_end)
+        # R11.4 — derived analytics skip excluded runs; volume totals elsewhere don't
+        runs = [r for r in activities_svc.unified_activities(
+                    db, date_from=block_start, date_to=block_end, for_analysis=True)
                 if r.distance_km]
-        weeks = strava_stats.training_summary(db, "weekly", date_from=block_start, date_to=block_end)
+        # ISO-week buckets from the filtered runs (not training_summary, which counts
+        # every run), so an excluded run can't set the peak.
+        buckets: dict[str, list] = {}
+        for r in runs:
+            buckets.setdefault("{}-W{:02d}".format(*r.date.isocalendar()[:2]), []).append(r.distance_km)
+        weeks = sorted(buckets.items(), reverse=True)   # newest-first: on a tie max() keeps the latest
         out.block_runs = len(runs)
         out.block_km = round(sum(r.distance_km for r in runs), 1)
         if weeks:
             # newest-first, so on a tie max() keeps the most recent week
-            peak = max(weeks, key=lambda w: w.total_km)
-            out.peak_week = ReadinessWeek(peak.period, round(peak.total_km, 1), peak.run_count)
+            period, kms = max(weeks, key=lambda w: sum(w[1]))
+            out.peak_week = ReadinessWeek(period, round(sum(kms), 1), len(kms))
         iso = block_end.isocalendar()
         current_key = f"{iso[0]}-W{iso[1]:02d}"
-        cur = next((w for w in weeks if w.period == current_key), None)
-        out.current_week = ReadinessWeek(current_key, round(cur.total_km, 1) if cur else 0.0,
-                                         cur.run_count if cur else 0)
+        cur = buckets.get(current_key, [])
+        out.current_week = ReadinessWeek(current_key, round(sum(cur), 1), len(cur))
         block_runs = runs
         if runs:
             out.longest_run = _run(max(runs, key=lambda r: r.distance_km))
@@ -603,7 +609,9 @@ def race_readiness(db: Session, *, as_of: Optional[date] = None) -> RaceReadines
             # as_of = race_date − d makes _build_block cut block_end at race_date − d.
             b = _build_block(db, e, cls, bw, bstart, as_of=e.race_date - timedelta(days=d))
             b_end = date.fromisoformat(b.block_end)
-            b_runs = ([r for r in activities_svc.unified_activities(db, date_from=bstart, date_to=b_end)
+            # R11.4 — derived analytics skip excluded runs; volume totals elsewhere don't
+            b_runs = ([r for r in activities_svc.unified_activities(
+                           db, date_from=bstart, date_to=b_end, for_analysis=True)
                        if r.distance_km] if bstart <= b_end else [])
             b_peak = b.peak_week.km if b.peak_week else None
             out.past_builds.append(PastBuild(
@@ -932,7 +940,9 @@ def _build_block(db: Session, e, cls: RaceClass, block_weeks: int, block_start: 
 
     runs = []
     if block_start <= block_end:
-        runs = [r for r in activities_svc.unified_activities(db, date_from=block_start, date_to=block_end)
+        # R11.4 — derived analytics skip excluded runs; volume totals elsewhere don't
+        runs = [r for r in activities_svc.unified_activities(
+                    db, date_from=block_start, date_to=block_end, for_analysis=True)
                 if r.distance_km]
 
     # One entry per calendar week from block_start through block_end's week.

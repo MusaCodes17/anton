@@ -22,6 +22,7 @@ from sqlalchemy.orm import Session
 
 from app.models.models import Activity, OwnedShoe, ShoeRun
 from app.services import rotation
+from app.utils.exclusion_reasons import EXCLUDE_REASONS
 
 
 @dataclass
@@ -49,6 +50,7 @@ class UnifiedActivity:
     shoe: Optional[UnifiedShoe] = None
     strava_activity_id: Optional[int] = None
     shoe_run_id: Optional[int] = None
+    exclude_from_analysis: bool = False    # R11.4: skip in derived analytics (see unified_activities(for_analysis=))
 
     @property
     def _sort_key(self):
@@ -90,6 +92,7 @@ def _row_to_unified(row) -> UnifiedActivity:
               if row.s_id is not None else None),
         strava_activity_id=row.strava_activity_id,
         shoe_run_id=row.shoe_run_id,
+        exclude_from_analysis=bool(row.exclude_from_analysis),
     )
 
 
@@ -104,6 +107,7 @@ def unified_activities(
     min_distance_km: Optional[float] = None,
     limit: Optional[int] = None,
     offset: int = 0,
+    for_analysis: bool = False,
 ) -> list[UnifiedActivity]:
     """
     The unioned run feed, newest first, with optional filters and stable
@@ -136,6 +140,7 @@ def unified_activities(
             Activity.moving_time_s, Activity.avg_pace_s_per_km, Activity.avg_hr,
             Activity.elevation_gain_m, Activity.name, Activity.elapsed_time_s,
             Activity.activity_tag, Activity.strava_activity_id,
+            Activity.exclude_from_analysis,
             ShoeRun.id.label("shoe_run_id"),
             OwnedShoe.id.label("s_id"), OwnedShoe.brand.label("s_brand"),
             OwnedShoe.model.label("s_model"), OwnedShoe.nickname.label("s_nickname"),
@@ -158,6 +163,8 @@ def unified_activities(
         q = q.filter(ShoeRun.owned_shoe_id == shoe_id)
     if min_distance_km is not None:
         q = q.filter(Activity.distance_km >= min_distance_km)
+    if for_analysis:
+        q = q.filter(Activity.exclude_from_analysis.is_(False))
 
     # Newest first, with the same deterministic tiebreak as the old _sort_key
     # (date, strava_activity_id or 0, shoe_run_id or 0) so pagination is stable.
@@ -214,6 +221,9 @@ def get_activity_detail(db: Session, activity_id: int) -> dict:
         "apparent_temp_c": a.apparent_temp_c,
         "humidity_pct": a.humidity_pct,
         "wind_speed_m_s": a.wind_speed_m_s,
+        "exclude_from_analysis": bool(a.exclude_from_analysis),
+        "exclude_reason": a.exclude_reason,
+        "exclude_note": a.exclude_note,
         "shoe": {"id": shoe.id, "brand": shoe.brand, "model": shoe.model, "nickname": shoe.nickname} if shoe else None,
     }
 
@@ -225,20 +235,63 @@ def update_activity(
     activity_tag=_UNSET,
     name=_UNSET,
     description=_UNSET,
+    exclude_from_analysis=_UNSET,
+    exclude_reason=_UNSET,
+    exclude_note=_UNSET,
 ) -> Activity:
     """Partial-update the editable fields of an activity (R2.7 T6): tag, name,
-    description. Only supplied fields change (the `_UNSET` sentinel distinguishes
-    "clear to null" from "leave alone"). Tag validity is the caller's contract.
-    Raises LookupError if the activity is missing."""
+    description, plus the R11.4 analysis-exclusion trio. Only supplied fields
+    change (the `_UNSET` sentinel distinguishes "clear to null" from "leave
+    alone"). Tag validity is the caller's contract. This function owns the commit.
+
+    Exclusion rules (R11.4):
+      - `exclude_from_analysis=True` needs a reason from `EXCLUDE_REASONS`,
+        supplied in the same call or already on the row.
+      - `exclude_from_analysis=False` clears `exclude_reason` and `exclude_note`
+        (they only mean something while excluded), overriding any supplied values.
+      - `exclude_reason` outside the vocabulary is rejected.
+    Exclusion affects derived analytics only: this function never touches
+    distance, time, attribution, or any shoe's mileage (INV-1).
+
+    Raises LookupError if the activity is missing; ValueError on an invalid
+    exclusion request (nothing is written in that case).
+    """
     a = db.query(Activity).filter(Activity.id == activity_id).first()
     if a is None:
         raise LookupError(f"Activity {activity_id} not found")
+
+    # Validate the exclusion trio before mutating anything, so a rejected edit
+    # leaves the row untouched even when other fields were supplied.
+    if exclude_from_analysis is not _UNSET and not isinstance(exclude_from_analysis, bool):
+        raise ValueError("exclude_from_analysis must be true or false.")
+    if exclude_reason is not _UNSET and exclude_reason is not None and exclude_reason not in EXCLUDE_REASONS:
+        raise ValueError(f"Invalid exclude_reason. Use one of: {', '.join(EXCLUDE_REASONS)}.")
+    if exclude_from_analysis is True:
+        effective_reason = a.exclude_reason if exclude_reason is _UNSET else exclude_reason
+        if effective_reason is None:
+            raise ValueError(
+                f"A reason is required to exclude an activity. Use one of: {', '.join(EXCLUDE_REASONS)}."
+            )
+    elif exclude_from_analysis is _UNSET and exclude_reason is not _UNSET and exclude_reason is None and a.exclude_from_analysis:
+        raise ValueError("Cannot clear the reason of an excluded activity; set exclude_from_analysis=false instead.")
+
     if activity_tag is not _UNSET:
         a.activity_tag = activity_tag
     if name is not _UNSET:
         a.name = name
     if description is not _UNSET:
         a.description = description
+    if exclude_from_analysis is False:
+        a.exclude_from_analysis = False
+        a.exclude_reason = None
+        a.exclude_note = None
+    else:
+        if exclude_from_analysis is True:
+            a.exclude_from_analysis = True
+        if exclude_reason is not _UNSET:
+            a.exclude_reason = exclude_reason
+        if exclude_note is not _UNSET:
+            a.exclude_note = exclude_note
     db.commit()
     db.refresh(a)
     return a
