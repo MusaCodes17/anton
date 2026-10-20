@@ -3,11 +3,12 @@ import { Area, ComposedChart, ResponsiveContainer, Tooltip, YAxis } from 'rechar
 import {
   SIGNAL, useFillId, SignalFill, endpointDot, activeDot, lineCursor, ChartTooltip, ChartLegend,
 } from '@/components/charts/signal'
-import { formatDate } from '@/lib/utils'
+import { formatDate, formatDuration } from '@/lib/utils'
 
 // VO₂ max history (R8.4.5) from the trends response's `form.fitness` step
 // series (R8.4.1 snapshots). Values only change at a new snapshot, so it's a
 // step line. Hidden below 2 readings — one point is not a trend.
+// The threshold-pace line (R10.4) is its sibling, rendered beneath this one.
 function Vo2Sparkline({ history }) {
   const fillId = useFillId('vo2')
   const points = (history || []).filter((p) => p.vo2max != null)
@@ -55,6 +56,59 @@ function Vo2Sparkline({ history }) {
   )
 }
 
+// Threshold-pace history (R10.4) from the same `form.fitness` step series.
+// Pace is seconds/km, so lower reads as faster. The Y-axis is therefore
+// reversed: a faster threshold draws higher on the chart, matching the
+// "up is better" reading of the VO₂ line beside it. Null readings are skipped
+// (COROS did not report a threshold on that snapshot). Hidden below 2 points.
+function ThresholdSparkline({ history }) {
+  const fillId = useFillId('threshold')
+  const points = (history || []).filter((p) => p.threshold_pace_s_per_km != null)
+  if (points.length < 2) return null
+  return (
+    <div className="border-t border-border px-5 pb-4 pt-3">
+      <div className="flex items-baseline justify-between gap-3">
+        <ChartLegend items={[{ kind: 'line', label: 'Threshold pace' }]} />
+        <span className="font-mono text-2xs text-faint">
+          {formatDate(points[0].captured_date)} → {formatDate(points[points.length - 1].captured_date)}
+        </span>
+      </div>
+      <ResponsiveContainer width="100%" height={56}>
+        <ComposedChart data={points} margin={{ top: 8, right: 6, left: 4, bottom: 2 }}>
+          <defs>
+            <SignalFill id={fillId} />
+          </defs>
+          <YAxis hide reversed domain={['dataMin - 5', 'dataMax + 5']} />
+          <Tooltip
+            cursor={lineCursor}
+            content={
+              <ChartTooltip
+                render={(d) => (
+                  <>
+                    <div className="font-sans font-semibold text-foreground">{formatDate(d.captured_date)}</div>
+                    <div>Threshold {formatDuration(d.threshold_pace_s_per_km)}/km</div>
+                  </>
+                )}
+              />
+            }
+          />
+          <Area
+            type="stepAfter"
+            dataKey="threshold_pace_s_per_km"
+            stroke={SIGNAL}
+            strokeWidth={2}
+            fill={`url(#${fillId})`}
+            baseValue="dataMax"
+            dot={endpointDot(points.length - 1)}
+            activeDot={activeDot}
+            isAnimationActive={false}
+          />
+        </ComposedChart>
+      </ResponsiveContainer>
+    </div>
+  )
+}
+
 function Kpi({ icon: Icon, label, value }) {
   return (
     <div className="min-w-0 px-4 py-4 sm:px-5">
@@ -73,7 +127,8 @@ function Kpi({ icon: Icon, label, value }) {
  * pace, and running level. Race predictions are split into PredictionsCard (F4).
  * Always rendered in the 2×2 grid — shows an empty state when no snapshot exists.
  * The three figures sit in one hairline-divided row (template .kpis). `history` (optional)
- * is the fitness step series from /api/training/trends, drawn as a sparkline.
+ * is the fitness step series from /api/training/trends, drawn as two sparklines:
+ * VO₂ max, and threshold pace beneath it (R10.4).
  */
 export default function FitnessCard({ data, history }) {
   return (
@@ -101,6 +156,7 @@ export default function FitnessCard({ data, history }) {
         </div>
       )}
       {data?.has_data && <Vo2Sparkline history={history} />}
+      {data?.has_data && <ThresholdSparkline history={history} />}
     </div>
   )
 }
