@@ -5,6 +5,29 @@
 
 ---
 
+## Training page UI polish — 2026-10-20
+
+Branch `training-ui-polish` (commits `e5aef89`, `14dc501`, `4ed19ec`, `de814b5`). Frontend only; no backend change, no migration.
+
+**[ADDED]** `components/SyncRunsButton.jsx`: the COROS sync button, moved out of New runs and shared by the New runs and Training headers. It renders nothing unless COROS is connected.
+
+**[CHANGED]**
+- **Header:** the Training header carries Sync runs; the meta line drops "km · last 12 mo" and keeps only "km this week".
+- **Now strip:** three plain-question groups of stat tiles ("Building or holding?", "Is form improving?", "Ready for {race}?"). Each tile is a label, one value and a short sub-line. The Load and Form charts, the "Heuristic:" footers and the checklist rule lines are gone, along with the 12-week series that fed the Load chart. Checklist tiles use a smaller value size so "4:08/km vs 3:33/km" fits.
+- **Volume chart:** bars per week or month instead of an area. The dashed 4-week average stays. Cells are keyed by `period`, since week labels repeat across years.
+- **Upcoming races:** one-line rows the same size as past-race rows. A row opens the edit dialog, which now leads with a summary (countdown, date, distance, location, target time and pace, shoe) plus Mark complete and Delete.
+- **RaceForm:** a live "≈ M:SS/km" pace hint and an explicit note that "2:30" means 2 min 30 s.
+
+**[BLOCKED / for the runner]** The live Boston (2:30) and Comrades (6:29) targets were entered as M:SS, so they are stored as 150 s and 389 s. That is why readiness shows a 0:04/km target. Re-enter them as `2:30:00` and `6:29:00` in the edit dialog. `parseDuration` was left unchanged on purpose.
+
+**Verified:**
+- `vite build` is clean.
+- Browser pass against a scratch copy of the DB (two test races added there only), at desktop and 375 px: Overview tiles, readiness tiles, bar chart, Races rows and the edit dialog.
+- 0 console errors on a fresh load (trapped `console.error`).
+- Backend untouched (suite last run at 966 passed + 1 skipped).
+
+---
+
 ## R10.7 — Training-layout backend retired — 2026-10-20
 
 Branch `r10-7-layout-cleanup`, cut from `main` after PR #89 (R10.6) merged. Backend deletion plus docs; no migration. The code was built in a separate session on `claude/awesome-hellman-63b3e7` and cherry-picked here; its docs were rewritten on top of the R10.6 entries.

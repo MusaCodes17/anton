@@ -1,6 +1,7 @@
 import {
+  Bar,
+  Cell,
   ComposedChart,
-  Area,
   Line,
   XAxis,
   YAxis,
@@ -10,13 +11,19 @@ import {
 } from 'recharts'
 
 import {
-  SIGNAL, MUTED, axisProps, gridProps, useFillId, SignalFill, endpointDot,
-  activeDot, lineCursor, ChartTooltip, ChartLegend,
+  SIGNAL, MUTED, axisProps, gridProps, ChartTooltip, ChartLegend,
 } from '@/components/charts/signal'
 
 // The 4-week rolling average (R8.4.2) is context for the signal series, so it
 // sits back in a muted dashed line rather than competing in a second hue.
 const ROLLING = MUTED
+
+// Bar opacities: history recedes, the latest period reads as the focus. When the
+// latest period is still filling up (liveLast), it is dimmed slightly so it reads
+// as "still filling" rather than as a finished week.
+const HISTORY_OPACITY = 0.55
+const LAST_OPACITY = 1
+const LIVE_LAST_OPACITY = 0.8
 
 function renderTooltip(d) {
   return (
@@ -32,25 +39,23 @@ function renderTooltip(d) {
 
 /**
  * Volume trend (km per period) in the template's chart language
- * (components/charts/signal): a signal line over a gradient area, hairline
- * grid, mono axes, and the latest period as a glowing endpoint — pulsing only
- * when `liveLast` (the range ends today, so that period is still filling up).
+ * (components/charts/signal): one bar per period over a hairline grid, mono
+ * axes. The last bar is the latest period; when `liveLast` (the range ends
+ * today, so that period is still filling up) it is drawn slightly dimmer.
  * Data is chronological { label, fullLabel, total_km, run_count }. Weekly data
- * carries `rolling_4wk_km` (server-computed, R8.4.2), drawn dashed with a key.
+ * carries `rolling_4wk_km` (server-computed, R8.4.2), drawn as a dashed line
+ * over the bars, with a key.
  */
 export default function VolumeChart({ data, xTicks, xTickFormatter, liveLast = false }) {
-  const fillId = useFillId('volume')
   const showRolling = data.some((d) => d.rolling_4wk_km != null)
+  const last = data.length - 1
 
   return (
     <>
       {/* Height lives on the wrapper: 160px on phones, 220px from sm up. */}
       <div className="h-[160px] sm:h-[220px]">
         <ResponsiveContainer width="100%" height="100%">
-          <ComposedChart data={data} margin={{ top: 12, right: 4, left: 0, bottom: 0 }}>
-            <defs>
-              <SignalFill id={fillId} />
-            </defs>
+          <ComposedChart data={data} margin={{ top: 12, right: 4, left: 0, bottom: 0 }} barCategoryGap="20%">
             <CartesianGrid {...gridProps} />
             <XAxis
               dataKey="label"
@@ -66,18 +71,24 @@ export default function VolumeChart({ data, xTicks, xTickFormatter, liveLast = f
               width={52}
               tickCount={3}
             />
-            <Tooltip cursor={lineCursor} content={<ChartTooltip render={renderTooltip} />} />
-            <Area
-              type="monotone"
-              dataKey="total_km"
-              stroke={SIGNAL}
-              strokeWidth={2}
-              strokeLinecap="round"
-              fill={`url(#${fillId})`}
-              dot={endpointDot(data.length - 1, { live: liveLast })}
-              activeDot={activeDot}
-              isAnimationActive={false}
+            <Tooltip
+              cursor={{ fill: 'var(--chart-grid)', fillOpacity: 0.6 }}
+              content={<ChartTooltip render={renderTooltip} />}
             />
+            <Bar
+              dataKey="total_km"
+              fill={SIGNAL}
+              radius={[2, 2, 0, 0]}
+              maxBarSize={28}
+              isAnimationActive={false}
+            >
+              {data.map((d, i) => (
+                <Cell
+                  key={d.period ?? i}
+                  fillOpacity={i === last ? (liveLast ? LIVE_LAST_OPACITY : LAST_OPACITY) : HISTORY_OPACITY}
+                />
+              ))}
+            </Bar>
             {showRolling && (
               <Line
                 type="monotone"
@@ -96,7 +107,7 @@ export default function VolumeChart({ data, xTicks, xTickFormatter, liveLast = f
       <ChartLegend
         className="mt-3"
         items={[
-          { kind: 'line', label: 'Distance' },
+          { kind: 'bar', label: 'Distance' },
           ...(showRolling ? [{ kind: 'dashed', color: ROLLING, label: '4-week average' }] : []),
         ]}
       />

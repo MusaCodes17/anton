@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { Activity, Compass, Flag, Layers, ListOrdered, TrendingUp } from 'lucide-react'
 import PageHeader from '@/components/PageHeader'
+import SyncRunsButton from '@/components/SyncRunsButton'
 import PlannedRacesCard from '@/components/training/PlannedRacesCard'
 import VolumeChart from '@/components/training/VolumeChart'
 import NowStrip from '@/components/training/NowStrip'
@@ -108,15 +109,14 @@ function SectionHeading({ id, icon: Icon, title, hint }) {
   )
 }
 
-// Fixed windows behind the header meta line, the stat row and the Now strip's
-// Load chart. Called by both the page (header) and OverviewTab; React Query
+// Fixed windows behind the header meta line, the stat row. Called by both the page (header) and OverviewTab; React Query
 // dedupes on identical keys, so it's one request each.
 function useVolumeStats() {
   // Fixed trailing-365-day window for the "Last 12 mo" stat tile — computed
   // once at mount so the tile matches the Volume header total when 1y is selected.
   const trailing365Range = useMemo(() => ({ date_from: isoDaysAgo(365), date_to: isoToday() }), [])
   const trailing365 = useTrainingSummary('monthly', trailing365Range) // fixed 365-day window for 12-mo tile
-  // Last 12 ISO weeks for the Now strip's Load card — independent of any range picker.
+  // Last 12 ISO weeks (feeds stats.thisWeek) — independent of any range picker.
   const recentWeeksRange = useMemo(() => ({ date_from: isoDaysAgo(7 * 12 + 6), date_to: isoToday() }), [])
   const recentWeekly = useTrainingSummary('weekly', recentWeeksRange)
 
@@ -151,8 +151,7 @@ function OverviewTab() {
   const records = useTrainingRecords()
   const fitness = useTrainingFitness()
 
-  // "Now" strip (R8.4.5). The Load card's chart is the last 12 ISO weeks of
-  // the weekly summary — fixed at mount, independent of the range picker.
+  // "Now" strip (R8.4.5): server-computed trends + race readiness.
   const trends = useTrainingTrends()
   const readiness = useRaceReadiness()
 
@@ -192,26 +191,6 @@ function OverviewTab() {
     return { xTicks: ticks, xTickFormatter: (lab) => map[lab] ?? lab }
   }, [period, chartData])
 
-  // Last 12 ISO weeks, oldest first. The summary omits empty weeks; they're
-  // filled with 0 km here (presentation only — no number is derived).
-  const recentWeeks = useMemo(() => {
-    const byKey = Object.fromEntries((recentWeekly.data || []).map((b) => [b.period, b]))
-    const out = []
-    for (let i = 11; i >= 0; i--) {
-      const d = new Date()
-      d.setDate(d.getDate() - 7 * i)
-      const key = currentWeekKey(d)
-      const b = byKey[key]
-      out.push({
-        period: key,
-        fullLabel: labelWeek(key).fullLabel,
-        total_km: b?.total_km ?? 0,
-        rolling_4wk_km: b?.rolling_4wk_km ?? null,
-      })
-    }
-    return out
-  }, [recentWeekly.data])
-
   const summaryLoading = trailing365.isLoading || recentWeekly.isLoading
   const summaryError = trailing365.isError ? trailing365 : recentWeekly.isError ? recentWeekly : null
 
@@ -219,7 +198,7 @@ function OverviewTab() {
     <div className="space-y-5 md:space-y-8">
       <section className="space-y-4">
         <SectionHeading id="now" icon={Compass} title="Now" />
-        <NowStrip trends={trends} readiness={readiness} weeks={recentWeeks} />
+        <NowStrip trends={trends} readiness={readiness} />
       </section>
 
       <section className="space-y-4">
@@ -461,8 +440,10 @@ export default function Training() {
     <div className="space-y-5 md:space-y-8">
       <PageHeader
         title="Training"
-        meta={trailing365.data && recentWeekly.data ? [`${stats.thisWeek.toFixed(1)} km this week`, `${Math.round(stats.total12).toLocaleString()} km · last 12 mo`] : undefined}
-      />
+        meta={trailing365.data && recentWeekly.data ? [`${stats.thisWeek.toFixed(1)} km this week`] : undefined}
+      >
+        <SyncRunsButton />
+      </PageHeader>
 
       {/* Segmented tab bar — same idiom as the Weekly/Monthly switch, sized up. */}
       <div role="tablist" aria-label="Training sections" className="flex rounded-lg border border-border p-0.5 sm:inline-flex">

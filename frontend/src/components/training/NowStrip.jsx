@@ -1,339 +1,186 @@
-import {
-  ArrowRight,
-  Check,
-  Flag,
-  Info,
-  Minus,
-  RefreshCw,
-  TrendingDown,
-  TrendingUp,
-  X,
-} from 'lucide-react'
-import {
-  Area,
-  Bar,
-  Cell,
-  ComposedChart,
-  Line,
-  ResponsiveContainer,
-  Tooltip,
-  XAxis,
-  YAxis,
-} from 'recharts'
-import {
-  SIGNAL, axisProps, useFillId, SignalFill, endpointDot, activeDot, lineCursor,
-  ChartTooltip, ChartLegend,
-} from '@/components/charts/signal'
-import { useMediaQuery } from '@/hooks/useMediaQuery'
+import { Check, Info, Minus, RefreshCw, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { formatDate, formatDuration } from '@/lib/utils'
 
 /**
- * The Training page's "Now" strip (R8.4.5): three answer cards — Load, Form,
- * Next race — each a verdict line in words, one line of numbers, one small
- * chart. Every number and verdict is computed server-side (training_trends,
- * race_advisor); this file only formats. Stacked on mobile (answers first at
- * 380 px), a 3-column row on desktop — 2 columns when no race is planned, so
- * the readiness card's absence leaves no hole.
+ * The Training page's "Now" section (R8.4.5): up to three plain-question
+ * groups — "Building or holding?" (load), "Is form improving?" (form) and
+ * "Ready for {race}?" (readiness) — each a row of stat tiles (muted label,
+ * one big value, one short sub-line). No charts, no rule text. Every number
+ * and verdict is computed server-side (training_trends, race_advisor); this
+ * file only formats. Tiles are 2-up on phones and 4-up from lg.
  */
-
-const PRIMARY = SIGNAL
-const MUTED = 'var(--muted-foreground)'
-
-const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
-
-// Phone chart height (px); sm+ keeps 88. Footers are never hidden (B20).
-const chartHeight = (isSm) => (isSm ? 88 : 64)
 
 const km = (v) => (v == null ? '—' : `${Number(v).toFixed(1)} km`)
 const pace = (s) => (s == null ? '—' : `${formatDuration(s)}/km`)
 
 // ── shared shell ─────────────────────────────────────────────────
 
-function NowCard({ eyebrow, children, footer }) {
+const GRID = 'grid grid-cols-2 gap-3 lg:grid-cols-4'
+
+function Group({ title, children }) {
   return (
-    <div className="panel flex min-w-0 flex-col rounded-2xl border border-border bg-card p-4">
-      {/* Template .panel-head: the card names itself, then a hairline. */}
-      <div className="border-b border-border pb-2.5 text-sm font-semibold text-foreground">{eyebrow}</div>
-      <div className="mt-3 flex flex-1 flex-col">{children}</div>
-      {footer && <p className="mt-2 text-2xs leading-snug text-faint sm:mt-3">{footer}</p>}
+    <div className="space-y-2.5">
+      <h3 className="text-sm font-semibold text-foreground">{title}</h3>
+      <div className={GRID}>{children}</div>
     </div>
   )
 }
 
-// The verdict: icon + words. Colour is a second cue, never the only one.
-function Verdict({ icon: Icon, tone = 'text-foreground', children }) {
+// `tone` colours the value; the word itself always carries the meaning.
+function Tile({ label, value, unit, sub, tone = 'text-foreground', compact = false }) {
   return (
-    <div className="flex items-start gap-2">
-      <Icon className={`mt-[3px] h-4 w-4 shrink-0 ${tone}`} aria-hidden="true" />
-      <p className="text-md-plus font-semibold leading-snug text-foreground">{children}</p>
+    <div className="panel min-w-0 rounded-2xl border border-border bg-card p-4">
+      <div className="line-clamp-2 text-xs text-muted-foreground" title={typeof label === 'string' ? label : undefined}>{label}</div>
+      <div className={`mt-1.5 font-heading ${compact ? 'text-lg sm:text-xl' : 'text-2xl sm:text-3xl'} font-bold leading-none tabular-nums ${tone}`}>
+        {value}
+        {unit && <small className="ml-1 text-xs font-medium tracking-normal text-muted-foreground">{unit}</small>}
+      </div>
+      {sub && <div className="mt-1.5 text-xs text-muted-foreground">{sub}</div>}
     </div>
   )
 }
 
-function Numbers({ children }) {
-  return <p className="mt-1 text-xs leading-relaxed text-muted-foreground tabular-nums">{children}</p>
-}
-
-function CardSkeleton() {
+function TileSkeletons({ title }) {
   return (
-    <div className="panel space-y-3 rounded-2xl border border-border bg-card p-4">
-      <Skeleton className="h-3 w-16" />
-      <Skeleton className="h-5 w-4/5" />
-      <Skeleton className="h-3 w-3/5" />
-      <Skeleton className="h-16 w-full sm:h-[88px] rounded-[10px]" />
+    <div className="space-y-2.5">
+      <Skeleton className="h-4 w-40" aria-label={title} />
+      <div className={GRID}>
+        {[0, 1, 2, 3].map((i) => (
+          <div key={i} className="panel space-y-2.5 rounded-2xl border border-border bg-card p-4">
+            <Skeleton className="h-3 w-16" />
+            <Skeleton className="h-7 w-20" />
+            <Skeleton className="h-3 w-24" />
+          </div>
+        ))}
+      </div>
     </div>
   )
 }
 
-function CardError({ eyebrow, error, onRetry }) {
+function GroupError({ title, error, onRetry }) {
   return (
-    <NowCard eyebrow={eyebrow}>
-      <p className="text-sm text-destructive">Couldn't load this answer.</p>
-      <p className="mt-1 text-xs text-muted-foreground">{error?.message || 'Unable to load data.'}</p>
-      {onRetry && (
-        <div className="mt-3">
-          <Button variant="outline" size="sm" onClick={onRetry}>
-            <RefreshCw className="h-4 w-4" /> Try again
-          </Button>
-        </div>
-      )}
-    </NowCard>
-  )
-}
-
-// ── Load: "am I building or holding?" ───────────────────────────
-
-const LOAD_VERDICT = {
-  building: { icon: TrendingUp, tone: 'text-primary', word: 'Building' },
-  holding: { icon: ArrowRight, tone: 'text-muted-foreground', word: 'Holding' },
-  easing: { icon: TrendingDown, tone: 'text-muted-foreground', word: 'Easing' },
-  taper: { icon: Flag, tone: 'text-primary', word: 'Taper' },
-}
-
-function LoadChart({ weeks }) {
-  const isSm = useMediaQuery('(min-width: 640px)')
-  const last = weeks.length - 1
-  return (
-    <ResponsiveContainer width="100%" height={chartHeight(isSm)}>
-      <ComposedChart data={weeks} margin={{ top: 4, right: 0, left: 0, bottom: 0 }} barCategoryGap={2}>
-        <XAxis dataKey="period" hide />
-        <YAxis hide domain={[0, 'dataMax']} />
-        <Tooltip
-          cursor={{ fill: 'var(--chart-grid)', fillOpacity: 0.6 }}
-          content={
-            <ChartTooltip
-              render={(d) => (
-                <>
-                  <div className="font-semibold text-foreground">{d.fullLabel}</div>
-                  <div className="text-muted-foreground">{km(d.total_km)}</div>
-                  {d.rolling_4wk_km != null && (
-                    <div className="text-faint">4-wk avg {km(d.rolling_4wk_km)}</div>
-                  )}
-                </>
-              )}
-            />
-          }
-        />
-        {/* Template .track: thin ticks, history dim, the current week lit. */}
-        <Bar dataKey="total_km" radius={[2, 2, 0, 0]} maxBarSize={14} isAnimationActive={false}>
-          {weeks.map((w, i) => (
-            <Cell
-              key={w.period}
-              fill={PRIMARY}
-              fillOpacity={i === last ? 1 : 0.32}
-              className={i === last ? 'chart-dot' : undefined}
-            />
-          ))}
-        </Bar>
-        <Line
-          type="monotone"
-          dataKey="rolling_4wk_km"
-          stroke={MUTED}
-          strokeWidth={1.5}
-          strokeDasharray="4 3"
-          dot={false}
-          activeDot={false}
-          connectNulls={false}
-          isAnimationActive={false}
-        />
-      </ComposedChart>
-    </ResponsiveContainer>
-  )
-}
-
-function LoadCard({ load, weeks }) {
-  const v = LOAD_VERDICT[load.verdict]
-  const vs = `${km(load.last7_km)} in the last 7 days vs ${km(load.prior_avg_week_km)} avg week`
-  let verdict
-  if (load.verdict === 'no_baseline') {
-    verdict = <Verdict icon={Minus}>Not enough recent running to compare</Verdict>
-  } else if (load.verdict === 'taper' && load.taper_race) {
-    const d = load.taper_race.days_to_race
-    verdict = (
-      <Verdict icon={v.icon} tone={v.tone}>
-        Taper — {load.taper_race.name} {d === 0 ? 'today' : `in ${d} day${d === 1 ? '' : 's'}`}
-      </Verdict>
-    )
-  } else {
-    verdict = <Verdict icon={v?.icon ?? Minus} tone={v?.tone}>{v?.word ?? load.verdict} — {vs}</Verdict>
-  }
-
-  const runs = `${load.last7_runs} run${load.last7_runs === 1 ? '' : 's'}`
-  const numbers =
-    load.verdict === 'no_baseline'
-      ? `No runs in the 4 weeks before the last 7 days · last 7 days ${km(load.last7_km)}, ${runs}`
-      : `${load.verdict === 'taper' ? `${vs} · ` : ''}${load.ratio?.toFixed(2)}× · ${runs} · longest ${km(load.last7_longest_km)} (prior 4 wks ${km(load.prior_longest_km)})`
-
-  const hasWeeks = weeks.some((w) => w.total_km > 0)
-  return (
-    <NowCard
-      eyebrow="Load"
-      footer={`Heuristic: last 7 days vs the average week of the 28 days before — building above ${load.building_above}×, easing below ${load.easing_below}×, taper when easing within 3 weeks of a planned race.`}
-    >
-      {verdict}
-      <Numbers>{numbers}</Numbers>
-      <div className="mt-3">
-        {hasWeeks ? (
-          <>
-            <LoadChart weeks={weeks} />
-            <ChartLegend
-              className="mt-2"
-              items={[
-                { kind: 'bar', label: 'Weekly km, 12 wks' },
-                { kind: 'dashed', color: MUTED, label: '4-week average' },
-              ]}
-            />
-          </>
-        ) : (
-          <p className="py-6 text-center text-xs text-faint">No runs in the last 12 weeks</p>
+    <div className="space-y-2.5">
+      <h3 className="text-sm font-semibold text-foreground">{title}</h3>
+      <div className="rounded-2xl border border-border bg-card p-4">
+        <p className="text-sm text-destructive">Couldn't load this answer.</p>
+        <p className="mt-1 text-xs text-muted-foreground">{error?.message || 'Unable to load data.'}</p>
+        {onRetry && (
+          <div className="mt-3">
+            <Button variant="outline" size="sm" onClick={onRetry}>
+              <RefreshCw className="h-4 w-4" /> Try again
+            </Button>
+          </div>
         )}
       </div>
-    </NowCard>
+    </div>
   )
 }
 
-// ── Form: "what's my form now?" ─────────────────────────────────
+// ── Load: "Building or holding?" ────────────────────────────────
+
+const LOAD_VERDICT = {
+  building: { tone: 'text-primary', word: 'Building' },
+  holding: { tone: 'text-muted-foreground', word: 'Holding' },
+  easing: { tone: 'text-muted-foreground', word: 'Easing' },
+  taper: { tone: 'text-primary', word: 'Taper' },
+}
+
+function LoadGroup({ load }) {
+  const v = LOAD_VERDICT[load.verdict]
+  let verdictValue = v?.word ?? load.verdict
+  let verdictSub = 'Last 7 days vs avg week of the 28 before'
+  if (load.verdict === 'no_baseline') {
+    verdictValue = '—'
+    verdictSub = 'Not enough recent running'
+  } else if (load.verdict === 'taper' && load.taper_race) {
+    const d = load.taper_race.days_to_race
+    verdictSub = `${load.taper_race.name} ${d === 0 ? 'today' : `in ${d} day${d === 1 ? '' : 's'}`}`
+  }
+  return (
+    <Group title="Building or holding?">
+      <Tile label="Load verdict" value={verdictValue} tone={v?.tone} sub={verdictSub} />
+      <Tile
+        label="Last 7 days"
+        value={km(load.last7_km)}
+        sub={`${load.last7_runs} run${load.last7_runs === 1 ? '' : 's'}`}
+      />
+      <Tile
+        label="Prior avg week"
+        value={km(load.prior_avg_week_km)}
+        sub={`Ratio ${load.ratio != null ? load.ratio.toFixed(2) : '—'}`}
+      />
+      <Tile
+        label="Longest run, last 7 days"
+        value={km(load.last7_longest_km)}
+        sub={`Prior 28 days: ${km(load.prior_longest_km)}`}
+      />
+    </Group>
+  )
+}
+
+// ── Form: "Is form improving?" ──────────────────────────────────
 
 const FORM_VERDICT = {
-  improving: { icon: TrendingUp, tone: 'text-primary' },
-  steady: { icon: ArrowRight, tone: 'text-muted-foreground' },
-  slipping: { icon: TrendingDown, tone: 'text-warning' },
+  improving: { tone: 'text-primary', word: 'Improving' },
+  steady: { tone: 'text-muted-foreground', word: 'Steady' },
+  slipping: { tone: 'text-warning', word: 'Slipping' },
 }
 
-function formVerdictText(form) {
-  const pct = form.change_pct != null ? Math.abs(form.change_pct).toFixed(1) : null
-  switch (form.verdict) {
-    case 'improving':
-      return `Improving — ${pct}% more metres per heartbeat`
-    case 'slipping':
-      return `Slipping — ${pct}% fewer metres per heartbeat`
-    case 'steady':
-      return `Steady — efficiency within ±${form.improving_above_pct}%`
-    default:
-      return 'Not enough steady runs with heart rate to compare'
-  }
-}
+const perBeat = (v) => (v == null ? '—' : Number(v).toFixed(3))
+const runsText = (n) => `${n} steady run${n === 1 ? '' : 's'}`
 
-function FormChart({ months }) {
-  const isSm = useMediaQuery('(min-width: 640px)')
-  const fillId = useFillId('form')
-  const data = months.map((m) => {
-    const [y, mm] = m.month.split('-')
-    const mon = MONTHS[parseInt(mm, 10) - 1]
-    return { ...m, label: mon, fullLabel: `${mon} ${y}` }
-  })
-  // The endpoint marks the latest month that has a value (gaps are allowed).
-  const lastPlotted = data.reduce((acc, d, i) => (d.m_per_beat != null ? i : acc), -1)
-  return (
-    <ResponsiveContainer width="100%" height={chartHeight(isSm)}>
-      <ComposedChart data={data} margin={{ top: 6, right: 6, left: 6, bottom: 0 }}>
-        <defs>
-          <SignalFill id={fillId} />
-        </defs>
-        <XAxis dataKey="label" {...axisProps} interval="preserveStartEnd" />
-        <YAxis hide domain={['dataMin - 0.02', 'dataMax + 0.02']} />
-        <Tooltip
-          cursor={lineCursor}
-          content={
-            <ChartTooltip
-              render={(d) => (
-                <>
-                  <div className="font-sans font-semibold text-foreground">{d.fullLabel}</div>
-                  <div>
-                    {d.m_per_beat != null ? `${d.m_per_beat.toFixed(3)} m/beat` : 'Too few steady runs'}
-                  </div>
-                  <div className="text-faint">{d.steady_runs} steady run{d.steady_runs === 1 ? '' : 's'}</div>
-                </>
-              )}
-            />
-          }
-        />
-        <Area
-          type="monotone"
-          dataKey="m_per_beat"
-          stroke={PRIMARY}
-          strokeWidth={2}
-          fill={`url(#${fillId})`}
-          dot={endpointDot(lastPlotted)}
-          activeDot={activeDot}
-          connectNulls={false}
-          isAnimationActive={false}
-        />
-      </ComposedChart>
-    </ResponsiveContainer>
-  )
-}
-
-function FormCard({ form }) {
+function FormGroup({ form }) {
   const v = FORM_VERDICT[form.verdict]
   const enough = form.verdict !== 'not_enough_data'
   const weeksRecent = Math.round(form.recent_days / 7)
   const weeksBase = Math.round(form.baseline_days / 7)
-  const numbers = enough
-    ? `${form.recent_m_per_beat?.toFixed(3)} m/beat, last ${weeksRecent} wks (${form.recent_steady_runs} runs) vs ${form.baseline_m_per_beat?.toFixed(3)}, ${weeksBase} wks before (${form.baseline_steady_runs})`
-    : `Needs ${form.min_steady_runs} steady runs in the last ${weeksRecent} weeks and ${form.min_steady_runs} in the ${weeksBase} before — have ${form.recent_steady_runs} and ${form.baseline_steady_runs}`
-
-  // 90-day best vs all-time, one compact line per distance that has a recent effort.
-  const efforts = (form.best_efforts || []).filter((b) => b.recent)
-  const hasMonths = form.months?.some((m) => m.m_per_beat != null)
+  const pct = form.change_pct
+  const effort = (form.best_efforts || []).find((b) => b.recent)
 
   return (
-    <NowCard
-      eyebrow="Form"
-      footer={`Heuristic: speed per heartbeat on steady runs (≥ 5 km, heart rate, untagged/Easy/Long Run) — ±${form.improving_above_pct}% over the last ${weeksRecent} weeks vs the ${weeksBase} before. Gaps: months with fewer than ${form.min_month_runs} steady runs.`}
-    >
-      <Verdict icon={v?.icon ?? Minus} tone={v?.tone}>{formVerdictText(form)}</Verdict>
-      <Numbers>{numbers}</Numbers>
-      {efforts.length > 0 && (
-        <Numbers>
-          {efforts.map((b, i) => (
-            <span key={b.label}>
-              {i > 0 && ' · '}
-              Best {b.label}, 90 days: {formatDuration(b.recent.time_s)}
-              {b.pct_off_all_time != null && b.pct_off_all_time > 0
-                ? `, ${b.pct_off_all_time.toFixed(1)}% off all-time ${formatDuration(b.all_time?.time_s)}`
-                : ', all-time best'}
-            </span>
-          ))}
-        </Numbers>
+    <Group title="Is form improving?">
+      <Tile
+        label="Form verdict"
+        value={enough ? (v?.word ?? form.verdict) : '—'}
+        tone={enough ? v?.tone : undefined}
+        sub={enough ? 'Speed per heartbeat, steady runs' : `Needs ${form.min_steady_runs} steady runs`}
+      />
+      <Tile
+        label={`Last ${weeksRecent} wks`}
+        value={perBeat(form.recent_m_per_beat)}
+        unit={form.recent_m_per_beat != null ? 'm/beat' : undefined}
+        sub={runsText(form.recent_steady_runs)}
+      />
+      <Tile
+        label={`${weeksBase} wks before`}
+        value={perBeat(form.baseline_m_per_beat)}
+        unit={form.baseline_m_per_beat != null ? 'm/beat' : undefined}
+        sub={
+          enough && pct != null
+            ? `${pct > 0 ? '+' : pct < 0 ? '−' : '±'}${Math.abs(pct).toFixed(1)}% change`
+            : runsText(form.baseline_steady_runs)
+        }
+      />
+      {effort ? (
+        <Tile
+          label={`Best ${effort.label}, 90 days`}
+          value={formatDuration(effort.recent.time_s)}
+          sub={
+            effort.pct_off_all_time != null && effort.pct_off_all_time > 0
+              ? `${effort.pct_off_all_time.toFixed(1)}% off ${formatDuration(effort.all_time?.time_s)}`
+              : 'All-time best'
+          }
+        />
+      ) : (
+        <Tile label="Best effort, 90 days" value="—" sub="No recent efforts" />
       )}
-      <div className="mt-3">
-        {hasMonths ? (
-          <>
-            <FormChart months={form.months} />
-            <ChartLegend className="mt-2" items={[{ kind: 'line', label: 'Metres per heartbeat, by month' }]} />
-          </>
-        ) : (
-          <p className="py-6 text-center text-xs text-faint">No month has enough steady runs to plot yet</p>
-        )}
-      </div>
-    </NowCard>
+    </Group>
   )
 }
 
-// ── Next race: "am I ready?" — a checklist with numbers, never a score ──
+// ── Readiness: "Ready for {race}?" — a checklist with numbers, never a score ──
 
 const STATUS = {
   met: { icon: Check, tone: 'text-primary', word: 'Met' },
@@ -359,47 +206,46 @@ function itemValue(item) {
   return value == null ? '—' : `${value} ${unit}`
 }
 
-function ReadinessCard({ rd }) {
+function ReadinessGroup({ rd }) {
   const race = rd.race
   const d = race.days_to_race
-  const when = d === 0 ? 'today' : d < 14 ? `in ${d} day${d === 1 ? '' : 's'}` : `in ${race.weeks_to_race} weeks`
-  const facts = [
-    race.distance_km != null ? km(race.distance_km) : null,
-    formatDate(race.race_date),
-    race.target_time_s ? `target ${formatDuration(race.target_time_s)} (${race.target_pace})` : 'no target time',
-  ].filter(Boolean)
-  // weeks_to_go is already the verdict line, so the list starts at the block rows.
+  const when = d === 0 ? 'Race day' : d < 14 ? `${d} day${d === 1 ? '' : 's'}` : `${race.weeks_to_race} wks`
+  const raceSub = [formatDate(race.race_date), race.distance_km != null ? km(race.distance_km) : null]
+    .filter(Boolean)
+    .join(' · ')
+  const block = rd.block_started
+    ? ` · block ${km(rd.block_km)}, ${rd.block_runs} run${rd.block_runs === 1 ? '' : 's'}`
+    : ''
+  // weeks_to_go is already the Race tile, so the checklist starts at the block rows.
   const rows = rd.checklist.filter((c) => c.key !== 'weeks_to_go')
 
   return (
-    <NowCard
-      eyebrow="Next race"
-      footer={`Heuristic: rules scale with race distance${rd.block_weeks ? ` over a ${rd.block_weeks}-week block` : ''}. A checklist, not a score.`}
-    >
-      <Verdict icon={Flag} tone="text-primary">{race.name} {when}</Verdict>
-      <Numbers>
-        {facts.join(' · ')}
-        {rd.block_started && ` · block ${km(rd.block_km)}, ${rd.block_runs} run${rd.block_runs === 1 ? '' : 's'}`}
-      </Numbers>
-      <ul className="mt-3 divide-y divide-divider">
-        {rows.map((item) => {
-          const s = STATUS[item.status] ?? STATUS.info
-          const Icon = s.icon
-          return (
-            <li key={item.key} className="flex items-start gap-2 py-1.5">
-              <Icon className={`mt-0.5 h-3.5 w-3.5 shrink-0 ${s.tone}`} aria-label={s.word} />
-              <div className="min-w-0 flex-1">
-                <div className="flex flex-wrap items-baseline justify-between gap-x-2">
-                  <span className="text-xs font-medium text-foreground">{item.label}</span>
-                  <span className="text-xs text-muted-foreground tabular-nums">{itemValue(item)}</span>
-                </div>
-                {item.rule && <p className="text-2xs leading-snug text-faint">{item.rule}</p>}
-              </div>
-            </li>
-          )
-        })}
-      </ul>
-    </NowCard>
+    <Group title={`Ready for ${race.name}?`}>
+      <Tile label="Race" value={when} sub={`${raceSub}${block}`} />
+      <Tile
+        label="Target"
+        value={race.target_time_s ? formatDuration(race.target_time_s) : '—'}
+        sub={race.target_time_s ? race.target_pace : 'No target time'}
+      />
+      {rows.map((item) => {
+        const s = STATUS[item.status] ?? STATUS.info
+        const Icon = s.icon
+        return (
+          <Tile
+            key={item.key}
+            label={item.label}
+            compact
+            value={itemValue(item)}
+            sub={
+              <span className="inline-flex items-center gap-1">
+                <Icon className={`h-3 w-3 shrink-0 ${s.tone}`} aria-hidden="true" />
+                <span>{s.word}</span>
+              </span>
+            }
+          />
+        )
+      })}
+    </Group>
   )
 }
 
@@ -407,42 +253,36 @@ function ReadinessCard({ rd }) {
 
 /**
  * `trends` / `readiness` are React Query results (useTrainingTrends,
- * useRaceReadiness); `weeks` is the last 12 ISO weeks of the weekly summary,
- * zero-filled and chronological (built by the page — presentation only).
+ * useRaceReadiness).
  */
-export default function NowStrip({ trends, readiness, weeks }) {
-  // Hide the readiness slot only once we know there's no race; while loading,
-  // keep three columns so the row doesn't reflow from 2 → 3.
-  // Branch on data presence, not isLoading: a paused/pending query (v5) has
-  // isLoading false and no data yet.
-  const showReadiness = !readiness.data || readiness.data.has_race
-  const cols = showReadiness ? 'lg:grid-cols-3' : 'lg:grid-cols-2'
-
+export default function NowStrip({ trends, readiness }) {
+  // Hide the readiness group only once we know there's no race; while loading
+  // show a skeleton so it doesn't pop in. Branch on data presence, not
+  // isLoading: a paused/pending query (v5) has isLoading false and no data yet.
   return (
-    <div className={`grid grid-cols-1 gap-4 ${cols}`}>
-      {trends.data ? null : trends.isError ? (
+    <div className="space-y-5">
+      {trends.data ? (
         <>
-          <CardError eyebrow="Load" error={trends.error} onRetry={trends.refetch} />
-          <CardError eyebrow="Form" error={trends.error} />
+          <LoadGroup load={trends.data.load} />
+          <FormGroup form={trends.data.form} />
+        </>
+      ) : trends.isError ? (
+        <>
+          <GroupError title="Building or holding?" error={trends.error} onRetry={trends.refetch} />
+          <GroupError title="Is form improving?" error={trends.error} />
         </>
       ) : (
         <>
-          <CardSkeleton />
-          <CardSkeleton />
-        </>
-      )}
-      {trends.data && (
-        <>
-          <LoadCard load={trends.data.load} weeks={weeks} />
-          <FormCard form={trends.data.form} />
+          <TileSkeletons title="Building or holding?" />
+          <TileSkeletons title="Is form improving?" />
         </>
       )}
       {readiness.data ? (
-        readiness.data.has_race ? <ReadinessCard rd={readiness.data} /> : null
+        readiness.data.has_race ? <ReadinessGroup rd={readiness.data} /> : null
       ) : readiness.isError ? (
-        <CardError eyebrow="Next race" error={readiness.error} onRetry={readiness.refetch} />
+        <GroupError title="Ready for your next race?" error={readiness.error} onRetry={readiness.refetch} />
       ) : (
-        <CardSkeleton />
+        <TileSkeletons title="Ready for your next race?" />
       )}
     </div>
   )
