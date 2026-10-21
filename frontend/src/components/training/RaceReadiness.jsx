@@ -41,6 +41,8 @@ function itemValue(item, weeksElapsed) {
   const { key, value, target, unit } = item
   // Consistency (R11.3): weeks with a run out of the weeks the block has run so far.
   if (key === 'weeks_with_running') return `${value ?? '—'} / ${weeksElapsed ?? '—'}`
+  // Long-run finishes (R11.6): faster second halves out of the runs that have splits.
+  if (key === 'fast_finish') return value == null ? '—' : `${value} of ${item.evidence?.length ?? 0}`
   if (unit === '% of peak') return value == null ? '—' : `${value}%`
   if (unit === 'days') return value == null ? '—' : `${value} d`
   if (unit === 'breaks') return value == null ? '—' : String(value)
@@ -68,9 +70,10 @@ function ageText(days) {
   return `${days} days ago`
 }
 
-function ReadinessDetail({ item }) {
+function ReadinessDetail({ item, finishes = [] }) {
   const hasPeriod = Boolean(item.period_from && item.period_to)
   const evidence = item.evidence ?? []
+  const showFinishes = item.key === 'fast_finish' && finishes.length > 0
   return (
     <div id={READINESS_PANEL_ID} className="panel col-span-full min-w-0 rounded-2xl border border-border bg-card p-4">
       <h4 className="text-sm font-semibold text-foreground">{item.label}</h4>
@@ -83,7 +86,11 @@ function ReadinessDetail({ item }) {
       {item.key === 'key_effort' && item.age_days != null && (
         <p className="mt-1 text-xs text-muted-foreground">{ageText(item.age_days)}</p>
       )}
-      {evidence.length === 0 ? (
+      {showFinishes ? (
+        <div className="mt-3">
+          <LongRunFinishTable finishes={finishes} />
+        </div>
+      ) : evidence.length === 0 ? (
         <p className="mt-3 text-xs text-muted-foreground">No runs behind this number yet.</p>
       ) : (
         <ul className="mt-3 divide-y divide-border">
@@ -116,6 +123,7 @@ function ReadinessDetail({ item }) {
 
 const MINUS = '−'
 const oneDp = (v) => (v == null ? '—' : Number(v).toFixed(1))
+const signedSec = (s) => (s == null ? '—' : `${s < 0 ? MINUS : s > 0 ? '+' : '±'}${formatDuration(Math.abs(s))}`)
 
 // R11.3 cells. Consistency is the whole block; taper is the last weeks up to the
 // cut date. Weeks are listed oldest first, with the unit "%" only on the last one.
@@ -339,6 +347,61 @@ function EvidenceTable({ sources }) {
   )
 }
 
+// R11.6 long-run finishes, oldest first. Moving pace per half; a negative diff is
+// a faster second half. Descriptive only, so no colour judgements.
+function LongRunFinishTable({ finishes }) {
+  const th = 'px-2 py-1.5 text-right font-semibold'
+  const td = 'whitespace-nowrap px-2 py-2 text-right tabular-nums'
+  const showTarget = finishes.some((f) => f.second_half_vs_target_s_per_km != null)
+  const numCols = showTarget ? 5 : 4
+  return (
+    <div className="min-w-0 space-y-2">
+      <div className="panel min-w-0 overflow-x-auto rounded-2xl border border-border bg-card">
+        <table className={cn('w-full text-xs', showTarget ? 'min-w-[40rem]' : 'min-w-[34rem]')}>
+          <thead className="text-2xs uppercase tracking-wide text-faint">
+            <tr className="border-b border-border">
+              <th className="px-2 py-1.5 text-left font-semibold">Run</th>
+              <th className={th}>1st half</th>
+              <th className={th}>2nd half</th>
+              <th className={th}>Δ</th>
+              <th className={th}>Last km vs avg</th>
+              {showTarget && <th className={th}>2nd half vs target</th>}
+            </tr>
+          </thead>
+          <tbody>
+            {finishes.map((f, i) => (
+              <tr key={f.activity_id ?? i} className="border-b border-border/60 last:border-0">
+                <td className="px-2 py-2 text-left">
+                  {f.activity_id ? (
+                    <Link to={`/activities/${f.activity_id}`} className="focus-ring font-semibold text-foreground hover:underline">
+                      {f.name || 'Run'}
+                    </Link>
+                  ) : (
+                    <span className="font-semibold text-foreground">{f.name || 'Run'}</span>
+                  )}
+                  <div className="text-xs text-muted-foreground">{`${formatDate(f.run_date)} · ${km(f.distance_km)}`}</div>
+                </td>
+                {f.has_splits ? (
+                  <>
+                    <td className={td}>{pace(f.first_half_pace_s_per_km)}</td>
+                    <td className={td}>{pace(f.second_half_pace_s_per_km)}</td>
+                    <td className={td}>{f.split_diff_s_per_km == null ? '—' : `${signedSec(f.split_diff_s_per_km)}/km`}</td>
+                    <td className={td}>{signedSec(f.last_km_vs_avg_s_per_km)}</td>
+                    {showTarget && <td className={td}>{signedSec(f.second_half_vs_target_s_per_km)}</td>}
+                  </>
+                ) : (
+                  <td className={cn(td, 'text-left text-muted-foreground')} colSpan={numCols}>Not scanned yet</td>
+                )}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <p className="text-xs text-muted-foreground">Moving pace per half. − is faster.</p>
+    </div>
+  )
+}
+
 function BacktestTable({ est }) {
   const rows = est.backtest ?? []
   const skipped = est.backtest_skipped ?? []
@@ -527,7 +590,7 @@ function ReadinessGroup({ rd }) {
             </button>
           )
         })}
-        {openItem && <ReadinessDetail item={openItem} />}
+        {openItem && <ReadinessDetail item={openItem} finishes={rd.long_run_finishes} />}
       </Group>
       <FinishEstimate est={rd.estimate} />
       <PastBuilds rd={rd} />
