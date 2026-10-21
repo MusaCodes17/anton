@@ -631,6 +631,24 @@ def get_race_block_context(weeks_back: int = 12, as_of: Optional[str] = None) ->
       taper). They are descriptive: describe the taper numbers beside the past
       builds' numbers, never against a target percentage, and never call a gap
       or a taper week good or bad.
+      `readiness.estimate` (R11.7) is the finish-time range for the next race
+      (null when there is no race). `estimate.state` is `ok` only when a range
+      exists: `low_s`–`high_s` around `estimate_s` (seconds), `band_pct` (the
+      largest error this same method made on the runner's own past halves and
+      marathons, a fraction), `grade` (strong | moderate | thin) with
+      `grade_reasons` in words, `sources` (the efforts behind it, `sets_estimate`
+      marks the one that sets the number, `segment` true = a stretch inside a
+      longer run), and `backtest` (each past race: predicted vs actual, error)
+      with `backtest_skipped` (races left out and why). `target_position` says
+      whether the target time is faster than, inside, or slower than the range.
+      Present it as a RANGE with its own historical error and grade, never as a
+      single predicted time, and never as a promise. When `state` is not `ok`
+      (unsupported_distance, insufficient_evidence, insufficient_history) there
+      is no range: say what `message` says is missing; with insufficient_history
+      `estimate_s` is a bare point estimate — mention it only as that, with the
+      missing history. `coros_prediction_s` is COROS's own figure, a separate
+      source that is not part of the range and has no backtest: label it as
+      COROS's and never blend it in.
 
     This is read-only — no writes, no confirmation gate needed.
     Call this before running the race_block_advisor prompt, or for "am I ready
@@ -826,6 +844,15 @@ Average: [avg_weekly_km] km/week
   [For s/km values show them as M:SS/km.]
 [Then one sentence naming the not_met items — no score, no verdict word.]
 [Name any no_data items separately, as missing evidence — not as shortfalls.]
+
+### Finish estimate
+[If readiness.estimate:]
+[If estimate.state is "ok": give the range low_s–high_s (H:MM:SS) around estimate_s, the
+ historical error (band_pct as a percent, from backtest_n past races), the grade and its
+ grade_reasons, and where the target sits (target_position). It is a range, never a single
+ predicted time.]
+[Else: say what estimate.message says is missing; no range.]
+[If coros_prediction_s: add "COROS's own prediction: [time]" as a separate source.]
 
 ### Rotation
 [If pipeline is non-empty:]

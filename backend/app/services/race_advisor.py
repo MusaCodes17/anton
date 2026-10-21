@@ -24,6 +24,7 @@ from sqlalchemy.orm import Session
 
 from app.models.models import OwnedShoe, PlannedRace
 from app.services import activities as activities_svc
+from app.services import finish_estimate as finish_estimate_svc
 from app.services import fitness as fitness_svc
 from app.services import races as races_svc
 from app.services import rotation as rotation_svc
@@ -439,6 +440,7 @@ class RaceReadiness:
     past_builds: list = field(default_factory=list)     # list[PastBuild], newest race first
     consistency: Optional[Consistency] = None           # set when the block has started (R11.3)
     taper: Optional[Taper] = None                       # only within training_trends.TAPER_DAYS of the race
+    estimate: Optional[finish_estimate_svc.FinishEstimate] = None   # finish-time range + grade + backtest (R11.7)
     heuristic: bool = True
 
 
@@ -506,6 +508,12 @@ def race_readiness(db: Session, *, as_of: Optional[date] = None) -> RaceReadines
     - race_shoe (R11.5) — the shoe picked on the race: projected race-day km
       vs its own mileage_limit (met/not_met), info without a limit, n/a with
       no shoe picked; evidence is the block's runs in that shoe.
+
+    R11.7 attaches `estimate` (finish_estimate.finish_estimate): a finish-time
+    range from the fastest 10k/half Riegel equivalent in the effort window, its
+    error measured live against past races, and a grade of the evidence — or,
+    when it can't be given, a state naming what is missing. Always set when
+    there is a race.
 
     Status honesty (R11.1): `not_met` only when evidence exists and falls
     short; a started block with no runs (or no key effort in the window) is
@@ -609,6 +617,11 @@ def race_readiness(db: Session, *, as_of: Optional[date] = None) -> RaceReadines
         db, race, as_of=as_of, days_to_race=days, started=started,
         block_start=block_start, block_end=block_end)
     out.checklist = _checklist(out, cls, block_runs, shoe_runs)
+    # R11.7 — whole-table cost: one personal_bests pass per past race (labelled in
+    # finish_estimate), filtered in Python — fine at personal scale.
+    out.estimate = finish_estimate_svc.finish_estimate(
+        db, race_distance_km=race.distance_km, target_time_s=race.target_time_s,
+        as_of=as_of, evidence_to=block_end)
 
     if started:
         out.consistency = _consistency([r.date for r in block_runs], block_start, block_end)

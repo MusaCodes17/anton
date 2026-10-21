@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
-import { Check, CircleDashed, Info, Minus, X } from 'lucide-react'
+import { ArrowLeft, ArrowRight, Check, ChevronDown, CircleDashed, Info, Minus, X } from 'lucide-react'
 import { cn, formatDate, formatDuration } from '@/lib/utils'
 import { Group, GroupError, Tile, TileSkeletons } from '@/components/training/StatTiles'
 
@@ -233,6 +233,242 @@ function PastBuilds({ rd }) {
   )
 }
 
+// R11.7 finish estimate. Everything is computed server-side (finish_estimate);
+// this only formats. The range is the headline, never the point.
+const pct1 = (f) => (f == null ? '—' : `${(Number(f) * 100).toFixed(1)}%`)
+const signedPct = (f) => (f == null ? '—' : `${f < 0 ? MINUS : '+'}${(Math.abs(Number(f)) * 100).toFixed(1)}%`)
+
+// Grade chips: thin is a statement about the evidence, not a failure, so no red.
+const GRADE_TONE = {
+  strong: 'border-primary/40 text-primary',
+  moderate: 'border-border text-muted-foreground',
+  thin: 'border-warning/40 text-warning',
+}
+
+function RangeBar({ est }) {
+  const { low_s: lo, high_s: hi, estimate_s: mid, target_time_s: target, target_position: pos } = est
+  const span = hi - lo
+  const midPct = span > 0 ? Math.min(100, Math.max(0, ((mid - lo) / span) * 100)) : 50
+  const tgtPct = span > 0 && target != null ? Math.min(100, Math.max(0, ((target - lo) / span) * 100)) : 50
+  const showTarget = target != null && pos != null
+  return (
+    <div className="relative h-8" role="img" aria-label={`Range ${formatDuration(lo)} to ${formatDuration(hi)}`}>
+      {/* 1.5rem gutters hold the pinned "outside" markers so the bar always fits. */}
+      <div className="absolute inset-x-6 top-1/2 h-2 -translate-y-1/2 rounded-full bg-primary/25" />
+      <div className="absolute inset-x-6 top-0 h-full">
+        <div className="absolute top-1/2 h-4 w-0.5 -translate-x-1/2 -translate-y-1/2 bg-primary" style={{ left: `${midPct}%` }} />
+        {showTarget && pos === 'inside' && (
+          <div
+            className="absolute top-0 h-full w-0.5 -translate-x-1/2 bg-foreground"
+            style={{ left: `${tgtPct}%` }}
+            title={`Target ${formatDuration(target)}`}
+          />
+        )}
+      </div>
+      {showTarget && pos === 'faster' && (
+        <ArrowLeft className="absolute left-0 top-1/2 h-4 w-4 -translate-y-1/2 text-foreground" aria-hidden="true" />
+      )}
+      {showTarget && pos === 'slower' && (
+        <ArrowRight className="absolute right-0 top-1/2 h-4 w-4 -translate-y-1/2 text-foreground" aria-hidden="true" />
+      )}
+    </div>
+  )
+}
+
+function Disclosure({ id, title, children }) {
+  const [open, setOpen] = useState(false)
+  return (
+    <div className="min-w-0">
+      <button
+        type="button"
+        onClick={() => setOpen(!open)}
+        aria-expanded={open}
+        aria-controls={id}
+        className="focus-ring flex items-center gap-1 rounded text-xs font-semibold text-foreground"
+      >
+        <ChevronDown className={cn('h-3.5 w-3.5 transition-transform', !open && '-rotate-90')} aria-hidden="true" />
+        {title}
+      </button>
+      {open && (
+        <div id={id} className="mt-2">
+          {children}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function EvidenceTable({ sources }) {
+  const th = 'px-2 py-1.5 text-right font-semibold'
+  const td = 'whitespace-nowrap px-2 py-2 text-right tabular-nums'
+  return (
+    <div className="panel min-w-0 overflow-x-auto rounded-2xl border border-border bg-card">
+      <table className="w-full min-w-[34rem] text-xs">
+        <thead className="text-2xs uppercase tracking-wide text-faint">
+          <tr className="border-b border-border">
+            <th className="px-2 py-1.5 text-left font-semibold">Source</th>
+            <th className={th}>Time</th>
+            <th className={th}>Date</th>
+            <th className={th}>Equivalent</th>
+          </tr>
+        </thead>
+        <tbody>
+          {sources.map((src, i) => (
+            <tr
+              key={`${src.kind}-${src.band}-${src.activity_id ?? i}`}
+              className={cn('border-b border-border/60 last:border-0', src.sets_estimate && 'bg-primary/10')}
+            >
+              <td className="px-2 py-2 text-left">
+                <span className="font-semibold text-foreground">{src.band}</span>
+                <span className="ml-1 text-muted-foreground">
+                  {`${km(src.distance_km)} · ${src.kind === 'race_pb' ? 'race' : src.segment ? 'segment of a longer run' : 'whole run'}`}
+                </span>
+                {src.sets_estimate && <span className="ml-1 font-semibold text-primary">sets the estimate</span>}
+              </td>
+              <td className={td}>{formatDuration(src.time_s)}</td>
+              <td className={td}>
+                {formatDate(src.run_date)}
+                <span className="ml-1 text-muted-foreground">{`${src.age_days} d ago`}</span>
+              </td>
+              <td className={td}>{formatDuration(src.equivalent_s)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  )
+}
+
+function BacktestTable({ est }) {
+  const rows = est.backtest ?? []
+  const skipped = est.backtest_skipped ?? []
+  const th = 'px-2 py-1.5 text-right font-semibold'
+  const td = 'whitespace-nowrap px-2 py-2 text-right tabular-nums'
+  return (
+    <div className="min-w-0 space-y-2">
+      <div className="panel min-w-0 overflow-x-auto rounded-2xl border border-border bg-card">
+        <table className="w-full min-w-[32rem] text-xs">
+          <thead className="text-2xs uppercase tracking-wide text-faint">
+            <tr className="border-b border-border">
+              <th className="px-2 py-1.5 text-left font-semibold">Race</th>
+              <th className={th}>Actual</th>
+              <th className={th}>Predicted</th>
+              <th className={th}>Error</th>
+              <th className={th}>Grade</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((r, i) => (
+              <tr key={`${r.name}-${r.race_date}-${i}`} className="border-b border-border/60 last:border-0">
+                <td className="px-2 py-2 text-left">
+                  <span className="font-semibold text-foreground">{r.name}</span>
+                  <div className="text-xs text-muted-foreground">{formatDate(r.race_date)}</div>
+                </td>
+                <td className={td}>{formatDuration(r.actual_s)}</td>
+                {r.predicted_s == null ? (
+                  <td className={cn(td, 'text-muted-foreground')} colSpan={3}>no evidence</td>
+                ) : (
+                  <>
+                    <td className={td}>{formatDuration(r.predicted_s)}</td>
+                    <td className={td}>{signedPct(r.error_pct)}</td>
+                    <td className={cn(td, 'text-muted-foreground')}>{r.grade ?? '—'}</td>
+                  </>
+                )}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      {rows.length > 0 && (
+        <p className="text-xs text-muted-foreground">Error = predicted − actual; + means predicted slower.</p>
+      )}
+      {skipped.map((k, i) => (
+        <p key={i} className="text-xs text-muted-foreground">{`${k.name} (${formatDate(k.race_date)}) — ${k.reason}`}</p>
+      ))}
+    </div>
+  )
+}
+
+const TARGET_SENTENCE = {
+  inside: 'inside',
+  faster: 'faster than',
+  slower: 'slower than',
+}
+
+function FinishEstimate({ est }) {
+  if (!est) return null
+  const ok = est.state === 'ok'
+  const sources = est.sources ?? []
+  const hasBacktest = (est.backtest?.length ?? 0) + (est.backtest_skipped?.length ?? 0) > 0
+  const showEvidence = (ok || est.state === 'insufficient_history') && sources.length > 0
+  const showBacktest = est.state !== 'unsupported_distance' && hasBacktest
+  const thin = est.grade === 'thin'
+
+  return (
+    <div className="min-w-0 space-y-3">
+      <h3 className="flex items-baseline gap-2 text-sm font-semibold text-foreground">
+        Finish estimate
+        <span className="text-2xs font-normal uppercase tracking-wide text-faint">heuristic</span>
+      </h3>
+      <div className="panel min-w-0 space-y-3 rounded-2xl border border-border bg-card p-4">
+        {ok ? (
+          <>
+            <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+              <p className="text-2xl font-bold tabular-nums text-foreground">
+                {`${formatDuration(est.low_s)} – ${formatDuration(est.high_s)}`}
+              </p>
+              {est.grade && (
+                <span className={cn('rounded-full border px-2 py-0.5 text-2xs font-semibold uppercase tracking-wide', GRADE_TONE[est.grade] ?? GRADE_TONE.moderate)}>
+                  {est.grade}
+                </span>
+              )}
+            </div>
+            <p className="text-xs text-muted-foreground">{`Middle: ${formatDuration(est.estimate_s)}`}</p>
+            <RangeBar est={est} />
+            {est.target_time_s != null && est.target_position && (
+              <p className="text-xs text-foreground">
+                {`Your target ${formatDuration(est.target_time_s)} is ${TARGET_SENTENCE[est.target_position] ?? 'compared with'} this range.`}
+              </p>
+            )}
+            <p className="text-xs text-muted-foreground">
+              {`Width = the largest miss this method made on your last ${est.backtest_n} races (${pct1(est.band_pct)})${thin ? ', ×1.5 because the evidence is thin' : ''}. Average miss ${pct1(est.backtest_mean_abs_pct)}.`}
+            </p>
+            {(est.grade_reasons?.length ?? 0) > 0 && (
+              <ul className="list-disc space-y-0.5 pl-4 text-xs text-muted-foreground">
+                {est.grade_reasons.map((r, i) => (
+                  <li key={i}>{r}</li>
+                ))}
+              </ul>
+            )}
+          </>
+        ) : (
+          <div className="rounded-xl border border-dashed border-border p-3 text-xs text-muted-foreground">
+            <p>{est.message ?? 'No finish estimate available.'}</p>
+            {est.state === 'insufficient_history' && est.estimate_s != null && (
+              <p className="mt-1 text-foreground">{`Bare estimate (no range): ${formatDuration(est.estimate_s)}`}</p>
+            )}
+          </div>
+        )}
+        {showEvidence && (
+          <Disclosure id="finish-evidence" title="Evidence">
+            <EvidenceTable sources={sources} />
+          </Disclosure>
+        )}
+        {showBacktest && (
+          <Disclosure id="finish-backtest" title="How it did on past races">
+            <BacktestTable est={est} />
+          </Disclosure>
+        )}
+        {est.coros_prediction_s != null && (
+          <p className="text-xs text-muted-foreground">
+            {`COROS predicts ${formatDuration(est.coros_prediction_s)} (captured ${formatDate(est.coros_captured_at)}). A separate source — not part of this range and not backtested.`}
+          </p>
+        )}
+      </div>
+    </div>
+  )
+}
+
 function ReadinessGroup({ rd }) {
   const race = rd.race
   const [openKey, setOpenKey] = useState(null)
@@ -293,6 +529,7 @@ function ReadinessGroup({ rd }) {
         })}
         {openItem && <ReadinessDetail item={openItem} />}
       </Group>
+      <FinishEstimate est={rd.estimate} />
       <PastBuilds rd={rd} />
     </div>
   )

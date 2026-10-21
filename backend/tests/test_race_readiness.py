@@ -299,6 +299,7 @@ def test_endpoint_and_mcp_tool_agree(db, monkeypatch):
     mcp = mcp_server.get_race_block_context(as_of=AS_OF.isoformat())["readiness"]
     assert rest == mcp
     assert rest["has_race"] is True and rest["heuristic"] is True
+    assert rest["estimate"] is not None and rest["estimate"] == mcp["estimate"]   # R11.7 rides the payload
     assert [i["key"] for i in rest["checklist"]] == [
         "weeks_to_go", "peak_week", "longest_run", "long_runs", "key_effort", "race_shoe",
         "weeks_with_running", "gaps", "taper_volume", "since_long_run"]   # R11.3 appends the info items

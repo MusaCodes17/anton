@@ -284,6 +284,26 @@ Intervals and Track **count** (the runner's call). A stretch is continuous runni
 
 ---
 
+### B27. Finish-time range + evidence grade: a labelled range with its own measured error, not a score (R11.7, 2026-10-20)
+**Chosen:** a finish-time estimate for the next half or marathon, built by `race_readiness`-style reads and labelled `heuristic`. It is built after the spike (`git show fa14554:docs/spike_r11_7_finish_estimate.md`; the file is deleted, its findings are here) recommended not building one. The runner read that recommendation on 2026-10-20 and chose to build the range anyway.
+- **Method "a-fast":** the fastest Riegel equivalent, `T2 = T1 × (D2/D1)^1.06`, taken across the 10k and half sources (race results and best-effort segments) from the last 8 weeks (`RECENT_EFFORT_WEEKS`) ending the day before the race. Runs flagged `exclude_from_analysis` (B26) are skipped.
+- **Range:** estimate × (1 ± band). The band is the largest absolute % error the same method made on the runner's own past scored races (completed halves and marathons whose recorded distance is within 5% of nominal and whose pace is plausible; DNF excluded). It is recomputed live on every read and never stored (INV-7). Fewer than 3 scored past races → "not enough history", and no range is shown. A **thin** grade widens the band ×1.5 (heuristic).
+- **Evidence grade**, with the reasons given in words. Strong: the longest source is at least 45% of race distance, no more than 42 days old, spans at least two bands, and the equivalents agree within 4%. Thin: the equivalents disagree by more than 10%, or the newest 10k+ source is more than 56 days old. Moderate: otherwise. No 10k or half source → "not enough evidence", which names what is missing, and no range.
+- **Distances:** only half and marathon get an estimate. Other races show "unsupported distance".
+- **Not a score:** no single ready/not-ready number. The output is a range with its own historical error shown beside it. The other readiness dimensions (long runs, block, key effort) stay separate checklist items. This extends B20's labelled read-time heuristics.
+- **COROS `race_predictions`** is shown beside the range as a separate, labelled source. It cannot be backtested, because no scored race follows its first snapshot.
+
+**Post-hoc caveats (stated plainly):**
+1. The a-fast rule was chosen after seeing the spike's misses. The "longest source" rule let easy long runs understate fitness by up to 28%, so "fastest equivalent" was added. The rule is untested out of sample. The sample is n = 6, with 2 marathons.
+2. The "thin" line at 10% disagreement was set after seeing the data, not derived in advance.
+
+**Why:** the runner wants an honest answer to "how likely is my target?" and chose a range over waiting for more data. A range whose width is the method's own measured error is the least misleading form available at n = 6. The a-fast choice comes from the spike's mechanism: a best-effort segment inside an easy long run can only understate fitness.
+**Advantages:** the band is computed from the runner's own record, so a wider or narrower error shows up on the page without a code change. The evidence grade says why a range is wide. Nothing is stored, so it can't drift from the history it is built on.
+**Trade-offs:** the range is only as good as n = 6 allows. A ±8–10% band on a marathon is ±16–19 min, which is too wide to answer "is 3:00 realistic" on its own. The thin ×1.5 and the 10% line are judgment calls. The COROS prediction can't be checked against the runner's results.
+**Verdict:** ✅ Keep as a labelled heuristic. 🔁 Revisit when 4 or more marathons are scored, or when effort evidence restricted to Race/Workout-tagged runs has been tested.
+
+---
+
 ## C. AI Layer
 
 ### C1. MCP as the single AI substrate; the assistant is a client of its own server
