@@ -4,7 +4,7 @@ app.services.activities. Powers the Training tab's activities list and any
 future mobile equivalent; no union/aggregation logic lives here.
 """
 from datetime import date
-from typing import List, Optional
+from typing import List, Literal, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
@@ -16,6 +16,7 @@ from app.services import activities as activities_svc
 from app.services import races as races_svc
 from app.services import rotation
 from app.utils.activity_tags import ACTIVITY_TAGS, is_valid_tag
+from app.utils.exclusion_reasons import EXCLUDE_REASONS
 
 router = APIRouter(prefix="/activities", tags=["activities"])
 
@@ -110,14 +111,25 @@ class ActivityDetail(BaseModel):
     apparent_temp_c: Optional[float] = None
     humidity_pct: Optional[float] = None
     wind_speed_m_s: Optional[float] = None
+    exclude_from_analysis: bool = False
+    exclude_reason: Optional[str] = None
+    exclude_note: Optional[str] = None
     shoe: Optional[ActivityShoe] = None
 
 
+# Built from the vocabulary so FastAPI rejects an unknown reason with a 422 (R11.4).
+ExcludeReason = Literal[EXCLUDE_REASONS]
+
+
 class ActivityUpdate(BaseModel):
-    """Partial edit of an activity (R2.7 T6): tag, name, description."""
+    """Partial edit of an activity: tag, name, description (R2.7 T6) and the
+    analysis-exclusion trio (R11.4)."""
     activity_tag: Optional[str] = None
     name: Optional[str] = None
     description: Optional[str] = None
+    exclude_from_analysis: Optional[bool] = None
+    exclude_reason: Optional[ExcludeReason] = None
+    exclude_note: Optional[str] = Field(None, max_length=200)
 
 
 class ReassignShoe(BaseModel):
@@ -135,8 +147,12 @@ def get_activity(activity_id: int, db: Session = Depends(get_db)):
 
 @router.patch("/{activity_id}", response_model=ActivityDetail)
 def patch_activity(activity_id: int, payload: ActivityUpdate, db: Session = Depends(get_db)):
-    """Partial-edit tag / name / description. Only supplied fields change; a tag
-    must be a member of the ACTIVITY_TAGS vocabulary (or null to clear)."""
+    """Partial-edit tag / name / description / analysis exclusion. Only supplied
+    fields change; a tag must be a member of the ACTIVITY_TAGS vocabulary (or null
+    to clear). `exclude_from_analysis=true` needs an `exclude_reason` from
+    EXCLUDE_REASONS (422 if unknown, 400 if missing); `false` clears the reason and
+    note. Exclusion drops the run from derived analytics only -- never from
+    mileage or volume (R11.4, INV-1)."""
     fields = payload.model_dump(exclude_unset=True)
     if "activity_tag" in fields and fields["activity_tag"] is not None and not is_valid_tag(fields["activity_tag"]):
         raise HTTPException(status_code=400, detail=f"Invalid activity_tag. Use one of: {', '.join(ACTIVITY_TAGS)}.")
@@ -144,6 +160,8 @@ def patch_activity(activity_id: int, payload: ActivityUpdate, db: Session = Depe
         activities_svc.update_activity(db, activity_id, **fields)
     except LookupError as e:
         raise HTTPException(status_code=404, detail=str(e))
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
     return activities_svc.get_activity_detail(db, activity_id)
 
 

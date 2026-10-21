@@ -115,14 +115,101 @@ class ReadinessEffortResponse(BaseModel):
     segment: bool = False
 
 
+class ReadinessEvidenceRun(BaseModel):
+    """A run behind a checklist number (R11.1)."""
+    activity_id: Optional[int] = None
+    run_date: str
+    distance_km: float                # a segment's stretch distance when segment is true
+    name: Optional[str] = None
+    segment: bool = False
+
+
 class ReadinessChecklistItem(BaseModel):
-    key: str                          # weeks_to_go | peak_week | longest_run | long_runs | key_effort
+    key: str                          # weeks_to_go | peak_week | longest_run | long_runs | key_effort | race_shoe | (R11.3 info keys)
     label: str
-    status: str                       # met | not_met | info | n/a
+    status: str                       # met | not_met | info | n/a | no_data
     rule: Optional[str] = None
     value: Optional[float] = None
     target: Optional[float] = None
     unit: str
+    period_from: Optional[str] = None
+    period_to: Optional[str] = None
+    evidence: List[ReadinessEvidenceRun] = []
+    age_days: Optional[int] = None
+
+
+class RaceShoeResponse(BaseModel):
+    """The race's planned shoe (R11.5). projected_race_day_km is today's ledger plus
+    the shoe's recent weekly rate over the race-day gap (a heuristic)."""
+    shoe_id: int
+    label: str
+    status: str
+    current_mileage: float
+    mileage_limit: Optional[float] = None
+    weekly_km: float
+    projected_race_day_km: float
+    block_runs: int = 0
+    block_km: float = 0.0
+    longest_km: Optional[float] = None
+    last_run_date: Optional[str] = None
+
+
+class BlockRaceResponse(BaseModel):
+    id: int                           # negative for a Race-tagged run with no plan row
+    name: str
+    race_date: str                    # ISO date
+    distance_km: Optional[float] = None
+    status: str                       # completed | dnf | planned
+    result_time_s: Optional[int] = None
+    result_pace: Optional[str] = None     # "M:SS/km"
+    target_time_s: Optional[int] = None
+    target_pace: Optional[str] = None     # "M:SS/km"
+    activity_id: Optional[int] = None
+    from_activity: bool = False
+
+
+class GapResponse(BaseModel):
+    start: str                        # ISO date, first day off
+    end: str                          # ISO date, last day off
+    days: int
+
+
+class ConsistencyResponse(BaseModel):
+    """Block consistency (R11.3) — descriptive, no pass/fail."""
+    weeks_elapsed: int
+    weeks_with_runs: int
+    median_runs_per_week: float
+    gaps: List[GapResponse] = []
+
+
+class TaperWeekResponse(BaseModel):
+    offset: int                       # -2, -1, 0 (race week)
+    week_start: str                   # ISO Monday
+    km: float
+    pct_of_peak: Optional[int] = None
+    complete: bool
+
+
+class TaperResponse(BaseModel):
+    """The final three weeks against the block's peak (R11.3) — no target percentage."""
+    peak_week_km: Optional[float] = None
+    weeks: List[TaperWeekResponse] = []
+    days_since_long_run: Optional[int] = None
+    days_since_key_effort: Optional[int] = None
+
+
+class PastBuildResponse(BaseModel):
+    """A past race's build cut at the same days-before-race as today (R11.2)."""
+    race: BlockRaceResponse
+    result_vs_target_s: Optional[int] = None   # negative = faster than target; None for a DNF
+    cut_date: str
+    km: float
+    runs: int
+    long_runs: int
+    longest_km: Optional[float] = None
+    peak_week_km: Optional[float] = None
+    consistency: Optional[ConsistencyResponse] = None
+    taper: Optional[TaperResponse] = None
 
 
 class RaceReadinessResponse(BaseModel):
@@ -148,6 +235,11 @@ class RaceReadinessResponse(BaseModel):
     key_effort: Optional[str] = None
     recent_efforts: List[ReadinessEffortResponse] = []
     checklist: List[ReadinessChecklistItem] = []
+    race_shoe: Optional[RaceShoeResponse] = None
+    days_before_race: Optional[int] = None
+    past_builds: List[PastBuildResponse] = []
+    consistency: Optional[ConsistencyResponse] = None
+    taper: Optional[TaperResponse] = None
     heuristic: bool = True
 
 
@@ -159,20 +251,6 @@ class BlockWeekResponse(BaseModel):
     km: float
     runs: int
     longest_km: float                 # 0.0 with no runs
-
-
-class BlockRaceResponse(BaseModel):
-    id: int                           # negative for a Race-tagged run with no plan row
-    name: str
-    race_date: str                    # ISO date
-    distance_km: Optional[float] = None
-    status: str                       # completed | dnf | planned
-    result_time_s: Optional[int] = None
-    result_pace: Optional[str] = None     # "M:SS/km"
-    target_time_s: Optional[int] = None
-    target_pace: Optional[str] = None     # "M:SS/km"
-    activity_id: Optional[int] = None
-    from_activity: bool = False
 
 
 class RaceBlockResponse(BaseModel):

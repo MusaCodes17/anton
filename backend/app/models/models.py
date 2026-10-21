@@ -4,7 +4,7 @@ Database models using SQLAlchemy ORM
 from datetime import datetime
 from sqlalchemy import BigInteger, Column, Index, Integer, String, Float, Boolean, DateTime, Date, ForeignKey, Text, JSON, UniqueConstraint
 from sqlalchemy.orm import relationship
-from sqlalchemy.sql import func
+from sqlalchemy.sql import false, func
 from app.database import Base
 
 
@@ -322,6 +322,14 @@ class Activity(Base):
     # weekly-summary agent (R3.1). Indexed: the PB query filters on it.
     activity_tag = Column(String(30), nullable=True, index=True)
     best_km_pace_s = Column(Integer, nullable=True)  # best consecutive-km pace within the run (s/km); null if <1km
+    # R11.4: removes the run from DERIVED analytics only (readiness, block
+    # comparison, load/form trends, best-effort records) -- never from the
+    # mileage ledger, shoe attribution, or volume totals (INV-1/INV-2).
+    # exclude_reason is from app/utils/exclusion_reasons.py (EXCLUDE_REASONS);
+    # reason + note are cleared whenever the flag is cleared.
+    exclude_from_analysis = Column(Boolean, nullable=False, default=False, server_default=false())
+    exclude_reason = Column(String(30), nullable=True)
+    exclude_note = Column(String(200), nullable=True)
     strava_activity_id = Column(BigInteger, nullable=True, unique=True, index=True)
     coros_activity_id = Column(String(100), nullable=True, index=True)
     gear_name = Column(String(200), nullable=True, index=True)

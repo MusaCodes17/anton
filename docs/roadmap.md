@@ -1,6 +1,6 @@
 # Anton — Product Roadmap
 
-**Generated:** 2026-07-04. **Last updated:** 2026-10-20 (**R10.4 built** — the dashboards also live in the app: Race blocks section + threshold-pace line.) Earlier the same day (**R10.2 backend built** — block comparison, B25; dashboard page 2 reads it after deploy.) Earlier the same day (**R10.3 code built**: DNF race status, B24; Beneva marked DNF after deploy.) Earlier the same day (**R10 — Training dashboard on claude.ai** scoped and scheduled at the runner's request: page 1 Load · Form · Records, R10.3 race data fixes, then page 2 race-block retrospective — which reverses R8.4's "not chosen"; see §R10.) Prior update 2026-10-15 (**R9.1–R9.4 and R9.6 built; R9.5 code built, go-live human steps pending** — the link is not shared until they are done; E20.) Prior update 2026-10-15 (**R9 — Public deals page for the run club + sign out everywhere** scoped at the runner's request, grounded in a code read of the auth middleware, sessions, rate limiters, deals schema/page, PWA config and Caddyfile; security tasks ship before the link is shared; see §R9.) Prior update 2026-10-10 (**Heat analysis run on the 215 archive weather rows — no effect; external weather lookup + heat-adjusted efficiency parked; new §Parked & gated list (confirmed by the runner).** Prior update 2026-10-10: **R5.3 built; R5.4.1 location and R5.4.2 free-half weather built; R5.4.4 runbook added; R5.5.1–R5.5.2 built; R5.5.3 dry run built, apply pending the runner's review.** Prior update 2026-10-10: **R5.3–R5.5 scoped** at the runner's request — §R5.3 "Bought it" with string provenance (B1 holds), §R5.4 location + weather + splits gated on R5.5 questions, §R5.5 phase-1 shoe performance / wear curves / archive tags; injury context parked with notes; not scheduled. Prior update 2026-10-09: **R8 — Training page: records, races & dashboards** scoped at the runner's request — R8.1 records rules, R8.2 best efforts inside longer runs, R8.3 past-races cleanup, R8.4 dashboards placeholder; not scheduled, see §R8. Earlier the same day: R7.1–R7.3 all closed the same day — R7.3 as an honest "unscrapable"; **R7 — Polish & coverage** added and **scheduled** by the runner: R7.1 design cleanup → R7.2 chat confirmation card → R7.3 scraper coverage (Sport Experts). See §R7. Prior update 2026-10-08: **R6 — Daily-use improvements** scoped from a project-state review: docs refresh, retirement forecast → deal radar, my-size deal filter, gated new-run push; and **RA3 — push-to-deploy** scoped in the RA milestone. Neither scheduled; see §R6 and §RA3. Prior update 2026-07-09: **RA — Remote Access & Deployment** added as the next milestone, prioritized ahead of R3 and R4, which are **parked**; RA pulls R5.2 forward and executes it. Plan doc: REMOTE_ACCESS_PLAN (retired). Prior update 2026-07-08: R2.7.1 Training Depth follow-ups.)
+**Generated:** 2026-07-04. **Last updated:** 2026-10-20 (**R11 built through R11.5; R11.6 and R11.7 spiked** — evidence + `no_data`, past builds, consistency/taper, exclude-from-analysis, race-shoe readiness shipped on branch `r11-race-readiness`; both spikes await the runner's decision, see §R11.) Earlier the same day (**R11 — Race readiness v2 scoped** at the runner's request: evidence + drill-down, past builds at the same week, consistency/taper, activity exclusion, race shoe, then spike-gated fast-finish and finish-time range; nice-to-haves parked with triggers; see §R11.) Earlier the same day (**R10.4 built** — the dashboards also live in the app: Race blocks section + threshold-pace line.) Earlier the same day (**R10.2 backend built** — block comparison, B25; dashboard page 2 reads it after deploy.) Earlier the same day (**R10.3 code built**: DNF race status, B24; Beneva marked DNF after deploy.) Earlier the same day (**R10 — Training dashboard on claude.ai** scoped and scheduled at the runner's request: page 1 Load · Form · Records, R10.3 race data fixes, then page 2 race-block retrospective — which reverses R8.4's "not chosen"; see §R10.) Prior update 2026-10-15 (**R9.1–R9.4 and R9.6 built; R9.5 code built, go-live human steps pending** — the link is not shared until they are done; E20.) Prior update 2026-10-15 (**R9 — Public deals page for the run club + sign out everywhere** scoped at the runner's request, grounded in a code read of the auth middleware, sessions, rate limiters, deals schema/page, PWA config and Caddyfile; security tasks ship before the link is shared; see §R9.) Prior update 2026-10-10 (**Heat analysis run on the 215 archive weather rows — no effect; external weather lookup + heat-adjusted efficiency parked; new §Parked & gated list (confirmed by the runner).** Prior update 2026-10-10: **R5.3 built; R5.4.1 location and R5.4.2 free-half weather built; R5.4.4 runbook added; R5.5.1–R5.5.2 built; R5.5.3 dry run built, apply pending the runner's review.** Prior update 2026-10-10: **R5.3–R5.5 scoped** at the runner's request — §R5.3 "Bought it" with string provenance (B1 holds), §R5.4 location + weather + splits gated on R5.5 questions, §R5.5 phase-1 shoe performance / wear curves / archive tags; injury context parked with notes; not scheduled. Prior update 2026-10-09: **R8 — Training page: records, races & dashboards** scoped at the runner's request — R8.1 records rules, R8.2 best efforts inside longer runs, R8.3 past-races cleanup, R8.4 dashboards placeholder; not scheduled, see §R8. Earlier the same day: R7.1–R7.3 all closed the same day — R7.3 as an honest "unscrapable"; **R7 — Polish & coverage** added and **scheduled** by the runner: R7.1 design cleanup → R7.2 chat confirmation card → R7.3 scraper coverage (Sport Experts). See §R7. Prior update 2026-10-08: **R6 — Daily-use improvements** scoped from a project-state review: docs refresh, retirement forecast → deal radar, my-size deal filter, gated new-run push; and **RA3 — push-to-deploy** scoped in the RA milestone. Neither scheduled; see §R6 and §RA3. Prior update 2026-07-09: **RA — Remote Access & Deployment** added as the next milestone, prioritized ahead of R3 and R4, which are **parked**; RA pulls R5.2 forward and executes it. Plan doc: REMOTE_ACCESS_PLAN (retired). Prior update 2026-07-08: R2.7.1 Training Depth follow-ups.)
 **Inputs:** REDESIGN_PLAN Phase-5 backlog, standing wishlist items recorded in `docs/changelog.md`, the ⚠️ verdicts in `docs/design_decisions.md`, `docs/architecture.md` §16, and user feature requests 2026-07-07.
 **Framing:** Anton is evolving from a finished redesign into a long-term personal AI platform. This roadmap sequences that evolution.
 
@@ -758,6 +758,111 @@ The host has been public since RA1 and bots already probe it. The link adds *att
 
 ---
 
+## R11 — Race readiness v2: evidence, not a checklist *(scoped 2026-10-20 at the runner's request — R11.1–R11.5 built 2026-10-20, branch `r11-race-readiness`; R11.6 and R11.7 spiked, decisions pending the runner)*
+
+*Fills the open note in the 2026-10-20 changelog ("the runner has further ideas for the Readiness section… no roadmap row"). Source: an external readiness spec, triaged with the runner on 2026-10-20 into build / nice-to-have / decline; the triage outcome is at the end of this section. Grounded in a read of `services/race_advisor.py` (`race_readiness`, `block_window`, `block_comparison`) the same day.*
+
+**Already shipped — don't rebuild:**
+- Readiness checklist (R8.4.4, B20): next race, weeks to go, exact target pace, peak week, longest run, long-run count, recent key effort vs target pace. REST `GET /api/races/readiness`, MCP `get_race_block_context.readiness`, the Readiness section on the Races tab.
+- Block comparison (R10.2/R10.4, B25): blocks aligned on race week (offset 0), Marathon/Half/10k switch, in-progress block dashed (never shown as zero), DNF shown, deep links to each race's run.
+- Load trend with a taper verdict inside 3 weeks of a race (R8.4.2); form trend (R8.4.3); best efforts inside runs (R8.2); COROS fitness snapshots (R8.4.1).
+
+**What v2 adds:** the four questions the spec asks — *how likely is my target, on what evidence, what are the gaps, what can I still do* — answered as separate, sourced dimensions, compared with your own past builds rather than fixed thresholds.
+
+**Rules:**
+- **No single ready/not-ready score.** Dimensions stay separate. The one prediction allowed is a finish-time **range** with its evidence grade (R11.7), only when the evidence supports one and only if its backtest passes. That is Anton's first prediction of its own, so it gets a `design_decisions.md` entry (extends B20).
+- **"No data" is never "not met".** A rule is `not_met` only when there is evidence and it falls short.
+- **Extend `race_advisor`, don't fork it.** Every number is computed there; REST + MCP parity through the existing readiness payload (CLAUDE.md §2/§4).
+- **Your own blocks are the yardstick.** Prefer "vs. your past builds at the same week" to new fixed thresholds. Any new threshold is a module constant with a why-comment, labelled a heuristic.
+- **Storage:** only the R11.4 exclusion fields (R11.5 reuses the existing `planned_shoe_id`; no new column). Backtests and comparisons are computed live, never stored (INV-7).
+- Mobile-first: 380 px pass on the Races tab for every UI task.
+
+| # | Item | Description | Why it matters | Dependencies | Complexity |
+|---|---|---|---|---|---|
+| R11.1 | **Evidence + drill-down on every checklist item** *(✅ built)* | New `no_data` status; each item carries its period and the activities behind its number; tapping an item lists those runs. Detail in §R11.1. | Answers "what evidence, and how current?" (spec Q2). Fixes a real honesty bug: today no recent effort reads `not_met`. | R8.4.4 | Low–Medium |
+| R11.2 | **"At this point in past builds"** *(✅ built)* | Each block number compared with your past blocks of the same class *at the same week offset*, with each past race's result (incl. DNF) beside it. Detail in §R11.2. | The individualized comparison the spec asks for, from data `block_comparison` already computes. | R10.2 | Low |
+| R11.3 | **Consistency + taper items** *(✅ built)* | Weeks with running, runs per week, gaps ≥ 7 days; inside the final 3 weeks, each week as % of block peak and days since the last long run / key effort. Descriptive, no pass/fail. Detail in §R11.3. | Two of the spec's six dimensions, cheap from the block's runs. | R11.2 (taper reads against past builds) | Low |
+| R11.4 | **Exclude an activity from analysis** *(✅ built (B26; migration `f5a6b7c8d9e0`))* | Per-activity flag + reason (GPS error, wrong sport, duplicate, …) that removes a run from derived analytics only — never from mileage. Detail in §R11.4. | The spec's "data the app interpreted incorrectly". Needed before R11.7 so one bad file can't move an estimate. | T6 activity edit | Low–Medium |
+| R11.5 | **Race-shoe readiness** *(✅ built (reuses `planned_shoe_id`))* | Pick the race shoe on a planned race; readiness shows its mileage at race day (R6.2 forecast) and how it's been used in the block. Detail in §R11.5. | The one readiness dimension only Anton can answer — shoes × runs. | R6.2 forecast | Low–Medium |
+| R11.6 | **Fast finish in long runs** *(🟡 spike done — can't show a fast finish; **decision pending** (reopen R5.4.3 or park))* *(spike-gated)* | Did the block's long runs finish faster? Spike whether R8.2 segment offsets answer it; if not, this is the named question that reopens R5.4.3 splits. Detail in §R11.6. | Marathon durability — what shorter-race fitness can't show. | R8.2; possibly R5.4.3 | Medium |
+| R11.7 | **Finish-time range + evidence grade** *(🟡 spike done — recommendation: don't build; **decision pending**)* *(spike-gated)* | Backtest candidate estimators against past races first; build a range with an evidence grade and a "not enough evidence" state only if the backtest error is acceptable to the runner. Detail in §R11.7. | Spec Q1 — "how likely is my target?" — answered honestly, with its own historical error shown. | R11.1–R11.4, R11.6 | Medium–High |
+
+**Order:** R11.1 → R11.2 → R11.3 (all over existing data) → R11.4 (before the estimate) → R11.5 → R11.6 spike → R11.7 spike, then build if it passes. Backend + tests before UI in every task. Commits `r11:`, one per task.
+
+### §R11.1 — Evidence + drill-down
+
+- **New status `no_data`** in `race_advisor.STATUSES`. Today `key_effort` is `not_met` when there is no effort in the window; that becomes `no_data` ("no half effort recorded since …"). `not_met` only when an effort exists and is slower than target pace. Audit every item for the same distinction. The status string is hand-matched: update `RaceReadiness.jsx` and the `race_block_advisor` prompt text with it.
+- **`ChecklistItem` gains `period_from`/`period_to` and `evidence`** — a list of `{activity_id, run_date, distance_km, segment}`:
+  - longest run → that run; long runs → the list; peak week → that week's runs; key effort → its source run (segment flag kept).
+  - The data is already on `RaceReadiness` (`longest_run`, `long_runs`, `recent_efforts`); this puts it on the item it supports.
+- **Age:** the key effort carries `age_days` so the UI can fade older evidence. No recency weighting in this task (that belongs to R11.7, if anywhere).
+- **UI:** tapping an item expands to its runs, each linking to `/activities/:id`.
+- **Tests:** no effort → `no_data`; slower effort → `not_met`; evidence ids match the numbers; no race → section hidden, unchanged.
+
+### §R11.2 — "At this point in past builds"
+
+- In `race_readiness`, for the next race's class, take past **completed or DNF** blocks from `block_comparison` and read each one *up to the same offset* as today (e.g. week −6): cumulative km, long runs so far, longest run so far, peak week so far.
+- **Cumulative-to-offset, not whole-block totals** — a block six weeks in compared with finished blocks would read as failure (the spec's in-progress rule).
+- Output a `past_builds` list: race name, date, status, result time vs target, and the values at the same offset. **No ranking, no "more km = better" wording** — results sit next to the numbers and the runner draws the conclusion.
+- Reuse `_build_block`'s week rows; no new endpoint (added to the readiness payload, so MCP gets it too).
+- **UI:** a compact "At this point in past builds" table under the checklist. Hidden when the class has no past blocks.
+- **Tests:** offset alignment; a past block with no runs at that offset; DNF included; no past blocks → empty list.
+
+### §R11.3 — Consistency + taper
+
+- **Consistency** (info items, block so far): weeks with ≥ 1 run / weeks elapsed; median runs per week; gaps of ≥ 7 days between runs, listed with dates. The gap list is where R11.4's reasons and the parked training notes would explain an interruption.
+- **Taper** (info, only inside the final 3 weeks — reuse the taper window constant from `training_trends.load_trend`, don't redefine it): each of the last 3 weeks' km as % of the block's peak week; days since the last long run; days since the last key-distance effort. Shown next to the same numbers from past builds (R11.2), **no target percentages**.
+- **Tests:** a gap spanning a week boundary; taper hidden at 22 days out, shown at 21; a one-week block.
+
+### §R11.4 — Exclude an activity from analysis
+
+- `activities.exclude_from_analysis` (bool, default false) + `exclude_reason` (controlled list: `gps_error`, `wrong_sport`, `duplicate`, `treadmill_calibration`, `other`, plus optional text). Additive E4 migration.
+- **Respected by derived analytics only:** readiness, block comparison, load/form trends, best efforts and Best-effort records (R8.2 already anticipated "allow excluding an activity from records"). Decide at build whether Race PBs honour it; default: no — a race result is an official record.
+- **Never touches the mileage ledger or volume totals** (INV-1/INV-2). Shoe mileage and weekly km stay as logged; fixing a wrong distance is still an activity edit.
+- Set from the activity detail page through the existing `PATCH /api/activities/{id}` (no MCP write tool, same as other activity edits today). Excluded runs show a small "excluded from analysis: reason" line.
+- **Tests:** an excluded run drops out of each consumer above; shoe mileage and weekly totals unchanged; reason vocabulary validated (422).
+
+### §R11.5 — Race-shoe readiness
+
+- **Built without a new column:** `planned_races.planned_shoe_id` already existed (nullable, race-form picker, nulled by `rotation.delete_owned_shoe`), so it is reused; the planned `race_shoe_id` + migration were dropped. *(Original plan: a new nullable FK → `owned_shoes`.)*
+- **Readiness item `race_shoe`:**
+  - projected mileage on race day from the R6.2 forecast vs the shoe's own `mileage_limit` — `not_met` only if it will pass its limit before race day (the runner's own limit, not a new threshold);
+  - info: runs and km in it during the block, longest run in it, last run in it.
+  - No race shoe set → `n/a` with "pick a race shoe".
+- `get_planned_races` and the readiness payload carry it.
+- **Tests:** forecast crossing the limit before race day; shoe deleted → field nulls; no shoe → `n/a`.
+
+### §R11.6 — Fast finish in long runs *(spike-gated)*
+
+- **Question:** in this block's long runs, did the runner hold or lift pace late — the marathon-durability signal the spec asks for?
+- **Spike (no product code):** `activity_best_efforts` stores the fastest segment per distance per activity with `start_offset_m`. For each long run in the last three marathon blocks: does the best 5k/10k segment sit in the final third, and how does its pace compare with the run's average and with target pace? Judge on real runs whether that reads honestly — it only finds the *fastest* segment, not "the last 10 km".
+- **If it reads honestly:** info item `fast_finish` — long runs with a late fast segment, the segment's pace vs target pace, each with its run.
+- **If not:** stop. This is the named question that reopens R5.4.3 (splits); move R5.4.3 out of Parked & gated and scope it there rather than approximating here.
+
+### §R11.7 — Finish-time range + evidence grade *(spike-gated)*
+
+- **Spike first — backtest.** `race_readiness` already takes `as_of`. For each past completed race (marathons and halves), compute candidate estimators as of the day before and compare with the actual result:
+  - (a) equivalency from the best recent race or effort (Riegel, exponent stated);
+  - (b) recent key-distance effort pace;
+  - (c) a durability adjustment from long-run evidence (R11.6 if it shipped).
+  - COROS `race_predictions` has history only since 2026-10-09, so it can't be backtested; show it as a separate, labelled source.
+  - DNF races are excluded from scoring (`_readiness_race` skips `dnf`; say so in the report). The sample is tiny — report n with every error.
+- **The runner decides on the spike report.** If the error is too large, ship nothing and record that decision; the R11.1–R11.6 dimensions stand on their own.
+- **If built:** an `estimate` on the readiness payload:
+  - `low`/`high` finish time and the target time's position in it;
+  - source rows (method, run, date) behind it;
+  - an evidence grade (`strong` / `moderate` / `thin`) with the reasons in words (e.g. "no half-distance effort in 8 weeks", "2 of 3 long runs"); the range widens as evidence thins;
+  - a "not enough evidence" state naming what's missing — no range shown;
+  - the backtest error beside it, computed live, not stored.
+- **Decision entry** in `design_decisions.md` before the build (first Anton-made prediction; how it differs from a score).
+- **Tests:** thin evidence → no range; a past race's estimate is reproducible from `as_of`; DNF excluded from backtest scoring.
+
+**Triage of the 2026-10-20 spec (for reference).** Built above: everything in the table. Nice-to-haves went to Parked & gated with triggers: % of peak toggle on the block chart, picking individual blocks to compare, a target-time what-if, a race-day rehearsal checklist (fueling / pacing / course), dated training notes (illness, travel), and COROS recovery/HRV in readiness. Declined: a smoothed-trend toggle (about 16 weekly points don't need it), a daily soreness/mood/fatigue log (the niggle-log habit test applies), rolling load ratios (COROS already shows them), a taper-volume or race-day-assumption what-if (a model on top of an estimate — false precision), and an estimate-history view (R11.7's live backtest covers calibration).
+
+**Exit (R11 as a whole):** every readiness item shows its period and source runs, and "no data" never reads as "not met"; the next race's numbers sit beside past builds at the same week; consistency and taper render with no pass/fail thresholds; an excluded run drops out of analytics with mileage unchanged; the race shoe's race-day mileage shows; R11.6 and R11.7 each end in either a shipped item or a recorded decision. Suite + CI green, `vite build` clean, desktop + 380 px pass.
+
+---
+
 ## Parked & gated — one list *(added and confirmed by the runner 2026-10-10)*
 
 *Everything deliberately not built, in one place. Each item names why it's parked and the trigger that would reopen it. Detail stays in the item's own section; this list is the index. When a trigger fires, move the item back into its milestone.*
@@ -771,7 +876,11 @@ The host has been public since RA1 and bots already probe it. The link adds *att
 | R5.5 phase 2 — by-place views + runner-named places | ⏸ gated | Location now exists (R5.4.1); no felt need for place views yet | You'd look at running by place (home loops / travel / race venues); then cluster start points into runner-named places, not reverse geocoding |
 | Son of Anton saves an owned shoe (R5.3 follow-up) | ⏸ not scoped | Claude can draft a purchase but not save it; saving is in the app | You want to add a shoe through chat; needs a new confirm-gated write tool (R7.2 card) |
 | Injury context — niggle log | ⏸ parked 2026-10-10 | "Not needed for now"; value depends on logging within a day (§R5.5 note) | A month of jotting niggles in run descriptions shows the habit holds |
-| COROS recovery / HRV / resting-HR ingestion | ⏸ deferred (R5.7) | No consumer yet | Injury context or a readiness view wants it; zero manual logging needed |
+| COROS recovery / HRV / resting-HR ingestion | ⏸ deferred (R5.7); re-checked 2026-10-20 for R11 | A readiness view now exists (R11), but COROS already shows these trends and nothing in R11 would change a decision with them | A readiness decision you'd make differently with recovery data alongside it; zero manual logging needed |
+| R11 nice-to-haves: % of peak toggle on the block chart; picking individual blocks to compare | 🟡 triaged 2026-10-20 | Useful only when blocks have very different peaks; the class switch covers most comparisons | You find yourself comparing two specific builds and the chart gets in the way |
+| R11 nice-to-have: target-time what-if | 🟡 triaged 2026-10-20 | Cheap (target pace recomputes), but changing the race's target already does it | You want to try targets without editing the race |
+| R11 nice-to-have: race-day rehearsal checklist (fueling, pacing plan, course) | 🟡 triaged 2026-10-20 | Real marathon risk, but no data source; a per-race static list is enough | A race where fueling or pacing went wrong for want of a rehearsal |
+| R11 nice-to-have: dated training notes (illness, travel, weather) | 🟡 triaged 2026-10-20 | R11.3 lists the gaps; R11.4 handles bad data. Illness notes are health data (keep out of MCP default outputs) | Gaps in R11.3 keep needing an explanation you can't see; same habit test as the niggle log |
 | R5.7 deferrals: auto-confirm, Partner-API webhooks, cycling | ⏸ deferred (R5.7) | Auto-confirm would break the confirmation gate (INV-8); webhooks/cycling have no need | Auto-confirm only with an explicit decision; the others on a felt need |
 | R6.4 "new run waiting" push (R3.5 revisit) | ⏸ measured, not built | Step 0: 1 run, 0.1 d lag, 0 waiting | Re-run the Step 0 query after a few weeks of use; build if runs sit for days |
 | R5.1 native mobile client | ⏸ parked 2026-09-04 | The PWA covers it; push was the native win and is gated above | A native-only need (on-device HealthKit / COROS read) |

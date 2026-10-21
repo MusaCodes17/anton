@@ -592,11 +592,45 @@ def get_race_block_context(weeks_back: int = 12, as_of: Optional[str] = None) ->
       peak_week are `info`; longest_run, long_runs (runs ≥ `long_run_km` in the
       block — 28 km for a marathon) and key_effort (the recent best effort at
       ~half race distance vs. target pace, in s/km — lower is faster) are
-      `met` / `not_met`, or `n/a` with the reason in `rule`. Quote the numbers
+      `met` / `not_met`, or `n/a` with the reason in `rule`. `not_met` means
+      there is evidence and it falls short. `no_data` means there is NO
+      evidence yet (a block with no runs, no key effort in the window): say
+      what is missing, never call it a shortfall. Each item except
+      weeks_to_go also has `period_from`/`period_to` (the ISO-date span the
+      number was computed over), `evidence` (the runs behind the number:
+      {activity_id, run_date, distance_km, name, segment} — `segment` true
+      means the number is a stretch inside a longer run) and, for key_effort,
+      `age_days` (days since that effort). Quote the numbers
       and the rule; it is a heuristic checklist, NOT a score — never sum it
-      into one. The block is `block_start`→`block_end` (a fixed number of
+      into one. The `race_shoe` item (R11.5) is the shoe picked for the race:
+      `readiness.race_shoe` ({shoe_id, label, status, current_mileage,
+      mileage_limit, weekly_km, projected_race_day_km, block_runs, block_km,
+      longest_km, last_run_date}) projects its km on race day from today's
+      mileage plus its recent weekly rate (a heuristic; a past `as_of` still
+      uses the current ledger). It is `not_met` only when that projection will
+      pass the runner's own mileage_limit; `met` at or under it; `info` when no
+      limit is set; `n/a` when no shoe is picked. The block is `block_start`→`block_end` (a fixed number of
       weeks ending race week, by race distance); `recent_efforts` carry
       `vs_target_s_per_km` (negative = faster than target pace).
+      `readiness.past_builds` lists the past completed/DNF races of the same
+      class, newest first, each with its block cut the same number of days
+      before its race as today (`readiness.days_before_race`): `km`, `runs`,
+      `long_runs`, `longest_km`, `peak_week_km` so far, beside the race's
+      result and `result_vs_target_s` (negative = faster than target; null for
+      a DNF). Compare them to the current `block_km`, `block_runs`,
+      `long_runs`, `longest_run`, `peak_week`. Present them beside the current
+      numbers; never rank builds or say more km is better.
+      Once the block has started, `readiness.consistency` ({weeks_elapsed,
+      weeks_with_runs, median_runs_per_week, gaps: [{start, end, days}]} — gaps
+      are 7+ consecutive days without a run) and, only inside the final 3 weeks
+      (21 days) of the race, `readiness.taper` ({peak_week_km, weeks: [{offset
+      -2/-1/0, week_start, km, pct_of_peak, complete}], days_since_long_run,
+      days_since_key_effort}) describe the block; each past build carries the
+      same two objects at its own cut. The checklist gains `info` items
+      weeks_with_running and gaps (and taper_volume, since_long_run within the
+      taper). They are descriptive: describe the taper numbers beside the past
+      builds' numbers, never against a target percentage, and never call a gap
+      or a taper week good or bad.
 
     This is read-only — no writes, no confirmation gate needed.
     Call this before running the race_block_advisor prompt, or for "am I ready
@@ -791,6 +825,7 @@ Average: [avg_weekly_km] km/week
 - [label]: [value][" " + unit] [" (target " + target + ")" if target set] — [status] · [rule]
   [For s/km values show them as M:SS/km.]
 [Then one sentence naming the not_met items — no score, no verdict word.]
+[Name any no_data items separately, as missing evidence — not as shortfalls.]
 
 ### Rotation
 [If pipeline is non-empty:]

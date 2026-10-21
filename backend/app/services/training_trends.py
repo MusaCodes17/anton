@@ -139,13 +139,14 @@ def load_trend(db: Session, *, as_of: Optional[date] = None) -> LoadTrend:
 
     `as_of` defaults to today in Toronto. The current day counts, so a morning
     read before today's run is a slight undercount — the window is honest about
-    what has been run so far. Read-only.
+    what has been run so far. R11.4: runs excluded from analysis don't count.
+    Read-only.
     """
     as_of = as_of or toronto_today()
     acute_start = as_of - timedelta(days=ACUTE_DAYS - 1)
     chronic_start = acute_start - timedelta(days=CHRONIC_DAYS)
 
-    runs = activities_svc.unified_activities(db, date_from=chronic_start, date_to=as_of)
+    runs = activities_svc.unified_activities(db, date_from=chronic_start, date_to=as_of, for_analysis=True)
     acute = [r.distance_km or 0.0 for r in runs if r.date >= acute_start]
     chronic = [r.distance_km or 0.0 for r in runs if r.date < acute_start]
 
@@ -366,10 +367,11 @@ def form_trend(db: Session, *, as_of: Optional[date] = None) -> FormTrend:
     - `best_efforts`: 90-day best 5k / 10k vs. all-time (Records card rules).
     - `fitness`: the COROS VO₂ max / threshold / running-level step series.
 
-    Runs without avg HR never count toward efficiency. Read-only.
+    Runs without avg HR never count toward efficiency. R11.4: runs excluded from
+    analysis are skipped throughout. Read-only.
     """
     as_of = as_of or toronto_today()
-    runs = activities_svc.unified_activities(db, date_to=as_of)   # whole history: all-time bests need it
+    runs = activities_svc.unified_activities(db, date_to=as_of, for_analysis=True)   # whole history: all-time bests need it
 
     recent_start = as_of - timedelta(days=FORM_RECENT_DAYS - 1)
     baseline_start = recent_start - timedelta(days=FORM_BASELINE_DAYS)

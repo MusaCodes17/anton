@@ -5,6 +5,60 @@
 
 ---
 
+## R11 — Race readiness v2 built (R11.1–R11.5), R11.6/R11.7 spikes — 2026-10-20
+
+Branch `r11-race-readiness`, cut from `training-ui-tweaks` (PR #94, open, not merged), so R11 is stacked on it. Commits: `a909d8d` docs scope; `391e925` R11.1; `6ac5864` R11.2; `cdf7ee9` R11.3; `14f5ef2` R11.4; `c8902f0` R11.6 spike; `e7f0a10` R11.5; `97bc726` tile row-height fix; `fa14554` R11.7 spike. Not pushed, no PR yet. One additive migration, `f5a6b7c8d9e0`.
+
+**[ADDED]**
+- **R11.1 evidence + `no_data`:** a checklist item with no evidence reads `no_data`, never `not_met`. That fixes the old key-effort bug where "no recent effort" read `not_met`. Every item carries `period_from`/`period_to` and `evidence` (the runs behind its number); the key effort also carries `age_days`. On the Races tab a tile tap opens one detail panel listing the runs, each linking to `/activities/:id`. The MCP docstring and the `race_block_advisor` prompt now name `no_data` as missing evidence.
+- **R11.2 past builds:** `past_builds` on the readiness payload. Each past completed/DNF race of the same class gets its block cut the same number of days before its race (`days_before_race`), with km, runs, long runs, longest run and peak week beside the result and `result_vs_target_s`. Newest first, no ranking. UI table "At this point in past builds". `block_comparison`'s race selection became the shared `_class_entries` helper; its output is unchanged.
+- **R11.3 consistency + taper:** pure helpers `_consistency` (weeks with a run / weeks elapsed, median runs per week, breaks of `GAP_DAYS = 7`+ days including leading and trailing) and `_taper` (only inside `training_trends.TAPER_DAYS` = 21: race week and the two before as % of the block peak, a `complete` flag, days since the last long run, key-effort age). Info items `weeks_with_running`, `gaps`, `taper_volume`, `since_long_run`; each past build carries the same numbers at its cut. No pass/fail, no target %. UI: tiles and table columns.
+- **R11.4 exclude from analysis:** `activities.exclude_from_analysis` (bool NOT NULL default false), `exclude_reason` (controlled list in `app/utils/exclusion_reasons.py`: gps_error, wrong_sport, duplicate, treadmill_calibration, other) and `exclude_note` (up to 200 chars). Set through `PATCH /api/activities/{id}` (422 on a bad reason, 400 on exclude without a reason; un-exclude clears reason and note) and an "Analysis" panel on the activity page. Seam: `unified_activities(..., for_analysis=True)`. Skipped by readiness (block runs; peak and current week are now bucketed from the filtered runs instead of `training_summary`), block comparison, past builds, load trend, form trend and best efforts (`strava_stats.best_efforts_among`, the one place). `tests/test_activity_exclusion.py`. B26.
+- **R11.5 race-shoe readiness:** readiness item `race_shoe` ("Race shoe · {nickname or brand model}") and a `readiness.race_shoe` object. Projected race-day km = current ledger + recent weekly rate (`rotation.recent_weekly_km`, R6.2 window) x days/7, against the shoe's own `mileage_limit`: `not_met` only if it passes the limit (exactly at the limit is met), `info` without a limit, `n/a` with no shoe. Evidence is the block runs in that shoe. A labelled heuristic; for a past `as_of` the ledger is today's.
+- Spike reports (docs only, no shipped item): `docs/spike_r11_6_fast_finish.md` + `backend/scripts/spikes/r11_6_fast_finish.py`; `docs/spike_r11_7_finish_estimate.md` + `backend/scripts/spikes/r11_7_backtest.py`.
+
+**[CHANGED]**
+- **R11.5 reuses `planned_races.planned_shoe_id`; no new column.** The roadmap planned `race_shoe_id`, but `planned_shoe_id` already existed with a race-form picker and is nulled by `rotation.delete_owned_shoe`. Roadmap §R11.5 and the §R11 Storage rule corrected.
+- **R11.4 decision made at build (the roadmap asked):** Race PBs keep excluded runs, because a race result is an official record. The mileage ledger, attribution, weekly volume, training summary and home are untouched (INV-1/INV-2), and tested.
+- Tappable readiness tiles now stretch to the row height (`97bc726`).
+
+**Migration:** `f5a6b7c8d9e0` (down_revision `e4f5a6b7c8d9`), additive. Round-tripped upgrade, downgrade, upgrade on a DB copy: 1020 `activities` rows before and after. The live DB was not touched; it applies on the next boot via `alembic upgrade head`.
+
+**[BLOCKED / for the runner]**
+- **R11.6 spike verdict:** best-effort segments do **not** read honestly as "fast finish". Over 3 marathon blocks and 17 long runs (15 with segments) they can't show a fade or the last km, elapsed and moving clocks mismatch, and tempo pieces sit inside long runs. No splits exist anywhere in the DB. No `fast_finish` item shipped. Per the roadmap this is the named question that reopens R5.4.3 (splits). **Decision pending: reopen R5.4.3 now, or park.**
+- **R11.7 spike verdict (6 scored races: 2 marathons, 4 halves):** Riegel from the longest source has bias +10.1%, mean abs error 11.3%, worst +27.9% (best efforts count easy long-run segments as efforts). Fastest-of-10k/half, chosen after the fact, ~5.3%; key-effort pace 7.0%. About 5% is ~9 min on a 3:00 marathon, against a useful +/-3 min. Recommendation: don't build the range now; a no-range variant (per-source equivalents beside the target) is possible. **Decision pending**; the `design_decisions.md` entry the roadmap requires waits for it.
+- **Data issues to check in prod:** in the local DB copy (taken 2026-10-20 11:16) Beneva Marathon 2026-10-11 is `completed`, linked to activity 1024 (a 14.02 km recording), so past builds read 50:59 (-2:09:01 vs target). R10.3 said to mark Beneva DNF after deploy. Four Race-tagged 17-18 km rows fall in the half class; the 2024-08-20 "random Tuesday" half may not have been a full effort.
+- R11 exit criterion "R11.6 and R11.7 each end in a shipped item or a recorded decision" is **not yet met**.
+
+**Verified:**
+- Suite **966 + 1 skipped -> 1016 passed + 1 skipped** (+50). `vite build` clean. CI not run (no PR yet).
+- Live pass on a DB copy (migration applied to the copy only, test race added to the copy): Races tab at 1024 and 380 px, with readiness tiles, drill-down with run links, the past-builds table with consistency/taper columns, and the race-shoe tile. No page-level horizontal overflow at 380 px (the table scrolls in its container). 0 console errors from R11 code. The tile row-height bug was found here and fixed (`97bc726`).
+- Activity page: excluded state and "Include again" verified through the UI mutation; exclude verified through the same PATCH path (the exclude click itself hit stale element refs in the harness, so it was not completed by click). A 403 on PATCH was the preview env's CSRF origin (`ANTON_HOST_URL` = prod host), not R11 code.
+- Known UX note: on phones the detail panel opens below all tiles, not under the tapped tile.
+
+---
+
+## R11 scoped — Race readiness v2 — 2026-10-20
+
+Docs only (`docs/roadmap.md` §R11 + Parked & gated). No code, no migration.
+
+**[ADDED]** §R11, at the runner's request. It turns the Readiness ideas noted below ("not specified yet, no roadmap row") into seven tasks. An external readiness spec was triaged with the runner into build / nice-to-have / decline, and the outcome is grounded in a read of `services/race_advisor.py`. Much of the spec already exists (R8.4.4 checklist, R10.2/R10.4 block comparison), so R11 extends `race_advisor` instead of adding a parallel feature:
+- R11.1 evidence + drill-down and a `no_data` status;
+- R11.2 past builds at the same week offset;
+- R11.3 consistency + taper;
+- R11.4 exclude an activity from analysis;
+- R11.5 race-shoe readiness;
+- R11.6 fast finish in long runs (spike-gated, may reopen R5.4.3);
+- R11.7 finish-time range + evidence grade (backtest-gated, needs a decision entry).
+
+**[CHANGED]** Parked & gated:
+- Four R11 nice-to-haves added with reopen triggers.
+- The COROS recovery/HRV row was re-checked: it stays deferred even with a readiness view.
+
+**Why:** the runner wants readiness to answer "how likely, on what evidence, what's missing" without bloating Anton. The rule kept throughout is no single score, and no data is never shown as not met.
+
+---
+
 ## Training tab reorder — 2026-10-20
 
 Branch `training-ui-tweaks` (commit `d18964b`). Frontend only; no backend change, no migration.

@@ -275,6 +275,15 @@ Intervals and Track **count** (the runner's call). A stretch is continuous runni
 
 ---
 
+### B26. An activity can be excluded from analysis; the flag touches analytics only (R11.4, 2026-10-20)
+**Chosen:** `activities.exclude_from_analysis` (bool, default false) with a controlled `exclude_reason` (`app/utils/exclusion_reasons.py`) and a short `exclude_note`. Read through one seam, `unified_activities(..., for_analysis=True)`. Excluded runs are skipped by readiness, block comparison, past builds, load trend, form trend and best efforts (`strava_stats.best_efforts_among`, the one place). **Race PBs keep excluded runs.** The mileage ledger, attribution, weekly volume, training summary and home ignore the flag. Set through `PATCH /api/activities/{id}`; excluding needs a reason, un-excluding clears reason and note.
+**Why:** The runner needs a bad file (GPS error, wrong sport, duplicate, treadmill calibration) out of the estimates without lying about what was run. It lands before any finish-time estimate so one bad recording can't move one. A race result is an official record, so the PB list keeps it.
+**Advantages:** Shoe wear and weekly km stay as logged (INV-1/INV-2); one seam and one best-efforts function mean consumers can't disagree.
+**Trade-offs:** Two weekly numbers can differ: volume counts an excluded run, readiness peak week does not. Readiness peak and current week are now bucketed from the filtered runs instead of `training_summary`. A wrong distance is still fixed by an activity edit, not by exclusion.
+**Verdict:** ✅ Keep.
+
+---
+
 ## C. AI Layer
 
 ### C1. MCP as the single AI substrate; the assistant is a client of its own server

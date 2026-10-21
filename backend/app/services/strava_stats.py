@@ -253,6 +253,7 @@ def personal_bests(
             continue  # a DNF is not a race result, even if the run is tagged Race
         if total_s and (r.activity_tag in RACE_RESULT_TAGS or r.activity_id in race_linked):
             races.append((r, total_s, clock))
+    # R11.4 — race_pbs deliberately keeps excluded runs: a race result is an official record.
     return PersonalBestsResult(race_pbs=_band_bests(races), best_efforts=best_efforts_among(db, runs))
 
 
@@ -269,7 +270,11 @@ def best_efforts_among(
     run and a 5.000 km segment compare fairly. `labels` limits the distances
     (EFFORT_DISTANCES order is kept). Reads every effort row and scan row:
     acceptable at personal scale (a few thousand rows).
+
+    R11.4: runs flagged `exclude_from_analysis` are skipped here — the one place
+    that covers the Records card, the readiness key effort and the form trend.
     """
+    runs = [r for r in runs if not r.exclude_from_analysis]
     scanned = {
         aid for (aid,) in db.query(ActivityEffortScan.activity_id).filter(ActivityEffortScan.status == "ok")
     }
