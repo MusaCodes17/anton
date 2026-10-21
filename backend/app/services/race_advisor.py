@@ -10,6 +10,7 @@ numbers (weeks to go, peak week, longest run, long-run count, a recent effort
 vs. target pace), never a score. It lives here, not in a parallel service, so
 the race_block_advisor prompt and the Training page read the same answer
 (REST `GET /api/races/readiness`; MCP `get_race_block_context.readiness`).
+R11.6 adds long-run finishes (second half vs first half, from stored splits).
 """
 from __future__ import annotations
 
@@ -22,7 +23,7 @@ from zoneinfo import ZoneInfo
 from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
-from app.models.models import OwnedShoe, PlannedRace
+from app.models.models import ActivitySplit, OwnedShoe, PlannedRace
 from app.services import activities as activities_svc
 from app.services import finish_estimate as finish_estimate_svc
 from app.services import fitness as fitness_svc
@@ -324,7 +325,7 @@ class EvidenceRun:
 
 @dataclass
 class ChecklistItem:
-    key: str                          # weeks_to_go | peak_week | longest_run | long_runs | key_effort | race_shoe | (R11.3 info keys)
+    key: str                          # weeks_to_go | peak_week | longest_run | long_runs | key_effort | race_shoe | fast_finish | (R11.3 info keys)
     label: str
     status: str                       # one of STATUSES
     rule: Optional[str]               # the stated rule (or why it can't apply)
@@ -335,6 +336,25 @@ class ChecklistItem:
     period_to: Optional[str] = None    # ISO date, inclusive
     evidence: list = field(default_factory=list)   # list[EvidenceRun] behind the number
     age_days: Optional[int] = None     # key_effort only: days from the effort's run to as_of
+
+
+@dataclass
+class LongRunFinish:
+    """One long run's finish, from its stored per-km splits (R11.6). Descriptive,
+    never a verdict. Every pace is on the moving clock; negative differences mean
+    faster. All numbers are None when `has_splits` is False (not scanned yet)."""
+    activity_id: Optional[int]
+    run_date: str                     # ISO date
+    name: Optional[str]
+    distance_km: float
+    has_splits: bool                  # False: fewer than 2 splits, or a half with no distance/time
+    moving_pace_s_per_km: Optional[int]        # the whole run's moving pace
+    first_half_pace_s_per_km: Optional[int]
+    second_half_pace_s_per_km: Optional[int]
+    split_diff_s_per_km: Optional[int]         # second - first; negative = a negative split
+    last_km_pace_s_per_km: Optional[int]       # the last full 1000 m split
+    last_km_vs_avg_s_per_km: Optional[int]     # last km - run moving pace; negative = faster finish
+    second_half_vs_target_s_per_km: Optional[int]  # second half - race target pace; None without a target
 
 
 @dataclass
@@ -439,6 +459,7 @@ class RaceReadiness:
     days_before_race: Optional[int] = None   # race_date − block_end; set when the block has started
     past_builds: list = field(default_factory=list)     # list[PastBuild], newest race first
     consistency: Optional[Consistency] = None           # set when the block has started (R11.3)
+    long_run_finishes: list = field(default_factory=list)  # list[LongRunFinish], oldest first (R11.6)
     taper: Optional[Taper] = None                       # only within training_trends.TAPER_DAYS of the race
     estimate: Optional[finish_estimate_svc.FinishEstimate] = None   # finish-time range + grade + backtest (R11.7)
     heuristic: bool = True
@@ -594,8 +615,11 @@ def race_readiness(db: Session, *, as_of: Optional[date] = None) -> RaceReadines
         if runs:
             out.longest_run = _run(max(runs, key=lambda r: r.distance_km))
         if cls:
-            out.long_runs = [_run(r) for r in sorted(runs, key=lambda r: r.date)
-                             if r.distance_km >= cls.long_run_km]
+            long_rows = [r for r in sorted(runs, key=lambda r: r.date)
+                         if r.distance_km >= cls.long_run_km]
+            out.long_runs = [_run(r) for r in long_rows]
+            out.long_run_finishes = _long_run_finishes(
+                db, long_rows, round(target_s_per_km) if target_s_per_km else None)
 
     # ── recent best efforts vs. target pace ───────────────────────────────────
     effort_from = as_of - timedelta(weeks=RECENT_EFFORT_WEEKS) + timedelta(days=1)
@@ -634,6 +658,8 @@ def race_readiness(db: Session, *, as_of: Optional[date] = None) -> RaceReadines
                 key_effort_age_days=key_item.age_days if key_item else None,
             )
         out.checklist.extend(_descriptive_items(out, block_runs, cls))
+        if cls:
+            out.checklist.append(_fast_finish_item(out, cls))
 
     if started and cls:
         d = (race.race_date - block_end).days   # >= 1: block_end <= race_date − 1
@@ -924,6 +950,86 @@ def _taper(runs: list, race_date: date, block_start: date, block_end: date,
         days_since_long_run=(block_end - last_long).days if last_long else None,
         days_since_key_effort=key_effort_age_days,
     )
+
+
+def _split_pace(splits: list) -> Optional[int]:
+    """Moving pace (s/km) of a group of splits: Σ moving_s / (Σ distance_m / 1000),
+    rounded. None when the group has no distance or no moving time."""
+    dist_m = sum(sp.distance_m for sp in splits)
+    moving_s = sum(sp.moving_s for sp in splits)
+    if dist_m <= 0 or moving_s <= 0:
+        return None
+    return round(moving_s / (dist_m / 1000))
+
+
+def _long_run_finishes(db: Session, runs: list, target_pace_s_per_km: Optional[int]) -> list[LongRunFinish]:
+    """
+    R11.6 — for each long run (`runs`: UnifiedActivity rows, oldest first), did the
+    second half go faster than the first? One query for all runs' splits. Everything
+    is on the moving clock (never mixed with elapsed — the spike found them
+    disagreeing). Halves: k = len(splits) // 2; first = splits[:k], second =
+    splits[k:], so a trailing partial km lands in the second half. The last km is
+    the last split of exactly 1000 m. A run with fewer than 2 splits, or a half
+    with no distance or moving time, gets `has_splits` False and all numbers None.
+    """
+    ids = [r.activity_id for r in runs if r.activity_id is not None]
+    by_activity: dict[int, list] = {}
+    if ids:
+        rows = (db.query(ActivitySplit).filter(ActivitySplit.activity_id.in_(ids))
+                .order_by(ActivitySplit.activity_id, ActivitySplit.split_index).all())
+        for sp in rows:
+            by_activity.setdefault(sp.activity_id, []).append(sp)
+    out: list[LongRunFinish] = []
+    for r in runs:
+        base = dict(activity_id=r.activity_id, run_date=r.date.isoformat(), name=r.name,
+                    distance_km=round(r.distance_km, 1))
+        splits = by_activity.get(r.activity_id, [])
+        k = len(splits) // 2
+        first, second = splits[:k], splits[k:]
+        whole, p1, p2 = _split_pace(splits), _split_pace(first), _split_pace(second)
+        if len(splits) < 2 or whole is None or p1 is None or p2 is None:
+            out.append(LongRunFinish(has_splits=False, moving_pace_s_per_km=None,
+                                     first_half_pace_s_per_km=None, second_half_pace_s_per_km=None,
+                                     split_diff_s_per_km=None, last_km_pace_s_per_km=None,
+                                     last_km_vs_avg_s_per_km=None,
+                                     second_half_vs_target_s_per_km=None, **base))
+            continue
+        full = [sp for sp in splits if sp.distance_m == 1000]
+        last_km = _split_pace(full[-1:]) if full else None
+        out.append(LongRunFinish(
+            has_splits=True, moving_pace_s_per_km=whole,
+            first_half_pace_s_per_km=p1, second_half_pace_s_per_km=p2,
+            split_diff_s_per_km=p2 - p1, last_km_pace_s_per_km=last_km,
+            last_km_vs_avg_s_per_km=last_km - whole if last_km is not None else None,
+            second_half_vs_target_s_per_km=(p2 - target_pace_s_per_km
+                                            if target_pace_s_per_km is not None else None),
+            **base))
+    return out
+
+
+def _fast_finish_item(rd: RaceReadiness, cls: RaceClass) -> ChecklistItem:
+    """R11.6 `fast_finish` info row: how many long runs had a faster second half.
+    Descriptive — no pass/fail. Unscanned runs are missing evidence, not slow ones."""
+    period = dict(period_from=rd.block_start, period_to=rd.block_end)
+    base = dict(key="fast_finish", label="Long-run finishes", target=None, unit="runs", **period)
+    fins = rd.long_run_finishes
+    if not fins:
+        return ChecklistItem(status=STATUS_NO_DATA, value=None,
+                             rule=f"No run of {cls.long_run_km:g} km or more in the block yet", **base)
+    scanned = [f for f in fins if f.has_splits]
+    if not scanned:
+        return ChecklistItem(status=STATUS_NO_DATA, value=None,
+                             rule="No long run in the block has per-km splits yet "
+                                  "(runs are scanned after they sync)", **base)
+    faster = sum(1 for f in scanned if f.split_diff_s_per_km < 0)
+    missing = len(fins) - len(scanned)
+    rule = f"{faster} of {len(scanned)} long runs had a faster second half (moving pace)"
+    if missing:
+        rule += f"; {missing} not scanned yet"
+    return ChecklistItem(
+        status=STATUS_INFO, value=faster, rule=rule,
+        evidence=[EvidenceRun(activity_id=f.activity_id, run_date=f.run_date,
+                              distance_km=f.distance_km, name=f.name) for f in scanned], **base)
 
 
 def _descriptive_items(rd: RaceReadiness, block_runs: list, cls: Optional[RaceClass]) -> list[ChecklistItem]:

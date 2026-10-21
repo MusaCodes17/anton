@@ -631,6 +631,12 @@ def get_race_block_context(weeks_back: int = 12, as_of: Optional[str] = None) ->
       taper). They are descriptive: describe the taper numbers beside the past
       builds' numbers, never against a target percentage, and never call a gap
       or a taper week good or bad.
+      `readiness.long_run_finishes` (R11.6) lists each long run in the block,
+      oldest first, with its second-half vs first-half moving pace
+      (`split_diff_s_per_km`, negative = faster second half), last km vs the
+      run average and second half vs target pace; `has_splits` false means the
+      run hasn't been scanned yet. The `fast_finish` info item counts the faster
+      second halves.
       `readiness.estimate` (R11.7) is the finish-time range for the next race
       (null when there is no race). `estimate.state` is `ok` only when a range
       exists: `low_s`–`high_s` around `estimate_s` (seconds), `band_pct` (the
@@ -844,6 +850,9 @@ Average: [avg_weekly_km] km/week
   [For s/km values show them as M:SS/km.]
 [Then one sentence naming the not_met items — no score, no verdict word.]
 [Name any no_data items separately, as missing evidence — not as shortfalls.]
+- Long-run finishes: for each readiness.long_run_finishes entry with has_splits, state
+  second-half vs first-half pace (and last km vs the run average) as facts. No verdict
+  or score. Runs without splits are "not scanned yet", never "no fast finish".
 
 ### Finish estimate
 [If readiness.estimate:]

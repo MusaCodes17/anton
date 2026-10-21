@@ -273,6 +273,23 @@ class FinishEstimateResponse(BaseModel):
     heuristic: bool = True
 
 
+class LongRunFinishResponse(BaseModel):
+    """One long run's finish from stored splits (R11.6). Moving clock; negative
+    differences mean faster. Numbers are null when has_splits is false."""
+    activity_id: Optional[int] = None
+    run_date: str
+    name: Optional[str] = None
+    distance_km: float
+    has_splits: bool
+    moving_pace_s_per_km: Optional[int] = None
+    first_half_pace_s_per_km: Optional[int] = None
+    second_half_pace_s_per_km: Optional[int] = None
+    split_diff_s_per_km: Optional[int] = None      # second - first; negative = negative split
+    last_km_pace_s_per_km: Optional[int] = None
+    last_km_vs_avg_s_per_km: Optional[int] = None  # last km - run average; negative = faster finish
+    second_half_vs_target_s_per_km: Optional[int] = None
+
+
 class RaceReadinessResponse(BaseModel):
     """"Am I ready for race X?" — a checklist with numbers, not a score (R8.4.4).
     `has_race` False → no race ahead; the readiness card hides."""
@@ -296,6 +313,7 @@ class RaceReadinessResponse(BaseModel):
     key_effort: Optional[str] = None
     recent_efforts: List[ReadinessEffortResponse] = []
     checklist: List[ReadinessChecklistItem] = []
+    long_run_finishes: List[LongRunFinishResponse] = []
     race_shoe: Optional[RaceShoeResponse] = None
     days_before_race: Optional[int] = None
     past_builds: List[PastBuildResponse] = []
