@@ -212,6 +212,67 @@ class PastBuildResponse(BaseModel):
     taper: Optional[TaperResponse] = None
 
 
+class EstimateSourceResponse(BaseModel):
+    kind: str
+    band: str
+    distance_km: float
+    time_s: int
+    run_date: str
+    age_days: int
+    activity_id: Optional[int] = None
+    name: Optional[str] = None
+    segment: bool = False
+    equivalent_s: int
+    sets_estimate: bool = False
+
+
+class BacktestRaceResponse(BaseModel):
+    name: str
+    race_date: str
+    race_class: str
+    actual_s: int
+    predicted_s: Optional[int] = None
+    error_s: Optional[int] = None
+    error_pct: Optional[float] = None
+    grade: Optional[str] = None
+
+
+class BacktestSkipResponse(BaseModel):
+    name: str
+    race_date: str
+    reason: str
+
+
+class FinishEstimateResponse(BaseModel):
+    """Finish-time range + evidence grade + live backtest (R11.7) — mirrors
+    services.finish_estimate.FinishEstimate. A heuristic range, not a prediction."""
+    state: str
+    message: Optional[str] = None
+    race_class: Optional[str] = None
+    race_km: Optional[float] = None
+    riegel_k: float
+    window_from: Optional[str] = None
+    window_to: Optional[str] = None
+    estimate_s: Optional[int] = None
+    low_s: Optional[int] = None
+    high_s: Optional[int] = None
+    band_pct: Optional[float] = None
+    grade: Optional[str] = None
+    grade_reasons: List[str] = []
+    spread_pct: Optional[float] = None
+    target_time_s: Optional[int] = None
+    target_position: Optional[str] = None
+    sources: List[EstimateSourceResponse] = []
+    backtest: List[BacktestRaceResponse] = []
+    backtest_skipped: List[BacktestSkipResponse] = []
+    backtest_n: int = 0
+    backtest_mean_abs_pct: Optional[float] = None
+    backtest_max_abs_pct: Optional[float] = None
+    coros_prediction_s: Optional[int] = None
+    coros_captured_at: Optional[str] = None
+    heuristic: bool = True
+
+
 class RaceReadinessResponse(BaseModel):
     """"Am I ready for race X?" — a checklist with numbers, not a score (R8.4.4).
     `has_race` False → no race ahead; the readiness card hides."""
@@ -240,6 +301,7 @@ class RaceReadinessResponse(BaseModel):
     past_builds: List[PastBuildResponse] = []
     consistency: Optional[ConsistencyResponse] = None
     taper: Optional[TaperResponse] = None
+    estimate: Optional[FinishEstimateResponse] = None
     heuristic: bool = True
 
 
