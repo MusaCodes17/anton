@@ -743,6 +743,10 @@ class ActivityEffortScan(Base):
     aren't repeated: a run shorter than 1 km has a scan but no effort rows.
     status: ok | no_stream | failed. `failed` (download or parse error) is
     retried up to MAX_SCAN_ATTEMPTS times; COROS FIT downloads have a daily cap.
+    `attempts` counts tries for the current `scan_version`: a settled scan resets
+    it to 1, and a failed upgrade of an `ok` row leaves it `ok` and adds a try.
+    `scan_version` records which engine version produced the scan, so a scan that
+    predates newly derived data (per-km splits, R5.4.3) is re-scanned once.
     """
     __tablename__ = "activity_effort_scans"
 
@@ -751,4 +755,35 @@ class ActivityEffortScan(Base):
     source = Column(String(10), nullable=True)                       # fit | gpx when a stream was read
     attempts = Column(Integer, nullable=False, default=1, server_default="1")
     error = Column(String(300), nullable=True)
+    # Which engine version produced the scan: 1 = best efforts (+ start point),
+    # 2 = + per-km splits (R5.4.3). services/best_efforts.SCAN_VERSION is current.
+    scan_version = Column(Integer, nullable=False, default=1, server_default="1")
     scanned_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+
+class ActivitySplit(Base):
+    """
+    One kilometre (or the trailing partial) of one run (R5.4.3, R11.6), from the
+    run's per-second FIT/GPX stream. Derived data: rebuilt by re-scanning the run
+    (services/best_efforts), never hand-edited, and it dies with its activity
+    (ON DELETE CASCADE). The same INV-7 exception as best efforts (B19): the
+    source files are not in the DB, so the result is stored. `moving_s` excludes
+    time below the engine's STOP_SPEED_M_S heuristic. `avg_hr` is the average
+    heart rate weighted by moving time (heart rate drops during stops); the
+    elevation columns are the split's climb and descent, raw sums without
+    smoothing. Each is NULL when the file carried no such data. One row per
+    (activity, km).
+    """
+    __tablename__ = "activity_splits"
+    __table_args__ = (UniqueConstraint("activity_id", "split_index", name="uq_split_activity_index"),)
+
+    id = Column(Integer, primary_key=True)
+    activity_id = Column(Integer, ForeignKey("activities.id", ondelete="CASCADE"), nullable=False, index=True)
+    split_index = Column(Integer, nullable=False)                    # 1-based
+    distance_m = Column(Integer, nullable=False)                     # 1000, or the remainder for the last partial
+    elapsed_s = Column(Integer, nullable=False)                      # wall-clock time in the split
+    moving_s = Column(Integer, nullable=False)                       # time above the stop-speed heuristic
+    source = Column(String(10), nullable=False)                      # fit | gpx
+    avg_hr = Column(Integer, nullable=True)                          # bpm, moving-time weighted
+    elev_gain_m = Column(Float, nullable=True)                       # metres climbed in the split
+    elev_loss_m = Column(Float, nullable=True)                       # metres descended in the split (positive)

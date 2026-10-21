@@ -5,6 +5,42 @@
 
 ---
 
+## R11.6 — Long-run finishes + per-km splits (R5.4.3) — 2026-10-20
+
+Branch `r11-6-splits`. Migration `b9c0d1e2f3a4` (additive, plus a reset of settled scan attempts; reversible). **Decision (runner, 2026-10-20):** the R11.6 spike said best-effort segments can't show a fast finish, so the runner reopened R5.4.3 and chose to store HR and elevation in the same build, so there is one rescan. Recorded as B28 in `design_decisions.md` (extends B19). With this, R11 is complete (R11.1–R11.7).
+
+**[ADDED]**
+- **Engine** `km_splits` in `app/utils/best_efforts.py`: per-km splits from the cleaned stream, with elapsed and moving time (moving = sample intervals at or above `STOP_SPEED_M_S`, 0.5 m/s, a heuristic), a trailing partial km kept if at least 50 m, average HR weighted by moving time, and elevation gain/loss with a 2 m hysteresis (`ELEV_HYSTERESIS_M`). `fit_records` / `gpx_records` read HR and altitude aligned with the stream. The hysteresis was tuned on 40 archive runs against Strava's elevation gain: 2 m gave a median 0.92x, raw sums 1.29x.
+- **`activity_splits` table** (model `ActivitySplit`): one row per run-km, `avg_hr`, `elev_gain_m`, `elev_loss_m` nullable, cascade-deleted with the run. A B19-style INV-7 exception (the source files aren't in the DB).
+- **Scan versioning:** `activity_effort_scans.scan_version`, `SCAN_VERSION = 2`. `ok` scans below it are re-scanned once by the normal path. `attempts` now counts tries for the current version (the migration resets settled rows to 1). A failed upgrade keeps an `ok` row `ok` with its efforts. COROS runs re-download their FIT at the existing ration (5 per tick, newest first).
+- **Readiness** (`services/race_advisor.py`): `long_run_finishes` per long run in the block (first-half vs second-half moving pace, halves by split count with k = n // 2; last full km vs run average; second half vs target pace) and a `fast_finish` info item ("N of M long runs had a faster second half"), `no_data` when no long run has splits. A run not yet scanned says "not scanned yet", never "no fast finish". REST and MCP parity; the `race_block_advisor` prompt describes facts, no verdict.
+- **UI:** a "Long-run finishes" tile on the Races tab opening a table.
+- Tests in `test_best_efforts.py`, `test_best_efforts_service.py` and `test_race_readiness.py`.
+
+**[CHANGED]**
+- `scripts/backfill_best_efforts` now fills splits too. `--rescan` is not needed for the upgrade.
+- R11.6 and R5.4.3 are built in the roadmap; "R5.5 phase 2 — negative splits / HR drift" is split: negative splits are covered by R11.6, and HR drift is unblocked but not built (a read-only view over `activity_splits`).
+- The spike doc `docs/spike_r11_6_fast_finish.md` is deleted; its findings are in B28. Readable at `git show c8902f0:docs/spike_r11_6_fast_finish.md`. The spike script `backend/scripts/spikes/r11_6_fast_finish.py` is untouched.
+
+**Verified:**
+- Suite **1044 → 1088** passed + 1 skipped. `vite build` clean.
+- Migration round-tripped on a DB copy.
+- Archive backfill on a DB copy: 694 runs scanned, 0 failed, **8,347 splits** (97% with HR, 98% with elevation), about 11 min. Split moving times sum to Strava's moving time within about 1% on the marathon long runs (8,722 vs 8,842 s on one).
+- On real data the splits show what the spike said was invisible: Toronto Marathon 2025-10-19 second half +0:21/km, last km +0:43 vs average; 2026-05-10 progression -0:43/km.
+- Browser on a DB copy: desktop + 380 px pass, 0 console errors; the table scrolls inside its panel.
+
+**Deploy:**
+1. Deploy `main` once merged. The migration applies on boot (`alembic upgrade head`).
+2. Run the archive backfill on the server against the export, as in the R8.2 entry: `docker compose exec anton python -m app.scripts.backfill_best_efforts --export-dir <path>` (about 11 min). No `--rescan`.
+3. COROS runs fill themselves: each re-downloads its FIT through the normal poll ticks (5 per tick, newest first).
+
+**[BLOCKED / for the runner]**
+- **Not verified:** COROS upgrade rescans in production (rationed, takes several ticks). The production archive backfill must be run where the export is.
+- The Beneva-block long runs are COROS runs: unscanned locally, so the Long-run finishes tile shows "not scanned yet" for them until production's poll ticks fill them in.
+- The Beneva DNF data check from the R11 entry still stands.
+
+---
+
 ## R11.7 — Finish-time range + evidence grade — 2026-10-20
 
 Branch `r11-7-finish-estimate`. Commits: `08a2f2e` decision entry B27; `ed14038` backend, tests and readiness wiring; `79a8fff` the UI (`frontend/src/components/training/RaceReadiness.jsx`). No migration. **Decision (runner, 2026-10-20):** the R11.7 spike recommended not building a range; the runner read that and chose to build it anyway. Recorded as B27 in `design_decisions.md`.
@@ -44,7 +80,7 @@ Branch `r11-race-readiness`, cut from `training-ui-tweaks` (PR #94, open, not me
 - **R11.3 consistency + taper:** pure helpers `_consistency` (weeks with a run / weeks elapsed, median runs per week, breaks of `GAP_DAYS = 7`+ days including leading and trailing) and `_taper` (only inside `training_trends.TAPER_DAYS` = 21: race week and the two before as % of the block peak, a `complete` flag, days since the last long run, key-effort age). Info items `weeks_with_running`, `gaps`, `taper_volume`, `since_long_run`; each past build carries the same numbers at its cut. No pass/fail, no target %. UI: tiles and table columns.
 - **R11.4 exclude from analysis:** `activities.exclude_from_analysis` (bool NOT NULL default false), `exclude_reason` (controlled list in `app/utils/exclusion_reasons.py`: gps_error, wrong_sport, duplicate, treadmill_calibration, other) and `exclude_note` (up to 200 chars). Set through `PATCH /api/activities/{id}` (422 on a bad reason, 400 on exclude without a reason; un-exclude clears reason and note) and an "Analysis" panel on the activity page. Seam: `unified_activities(..., for_analysis=True)`. Skipped by readiness (block runs; peak and current week are now bucketed from the filtered runs instead of `training_summary`), block comparison, past builds, load trend, form trend and best efforts (`strava_stats.best_efforts_among`, the one place). `tests/test_activity_exclusion.py`. B26.
 - **R11.5 race-shoe readiness:** readiness item `race_shoe` ("Race shoe · {nickname or brand model}") and a `readiness.race_shoe` object. Projected race-day km = current ledger + recent weekly rate (`rotation.recent_weekly_km`, R6.2 window) x days/7, against the shoe's own `mileage_limit`: `not_met` only if it passes the limit (exactly at the limit is met), `info` without a limit, `n/a` with no shoe. Evidence is the block runs in that shoe. A labelled heuristic; for a past `as_of` the ledger is today's.
-- Spike reports (docs only, no shipped item): `docs/spike_r11_6_fast_finish.md` + `backend/scripts/spikes/r11_6_fast_finish.py`; `git show fa14554:docs/spike_r11_7_finish_estimate.md` (file deleted 2026-10-20; findings in B27) + `backend/scripts/spikes/r11_7_backtest.py`.
+- Spike reports (docs only, no shipped item): `git show c8902f0:docs/spike_r11_6_fast_finish.md` (file deleted 2026-10-20; findings in B28) + `backend/scripts/spikes/r11_6_fast_finish.py`; `git show fa14554:docs/spike_r11_7_finish_estimate.md` (file deleted 2026-10-20; findings in B27) + `backend/scripts/spikes/r11_7_backtest.py`.
 
 **[CHANGED]**
 - **R11.5 reuses `planned_races.planned_shoe_id`; no new column.** The roadmap planned `race_shoe_id`, but `planned_shoe_id` already existed with a race-form picker and is nulled by `rotation.delete_owned_shoe`. Roadmap §R11.5 and the §R11 Storage rule corrected.

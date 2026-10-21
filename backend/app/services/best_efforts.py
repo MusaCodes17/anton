@@ -17,6 +17,15 @@ Two sources:
 Efforts are derived data: a scan replaces the run's rows. Raw files are never
 stored, and the COROS FIT URL (an unsigned S3 link) is never stored or logged.
 
+Per-km splits (R5.4.3, R11.6) are written alongside the efforts in the same scan
+(`activity_splits`, with per-km average heart rate and elevation gain/loss read from the same file) under the same derived-data rules: a scan replaces the run's
+split rows, and they die with the activity. Each scan records the engine version
+that produced it (SCAN_VERSION); settled `ok` scans below it are re-scanned once
+by the plain (non-rescan) path, which is how runs scanned before splits existed
+gain them. Version-upgrade rescans re-download COROS FITs at the same ration
+(COROS_SCANS_PER_TICK per tick), newest first; archive runs need the backfill
+run once against the export.
+
 Location (R5.4.1): an archive scan also reads the run's first GPS fix and
 writes it to the activity row as `start_lat`/`start_lng`, rounded to ~100 m
 (utils/location.round_coord). That makes the scan write exactly two columns on
@@ -34,7 +43,9 @@ from typing import Callable, Optional
 import requests
 from sqlalchemy.orm import Session
 
-from app.models.models import Activity, ActivityBestEffort, ActivityEffortScan, PendingCorosRun
+from app.models.models import (
+    Activity, ActivityBestEffort, ActivityEffortScan, ActivitySplit, PendingCorosRun,
+)
 from app.utils import best_efforts as engine
 from app.utils.location import round_coord
 
@@ -43,6 +54,7 @@ logger = logging.getLogger(__name__)
 MAX_SCAN_ATTEMPTS = 3        # a failed download/parse is retried on later ticks, then left alone
 COROS_SCANS_PER_TICK = 5     # rations the daily COROS FIT download limit (size unknown)
 FIT_DOWNLOAD_TIMEOUT_S = 30
+SCAN_VERSION = 2             # bump when a scan starts producing new data; settled ok scans below it are re-scanned once (R5.4.3 added splits)
 
 
 @dataclass
@@ -51,49 +63,93 @@ class ScanSummary:
     no_stream: int = 0        # file had no usable distance stream
     failed: int = 0
     efforts: int = 0          # effort rows written
+    splits: int = 0           # per-km split rows written
     errors: list[str] = field(default_factory=list)
 
 
 def store_scan(db: Session, activity_id: int, stream: engine.Stream, *, source: str,
-               start: Optional[tuple[float, float]] = None) -> int:
-    """Replace one run's best efforts from its stream and record the scan.
-    When `start` (lat, lon in degrees) is given, also stamp the activity's
-    start point, rounded to ~100 m; that is the only activity column touched.
-    Returns the number of effort rows written. Caller owns the commit."""
+               start: Optional[tuple[float, float]] = None,
+               hr: Optional[list] = None, alt: Optional[list] = None) -> int:
+    """Replace one run's best efforts and per-km splits from its stream and
+    record the scan. When `start` (lat, lon in degrees) is given, also stamp the
+    activity's start point, rounded to ~100 m; that is the only activity column
+    touched. `hr`/`alt` are the stream-aligned heart-rate and altitude channels
+    (engine.fit_records / gpx_records) used for the splits. Returns the number of
+    effort rows written (see `store_scan_counts` for the split count too). Caller
+    owns the commit."""
+    return store_scan_counts(db, activity_id, stream, source=source, start=start, hr=hr, alt=alt)[0]
+
+
+def store_scan_counts(db: Session, activity_id: int, stream: engine.Stream, *, source: str,
+                      start: Optional[tuple[float, float]] = None,
+                      hr: Optional[list] = None, alt: Optional[list] = None) -> tuple[int, int]:
+    """`store_scan`, returning (effort rows, split rows) written. Caller owns the commit."""
     db.query(ActivityBestEffort).filter(ActivityBestEffort.activity_id == activity_id).delete()
+    db.query(ActivitySplit).filter(ActivitySplit.activity_id == activity_id).delete()
     efforts = engine.best_efforts(stream, source=source) if stream else {}
     for label, (elapsed_s, start_m) in efforts.items():
         db.add(ActivityBestEffort(
             activity_id=activity_id, distance_label=label,
             elapsed_s=elapsed_s, start_offset_m=start_m, source=source,
         ))
+    splits = engine.km_splits(stream, source=source, hr=hr, alt=alt) if stream else []
+    for sp in splits:
+        db.add(ActivitySplit(
+            activity_id=activity_id, split_index=sp.index, distance_m=sp.distance_m,
+            elapsed_s=sp.elapsed_s, moving_s=sp.moving_s, source=source,
+            avg_hr=sp.avg_hr, elev_gain_m=sp.elev_gain_m, elev_loss_m=sp.elev_loss_m,
+        ))
     if start is not None:
         activity = db.get(Activity, activity_id)
         activity.start_lat = round_coord(start[0])
         activity.start_lng = round_coord(start[1])
     _mark_scan(db, activity_id, status="ok" if stream else "no_stream", source=source)
-    return len(efforts)
+    return len(efforts), len(splits)
 
 
 def _mark_scan(db: Session, activity_id: int, *, status: str, source: Optional[str] = None,
                error: Optional[str] = None) -> None:
+    """Record a scan outcome. `attempts` counts tries for the row's current
+    scan_version: a settled scan (ok/no_stream) resets it to 1 at SCAN_VERSION.
+    A failure on a new or already-failed row marks it failed and counts a try.
+    A failure while *upgrading* an `ok` row (e.g. a transient COROS error) keeps
+    the row `ok` at its old scan_version, because the rollback left its efforts
+    and splits untouched, and readers (strava_stats.best_efforts_among) treat only
+    `ok` as scanned; it records the error and counts a try, so the upgrade is
+    retried up to MAX_SCAN_ATTEMPTS and then left alone."""
     scan = db.get(ActivityEffortScan, activity_id)
-    if scan is None:
-        db.add(ActivityEffortScan(activity_id=activity_id, status=status, source=source,
+    if status != "failed":
+        if scan is None:
+            db.add(ActivityEffortScan(activity_id=activity_id, status=status, source=source,
+                                      attempts=1, error=error, scan_version=SCAN_VERSION))
+        else:
+            scan.status, scan.source, scan.error = status, source, error
+            scan.attempts, scan.scan_version = 1, SCAN_VERSION
+    elif scan is None:
+        db.add(ActivityEffortScan(activity_id=activity_id, status="failed", source=source,
                                   attempts=1, error=error))
+    elif scan.status == "ok":
+        scan.error = error                      # status, source, version stay: the data is still good
+        scan.attempts = (scan.attempts or 0) + 1
     else:
-        scan.status, scan.source, scan.error = status, source, error
+        scan.status, scan.source, scan.error = "failed", source, error
         scan.attempts = (scan.attempts or 0) + 1
 
 
 def _needs_scan(db: Session, *, rescan: bool):
-    """Run activities with no settled scan (ok/no_stream), or with retries left."""
+    """Run activities with no settled scan (ok/no_stream), with retries left, or
+    whose `ok` scan predates SCAN_VERSION (a one-time upgrade rescan). The attempts
+    limit applies to failed rows and to upgrade rescans (`attempts` counts tries for
+    the current scan_version, so settled scans start at 1); `no_stream` is never re-picked for upgrade
+    (the file had nothing to derive from, and a newer engine reads the same stream)."""
     q = db.query(Activity).filter(Activity.activity_type == "Run")
     if rescan:
         return q
     return q.outerjoin(ActivityEffortScan, ActivityEffortScan.activity_id == Activity.id).filter(
         (ActivityEffortScan.activity_id.is_(None))
         | ((ActivityEffortScan.status == "failed") & (ActivityEffortScan.attempts < MAX_SCAN_ATTEMPTS))
+        | ((ActivityEffortScan.status == "ok") & (ActivityEffortScan.scan_version < SCAN_VERSION)
+           & (ActivityEffortScan.attempts < MAX_SCAN_ATTEMPTS))
     )
 
 
@@ -117,14 +173,15 @@ def scan_archive(db: Session, export_dir: Path, *, rescan: bool = False,
             # Read the file once; the stream parser and the start-point reader share it.
             if source == "fit":
                 raw = path.read_bytes()
-                stream = engine.fit_stream(raw)
+                stream, hr, alt = engine.fit_records(raw)
                 start = engine.fit_start(raw)
             else:
                 text = path.read_bytes().decode("utf-8", "replace")
-                stream = engine.gpx_stream(text)
+                stream, hr, alt = engine.gpx_records(text)
                 start = engine.gpx_start(text)
-            n = store_scan(db, a.id, stream, source=source, start=start)
+            n, m = store_scan_counts(db, a.id, stream, source=source, start=start, hr=hr, alt=alt)
             out.efforts += n
+            out.splits += m
             if stream:
                 out.scanned += 1
             else:
@@ -143,7 +200,8 @@ def scan_archive(db: Session, export_dir: Path, *, rescan: bool = False,
 
 def scan_coros(db: Session, client, *, limit: int = COROS_SCANS_PER_TICK,
                get: Callable[..., requests.Response] = requests.get) -> ScanSummary:
-    """Scan up to `limit` logged COROS runs that have no settled scan, newest
+    """Scan up to `limit` logged COROS runs that have no settled scan (or an `ok`
+    scan from an older SCAN_VERSION), newest
     first: ask COROS for the FIT URL, download it, parse in memory, store the
     efforts. Called from the poll tick after polling (one thread, INV-9).
     Auth errors propagate (the tick handles reconnect state); anything else is
@@ -168,9 +226,10 @@ def scan_coros(db: Session, client, *, limit: int = COROS_SCANS_PER_TICK,
             url = client.fit_url(label_id, sport_type)
             resp = get(url, timeout=FIT_DOWNLOAD_TIMEOUT_S)
             resp.raise_for_status()
-            stream = engine.fit_stream(resp.content)
-            n = store_scan(db, a.id, stream, source="fit")
+            stream, hr, alt = engine.fit_records(resp.content)
+            n, m = store_scan_counts(db, a.id, stream, source="fit", hr=hr, alt=alt)
             out.efforts += n
+            out.splits += m
             if stream:
                 out.scanned += 1
             else:

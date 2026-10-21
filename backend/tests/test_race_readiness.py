@@ -14,7 +14,7 @@ from contextlib import contextmanager
 from datetime import date, timedelta
 
 from app import mcp_server
-from app.models.models import Activity, ActivityBestEffort, ActivityEffortScan, OwnedShoe, PlannedRace
+from app.models.models import Activity, ActivityBestEffort, ActivitySplit, ActivityEffortScan, OwnedShoe, PlannedRace
 from app.routers.races import get_race_readiness
 from app.services import rotation
 from app.services.race_advisor import _consistency, _taper, race_block_context, race_readiness
@@ -48,6 +48,18 @@ def effort(db, day, label, elapsed_s, run_km=25.0):
                               start_offset_m=0, source="fit"))
     db.commit()
     return a
+
+
+def splits(db, activity, moving, *, last_partial_m=None):
+    """Real ActivitySplit rows: one 1000 m split per moving_s entry (elapsed = moving),
+    plus an optional trailing partial of `last_partial_m` metres (60 s)."""
+    for i, m in enumerate(moving, start=1):
+        db.add(ActivitySplit(activity_id=activity.id, split_index=i, distance_m=1000,
+                             elapsed_s=m, moving_s=m, source="fit"))
+    if last_partial_m:
+        db.add(ActivitySplit(activity_id=activity.id, split_index=len(moving) + 1,
+                             distance_m=last_partial_m, elapsed_s=60, moving_s=60, source="fit"))
+    db.commit()
 
 
 def items(rd):
@@ -287,7 +299,8 @@ def test_race_block_context_carries_readiness(db):
 
 def test_endpoint_and_mcp_tool_agree(db, monkeypatch):
     race(db)
-    run(db, date(2026, 9, 13), 32.0)
+    lr = run(db, date(2026, 9, 13), 32.0)
+    splits(db, lr, [300, 300, 290, 290])
     effort(db, AS_OF - timedelta(days=20), "half", 5300)
 
     @contextmanager
@@ -302,7 +315,10 @@ def test_endpoint_and_mcp_tool_agree(db, monkeypatch):
     assert rest["estimate"] is not None and rest["estimate"] == mcp["estimate"]   # R11.7 rides the payload
     assert [i["key"] for i in rest["checklist"]] == [
         "weeks_to_go", "peak_week", "longest_run", "long_runs", "key_effort", "race_shoe",
-        "weeks_with_running", "gaps", "taper_volume", "since_long_run"]   # R11.3 appends the info items
+        "weeks_with_running", "gaps", "taper_volume", "since_long_run",   # R11.3 appends the info items
+        "fast_finish"]                                                    # R11.6
+    assert len(rest["long_run_finishes"]) == 1 and rest["long_run_finishes"] == mcp["long_run_finishes"]
+    assert rest["long_run_finishes"][0]["split_diff_s_per_km"] == -10
 
 
 def test_endpoint_without_a_race_says_so(db):
@@ -625,3 +641,114 @@ def test_race_shoe_label_falls_back_to_brand_and_model(db):
 def test_race_shoe_label_is_plain_when_no_shoe(db):
     _race_with_shoe(db, None)
     assert _race_shoe_item(db).label == "Race shoe"
+
+
+# --- R11.6 long-run finishes ---------------------------------------------------------------
+
+LONG_DAY = date(2026, 9, 13)
+
+
+def finishes(db):
+    rd = race_readiness(db, as_of=AS_OF)
+    return rd, items(rd)["fast_finish"]
+
+
+def test_negative_positive_and_equal_splits_count_only_when_faster(db):
+    race(db)
+    neg = run(db, LONG_DAY, 32.0)
+    splits(db, neg, [310, 310, 290, 290])
+    pos = run(db, LONG_DAY + timedelta(days=1), 32.0)
+    splits(db, pos, [290, 290, 310, 310])
+    eq = run(db, LONG_DAY + timedelta(days=2), 32.0)
+    splits(db, eq, [300, 300, 300, 300])
+    rd, it = finishes(db)
+    assert [f.split_diff_s_per_km for f in rd.long_run_finishes] == [-20, 20, 0]
+    assert it.status == "info" and it.value == 1 and it.unit == "runs" and it.target is None
+    assert it.rule == "1 of 3 long runs had a faster second half (moving pace)"
+    assert [e.activity_id for e in it.evidence] == [neg.id, pos.id, eq.id]
+
+
+def test_odd_split_count_with_trailing_partial_halves(db):
+    race(db)
+    a = run(db, LONG_DAY, 32.0)
+    # 5 full km + a 500 m partial of 60 s (= 120 s/km): k = 6 // 2 = 3
+    splits(db, a, [300, 300, 300, 270, 270], last_partial_m=500)
+    [f] = race_readiness(db, as_of=AS_OF).long_run_finishes
+    assert f.first_half_pace_s_per_km == 300
+    assert f.second_half_pace_s_per_km == round((270 + 270 + 60) / 2.5)   # 240
+    assert f.moving_pace_s_per_km == round((1440 + 60) / 5.5)             # 273
+    assert f.split_diff_s_per_km == 240 - 300
+
+
+def test_last_km_is_the_last_full_split_not_the_partial(db):
+    race(db)
+    a = run(db, LONG_DAY, 32.0)
+    splits(db, a, [300, 300, 280, 260], last_partial_m=200)
+    [f] = race_readiness(db, as_of=AS_OF).long_run_finishes
+    assert f.last_km_pace_s_per_km == 260
+    assert f.last_km_vs_avg_s_per_km == 260 - f.moving_pace_s_per_km
+
+
+def test_second_half_vs_target_needs_a_target(db):
+    race(db, target_s=10800)   # 10800 / 42.195 = 255.95 -> 256 s/km
+    a = run(db, LONG_DAY, 32.0)
+    splits(db, a, [300, 300, 280, 280])
+    [f] = race_readiness(db, as_of=AS_OF).long_run_finishes
+    assert f.second_half_vs_target_s_per_km == 280 - 256
+
+
+def test_no_target_leaves_vs_target_none(db):
+    race(db, target_s=None)
+    a = run(db, LONG_DAY, 32.0)
+    splits(db, a, [300, 300, 280, 280])
+    [f] = race_readiness(db, as_of=AS_OF).long_run_finishes
+    assert f.has_splits and f.second_half_vs_target_s_per_km is None
+
+
+def test_unscanned_long_run_is_listed_and_counted_as_missing(db):
+    race(db)
+    a = run(db, LONG_DAY, 32.0)
+    splits(db, a, [310, 310, 290, 290])
+    bare = run(db, LONG_DAY + timedelta(days=1), 32.0)
+    rd, it = finishes(db)
+    f = rd.long_run_finishes[1]
+    assert f.activity_id == bare.id and f.has_splits is False
+    assert f.split_diff_s_per_km is None and f.moving_pace_s_per_km is None
+    assert it.rule == "1 of 1 long runs had a faster second half (moving pace); 1 not scanned yet"
+    assert [e.activity_id for e in it.evidence] == [a.id]
+
+
+def test_single_split_counts_as_no_splits(db):
+    race(db)
+    a = run(db, LONG_DAY, 32.0)
+    splits(db, a, [300])
+    [f] = race_readiness(db, as_of=AS_OF).long_run_finishes
+    assert f.has_splits is False
+
+
+def test_all_unscanned_is_no_data(db):
+    race(db)
+    run(db, LONG_DAY, 32.0)
+    rd, it = finishes(db)
+    assert it.status == "no_data" and it.value is None
+    assert it.rule == "No long run in the block has per-km splits yet (runs are scanned after they sync)"
+    assert len(rd.long_run_finishes) == 1
+
+
+def test_no_long_runs_is_no_data(db):
+    race(db)
+    run(db, LONG_DAY, 12.0)
+    rd, it = finishes(db)
+    assert it.status == "no_data" and rd.long_run_finishes == []
+    assert it.rule == "No run of 28 km or more in the block yet"
+
+
+def test_excluded_long_run_does_not_appear(db):
+    race(db)
+    a = run(db, LONG_DAY, 32.0)
+    splits(db, a, [310, 310, 290, 290])
+    a.exclude_from_analysis = True
+    db.commit()
+    rd, it = finishes(db)
+    assert rd.long_runs == [] and rd.long_run_finishes == []
+    assert it.status == "no_data"
