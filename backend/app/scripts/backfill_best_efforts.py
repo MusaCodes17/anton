@@ -6,7 +6,10 @@ stores its segment best efforts and its start location (R5.4.1: the first GPS
 fix, rounded to ~100 m) in one walk (services/best_efforts.scan_archive). Run it
 where both the export and the database are reachable — e.g. copy the export's
 `activities/` folder to the server, or run locally against a DB copy.
-Idempotent: runs already scanned are skipped. Runs scanned before R5.4.1 have no
+Idempotent: runs already scanned are skipped, except that a plain run (no
+--rescan) also fills per-km splits (R5.4.3) for runs scanned before they existed,
+because their scan_version is below SCAN_VERSION (each such run is re-scanned
+once, then settled). Runs scanned before R5.4.1 have no
 location yet, so run once with --rescan to fill it (this also rebuilds their best
 efforts, which is idempotent: each scan replaces the run's rows). Runs without
 GPS data stay without a location; that is not a failure.
@@ -46,7 +49,7 @@ def main(argv=None) -> int:
         s = best_efforts_svc.scan_archive(db, export_dir, rescan=args.rescan, progress=progress)
     finally:
         db.close()
-    print(f"scanned {s.scanned} · no stream {s.no_stream} · failed {s.failed} · {s.efforts} efforts stored")
+    print(f"scanned {s.scanned} · no stream {s.no_stream} · failed {s.failed} · {s.efforts} efforts · {s.splits} splits stored")
     for e in s.errors[:20]:
         print(f"  failed: {e}")
     return 1 if s.failed else 0
