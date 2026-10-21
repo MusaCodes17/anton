@@ -5,6 +5,27 @@
 
 ---
 
+## Training tab reorder — 2026-10-20
+
+Branch `training-ui-tweaks` (commit `d18964b`). Frontend only; no backend change, no migration.
+
+**[CHANGED]**
+- **Overview order:** Volume always comes first. Then Now, then Fitness and Records.
+- **Now strip:** one grid of four tiles: Load verdict, Form verdict, Last 7 days, and Longest run (last 7 days, with the prior 28 days as the sub-line). The question headings and the Prior avg week, recent/baseline m-per-beat and best-effort tiles are gone. The API is unchanged and still returns them.
+- **Readiness:** "Ready for {race}?" moves out of Now to a new **Readiness** section at the bottom of the Races tab, after Race blocks. The section is hidden when no race is planned.
+
+**[ADDED]**
+- `components/training/StatTiles.jsx`: the tile shell, shared by Now and readiness.
+- `components/training/RaceReadiness.jsx`: the readiness checklist.
+
+**[BLOCKED / for the runner]** The runner has further ideas for the Readiness section, to be built later. They aren't specified yet, so there's no roadmap row.
+
+**Verified:**
+- `vite build` is clean.
+- Browser pass against the scratch DB copy at desktop and 380 px. Overview order and the four tiles, 2×2 on phones with no horizontal scroll. Readiness at the bottom of Races (Boston).
+- Every page API request returned 200.
+- Backend untouched (suite 966 passed + 1 skipped).
+
 ## Training page UI polish — 2026-10-20
 
 Branch `training-ui-polish` (commits `e5aef89`, `14dc501`, `4ed19ec`, `de814b5`). Frontend only; no backend change, no migration.
