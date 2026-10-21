@@ -5,6 +5,35 @@
 
 ---
 
+## R11.7 — Finish-time range + evidence grade — 2026-10-20
+
+Branch `r11-7-finish-estimate`. Commits: `08a2f2e` decision entry B27; `ed14038` backend, tests and readiness wiring; `79a8fff` the UI (`frontend/src/components/training/RaceReadiness.jsx`). No migration. **Decision (runner, 2026-10-20):** the R11.7 spike recommended not building a range; the runner read that and chose to build it anyway. Recorded as B27 in `design_decisions.md`.
+
+**[ADDED]**
+- **`services/finish_estimate.py` (`finish_estimate()`):** a finish-time range for the next half or marathon, returned as `FinishEstimate` with state `ok | unsupported_distance | insufficient_evidence | insufficient_history`. Method "a-fast": the fastest Riegel equivalent (k = 1.06) across the 10k and half race results and best efforts in the 8 weeks ending the day before block end. Runs flagged `exclude_from_analysis` (B26) are skipped. The range is estimate × (1 ± the largest absolute error the same method made on past races); × 1.5 when the grade is thin.
+- **Evidence grade:** strong, moderate or thin, each with its reasons in words.
+- **Live backtest:** every read re-scores the runner's past halves and marathons with the same method. It is never stored (INV-7). Skipped races carry a reason: DNF, linked run not the race distance, implausible pace, excluded run, or no result. At least 3 scored races are needed before a range shows.
+- **COROS `race_predictions`** is shown beside the range as a separate, labelled source. It cannot be backtested (B27).
+- **Readiness payload:** `estimate` on `GET /api/races/readiness` and inside `get_race_block_context`. The `race_block_advisor` prompt has a "Finish estimate" section.
+- **UI:** a "Finish estimate" section after the readiness tiles on the Races tab. It shows the range headline, the grade chip, a range bar with the target marker, why the range is that wide, the grade reasons, and collapsible "Evidence" and "How it did on past races" tables, plus the COROS line. Non-ok states show their message.
+- `backend/tests/test_finish_estimate.py` (28 tests).
+
+**[CHANGED]**
+- R11.7 is built. The roadmap row and §R11.7 now say so, and the spike verdict is recorded as read and overridden by the runner (B27).
+
+**Backtest on a DB copy (read-only, nothing written):** the live backtest reproduces the spike's a-fast numbers exactly: n = 6, mean |error| 5.3%, worst 10.3% (Spring Half), Toronto +8.4%. Beneva is skipped with "Linked run is 14.0 km, not a marathon".
+- Test marathon with a 3:00 target: range 2:10:34–2:58:16, middle 2:34:25, grade thin (the sources disagree by 17.7%). The target is slower than the range. COROS 2:28:28 is shown separately.
+
+**Verified:**
+- Suite **1016 → 1044 passed + 1 skipped**. `vite build` clean.
+- Readiness latency about 117 ms warm, of which the estimate is about 80 ms. The estimate is not on `/api/home`.
+- Desktop and 380 px pass on the DB copy: no page-level horizontal overflow, 0 console errors after a duplicate-key fix.
+
+**[BLOCKED / for the runner]**
+- **R11.6 decision still pending:** reopen R5.4.3 (splits) or park. R11's exit criterion needs it.
+
+---
+
 ## R11 — Race readiness v2 built (R11.1–R11.5), R11.6/R11.7 spikes — 2026-10-20
 
 Branch `r11-race-readiness`, cut from `training-ui-tweaks` (PR #94, open, not merged), so R11 is stacked on it. Commits: `a909d8d` docs scope; `391e925` R11.1; `6ac5864` R11.2; `cdf7ee9` R11.3; `14f5ef2` R11.4; `c8902f0` R11.6 spike; `e7f0a10` R11.5; `97bc726` tile row-height fix; `fa14554` R11.7 spike. Not pushed, no PR yet. One additive migration, `f5a6b7c8d9e0`.
@@ -15,7 +44,7 @@ Branch `r11-race-readiness`, cut from `training-ui-tweaks` (PR #94, open, not me
 - **R11.3 consistency + taper:** pure helpers `_consistency` (weeks with a run / weeks elapsed, median runs per week, breaks of `GAP_DAYS = 7`+ days including leading and trailing) and `_taper` (only inside `training_trends.TAPER_DAYS` = 21: race week and the two before as % of the block peak, a `complete` flag, days since the last long run, key-effort age). Info items `weeks_with_running`, `gaps`, `taper_volume`, `since_long_run`; each past build carries the same numbers at its cut. No pass/fail, no target %. UI: tiles and table columns.
 - **R11.4 exclude from analysis:** `activities.exclude_from_analysis` (bool NOT NULL default false), `exclude_reason` (controlled list in `app/utils/exclusion_reasons.py`: gps_error, wrong_sport, duplicate, treadmill_calibration, other) and `exclude_note` (up to 200 chars). Set through `PATCH /api/activities/{id}` (422 on a bad reason, 400 on exclude without a reason; un-exclude clears reason and note) and an "Analysis" panel on the activity page. Seam: `unified_activities(..., for_analysis=True)`. Skipped by readiness (block runs; peak and current week are now bucketed from the filtered runs instead of `training_summary`), block comparison, past builds, load trend, form trend and best efforts (`strava_stats.best_efforts_among`, the one place). `tests/test_activity_exclusion.py`. B26.
 - **R11.5 race-shoe readiness:** readiness item `race_shoe` ("Race shoe · {nickname or brand model}") and a `readiness.race_shoe` object. Projected race-day km = current ledger + recent weekly rate (`rotation.recent_weekly_km`, R6.2 window) x days/7, against the shoe's own `mileage_limit`: `not_met` only if it passes the limit (exactly at the limit is met), `info` without a limit, `n/a` with no shoe. Evidence is the block runs in that shoe. A labelled heuristic; for a past `as_of` the ledger is today's.
-- Spike reports (docs only, no shipped item): `docs/spike_r11_6_fast_finish.md` + `backend/scripts/spikes/r11_6_fast_finish.py`; `docs/spike_r11_7_finish_estimate.md` + `backend/scripts/spikes/r11_7_backtest.py`.
+- Spike reports (docs only, no shipped item): `docs/spike_r11_6_fast_finish.md` + `backend/scripts/spikes/r11_6_fast_finish.py`; `git show fa14554:docs/spike_r11_7_finish_estimate.md` (file deleted 2026-10-20; findings in B27) + `backend/scripts/spikes/r11_7_backtest.py`.
 
 **[CHANGED]**
 - **R11.5 reuses `planned_races.planned_shoe_id`; no new column.** The roadmap planned `race_shoe_id`, but `planned_shoe_id` already existed with a race-form picker and is nulled by `rotation.delete_owned_shoe`. Roadmap §R11.5 and the §R11 Storage rule corrected.

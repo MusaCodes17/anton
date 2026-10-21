@@ -9,7 +9,7 @@ the last EVIDENCE_WEEKS weeks; the range is that estimate widened by the
 largest error the same method made on the runner's own past halves and
 marathons (the backtest, recomputed live on every call and never stored).
 
-Why this method: the R11.7 spike (docs/spike_r11_7_finish_estimate.md) found
+Why this method: the R11.7 spike (`git show fa14554:docs/spike_r11_7_finish_estimate.md`; deleted, findings in design_decisions B27) found
 that "longest source wins" is badly biased because best efforts count stretches
 of easy long runs, which only understate fitness; taking the fastest equivalent
 fixes most of that. That choice, and the THIN_SPREAD line, were made AFTER the
