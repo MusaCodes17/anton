@@ -400,3 +400,138 @@ def test_delete_connection_requires_auth_then_disconnects(client):
 def test_callback_denied_by_user(client):
     r = client("GET", "/api/coros/callback?error=access_denied")
     assert "reason=denied" in r.headers["location"]
+
+
+# --- R12 lean sync: compact view + batch resolve over HTTP (T3) ------------------------
+
+from datetime import date  # noqa: E402
+
+from app.models.models import OwnedShoe, PendingCorosRun  # noqa: E402
+
+
+def _inbox_shoe(db, **kw):
+    s = OwnedShoe(brand="Nike", model="Pegasus", shoe_type="daily_trainer", starting_mileage=100.0,
+                  current_mileage=100.0, status="active", **kw)
+    db.add(s)
+    db.commit()
+    return s
+
+
+def _inbox_pending(db, label, **kw):
+    vals = dict(label_id=label, sport_type=100, run_date=date(2026, 10, 6), distance_km=10.0,
+                moving_time_s=3000, elapsed_time_s=3010, avg_pace_s_per_km=300, avg_hr=150,
+                start_timestamp=100, end_timestamp=3100, status="pending")
+    vals.update(kw)
+    r = PendingCorosRun(**vals)
+    db.add(r)
+    db.commit()
+    return r
+
+
+@pytest.fixture()
+def inbox_http():
+    """HTTP client over one shared in-memory DB (StaticPool: the sync route runs in a
+    worker thread, so the seeding session and the request must see the same database).
+    Yields (call, db) so tests can seed rows and read them back."""
+    from app.main import app
+    from app.services.rate_limit import auth_failure_limiter
+
+    engine = create_engine("sqlite:///:memory:", connect_args={"check_same_thread": False}, poolclass=StaticPool)
+    Base.metadata.create_all(bind=engine)
+    db = sessionmaker(bind=engine)()
+    auth_failure_limiter._buckets.clear()
+    prev = app.dependency_overrides.get(get_db)
+    app.dependency_overrides[get_db] = lambda: db
+
+    def call(method, path, json=None, token=TOKEN):
+        headers = {"Authorization": f"Bearer {token}"} if token else {}
+
+        async def _go():
+            async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://t",
+                                         follow_redirects=False) as c:
+                return await c.request(method, path, json=json, headers=headers)
+        return asyncio.run(_go())
+
+    yield call, db
+    db.close()
+    engine.dispose()
+    if prev is None:
+        app.dependency_overrides.pop(get_db, None)
+    else:
+        app.dependency_overrides[get_db] = prev
+
+
+def test_pending_view_and_resolve_require_auth(inbox_http):
+    http, _ = inbox_http
+    assert http("GET", "/api/coros/pending/view", token=None).status_code == 401
+    assert http("POST", "/api/coros/pending/resolve", json={"items": []}, token=None).status_code == 401
+
+
+def test_pending_view_shape(inbox_http):
+    http, db = inbox_http
+    shoe = _inbox_shoe(db, nickname="Daily")
+    _inbox_pending(db, "v1", suggested_shoe_id=shoe.id, suggestion_reason="closest pace")
+    r = http("GET", "/api/coros/pending/view")
+    assert r.status_code == 200
+    body = r.json()
+    assert set(body) == {"runs", "rotation"}
+    run = body["runs"][0]
+    assert run["pending_id"] and run["suggested_shoe_id"] == shoe.id
+    assert run["suggested_shoe"] == "Nike Pegasus (Daily)"
+    rot = body["rotation"][0]
+    assert rot["name"] == "Nike Pegasus (Daily)" and rot["current_mileage_km"] == 100.0
+
+
+def test_resolve_confirm_and_dismiss_then_pending_is_empty(inbox_http):
+    http, db = inbox_http
+    shoe = _inbox_shoe(db)
+    a = _inbox_pending(db, "r1", distance_km=12.0)
+    b = _inbox_pending(db, "r2", distance_km=5.0, start_timestamp=200)
+    r = http("POST", "/api/coros/pending/resolve", json={"items": [
+        {"pending_id": a.id, "action": "confirm", "owned_shoe_id": shoe.id},
+        {"pending_id": b.id, "action": "dismiss"},
+    ]})
+    assert r.status_code == 200
+    out = r.json()
+    assert out["logged"] == 1 and out["dismissed"] == 1 and out["errors"] == []
+    assert len(out["per_shoe"]) == 1 and out["per_shoe"][0]["shoe_id"] == shoe.id
+    assert http("GET", "/api/coros/pending").json()["runs"] == []
+
+
+def test_resolve_duplicate_pending_id_is_400_and_writes_nothing(inbox_http):
+    http, db = inbox_http
+    shoe = _inbox_shoe(db)
+    a = _inbox_pending(db, "d1")
+    r = http("POST", "/api/coros/pending/resolve", json={"items": [
+        {"pending_id": a.id, "action": "confirm", "owned_shoe_id": shoe.id},
+        {"pending_id": a.id, "action": "dismiss"},
+    ]})
+    assert r.status_code == 400
+    db.refresh(a)
+    assert a.status == "pending"
+    assert db.query(PendingCorosRun).filter_by(status="confirmed").count() == 0
+
+
+def test_resolve_unknown_shoe_is_an_item_error_not_a_failure(inbox_http):
+    http, db = inbox_http
+    a = _inbox_pending(db, "u1")
+    r = http("POST", "/api/coros/pending/resolve", json={"items": [
+        {"pending_id": a.id, "action": "confirm", "owned_shoe_id": 999999},
+    ]})
+    assert r.status_code == 200
+    out = r.json()
+    assert out["logged"] == 0 and len(out["errors"]) == 1
+    assert out["errors"][0]["pending_id"] == a.id
+    db.refresh(a)
+    assert a.status == "pending"
+
+
+def test_resolve_invalid_action_is_422(inbox_http):
+    http, db = inbox_http
+    a = _inbox_pending(db, "x1")
+    r = http("POST", "/api/coros/pending/resolve", json={"items": [
+        {"pending_id": a.id, "action": "maybe"},
+    ]})
+    assert r.status_code == 422
+    db.refresh(a)
+    assert a.status == "pending"

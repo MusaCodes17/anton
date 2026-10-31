@@ -30,7 +30,7 @@ from typing import Any, Awaitable, Callable, Optional
 
 from sqlalchemy.orm import Session
 
-from app.models.models import OwnedShoe, Retailer, Shoe, ShoeRun
+from app.models.models import OwnedShoe, PendingCorosRun, Retailer, Shoe, ShoeRun
 
 logger = logging.getLogger(__name__)
 
@@ -43,8 +43,8 @@ READ_ONLY_TOOLS = frozenset({
 })
 
 # Tools that write, but only data the runner ruled needs no confirmation card:
-# sync_coros_now fills the "New runs" inbox (each run is still confirmed one by
-# one) and saves COROS's fitness reading as-is (design decisions C13).
+# sync_coros_now fills the "New runs" inbox (each run is still confirmed by the
+# runner) and saves COROS's fitness reading as-is (design decisions C13).
 NO_CONFIRM_TOOLS = frozenset({
     "sync_coros_now",
 })
@@ -140,6 +140,46 @@ def _run_fields(db: Session, args: dict, *, date_key: str) -> tuple[list[dict], 
     return fields, shoe
 
 
+def _batch_fields(db: Session, items: Any) -> list[dict]:
+    """One field per decided COROS run so the runner sees every run before tapping. Reads only.
+
+    Never raises: malformed items get an "Invalid item" line instead of failing the card.
+    """
+    if not isinstance(items, list):
+        return [{"label": "Runs", "value": "No valid runs"}]
+    fields: list[dict] = []
+    for item in items:
+        if not isinstance(item, dict):
+            fields.append({"label": "Unknown run", "value": "Invalid item"})
+            continue
+        try:
+            pending_id = int(item.get("pending_id"))
+        except (TypeError, ValueError):
+            fields.append({"label": "Unknown run", "value": "Invalid item"})
+            continue
+        pending = db.get(PendingCorosRun, pending_id)
+        label = (
+            f"{pending.run_date} · {_km(pending.distance_km)}"
+            if pending is not None else f"#{pending_id} (not found)"
+        )
+        action = item.get("action")
+        if action == "confirm":
+            shoe_id = item.get("owned_shoe_id")
+            if shoe_id in (None, ""):
+                value = "No shoe chosen"
+            else:
+                shoe = _owned(db, shoe_id)
+                value = _shoe_label(shoe) if shoe is not None else f"#{shoe_id} (not found)"
+            if item.get("activity_tag"):
+                value += f" · {item['activity_tag']}"
+        elif action == "dismiss":
+            value = "Dismiss"
+        else:
+            value = str(action)
+        fields.append({"label": label, "value": value})
+    return fields
+
+
 def describe(db: Session, tool: str, args: dict) -> tuple[str, list[dict], Optional[dict]]:
     """Title, display fields and optional Edit prefill for a held call.
 
@@ -160,6 +200,9 @@ def describe(db: Session, tool: str, args: dict) -> tuple[str, list[dict], Optio
     if tool == "confirm_coros_run":
         fields, _ = _run_fields(db, args, date_key="date")
         return "Log COROS run", fields, None
+
+    if tool == "confirm_pending_coros_runs":
+        return "Log COROS runs", _batch_fields(db, args.get("items")), None
 
     if tool == "retire_shoe":
         shoe = _owned(db, args.get("owned_shoe_id"))

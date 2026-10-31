@@ -65,6 +65,7 @@ from app.mcp_server.coros import (
     sync_coros_now,
     fetch_unsynced_coros_runs,
     confirm_coros_run,
+    confirm_pending_coros_runs,
     sync_coros_runs,
 )
 from app.mcp_server.training import (
@@ -134,6 +135,7 @@ __all__ = [
     "sync_coros_now",
     "fetch_unsynced_coros_runs",
     "confirm_coros_run",
+    "confirm_pending_coros_runs",
     "sync_coros_runs",
     "get_training_summary",
     "get_training_trends",

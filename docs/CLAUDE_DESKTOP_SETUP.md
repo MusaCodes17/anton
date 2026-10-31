@@ -159,7 +159,7 @@ Run logging no longer depends on Claude Desktop (or any Claude client) being in 
 What this means for Claude:
 
 - **The COROS connector in Claude Desktop is optional.** Keep it installed for analysis, reviews and planning (the COROS tools remain useful for that); it is no longer needed to log runs.
-- **`sync_coros_runs` still works** and now reads the *same* queue as the app: it calls `fetch_unsynced_coros_runs` (no COROS lookups), shows the server's shoe suggestions, and logs your confirmed runs with `confirm_coros_run`. Confirming in Claude removes the run from the app inbox, and confirming in the app makes Claude report it as already logged — a run can never be logged twice.
+- **`sync_coros_runs` still works** and now reads the *same* queue as the app: it calls `fetch_unsynced_coros_runs` (no COROS lookups), shows the server's shoe suggestions, and logs your confirmed runs in one batch with `confirm_pending_coros_runs`, so a sync is one fetch and one confirm rather than a call per run. Runs that shouldn't count toward any shoe can be dismissed from Claude too. Confirming in Claude removes the run from the app inbox, and confirming in the app makes Claude report it as already logged — a run can never be logged twice.
 - **Check state** by asking Claude to call `get_coros_sync_status` (connection, last successful poll, last error, runs waiting).
 - If the connection needs attention, the app shows **Reconnect needed** (Home banner and Settings → Sync) and Claude's tools say the same; reconnect from Settings → Sync.
 - Server prerequisite: `COROS_TOKEN_KEY` (a Fernet key) in the production `.env`; generate one with the command in `backend/.env.example`.

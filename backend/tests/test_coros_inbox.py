@@ -251,3 +251,213 @@ def test_confirm_run_without_location_kwargs_uses_the_pending_row(db):
                           run_date=date(2026, 10, 6), distance_km=12.53)
     act = db.query(Activity).one()
     assert (act.location_label, act.start_lat, act.start_lng) == ("Montreal Run", 45.502, -73.567)
+
+
+# --- inbox_view ---------------------------------------------------------------------
+
+def test_inbox_view_rotation_lists_active_shoes_only(db):
+    active = mk_shoe(db, 120.0)
+    retired = mk_shoe(db, 50.0)
+    retired.status = "retired"
+    for_sale = mk_shoe(db, 30.0)
+    for_sale.status = "for_sale"
+    db.commit()
+    view = inbox.inbox_view(db)
+    assert [s.id for s in view.rotation] == [active.id]
+    assert view.rotation[0].current_mileage_km == 120.0 and view.rotation[0].shoe_type == "daily_trainer"
+
+
+def test_inbox_view_retired_suggestion_refreshes_without_writing_back(db):
+    retired = mk_shoe(db, 50.0)
+    retired.status = "retired"
+    db.commit()
+    active = mk_shoe(db, 300.0)
+    p = mk_pending(db, suggested_shoe_id=retired.id, suggestion_reason="old reason")
+    run = inbox.inbox_view(db).runs[0]
+    assert run.suggested_shoe_id == active.id and run.suggested_shoe == "Nike Pegasus"
+    assert run.suggestion_refreshed is True and run.suggestion_reason != "old reason"
+    db.expire_all()
+    row = db.get(PendingCorosRun, p.id)
+    assert row.suggested_shoe_id == retired.id and row.suggestion_reason == "old reason"
+
+
+def test_inbox_view_retired_suggestion_with_no_active_shoe_left(db):
+    retired = mk_shoe(db, 50.0)
+    retired.status = "retired"
+    db.commit()
+    mk_pending(db, suggested_shoe_id=retired.id, suggestion_reason="old reason")
+    run = inbox.inbox_view(db).runs[0]
+    assert run.suggested_shoe_id is None and run.suggested_shoe is None
+    assert run.suggestion_refreshed is True and "No active shoe" in run.suggestion_reason
+
+
+def test_inbox_view_active_suggestion_names_shoe_with_nickname(db):
+    shoe = mk_shoe(db, 100.0, nickname="Teal")
+    mk_pending(db, suggested_shoe_id=shoe.id, suggestion_reason="stored reason")
+    view = inbox.inbox_view(db)
+    run = view.runs[0]
+    assert run.suggested_shoe_id == shoe.id and run.suggested_shoe == "Nike Pegasus (Teal)"
+    assert run.suggestion_refreshed is False and run.suggestion_reason == "stored reason"
+    assert view.rotation[0].name == "Nike Pegasus (Teal)"
+
+
+def test_inbox_view_empty(db):
+    view = inbox.inbox_view(db)
+    assert view.runs == [] and view.rotation == []
+
+
+def test_inbox_view_excludes_dismissed_and_confirmed(db):
+    shoe = mk_shoe(db, 100.0)
+    p = mk_pending(db, "p")
+    mk_pending(db, "d", status="dismissed")
+    mk_pending(db, "c", status="confirmed")
+    assert [r.pending_id for r in inbox.inbox_view(db).runs] == [p.id]
+
+
+# --- resolve_batch ------------------------------------------------------------------
+
+def _count_activities(db):
+    return db.query(Activity).count()
+
+
+def test_batch_mixed_partial_success_and_per_shoe_sums(db):
+    a, b = mk_shoe(db, 100.0), mk_shoe(db, 200.0, nickname="Teal")
+    p1 = mk_pending(db, "b1", distance_km=10.0)
+    p2 = mk_pending(db, "b2", distance_km=5.5)
+    p3 = mk_pending(db, "b3", distance_km=8.0)
+    p4 = mk_pending(db, "b4")
+    p5 = mk_pending(db, "b5")
+    items = [
+        inbox.BatchItem(p1.id, "confirm", owned_shoe_id=a.id),
+        inbox.BatchItem(p5.id, "confirm", owned_shoe_id=99999),          # failing, in the middle
+        inbox.BatchItem(p2.id, "confirm", owned_shoe_id=a.id),
+        inbox.BatchItem(p3.id, "confirm", owned_shoe_id=b.id),
+        inbox.BatchItem(p4.id, "dismiss"),
+        inbox.BatchItem(424242, "dismiss"),                              # unknown pending id
+    ]
+    res = inbox.resolve_batch(db, items)
+    assert (res.logged, res.dismissed, res.already_logged) == (3, 1, 0)
+    assert {e["pending_id"] for e in res.errors} == {p5.id, 424242}
+    assert [(s["shoe_id"], s["km_added"]) for s in res.per_shoe] == [(a.id, 15.5), (b.id, 8.0)]
+    assert res.per_shoe[1]["name"] == "Nike Pegasus (Teal)"
+    assert res.per_shoe[0]["new_mileage_km"] == pytest.approx(115.5)
+    db.refresh(p5)
+    assert p5.status == "pending"
+
+
+def test_batch_ledger_round_trip(db):
+    a, b = mk_shoe(db, 100.0), mk_shoe(db, 50.0)
+    ps = [mk_pending(db, f"l{i}", distance_km=d) for i, d in enumerate([10.1, 7.37, 12.53])]
+    res = inbox.resolve_batch(db, [
+        inbox.BatchItem(ps[0].id, "confirm", owned_shoe_id=a.id),
+        inbox.BatchItem(ps[1].id, "confirm", owned_shoe_id=a.id),
+        inbox.BatchItem(ps[2].id, "confirm", owned_shoe_id=b.id),
+    ])
+    db.refresh(a)
+    db.refresh(b)
+    by = {s["shoe_id"]: s for s in res.per_shoe}
+    assert by[a.id]["km_added"] == pytest.approx(a.current_mileage - 100.0)
+    assert by[b.id]["km_added"] == pytest.approx(b.current_mileage - 50.0)
+
+
+def test_batch_rerun_is_idempotent(db):
+    shoe = mk_shoe(db, 100.0)
+    ps = [mk_pending(db, f"r{i}") for i in range(2)]
+    items = [inbox.BatchItem(p.id, "confirm", owned_shoe_id=shoe.id) for p in ps]
+    inbox.resolve_batch(db, items)
+    db.refresh(shoe)
+    mileage, n_act = shoe.current_mileage, _count_activities(db)
+    res = inbox.resolve_batch(db, items)
+    db.refresh(shoe)
+    assert (res.logged, res.already_logged, res.per_shoe) == (0, 2, [])
+    assert shoe.current_mileage == mileage and _count_activities(db) == n_act
+
+
+def test_batch_threshold_reported_once_per_shoe(db):
+    shoe = mk_shoe(db, 590.0)
+    ps = [mk_pending(db, f"t{i}") for i in range(2)]          # 12.53 km each: 602.53 then 615.06
+    res = inbox.resolve_batch(db, [inbox.BatchItem(p.id, "confirm", owned_shoe_id=shoe.id) for p in ps])
+    assert len(res.thresholds) == 1 and res.thresholds[0]["threshold_km"] == 600
+    assert res.thresholds[0]["shoe_id"] == shoe.id and res.thresholds[0]["message"]
+
+
+def test_batch_double_crossing_keeps_highest(db):
+    shoe = mk_shoe(db, 595.0)
+    p1 = mk_pending(db, "h1", distance_km=10.0)
+    p2 = mk_pending(db, "h2", distance_km=100.0)
+    res = inbox.resolve_batch(db, [
+        inbox.BatchItem(p1.id, "confirm", owned_shoe_id=shoe.id),
+        inbox.BatchItem(p2.id, "confirm", owned_shoe_id=shoe.id),
+    ])
+    assert [t["threshold_km"] for t in res.thresholds] == [700]
+
+
+def test_batch_checkpoint_reported(db):
+    shoe = mk_shoe(db, 95.0)
+    p = mk_pending(db, "c1", distance_km=12.0)
+    res = inbox.resolve_batch(db, [inbox.BatchItem(p.id, "confirm", owned_shoe_id=shoe.id)])
+    assert [c["checkpoint_km"] for c in res.checkpoints] == [100]
+    assert res.checkpoints[0]["shoe_id"] == shoe.id
+
+
+def test_batch_duplicate_pending_id_raises_before_any_write(db):
+    shoe = mk_shoe(db)
+    p = mk_pending(db)
+    with pytest.raises(ValueError, match=str(p.id)):
+        inbox.resolve_batch(db, [
+            inbox.BatchItem(p.id, "confirm", owned_shoe_id=shoe.id),
+            inbox.BatchItem(p.id, "dismiss"),
+        ])
+    db.refresh(p)
+    assert p.status == "pending" and _count_activities(db) == 0
+
+
+def test_batch_confirm_without_shoe_never_uses_suggestion(db):
+    shoe = mk_shoe(db)
+    p = mk_pending(db, suggested_shoe_id=shoe.id, suggestion_reason="r")
+    res = inbox.resolve_batch(db, [inbox.BatchItem(p.id, "confirm")])
+    assert res.logged == 0 and res.errors == [
+        {"pending_id": p.id, "error": "owned_shoe_id is required to confirm"}]
+    db.refresh(p)
+    assert p.status == "pending" and _count_activities(db) == 0
+
+
+def test_batch_invalid_tag_only_fails_that_item(db):
+    shoe = mk_shoe(db)
+    bad, good = mk_pending(db, "g1"), mk_pending(db, "g2")
+    res = inbox.resolve_batch(db, [
+        inbox.BatchItem(bad.id, "confirm", owned_shoe_id=shoe.id, activity_tag="not-a-tag"),
+        inbox.BatchItem(good.id, "confirm", owned_shoe_id=shoe.id),
+    ])
+    assert res.logged == 1 and [e["pending_id"] for e in res.errors] == [bad.id]
+    db.refresh(bad)
+    assert bad.status == "pending"
+
+
+def test_batch_unknown_action_is_an_error(db):
+    p = mk_pending(db)
+    res = inbox.resolve_batch(db, [inbox.BatchItem(p.id, "explode")])
+    assert res.errors == [{"pending_id": p.id, "error": "Unknown action 'explode'"}]
+
+
+def test_batch_generic_exception_does_not_stop_loop(db, monkeypatch):
+    shoe = mk_shoe(db)
+    boom, ok = mk_pending(db, "x1"), mk_pending(db, "x2")
+    real = inbox.confirm
+
+    def fake(db_, pending_id, **kw):
+        if pending_id == boom.id:
+            raise RuntimeError("kaboom")
+        return real(db_, pending_id, **kw)
+
+    monkeypatch.setattr(inbox, "confirm", fake)
+    res = inbox.resolve_batch(db, [
+        inbox.BatchItem(boom.id, "confirm", owned_shoe_id=shoe.id),
+        inbox.BatchItem(ok.id, "confirm", owned_shoe_id=shoe.id),
+    ])
+    assert res.errors == [{"pending_id": boom.id, "error": "Internal error"}]
+    assert res.logged == 1
+
+
+def test_batch_empty_list(db):
+    assert inbox.resolve_batch(db, []) == inbox.BatchResult()
