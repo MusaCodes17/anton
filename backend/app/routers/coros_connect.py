@@ -6,6 +6,7 @@ COROS direct-sync connection endpoints (R5.7 §2). Thin: HTTP <-> services.coros
                             single-use OAuth `state`; redirects into the SPA
   GET  /api/coros/status    session/bearer-auth — connection state + sync summary, no tokens
   GET  /api/coros/pending + POST /api/coros/pending/{id}/confirm|dismiss — the inbox (§6)
+  GET  /api/coros/pending/view + POST /api/coros/pending/resolve — compact view and batch confirm/dismiss (R12)
   POST /api/coros/sync      session/bearer-auth — one poll now (writes only the pending queue)
   DELETE /api/coros/connection  session/bearer-auth — disconnect; {revoked_remotely}
 
@@ -13,10 +14,11 @@ All but the callback are gated by the app-wide auth middleware. DELETE /connecti
 (runner-approved 2026-10-07) forgets the tokens even if COROS can't revoke them.
 """
 import logging
+from dataclasses import asdict
 from urllib.parse import urlencode
 
 import requests
-from typing import Optional
+from typing import Literal, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import RedirectResponse
@@ -103,12 +105,43 @@ class ConfirmBody(BaseModel):
     notes: Optional[str] = None
 
 
+class ResolveItem(BaseModel):
+    pending_id: int
+    action: Literal["confirm", "dismiss"]
+    owned_shoe_id: Optional[int] = None
+    activity_tag: Optional[str] = None
+    notes: Optional[str] = None
+
+
+class ResolveBody(BaseModel):
+    items: list[ResolveItem]
+
+
 @router.get("/pending")
 def list_pending(db: Session = Depends(get_db)):
     """The "New runs" inbox: pending runs newest-first, plus when we last synced
     (the UI labels a cached list with it)."""
     summary = coros_poller.get_sync_summary(db)
     return {"runs": coros_inbox.list_pending(db), "last_success_at": summary["last_success_at"]}
+
+
+@router.get("/pending/view")
+def pending_view(db: Session = Depends(get_db)):
+    """Compact inbox for Claude: pending runs with their suggested shoe, plus the active rotation."""
+    return asdict(coros_inbox.inbox_view(db))
+
+
+@router.post("/pending/resolve")
+def resolve_pending(body: ResolveBody, db: Session = Depends(get_db)):
+    """Confirm or dismiss many pending runs in one call. Per-item failures are reported in
+    `errors` inside a 200 body; only a whole-batch problem (duplicate pending_id) is a 400,
+    and nothing is written in that case."""
+    items = [coros_inbox.BatchItem(**item.model_dump()) for item in body.items]
+    try:
+        result = coros_inbox.resolve_batch(db, items)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    return asdict(result)
 
 
 @router.post("/pending/{pending_id}/confirm")
