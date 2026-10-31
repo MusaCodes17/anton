@@ -5,6 +5,28 @@
 
 ---
 
+## R12 — Lean COROS sync from Claude — 2026-10-31
+
+Branch `r12-lean-coros-sync`. No migration, no schema change. Decision: `design_decisions.md` C15.
+
+**[ADDED]**
+- `coros_inbox.inbox_view` (read model: lean runs, a `rotation` block of active shoes, and a stale-suggestion guard that recomputes a retired suggestion for the view only, never written back) and `coros_inbox.resolve_batch` (one batch of confirm/dismiss by `pending_id` through the existing paths; skip-and-continue; server-computed summary).
+- REST: `GET /api/coros/pending/view`, `POST /api/coros/pending/resolve`. MCP: `confirm_pending_coros_runs`.
+- Son of Anton confirmation card "Log COROS runs" in `chat_proposals`, one field per run.
+
+**[CHANGED]**
+- `fetch_unsynced_coros_runs` returns the lean shape by default plus `rotation`; `detail=True` keeps the full per-run fields.
+- `sync_coros_runs` prompt: 4,699 → 1,465 characters. The pace/distance bands are gone; Claude presents the server's suggestion and makes one batch confirm. Guarded by a test at 2,500 characters. Owned-shoe ids stay explicit per run (INV-8).
+- Sample 10-run sync: 12 tool calls before (1 fetch, 1 `get_owned_shoes`, 10 `confirm_coros_run`), 2 after (1 fetch, 1 `confirm_pending_coros_runs`).
+
+**[REMOVED]**
+- The in-flight R12 plan doc. Its findings are in C15 and the roadmap; its history-learned-suggestions item is parked in the roadmap.
+
+**Verified:** backend suite 1088 + 1 skipped → 1127 + 1 skipped. `vite build` clean; no frontend change. T6 finding: the plan expected a Son of Anton tool allowlist, but there is none (`chat_service` discovers tools from the MCP server). `chat_proposals.describe` needed a branch, otherwise the card would show raw JSON. No change to `chat_service`. T7 ("Confirm all suggestions" button) skipped: optional in the plan, and the REST endpoint it would use now exists.
+**Not verified:** a live Claude Desktop or in-app chat sync against real runs, because it would write to the real DB. Covered by tests through the MCP functions, plus an in-memory check of the tool listing.
+
+---
+
 ## Project guide trimmed and renamed to AGENTS.md — 2026-10-31
 
 **[CHANGED]**
