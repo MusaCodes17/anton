@@ -251,3 +251,64 @@ def test_confirm_run_without_location_kwargs_uses_the_pending_row(db):
                           run_date=date(2026, 10, 6), distance_km=12.53)
     act = db.query(Activity).one()
     assert (act.location_label, act.start_lat, act.start_lng) == ("Montreal Run", 45.502, -73.567)
+
+
+# --- inbox_view ---------------------------------------------------------------------
+
+def test_inbox_view_rotation_lists_active_shoes_only(db):
+    active = mk_shoe(db, 120.0)
+    retired = mk_shoe(db, 50.0)
+    retired.status = "retired"
+    for_sale = mk_shoe(db, 30.0)
+    for_sale.status = "for_sale"
+    db.commit()
+    view = inbox.inbox_view(db)
+    assert [s.id for s in view.rotation] == [active.id]
+    assert view.rotation[0].current_mileage_km == 120.0 and view.rotation[0].shoe_type == "daily_trainer"
+
+
+def test_inbox_view_retired_suggestion_refreshes_without_writing_back(db):
+    retired = mk_shoe(db, 50.0)
+    retired.status = "retired"
+    db.commit()
+    active = mk_shoe(db, 300.0)
+    p = mk_pending(db, suggested_shoe_id=retired.id, suggestion_reason="old reason")
+    run = inbox.inbox_view(db).runs[0]
+    assert run.suggested_shoe_id == active.id and run.suggested_shoe == "Nike Pegasus"
+    assert run.suggestion_refreshed is True and run.suggestion_reason != "old reason"
+    db.expire_all()
+    row = db.get(PendingCorosRun, p.id)
+    assert row.suggested_shoe_id == retired.id and row.suggestion_reason == "old reason"
+
+
+def test_inbox_view_retired_suggestion_with_no_active_shoe_left(db):
+    retired = mk_shoe(db, 50.0)
+    retired.status = "retired"
+    db.commit()
+    mk_pending(db, suggested_shoe_id=retired.id, suggestion_reason="old reason")
+    run = inbox.inbox_view(db).runs[0]
+    assert run.suggested_shoe_id is None and run.suggested_shoe is None
+    assert run.suggestion_refreshed is True and "No active shoe" in run.suggestion_reason
+
+
+def test_inbox_view_active_suggestion_names_shoe_with_nickname(db):
+    shoe = mk_shoe(db, 100.0, nickname="Teal")
+    mk_pending(db, suggested_shoe_id=shoe.id, suggestion_reason="stored reason")
+    view = inbox.inbox_view(db)
+    run = view.runs[0]
+    assert run.suggested_shoe_id == shoe.id and run.suggested_shoe == "Nike Pegasus (Teal)"
+    assert run.suggestion_refreshed is False and run.suggestion_reason == "stored reason"
+    assert view.rotation[0].name == "Nike Pegasus (Teal)"
+
+
+def test_inbox_view_empty(db):
+    view = inbox.inbox_view(db)
+    assert view.runs == [] and view.rotation == []
+
+
+def test_inbox_view_excludes_dismissed_and_confirmed(db):
+    shoe = mk_shoe(db, 100.0)
+    p = mk_pending(db, "p")
+    mk_pending(db, "d", status="dismissed")
+    mk_pending(db, "c", status="confirmed")
+    assert [r.pending_id for r in inbox.inbox_view(db).runs] == [p.id]

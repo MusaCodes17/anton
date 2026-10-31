@@ -15,6 +15,7 @@ the two steps are two commits made safe by that idempotency, not one.)
 """
 from __future__ import annotations
 
+from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Optional
 
@@ -22,6 +23,7 @@ from sqlalchemy.orm import Session
 
 from app.models.models import OwnedShoe, PendingCorosRun
 from app.services import coros as coros_svc
+from app.services import coros_suggestion
 from app.utils.activity_tags import is_valid_tag
 from app.utils.pace import seconds_to_pace
 
@@ -152,3 +154,98 @@ def dismiss(db: Session, pending_id: int) -> dict:
         row.resolved_at = datetime.now(timezone.utc)
         db.commit()
     return {"dismissed": True}
+
+
+# --- compact view for Claude (R12 lean sync §T1) -------------------------------------
+
+@dataclass
+class InboxRun:
+    pending_id: int
+    date: str
+    distance_km: float
+    avg_pace: Optional[str]
+    avg_hr: Optional[int]
+    training_focus: Optional[str]
+    suggested_shoe_id: Optional[int]
+    suggested_shoe: Optional[str]
+    suggestion_reason: Optional[str]
+    suggestion_refreshed: bool = False
+
+
+@dataclass
+class RotationShoe:
+    id: int
+    name: str
+    shoe_type: Optional[str]
+    current_mileage_km: float
+
+
+@dataclass
+class InboxView:
+    runs: list[InboxRun] = field(default_factory=list)
+    rotation: list[RotationShoe] = field(default_factory=list)
+
+
+def _shoe_name(shoe: OwnedShoe) -> str:
+    # The runner refers to shoes by nickname, so show it alongside brand and model.
+    base = f"{shoe.brand} {shoe.model}"
+    return f"{base} ({shoe.nickname})" if shoe.nickname else base
+
+
+def inbox_view(db: Session) -> InboxView:
+    """
+    Compact read-only view of the "New runs" inbox plus the active rotation.
+
+    Read-only: never commits, never writes back. When a pending run's stored
+    suggestion points at a shoe that is no longer active (retired, for_sale, or
+    gone), the suggestion is recomputed for this view only and flagged with
+    `suggestion_refreshed`. It is not written to the row: a suggestion is derived,
+    so persisting the refresh would be a second writer for a derived value (INV-7 style).
+    """
+    active_rows = (
+        db.query(OwnedShoe)
+        .filter(OwnedShoe.status == "active")
+        .order_by(OwnedShoe.id)
+        .all()
+    )
+    active = {s.id: s for s in active_rows}
+    rotation = [
+        RotationShoe(
+            id=s.id,
+            name=_shoe_name(s),
+            shoe_type=s.shoe_type,
+            current_mileage_km=round(s.current_mileage or 0.0, 1),
+        )
+        for s in active_rows
+    ]
+
+    runs: list[InboxRun] = []
+    for p in list_pending(db):
+        stored_id = p["suggested_shoe_id"]
+        refreshed = False
+        if stored_id is None:
+            shoe_id, reason = None, p["suggestion_reason"]
+        elif stored_id in active:
+            shoe_id, reason = stored_id, p["suggestion_reason"]
+        else:
+            sug = coros_suggestion.suggest_shoe(
+                db,
+                distance_km=p["distance_km"],
+                avg_pace_s_per_km=p["avg_pace_s_per_km"],
+            )
+            shoe_id, reason = sug.shoe_id, sug.reason
+            refreshed = True
+        runs.append(InboxRun(
+            pending_id=p["id"],
+            date=p["run_date"],
+            distance_km=p["distance_km"],
+            avg_pace=p["avg_pace"],
+            avg_hr=p["avg_hr"],
+            training_focus=p["training_focus"],
+            suggested_shoe_id=shoe_id,
+            suggested_shoe=_shoe_name(active[shoe_id]) if shoe_id is not None else None,
+            suggestion_reason=reason,
+            suggestion_refreshed=refreshed,
+        ))
+
+    return InboxView(runs=runs, rotation=rotation)
