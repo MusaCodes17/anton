@@ -607,3 +607,55 @@ def test_frontend_build_failure_blocks_when_node_modules_exists(gate):
     gate.build_rc = (1, "vite: build failed")
     out = gate.run()
     assert out["decision"] == "block" and "vite: build failed" in out["reason"]
+
+
+# --- settings.json wiring ---
+
+SETTINGS_PATH = HOOKS_DIR.parent / "settings.json"
+EXPECTED_HOOK_SCRIPTS = {"pre_guard.py", "post_edit.py", "post_edit_tests.py", "stop_gate.py"}
+
+
+def _settings_hook_entries() -> list[tuple[str, dict]]:
+    """Return (event, hook) pairs for every command hook in settings.json."""
+    settings = json.loads(SETTINGS_PATH.read_text(encoding="utf-8"))
+    pairs = []
+    for event, groups in settings["hooks"].items():
+        for group in groups:
+            for hook in group["hooks"]:
+                pairs.append((event, hook))
+    return pairs
+
+
+def _script_name(command: str) -> str:
+    """Extract the ``<name>.py`` script from a ``.claude/hooks/`` command line."""
+    marker = ".claude/hooks/"
+    start = command.index(marker) + len(marker)
+    end = command.index(".py", start) + len(".py")
+    return command[start:end]
+
+
+def test_settings_wire_every_hook_script():
+    scripts = set()
+    for _event, hook in _settings_hook_entries():
+        name = _script_name(hook["command"])
+        assert (HOOKS_DIR / name).is_file(), f"settings.json references missing hook {name}"
+        scripts.add(name)
+    assert scripts == EXPECTED_HOOK_SCRIPTS
+
+
+def test_settings_subagent_gate_is_affected_scope_and_tests_run_async():
+    by_event: dict[str, list[dict]] = {}
+    for event, hook in _settings_hook_entries():
+        by_event.setdefault(event, []).append(hook)
+
+    subagent = by_event["SubagentStop"]
+    assert len(subagent) == 1
+    assert "--scope affected" in subagent[0]["command"]
+
+    stop = by_event["Stop"]
+    assert len(stop) == 1
+    assert "--scope" not in stop[0]["command"]
+
+    post = {_script_name(h["command"]): h for h in by_event["PostToolUse"]}
+    assert post["post_edit_tests.py"].get("asyncRewake") is True
+    assert not post["post_edit.py"].get("asyncRewake")
