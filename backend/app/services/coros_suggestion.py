@@ -1,14 +1,14 @@
 """
 Shoe suggestion for a pending COROS run (COROS direct sync §5).
 
-Job: a deterministic, no-model port of the heuristic in the `sync_coros_runs` MCP
-prompt (mcp_server/coros.py, "Step 3 — Suggest shoe assignment"), so the app's inbox and
-Claude propose the same shoe for the same run. If you change a band here, change
-that prompt text too (and vice-versa) — they are two renderings of one rule.
+Job: a deterministic, no-model shoe suggestion. This module is the only rendering
+of the rule (R12, design decisions C15): the app's inbox shows its output and the
+`sync_coros_runs` MCP prompt relays it, so the app and Claude propose the same shoe
+for the same run. Change a band here and nothing else needs to follow.
 
 The rule (heuristic — a suggestion the runner overrides with one tap, C9):
 1. Pace picks candidate shoe_types (PRIMARY signal), distance picks candidate
-   shoe_types (SECONDARY). Bands are inclusive as written in the prompt, and
+   shoe_types (SECONDARY). Bands are inclusive as written below, and
    deliberately overlap.
 2. Types both signals agree on win; among ACTIVE shoes of those types the one with
    the lowest `current_mileage` is suggested (spreads wear), ties → lowest id.
@@ -17,8 +17,8 @@ The rule (heuristic — a suggestion the runner overrides with one tap, C9):
 4. Nothing in the rotation fits → no suggestion, and the reason says so
    explicitly rather than forcing a bad match.
 Only `status == "active"` shoes are ever suggested: retired / for_sale never.
-`trail` appears in no band, so a trail shoe is never auto-suggested (the prompt has
-no trail rule; not invented here).
+`trail` appears in no band, so a trail shoe is never auto-suggested (no trail rule
+was ever defined; not invented here).
 
 Commit ownership: read-only.
 """
@@ -33,7 +33,7 @@ from app.models.models import OwnedShoe
 from app.utils.pace import seconds_to_pace
 
 # (lo_s_per_km, hi_s_per_km, types) — inclusive bounds; None = open-ended.
-# Mirrors the prompt: <3:30 · 3:30–4:15 · 4:00–4:30 · 4:30–5:30 · >5:30.
+# Bands: <3:30 · 3:30–4:15 · 4:00–4:30 · 4:30–5:30 · >5:30.
 _PACE_BANDS: list[tuple[Optional[int], Optional[int], frozenset[str]]] = [
     (None, 209, frozenset({"short_distance_racer", "intervals"})),
     (210, 255, frozenset({"tempo", "long_distance_racer"})),
@@ -42,7 +42,7 @@ _PACE_BANDS: list[tuple[Optional[int], Optional[int], frozenset[str]]] = [
     (331, None, frozenset({"recovery", "daily_trainer"})),
 ]
 
-# Distance bands (prompt): <5 · 5–16 · 16–22 · >21. The first is strictly below 5
+# Distance bands: <5 · 5–16 · 16–22 · >21. The first is strictly below 5
 # and the last strictly above 21; the middle two are inclusive and overlap at 16
 # and 21–22, so distance_types() spells them out rather than using a table.
 _DIST_SHORT = frozenset({"intervals", "short_distance_racer"})

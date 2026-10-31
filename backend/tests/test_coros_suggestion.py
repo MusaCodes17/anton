@@ -1,6 +1,6 @@
 """COROS direct sync §5 — deterministic shoe suggestion.
 
-Pins the rule ported from the `sync_coros_runs` prompt: pace primary, distance
+Pins the suggestion rule (this module is its only rendering, C15): pace primary, distance
 secondary, active shoes only, lowest mileage wins, explicit "no match" instead of
 a forced pick. Boundaries are named because the bands are inclusive and overlap.
 """
@@ -22,7 +22,7 @@ def shoe(db, type_, mileage, *, status="active", model=None):
 
 # --- the signals ------------------------------------------------------------------
 
-def test_pace_bands_match_the_prompt():
+def test_pace_bands():
     assert pace_types(P(3, 20)) == {"short_distance_racer", "intervals"}
     assert pace_types(P(4, 12)) == {"tempo", "long_distance_racer", "long_run"}   # 3:30–4:15 ∪ 4:00–4:30
     assert pace_types(P(5, 0)) == {"daily_trainer"}

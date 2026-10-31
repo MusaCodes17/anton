@@ -340,9 +340,26 @@ def test_status_never_connected_is_not_an_error(db):
 def test_prompt_uses_the_queue_not_the_connector_for_logging():
     text = mcp_server.sync_coros_runs()
     assert "fetch_unsynced_coros_runs" in text
+    assert "confirm_pending_coros_runs" in text
     assert "querySportRecords" not in text and "Step 1b" not in text
-    assert "do NOT call getActivityDetail" in text
-    assert "suggested_shoe_id" in text and "confirm_coros_run" in text
+    assert "do not call getactivitydetail" in text.lower()
+    assert "Call get_owned_shoes" not in text
+    assert "confirm_coros_run" not in text
+
+
+def test_prompt_stays_short():
+    assert len(mcp_server.sync_coros_runs()) < 2500
+
+
+def test_prompt_does_not_restate_the_heuristic():
+    text = mcp_server.sync_coros_runs()
+    assert "3:30" not in text and "daily_trainer" not in text
+
+
+def test_prompt_keeps_the_confirmation_gate():
+    text = mcp_server.sync_coros_runs()
+    assert "log nothing until the runner responds" in text
+    assert "INV-8" in text or "C9" in text
 
 
 def test_confirm_reports_threshold_crossed(db):

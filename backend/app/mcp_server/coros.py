@@ -354,126 +354,36 @@ def confirm_coros_run(
 def sync_coros_runs(days_back: int = 2) -> str:
     """
     Review the runs waiting in Anton's "New runs" inbox (pulled from COROS
-    by the backend poller) and assign them to shoes in your rotation.
-    Suggests shoe assignments based on pace and distance, and logs
-    confirmed runs after your review.
+    by the backend poller). Presents the server's shoe suggestions, waits for
+    your reply, then logs the confirmed runs in one batch.
     """
     # Thresholds come from the one table in rotation.py (never hard-coded here).
     kms = [f"{km}km" for km, _ in rotation.MILEAGE_THRESHOLDS]
     _thresholds_text = ", ".join(kms[:-1]) + f", or {kms[-1]}" if len(kms) > 1 else kms[0]
-    return f"""# COROS Sync Agent
+    # No suggestion heuristic here on purpose: services/coros_suggestion.py is the
+    # only rendering of that rule (design decisions C15); the prompt relays it.
+    return f"""# COROS Sync
 
-You are acting as a COROS run sync agent for Anton, the user's
-personal running platform. Follow this exact process.
+Sync the runner's queued COROS runs to their shoes. Be direct: a competitive
+runner wants clear information, not chattiness.
 
-## Step 1 — Get the queued runs from Anton
-Call fetch_unsynced_coros_runs. Anton's backend polls COROS itself about
-every 15 minutes, so this returns the same "New runs" inbox the app shows:
-already deduplicated against logged runs, with the rich per-run detail
-(elevation, times, cadence, calories, load, focus) already attached and a
-server-side shoe suggestion (`suggested_shoe_id`, `suggestion_reason`).
-Do NOT query the COROS connector to build this list.
-
-If `runs` is empty, say so and stop. If `warning` is present (COROS not
-connected / reconnect needed), relay it — the runner fixes that in
-Settings → Sync. You may call get_coros_sync_status for details.
-
-## Step 2 — Get current rotation
-Call get_owned_shoes to see all active shoes with their shoe_type
-and current mileage.
-
-## Step 3 — Suggest shoe assignment for each run
-For each unsynced run, reason about the best shoe match using BOTH
-signals below — do not rely on pace alone.
-
-Each queued run already carries a suggestion computed by exactly the rules
-below. Start from it; apply your own judgement only when it is null or you
-have a clear reason to differ (say why).
-
-### Pace signal (primary)
-- < 3:30/km → favors short_distance_racer or intervals
-- 3:30–4:15/km → favors tempo long_distance_racer or tempo
-- 4:00–4:30/km → favors long_run
-- 4:30–5:30/km → favors daily_trainer
-- > 5:30/km → favors recovery or daily_trainer
-
-### Distance signal (secondary, refines the pace signal)
-- < 5km → favors intervals or short_distance_racer
-- 5–16km → favors daily_trainer
-- 16–22km → favors tempo or daily_trainer
-- > 21km → favors long_run or long_distance_racer
-
-### Resolution
-- If pace and distance signals agree on a shoe_type, that's the
-  suggestion.
-- If they conflict, pick the shoe_type with an active shoe in the
-  rotation, preferring the one with lower current mileage.
-- Only suggest shoes that are status=active. Never suggest a
-  retired shoe.
-- If multiple active shoes share the matched shoe_type, suggest
-  the one with lower mileage (spread wear more evenly).
-- If no shoe in the rotation matches the inferred shoe_type, say so
-  explicitly rather than forcing a bad match.
-
-## Step 4 — Present all suggestions together
-Show every unsynced run with its suggested shoe and a brief reason,
-in a single structured response.
-
-Format:
-"Here are my suggestions for [N] unsynced runs:
-
-[Date] · [distance]km · [pace]/km · [hr]bpm
-→ [Brand Model] ([shoe_type], [current_mileage]km)
-Reason: [one short sentence]
-
-...repeat for each run...
-
-Confirm all, adjust specific runs, or skip any?"
-
-## Step 5 — Wait for user confirmation
-Do not log anything until the user responds. Accept any natural
-language mix of confirmations, changes, and skips. If ambiguous,
-ask for clarification.
-
-## Step 6 — Log confirmed runs
-
-For EACH confirmed run call confirm_coros_run with the values exactly as
-returned by fetch_unsynced_coros_runs — the detail is already prefetched, so
-do NOT call getActivityDetail:
-- coros_activity_id, owned_shoe_id (the confirmed shoe)
-- date, distance_km, avg_pace, avg_hr
-- moving_time_s, elapsed_time_s, elevation_gain_m, avg_cadence, calories,
-  training_load, training_focus (omit any that are null)
-
-COROS provides no run name, so only suggest an activity_tag if the runner
-told you what the run was (e.g. "that was the tempo"); the vocabulary is
-Easy, Long Run, Recovery, Tempo, Intervals, Track, Workout, Trail, Parkrun,
-Race. Never apply a tag without the runner's confirmation (C9); omit it
-otherwise.
-
-Runs the user skips simply stay in the inbox (they are not dismissed) — tell
-them they can dismiss a run in the app (New runs → Dismiss) if it should not
-count toward any shoe.
-
-## Step 7 — Summarise results
-"Logged [N] runs:
-- [Shoe name]: +[total km added]km (now [new total]km)
-...
-[Skipped: N runs]"
-
-## Step 8 — Proactive threshold check
-For any shoe that crossed {_thresholds_text}, flag it and offer
-to check replacement deals or add a note. confirm_coros_run reports a
-crossing as `threshold_crossed` (km) with a `threshold_message`.
-
-## General rules
-- Never log a run without explicit user confirmation
-- Never invent data — every field comes from fetch_unsynced_coros_runs
-  (Step 1)
-- If confirm_coros_run says a run is "already logged", it was handled
-  elsewhere (e.g. in the app) — note it and move on
-- If confirm_coros_run returns success: false for any run, report
-  the specific error and continue processing the rest
-- Keep the tone direct and concise — this user is a competitive
-  runner who wants clear information, not chattiness
+1. Call fetch_unsynced_coros_runs (lean default). Do NOT query the COROS
+   connector, and do NOT call getActivityDetail. If `runs` is empty, say so and stop.
+   Relay `warning` if present.
+2. Show one line per run: `#pending_id · date · km · pace · → suggested shoe
+   (reason)`. Start from `suggestion_reason`; differ only with a stated reason.
+   Flag a null suggestion as "pick one", and `suggestion_refreshed: true` as
+   "suggestion updated" (the earlier shoe left the rotation). Use `rotation`
+   for shoe names and ids: do NOT call get_owned_shoes.
+3. Wait for the reply (INV-8): log nothing until the runner responds. Accept
+   "all good", per-run overrides by shoe name, skips and dismissals, in any
+   natural mix. "all good" covers only runs that have a suggestion; a run
+   flagged "pick one" still needs a choice. If ambiguous, ask.
+4. Make one confirm_pending_coros_runs call with every decided run: pass
+   `pending_id`, `action`, and for confirms the `owned_shoe_id` the runner
+   agreed to. Add `activity_tag` only if the runner said what the run was
+   (C9). Leave skipped runs out; they stay pending.
+5. Report from the result and do no arithmetic: `per_shoe`, `errors` verbatim,
+   the skipped count. For `thresholds` (crossing {_thresholds_text}), offer to
+   check replacement deals or add a note.
 """
