@@ -1,5 +1,6 @@
-"""COROS sync MCP surface: connection status, manual sync, unsynced-run inbox, run confirmation."""
+"""COROS sync MCP surface: connection status, manual sync, unsynced-run inbox, run confirmation (single and batch)."""
 import asyncio
+from dataclasses import asdict
 from typing import Optional
 from datetime import date as date_type
 
@@ -60,8 +61,8 @@ async def sync_coros_now() -> dict:
     runs or fitness, or when fitness data looks stale.
 
     No confirmation needed: it never logs a run or touches mileage (new runs
-    wait in the inbox — present them with fetch_unsynced_coros_runs and log
-    each through confirm_coros_run as usual), and a fitness snapshot is a
+    wait in the inbox — present them with fetch_unsynced_coros_runs, then log
+    the runner's decisions with confirm_pending_coros_runs), and a fitness snapshot is a
     reading COROS computed, saved as-is (design decisions C13).
 
     Returns `queued` (new runs added to the inbox), `pending_count`,
@@ -100,41 +101,59 @@ async def sync_coros_now() -> dict:
 
 
 @mcp.tool()
-def fetch_unsynced_coros_runs(days_back: int = 30) -> dict:
+def fetch_unsynced_coros_runs(days_back: int = 30, detail: bool = False) -> dict:
     """
-    Return the runs waiting in Anton's "New runs" inbox — the same queue the
-    app shows. A background poller pulls them from COROS about every 15
-    minutes, already deduplicated against logged runs and with detail
-    prefetched, so there is nothing to look up in COROS first. Each run
-    carries `suggested_shoe_id` / `suggestion_reason` (the same heuristic the
-    app uses; may be null). Present them to the user for shoe assignment,
-    then call confirm_coros_run for each confirmed one, passing the fields
-    below through unchanged. Read-only; never logs anything.
+    Return the runs waiting in Anton's "New runs" inbox, the same queue the
+    app shows, plus the active rotation. A background poller pulls runs from
+    COROS about every 15 minutes, already deduplicated against logged runs, so
+    there is nothing to look up in COROS first. Read-only: never logs a run
+    and never touches mileage.
+
+    Default (lean) rows in `runs` carry: `pending_id`, `date`, `distance_km`,
+    `avg_pace`, `avg_hr`, `training_focus`, and a shoe suggestion
+    (`suggested_shoe_id`, `suggested_shoe` as a readable name,
+    `suggestion_reason`, `suggestion_refreshed`). When `suggested_shoe_id` is
+    null there is no suggestion and the runner must pick the shoe.
+    `rotation` lists the active shoes (id, name, shoe_type, current_mileage_km),
+    so there is no need to call get_owned_shoes.
+
+    Present the runs and suggestions to the runner, wait for their reply, then
+    call confirm_pending_coros_runs ONCE with the decided runs, using each
+    run's `pending_id`. Never log on your own initiative.
 
     Args:
-        days_back: Ignored — kept so older callers don't break. The queue
-            holds every unresolved run regardless of age.
+        days_back: Ignored. Kept so older callers don't break. The queue holds
+            every unresolved run regardless of age.
+        detail: Default False. True returns the full per-run fields
+            (`coros_activity_id`, elevation, times, cadence, calories, load,
+            suggested_shoe_id, suggestion_reason). Only needed when logging a
+            run with confirm_coros_run, which takes `coros_activity_id`.
     """
     with _core.get_session() as db:
-        runs = [
-            {
-                "coros_activity_id": r["label_id"],
-                "date": r["run_date"],
-                "distance_km": r["distance_km"],
-                "avg_pace": r["avg_pace"],
-                "avg_hr": r["avg_hr"],
-                "moving_time_s": r["moving_time_s"],
-                "elapsed_time_s": r["elapsed_time_s"],
-                "elevation_gain_m": r["elevation_gain_m"],
-                "avg_cadence": r["avg_cadence"],
-                "calories": r["calories"],
-                "training_load": r["training_load"],
-                "training_focus": r["training_focus"],
-                "suggested_shoe_id": r["suggested_shoe_id"],
-                "suggestion_reason": r["suggestion_reason"],
-            }
-            for r in coros_inbox_svc.list_pending(db)
-        ]
+        view = coros_inbox_svc.inbox_view(db)
+        if detail:
+            runs = [
+                {
+                    "coros_activity_id": r["label_id"],
+                    "date": r["run_date"],
+                    "distance_km": r["distance_km"],
+                    "avg_pace": r["avg_pace"],
+                    "avg_hr": r["avg_hr"],
+                    "moving_time_s": r["moving_time_s"],
+                    "elapsed_time_s": r["elapsed_time_s"],
+                    "elevation_gain_m": r["elevation_gain_m"],
+                    "avg_cadence": r["avg_cadence"],
+                    "calories": r["calories"],
+                    "training_load": r["training_load"],
+                    "training_focus": r["training_focus"],
+                    "suggested_shoe_id": r["suggested_shoe_id"],
+                    "suggestion_reason": r["suggestion_reason"],
+                }
+                for r in coros_inbox_svc.list_pending(db)
+            ]
+        else:
+            runs = [asdict(r) for r in view.runs]
+        rotation = [asdict(s) for s in view.rotation]
         conn = coros_connection_svc.get_status(db)
         summary = coros_poller_svc.get_sync_summary(db)
 
@@ -143,6 +162,7 @@ def fetch_unsynced_coros_runs(days_back: int = 30) -> dict:
         "coros_configured": conn["status"] == "connected",
         "connection_status": conn["status"],
         "runs": runs,
+        "rotation": rotation,
         "already_synced": 0,
         "total_fetched": len(runs),
         "last_success_at": summary["last_success_at"],
@@ -155,6 +175,83 @@ def fetch_unsynced_coros_runs(days_back: int = 30) -> dict:
             else "COROS isn't connected. Connect it in Settings → Sync to receive new runs."
         )
     return result
+
+
+@mcp.tool()
+def confirm_pending_coros_runs(items: list[dict]) -> dict:
+    """
+    Confirm or dismiss many runs from the "New runs" inbox in one call. Logs
+    each confirmed run to the shoe the runner chose and returns a ready-made
+    summary.
+
+    Call this ONLY after the runner has replied about these runs. Never log or
+    dismiss on your own initiative (INV-8 / design decision C9): the runner is
+    the tiebreaker, and a suggestion is never a default. Make ONE call per
+    sync, covering every run the runner decided on. Runs they skipped are left
+    out and simply stay pending.
+
+    Args:
+        items: A list of objects, one per decided run:
+            {pending_id, action, owned_shoe_id, activity_tag?, notes?}
+            - pending_id: the `pending_id` from fetch_unsynced_coros_runs.
+              Each id may appear only once; a duplicate rejects the whole
+              call with nothing written.
+            - action: "confirm" (log the run) or "dismiss".
+            - owned_shoe_id: REQUIRED for confirm, and must be the shoe the
+              runner agreed to. There is no default to the suggestion. Not
+              used for dismiss.
+            - activity_tag: optional, only if the runner told you what the run
+              was. One of the ACTIVITY_TAGS vocabulary (Easy, Long Run,
+              Recovery, Tempo, Intervals, Track, Workout, Trail, Parkrun,
+              Race). Never infer or apply one silently (C9).
+            - notes: optional free text from the runner.
+            Dismiss is for runs that should not count toward any shoe; the
+            run is kept as dismissed so the poller won't queue it again.
+
+    Safe to repeat: a run that is already logged is counted in
+    `already_logged` and is not logged twice or added to mileage again.
+
+    Returns `success` (True means the batch ran, even if some items failed)
+    and:
+        logged: runs newly logged.
+        dismissed: runs dismissed.
+        already_logged: runs that were already logged (no change).
+        errors: list of {pending_id, error} for items that failed. Report
+            these to the runner verbatim; the other items were still processed.
+        per_shoe: list of {shoe_id, name, km_added, new_mileage_km}.
+        thresholds: shoes that crossed a mileage threshold, with a message.
+        checkpoints: shoes that reached a checkpoint.
+    Build your summary from these fields rather than adding km up yourself,
+    and flag any `thresholds` entries (offer to check replacement deals).
+    On `success` False (malformed input or duplicate ids) nothing was written.
+    """
+    if not isinstance(items, list):
+        return {"success": False, "error": "items must be a list of objects"}
+    batch: list[coros_inbox_svc.BatchItem] = []
+    for idx, raw in enumerate(items):
+        if not isinstance(raw, dict):
+            return {"success": False, "error": f"Item {idx} must be an object, got {type(raw).__name__}"}
+        try:
+            pid = int(raw["pending_id"])
+            action = raw["action"]
+        except (KeyError, TypeError, ValueError):
+            return {"success": False,
+                    "error": f"Item {idx} needs an integer 'pending_id' and an 'action'"}
+        shoe_raw = raw.get("owned_shoe_id")
+        try:
+            shoe_id = int(shoe_raw) if shoe_raw is not None else None
+        except (TypeError, ValueError):
+            return {"success": False, "error": f"Item {idx}: 'owned_shoe_id' must be an integer"}
+        batch.append(coros_inbox_svc.BatchItem(
+            pending_id=pid, action=action, owned_shoe_id=shoe_id,
+            activity_tag=raw.get("activity_tag"), notes=raw.get("notes"),
+        ))
+    with _core.get_session() as db:
+        try:
+            result = coros_inbox_svc.resolve_batch(db, batch)
+        except ValueError as exc:
+            return {"success": False, "error": str(exc)}
+    return {"success": True, **asdict(result)}
 
 
 @mcp.tool()
@@ -179,7 +276,9 @@ def confirm_coros_run(
     """
     Log a single COROS run to an owned shoe after the user confirms the
     assignment. Call this once per run after fetching unsynced runs and
-    getting the user's shoe choice for each. Also clears the run from the
+    getting the user's shoe choice for each. Prefer confirm_pending_coros_runs
+    for runs in the inbox; this tool is for runs not in the inbox and older
+    clients. Also clears the run from the
     app's "New runs" inbox, and is safe to repeat: a run already logged
     (by Claude or the app) returns success=False "already logged" instead
     of logging twice.

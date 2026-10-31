@@ -128,7 +128,7 @@ def test_fetch_returns_pending_queue_with_suggestions_and_detail(db):
     pending(db, "1", suggested_shoe_id=s.id, suggestion_reason="because")
     pending(db, "2", status="dismissed")
     pending(db, "3", status="confirmed")
-    out = mcp_server.fetch_unsynced_coros_runs(days_back=1)       # days_back is ignored
+    out = mcp_server.fetch_unsynced_coros_runs(days_back=1, detail=True)       # days_back is ignored
     assert out["success"] is True and out["coros_configured"] is True and "warning" not in out
     assert [r["coros_activity_id"] for r in out["runs"]] == ["1"]
     r = out["runs"][0]
@@ -137,13 +137,14 @@ def test_fetch_returns_pending_queue_with_suggestions_and_detail(db):
     assert (r["avg_cadence"], r["calories"], r["training_load"], r["training_focus"]) == (186.0, 710.0, 113.0, "Base")
     assert r["suggested_shoe_id"] == s.id and r["suggestion_reason"] == "because"
     assert out["total_fetched"] == 1 and out["already_synced"] == 0
+    assert [x["id"] for x in out["rotation"]] == [s.id]
 
 
 def test_fetch_output_feeds_confirm_unchanged(db):
     connect(db)
     s = shoe(db, 100.0)
     pending(db)
-    r = mcp_server.fetch_unsynced_coros_runs()["runs"][0]
+    r = mcp_server.fetch_unsynced_coros_runs(detail=True)["runs"][0]
     out = mcp_server.confirm_coros_run(
         coros_activity_id=r["coros_activity_id"], owned_shoe_id=s.id, date=r["date"],
         distance_km=r["distance_km"], avg_pace=r["avg_pace"], avg_hr=r["avg_hr"],
@@ -169,6 +170,89 @@ def test_fetch_never_logs_anything(db):
     shoe(db)
     pending(db)
     mcp_server.fetch_unsynced_coros_runs()
+    assert db.query(Activity).count() == 0
+
+
+# --- lean fetch + batch confirm (R12 §T4) ------------------------------------------------
+
+def test_fetch_lean_shape_is_compact_with_rotation(db):
+    connect(db, "reauth_required")
+    s = shoe(db)
+    pending(db, "1", suggested_shoe_id=s.id, suggestion_reason="because")
+    out = mcp_server.fetch_unsynced_coros_runs()
+    assert set(out["runs"][0]) == {
+        "pending_id", "date", "distance_km", "avg_pace", "avg_hr", "training_focus",
+        "suggested_shoe_id", "suggested_shoe", "suggestion_reason", "suggestion_refreshed"}
+    assert out["runs"][0]["suggested_shoe"] == "Nike Pegasus"
+    assert [x["id"] for x in out["rotation"]] == [s.id]
+    assert out["connection_status"] == "reauth_required" and "warning" in out
+    assert out["total_fetched"] == 1 and "last_success_at" in out
+
+
+def test_fetch_then_batch_confirm_end_to_end_and_repeat_is_safe(db):
+    connect(db)
+    s = shoe(db, 100.0)
+    pending(db)
+    pid = mcp_server.fetch_unsynced_coros_runs()["runs"][0]["pending_id"]
+    items = [{"pending_id": pid, "action": "confirm", "owned_shoe_id": s.id}]
+    out = mcp_server.confirm_pending_coros_runs(items)
+    assert out["success"] is True and out["logged"] == 1 and out["errors"] == []
+    assert inbox.list_pending(db) == []
+    db.refresh(s)
+    assert s.current_mileage == 112.53
+    assert len(out["per_shoe"]) == 1
+    assert out["per_shoe"][0]["shoe_id"] == s.id and out["per_shoe"][0]["km_added"] == 12.53
+    again = mcp_server.confirm_pending_coros_runs(items)
+    assert again["success"] is True and again["already_logged"] == 1 and again["logged"] == 0
+    db.refresh(s)
+    assert s.current_mileage == 112.53 and db.query(Activity).count() == 1
+
+
+def test_batch_duplicate_ids_reject_whole_call(db):
+    s = shoe(db)
+    p = pending(db)
+    out = mcp_server.confirm_pending_coros_runs([
+        {"pending_id": p.id, "action": "confirm", "owned_shoe_id": s.id},
+        {"pending_id": p.id, "action": "dismiss"},
+    ])
+    assert out["success"] is False and "Duplicate" in out["error"]
+    assert db.query(Activity).count() == 0
+    assert len(inbox.list_pending(db)) == 1
+
+
+@pytest.mark.parametrize("items", [
+    [{"action": "confirm"}],
+    ["x"],
+    [{"pending_id": "abc", "action": "confirm"}],
+])
+def test_batch_malformed_items_fail_cleanly(db, items):
+    shoe(db)
+    pending(db)
+    out = mcp_server.confirm_pending_coros_runs(items)
+    assert out["success"] is False and out["error"]
+    assert db.query(Activity).count() == 0
+    assert len(inbox.list_pending(db)) == 1
+
+
+def test_batch_unknown_shoe_is_a_per_item_error_others_still_logged(db):
+    s = shoe(db)
+    p1 = pending(db, "1")
+    p2 = pending(db, "2")
+    out = mcp_server.confirm_pending_coros_runs([
+        {"pending_id": p1.id, "action": "confirm", "owned_shoe_id": 99999},
+        {"pending_id": p2.id, "action": "confirm", "owned_shoe_id": s.id},
+    ])
+    assert out["success"] is True and out["logged"] == 1
+    assert len(out["errors"]) == 1 and out["errors"][0]["pending_id"] == p1.id
+    assert db.query(Activity).count() == 1
+
+
+def test_batch_dismiss_removes_run_from_fetch(db):
+    connect(db)
+    p = pending(db)
+    out = mcp_server.confirm_pending_coros_runs([{"pending_id": p.id, "action": "dismiss"}])
+    assert out["success"] is True and out["dismissed"] == 1
+    assert mcp_server.fetch_unsynced_coros_runs()["runs"] == []
     assert db.query(Activity).count() == 0
 
 
