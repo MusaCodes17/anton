@@ -89,6 +89,14 @@ def repo_root(cwd: str | None) -> Path | None:
     return Path(out)
 
 
+def current_branch(root: Path) -> str:
+    """Current branch name of the tree at ``root`` (``HEAD`` when detached,
+    ``unknown`` if git fails). Used to key per-branch baselines."""
+    out = _git(root, "rev-parse", "--abbrev-ref", "HEAD")
+    name = out.decode("utf-8", "replace").strip() if out else ""
+    return name or "unknown"
+
+
 def venv_python() -> Path | None:
     """The project venv's python, or None.
 
