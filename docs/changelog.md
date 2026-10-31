@@ -5,6 +5,28 @@
 
 ---
 
+## R13 — Verification hooks for Claude Code sessions — 2026-10-31
+
+Branch `r13-verification-hooks` (commits `23e9c93`…`f1a3fd3`, T1–T7). No migration, no app code, no frontend change. Decision: `design_decisions.md` E26.
+
+**[ADDED]**
+- `.claude/hooks/`: `_lib.py` (stdlib-only shared helper), `pre_guard.py` (PreToolUse guards for `.env`, the live DB, applied migrations, `pip install` of the pinned trio, and `alembic downgrade`), `post_edit.py` (per-edit syntax and hard-coded-colour checks), `post_edit_tests.py` (affected tests in the background, waking Claude only on failure), `stop_gate.py` (Stop and SubagentStop gate with loop guard and test-count guard).
+- `.claude/settings.json` wires the hooks. `.claude/hooks/.state/` and `__pycache__/` are gitignored.
+- `backend/tests/test_claude_hooks.py`: 63 tests, run in CI, that prove the guards and the loop guard with real git.
+- `AGENTS.md` §3 folder line and §10 paragraph on the hooks.
+
+**[CHANGED]**
+- Stop runs affected tests only; the full suite runs only when a core file changed (T0 decision).
+- The count guard uses `pytest --collect-only`, not the `N passed` line, because an affected run reports only a subset.
+
+**[REMOVED]**
+- The R13 in-flight plan doc. Its findings are in E26 and the roadmap's Parked list.
+
+**Verified:** backend suite 1127 + 1 skipped → **1190 + 1 skipped** (63 new hook tests). T0 timings on four quiet runs: full suite 54–68 s; `--collect-only` ~9 s. Slowest modules: test_strava_weather 4.7 s, test_race_readiness 4.3 s, test_coros_poller 3.6 s, test_finish_estimate 2.5 s, test_coros_inbox 2.4 s. The hook tests add ~8–13 s here because they use real git: 79 s after the change. The T0 rule (full suite under ~60 s) was not met, so Stop uses the affected set.
+**Seen live:** the Stop and SubagentStop gates fired in the build session once `settings.json` landed, passed silently and wrote their markers. **Not verified live:** PreToolUse and PostToolUse firing, the `asyncRewake` wake on failure, a real block, and the `background_tasks` field. Those are covered by `test_claude_hooks.py` and by running the wired commands by hand.
+
+---
+
 ## R12 — Lean COROS sync from Claude — 2026-10-31
 
 Branch `r12-lean-coros-sync`. No migration, no schema change. Decision: `design_decisions.md` C15.
