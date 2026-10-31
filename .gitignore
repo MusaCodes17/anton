@@ -12,3 +12,7 @@ scripts/spikes/.coros_spike_state.json
 
 # Impeccable per-machine consent state
 .impeccable/config.local.json
+
+# R13 verification hooks: per-tree pass/fail markers and bytecode
+.claude/hooks/.state/
+.claude/hooks/__pycache__/
