@@ -1,7 +1,18 @@
 # Anton — Session Changelog
 
-**Last Updated:** 2026-10-20
+**Last Updated:** 2026-10-31
 **Status / current focus:** see `docs/project_state.md` (the perishable snapshot). This file is the append-only session log — the authoritative record of *what happened*; the `docs/` suite is the reference material.
+
+---
+
+## Project guide trimmed and renamed to AGENTS.md — 2026-10-31
+
+**[CHANGED]**
+- The project guide went from 4,086 to about 2,600 words: dated history left §14, the commands index and retired-docs paragraph left §3, and general good practice was cut across §2–§13. Section numbers, the Session Checklist and INV-1…INV-10 are unchanged, and all §6 traps stayed.
+- Renamed from `claude.md` (tracked in lowercase) to `AGENTS.md`. Other files still cite `CLAUDE.md §n`; those citations now mean this file.
+- Stale facts fixed: the ORM model count, the `scraper_manager.py` shim reference (file deleted), the schema file list, the README claim and the "64 passing" test count. §3 now says `.claude/skills/` holds flat reference docs that are not auto-loaded. §3 and §11 now agree on the plan-doc lifecycle, and the conflicting §13 bullet was removed.
+
+**Verified:** docs-only change. Headings, INV IDs and §6 traps checked against the previous version. Suite and `vite build` not run.
 
 ---
 
