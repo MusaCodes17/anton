@@ -18,7 +18,7 @@ from datetime import date, timedelta
 import pytest
 
 from app import mcp_server
-from app.models.models import Activity, OwnedShoe, ShoeRun
+from app.models.models import Activity, OwnedShoe, PendingCorosRun, ShoeRun
 from app.services import chat_proposals as cp
 from app.services.chat_service import BaseLLMProvider, _ToolCall
 
@@ -61,6 +61,7 @@ def run(coro):
     ("record_athlete_metrics", {"vo2max": 59}, True),
     ("log_run_to_shoe", {"owned_shoe_id": 1}, True),
     ("confirm_coros_run", {}, True),
+    ("confirm_pending_coros_runs", {"items": []}, True),
     ("retire_shoe", {"owned_shoe_id": 1}, True),
     ("trigger_scrape", {}, True),
     ("onboard_retailer", {"retailer_id": 1, "confirm": False}, False),  # preview writes nothing
@@ -94,6 +95,57 @@ def test_unknown_tool_falls_back_to_raw_args(db):
     p = cp.create(db, "some_future_tool", {"x": 1, "name": "y"})
     assert p.title == "Some future tool"
     assert {"label": "x", "value": "1"} in p.fields
+
+
+def _pending(db, label_id="coros-1", km=8.2, run_day=date(2026, 10, 30)):
+    row = PendingCorosRun(
+        label_id=label_id, sport_type=100, run_date=run_day, distance_km=km,
+        moving_time_s=2400, avg_pace_s_per_km=293, start_timestamp=0, end_timestamp=1,
+    )
+    db.add(row)
+    db.commit()
+    return row
+
+
+def test_batch_card_lists_every_run_with_its_decision(db, shoe):
+    first = _pending(db, "coros-1", km=8.2)
+    second = _pending(db, "coros-2", km=14.0, run_day=date(2026, 10, 29))
+    p = cp.create(db, "confirm_pending_coros_runs", {"items": [
+        {"pending_id": first.id, "action": "confirm", "owned_shoe_id": shoe.id, "activity_tag": "Easy"},
+        {"pending_id": second.id, "action": "dismiss"},
+    ]})
+    assert p.title == "Log COROS runs"
+    assert len(p.fields) == 2
+    assert p.fields[0] == {"label": "2026-10-30 · 8.2 km", "value": "Adidas Evo SL — Teal · Easy"}
+    assert p.fields[1] == {"label": "2026-10-29 · 14.0 km", "value": "Dismiss"}
+    assert p.edit is None
+
+
+def test_batch_card_renders_unknown_shoe_missing_shoe_and_unknown_run(db, shoe):
+    row = _pending(db)
+    p = cp.create(db, "confirm_pending_coros_runs", {"items": [
+        {"pending_id": row.id, "action": "confirm", "owned_shoe_id": 999},
+        {"pending_id": row.id, "action": "confirm"},
+        {"pending_id": 12345, "action": "dismiss"},
+    ]})
+    assert p.fields[0]["value"] == "#999 (not found)"
+    assert p.fields[1]["value"] == "No shoe chosen"
+    assert p.fields[2] == {"label": "#12345 (not found)", "value": "Dismiss"}
+
+
+def test_batch_card_tolerates_malformed_input(db):
+    assert cp.describe(db, "confirm_pending_coros_runs", {"items": "nope"})[1] == [
+        {"label": "Runs", "value": "No valid runs"},
+    ]
+    assert cp.describe(db, "confirm_pending_coros_runs", {"items": ["x"]})[1] == [
+        {"label": "Unknown run", "value": "Invalid item"},
+    ]
+    assert cp.describe(db, "confirm_pending_coros_runs", {"items": [{"pending_id": "abc"}]})[1] == [
+        {"label": "Unknown run", "value": "Invalid item"},
+    ]
+    assert cp.describe(db, "confirm_pending_coros_runs", {})[1] == [
+        {"label": "Runs", "value": "No valid runs"},
+    ]
 
 
 # ── Confirm / cancel lifecycle ───────────────────────────────────────────────
