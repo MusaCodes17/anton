@@ -1,6 +1,6 @@
 """Deal-watching MCP surface: deals, watchlist, retailers, scraping, price history, coupons."""
 from dataclasses import asdict
-from typing import List, Optional
+from typing import List, Optional, Union
 from datetime import datetime
 
 from mcp.server.fastmcp import Context
@@ -12,7 +12,10 @@ from app.services import settings as settings_svc, scrape_history as scrape_hist
 from app.models.schemas import PurchaseDraftResponse
 from app.mcp_server import _core
 from app.mcp_server._core import mcp
-from app.mcp_server._shared import _deal_to_dict, _format_relative_time, _watchlist_entry_payload
+from app.mcp_server._shared import _deal_brief, _deal_to_dict, _format_relative_time, _scrape_health_brief, _watchlist_brief, _watchlist_entry_payload
+
+_WATCHLIST_MAX_LIMIT = 200  # hard cap per page so one call can't dump the whole watchlist into context
+_BRAND_DEALS_RESOURCE_CAP = 50  # top-N by savings per brand resource; the footer points to get_deals for the rest
 
 
 @mcp.tool()
@@ -22,6 +25,7 @@ def get_deals(
     size: Optional[str] = None,
     shoe_type: Optional[str] = None,
     limit: int = 20,
+    detail: bool = False,
 ) -> List[dict]:
     """
     List active running shoe deals, biggest discount first.
@@ -30,6 +34,9 @@ def get_deals(
     a deal on Adidas", or "what's on sale in size 10.5". Only returns deals
     that are genuinely marked down (not just shoes sitting at full price
     that happen to be at or below target) and currently active.
+
+    Each brief deal has: id (pass it to draft_purchase_from_deal), shoe_id,
+    shoe ("Brand Model"), retailer, price, savings_percent, size_fit and url.
 
     Args:
         min_savings_percent: Only include deals discounted by at least this
@@ -42,6 +49,8 @@ def get_deals(
             "daily_trainer", "tempo", "trail", "recovery", "intervals",
             "short_distance_racer".
         limit: Max number of deals to return (default 20, capped at 100).
+        detail: True adds msrp, target_price, savings_amount, in_stock,
+            sizes_available, colorway, shoe_type and detected_at to each deal.
 
     Each deal carries size_fit ("in" | "out" | "unknown") against the runner's
     saved shoe size; null means no size is saved. Prefer "in" deals when
@@ -57,7 +66,9 @@ def get_deals(
             size=size,
             limit=limit,
         )
-        return [_deal_to_dict(d) for d in deals]
+        if detail:
+            return [_deal_to_dict(d) for d in deals]
+        return [_deal_brief(d) for d in deals]
 
 
 @mcp.tool()
@@ -109,26 +120,43 @@ def draft_purchase_from_deal(deal_id: int) -> dict:
 
 
 @mcp.tool()
-def get_watchlist() -> List[dict]:
+def get_watchlist(limit: int = 20, offset: int = 0, detail: bool = False) -> Union[dict, List[dict]]:
     """
-    List every tracked shoe with its current deal status, best-ever price,
-    and last-seen prices per retailer.
-
+    List tracked shoes with their current deal status and best-ever price.
     Use this to answer "what am I watching?", "what's the best price ever
     on X?", "which tracked shoes are currently on sale?", or to look up
-    a shoe_id before calling trigger_scrape. On-sale shoes sort first
-    (deepest discount first), then the rest alphabetically by brand/model.
+    a shoe_id before calling trigger_scrape.
 
-    Each entry includes:
-    - shoe_id, brand, model, shoe_type, msrp, target_price
-    - on_sale: True if there's at least one active deal below MSRP
-    - best_deal: the current lowest active deal price with savings %, or null
-    - best_ever_price / best_ever_at: historical best price across all scrapes
-    - last_seen: most recent scraped price per retailer (cheapest first)
+    By default returns the first 20 brief entries as {"entries", "total",
+    "has_more"}. Each brief entry has: shoe_id, brand, model, shoe_type, msrp,
+    target_price, on_sale, best_deal (null, or deal_id, retailer_name,
+    current_price, savings_percent) and best_ever_price. On-sale shoes come
+    first (deepest discount first), so if you are looking up a shoe_id, page
+    with offset or raise limit (up to 200) until it appears.
+
+    Pass detail=True to get every shoe as a plain list (limit and offset are
+    ignored) with the full record: image, best-ever date, and last-seen
+    prices per retailer.
+
+    Args:
+        limit: Entries per page (default 20, clamped to 1-200).
+        offset: Number of entries to skip (default 0, clamped to >= 0).
+        detail: True for every shoe with the full record, as a plain list.
     """
     with _core.get_session() as db:
+        if detail:
+            return [_watchlist_entry_payload(e) for e in watchlist_svc.build_watchlist(db)]
+        # Slices the aggregate in Python: build_watchlist has no SQL paging seam, and the
+        # service is left unchanged on purpose. The list is personal scale (tens of shoes).
+        limit = max(1, min(limit, _WATCHLIST_MAX_LIMIT))
+        offset = max(0, offset)
         entries = watchlist_svc.build_watchlist(db)
-        return [_watchlist_entry_payload(e) for e in entries]
+        page = entries[offset:offset + limit]
+        return {
+            "entries": [_watchlist_brief(e) for e in page],
+            "total": len(entries),
+            "has_more": offset + len(page) < len(entries),
+        }
 
 
 @mcp.tool()
@@ -252,7 +280,7 @@ def delete_shoe(shoe_id: int) -> dict:
 
 
 @mcp.tool()
-def scrape_health() -> dict:
+def scrape_health(detail: bool = False) -> dict:
     """
     Report each retailer's scrape health so you can answer "is any retailer
     quietly broken?" without triggering a scrape.
@@ -272,18 +300,24 @@ def scrape_health() -> dict:
     `retailers_needing_attention` list summarises retailers where the watchdog
     fired so you can spot trouble at a glance without scanning every entry.
 
-    Also returns `recent_runs`, a newest-first log across all retailers. This
-    reads the durable scrape_runs history, so it reflects trends across past
-    scrapes, not just the current job. Use it before trigger_scrape to decide
-    whether a retailer is worth investigating.
+    By default each retailer entry is brief: its verdict, the latest run's
+    `last_status`, `last_run_at`, `products_found` and `error`, a newest-first
+    `products_trend` of recent product counts, and the watchdog fields. Use it
+    before trigger_scrape to decide whether a retailer is worth investigating.
 
-    Finally, `needs_onboarding` lists active retailers with no working scraper
+    `needs_onboarding` lists active retailers with no working scraper
     that haven't been declared unscrapable (R4.6) — new retailers awaiting
     setup, distinct from the watchdog's "quietly broken" cases. Run the
     `retailer_onboarding` prompt (or probe_retailer) to resolve them.
+
+    Args:
+        detail: True for the full record: each retailer's complete per-run
+            history (`trend`, with every run's status, timestamps and counts)
+            and the `recent_runs` log, newest first, across all retailers.
     """
     with _core.get_session() as db:
-        return scrape_history_svc.scrape_health(db)
+        health = scrape_history_svc.scrape_health(db)
+        return health if detail else _scrape_health_brief(health)
 
 
 @mcp.tool()
@@ -434,7 +468,7 @@ def active_deals_resource() -> str:
             md_lines.append(f"| {shoe_name} | {d.retailer.name} | ${d.current_price:.2f} | {savings} |")
 
         markdown = "\n".join(md_lines)
-        payload = json.dumps({"total": total, "deals": [_deal_to_dict(d) for d in deals]}, default=str)
+        payload = json.dumps({"total": total, "deals": [_deal_brief(d) for d in deals]}, default=str)
         return f"{markdown}\n\n```json\n{payload}\n```"
 
 
@@ -490,7 +524,7 @@ def deals_watchlist_resource() -> str:
             md_lines.append(f"| {name} | {type_tag} | {msrp} | {best_ever} |")
 
     markdown = "\n".join(md_lines)
-    payload = json.dumps({"entries": [_watchlist_entry_payload(e) for e in entries]}, default=str)
+    payload = json.dumps({"entries": [_watchlist_brief(e) for e in entries]}, default=str)
     return f"{markdown}\n\n```json\n{payload}\n```"
 
 
@@ -540,23 +574,23 @@ def retailers_resource() -> str:
     mime_type="application/json",
 )
 def brand_deals_resource(brand: str) -> str:
-    """Active deals for a specific brand, sorted by savings percentage"""
+    """Top 50 active deals for a brand by savings percentage"""
     import json
 
     with _core.get_session() as db:
-        deals = (
+        base = (
             db.query(Deal)
             .join(Deal.shoe)
             .filter(Deal.is_active == True, Shoe.brand.ilike(f"%{brand}%"))
-            .order_by(desc(Deal.savings_percent))
-            .all()
         )
+        total = base.count()
+        deals = base.order_by(desc(Deal.savings_percent)).limit(_BRAND_DEALS_RESOURCE_CAP).all()
 
         if not deals:
             return f"No active deals found for {brand}"
 
         md_lines = [
-            f"# Active Deals — {brand} ({len(deals)} deal{'s' if len(deals) != 1 else ''})",
+            f"# Active Deals — {brand} ({total} deal{'s' if total != 1 else ''})",
             "",
             "| Shoe | Retailer | Price | Savings |",
             "|------|----------|-------|---------|",
@@ -565,9 +599,11 @@ def brand_deals_resource(brand: str) -> str:
             shoe_name = f"{d.shoe.brand} {d.shoe.model}"
             savings = f"{round(d.savings_percent)}% off"
             md_lines.append(f"| {shoe_name} | {d.retailer.name} | ${d.current_price:.2f} | {savings} |")
+        if total > len(deals):
+            md_lines += ["", f"_{total - len(deals)} more deals: use get_deals(brand=\"{brand}\", limit=100)._"]
 
         markdown = "\n".join(md_lines)
-        payload = json.dumps({"brand": brand, "deals": [_deal_to_dict(d) for d in deals]}, default=str)
+        payload = json.dumps({"brand": brand, "total": total, "deals": [_deal_brief(d) for d in deals]}, default=str)
         return f"{markdown}\n\n```json\n{payload}\n```"
 
 

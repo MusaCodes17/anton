@@ -12,37 +12,63 @@ from app.utils.activity_tags import ACTIVITY_TAGS, is_valid_tag
 from app.services import rotation
 from app.mcp_server import _core
 from app.mcp_server._core import mcp
-from app.mcp_server._shared import _SOURCE_BADGES, _format_mileage_bar, _owned_shoe_payload, _owned_shoes_payload, _shoe_note_payload, _shoe_run_payload
+from app.mcp_server._shared import _SOURCE_BADGES, _format_mileage_bar, _owned_shoe_brief, _owned_shoe_payload, _owned_shoes_payload, _pct_of_limit, _shoe_note_payload, _shoe_run_brief, _shoe_run_payload
 
 
 @mcp.tool()
-def get_owned_shoes(status_filter: Optional[str] = None) -> List[dict]:
+def get_owned_shoes(status_filter: Optional[str] = None, detail: bool = False) -> List[dict]:
     """
     List shoes in the user's personal rotation with current mileage and
     status. Use this for "what shoes do I have", "which shoes are near
     retirement", or to look up an owned_shoe_id before calling another tool.
 
+    By default each shoe is a brief row: id, name (brand, model and nickname),
+    shoe_type, status, current_mileage_km, mileage_limit_km, pct_of_limit and
+    total_runs. Pass detail=True only when you need the full record.
+
     Args:
         status_filter: Filter by status — "active", "retired", or
             "for_sale". Omit for all shoes regardless of status.
+        detail: False (default) returns the brief row per shoe. True adds the
+            full record: purchase details, starting mileage, lifetime pace and
+            heart rate, cost per km, review draft, images and dates.
     """
     with _core.get_session() as db:
         query = db.query(OwnedShoe)
         if status_filter:
             query = query.filter(OwnedShoe.status == status_filter)
         shoes = query.order_by(OwnedShoe.created_at.desc()).all()
-        return _owned_shoes_payload(db, shoes)
+        if detail:
+            return _owned_shoes_payload(db, shoes)
+        rotation.attach_computed_fields_bulk(db, shoes)
+        return [_owned_shoe_brief(s) for s in shoes]
+
+
+_SHOE_RUNS_MAX_LIMIT = 200  # hard cap per page so one call can't dump a whole archive into context
 
 
 @mcp.tool()
-def get_shoe_runs(owned_shoe_id: int) -> dict:
+def get_shoe_runs(owned_shoe_id: int, limit: int = 20, offset: int = 0, detail: bool = False) -> dict:
     """
-    Get the run history logged against an owned shoe (newest first), plus
-    that shoe's lifetime average pace, average heart rate, and run count.
+    Get the run history logged against an owned shoe, newest first, plus that
+    shoe's lifetime average pace, average heart rate, and run count.
+
+    By default returns the newest 20 runs as brief rows: run_id, date,
+    distance_km, avg_pace, avg_hr, activity_tag and source. run_id is what
+    delete_shoe_run takes. total_runs and has_more tell you whether more runs
+    exist beyond this page; fetch them by raising offset (page size up to
+    limit=200). Pass detail=True to add notes, COROS activity id and
+    timestamps to each run. lifetime_avg_pace, lifetime_avg_hr and total_runs
+    always cover every run on the shoe, regardless of the page requested.
 
     Args:
         owned_shoe_id: ID of the owned shoe (from get_owned_shoes).
+        limit: Runs per page (default 20, clamped to 1-200).
+        offset: Number of newest runs to skip (default 0, clamped to >= 0).
+        detail: True for full run records instead of brief rows.
     """
+    limit = max(1, min(limit, _SHOE_RUNS_MAX_LIMIT))
+    offset = max(0, offset)
     with _core.get_session() as db:
         runs = (
             db.query(ShoeRun)
@@ -50,15 +76,19 @@ def get_shoe_runs(owned_shoe_id: int) -> dict:
             .options(contains_eager(ShoeRun.activity))
             .filter(ShoeRun.owned_shoe_id == owned_shoe_id)
             .order_by(desc(Activity.run_date), desc(ShoeRun.created_at))
+            .offset(offset)
+            .limit(limit)
             .all()
         )
         stats = rotation.compute_lifetime_stats(db, owned_shoe_id)
+        project = _shoe_run_payload if detail else _shoe_run_brief
         return {
             "owned_shoe_id": owned_shoe_id,
-            "runs": [_shoe_run_payload(r) for r in runs],
+            "runs": [project(r) for r in runs],
             "lifetime_avg_pace": stats.lifetime_avg_pace,
             "lifetime_avg_hr": stats.lifetime_avg_hr,
             "total_runs": stats.total_runs,
+            "has_more": offset + len(runs) < stats.total_runs,
         }
 
 
@@ -477,7 +507,9 @@ def shoe_rotation_resource() -> str:
 
         # One bulk attach feeds both the JSON block and the markdown stats below
         # (sets s.lifetime_avg_pace / lifetime_avg_hr / total_runs on each instance).
-        shoe_dicts = _owned_shoes_payload(db, active + retired)
+        # The JSON block uses the brief projection (R14 T4); the markdown reads the same attributes.
+        rotation.attach_computed_fields_bulk(db, active + retired)
+        shoe_dicts = [_owned_shoe_brief(s) for s in active + retired]
 
         md_lines = ["# My Shoe Rotation", "", "**Active Shoes**"]
         for s in active:
@@ -530,7 +562,7 @@ def shoe_detail_resource(shoe_id: int) -> str:
         mileage_limit = shoe.mileage_limit
         label = shoe.nickname or ""
         name = f"{shoe.brand} {shoe.model}" + (f" ({label})" if label else "")
-        pct = round(shoe.current_mileage / mileage_limit * 100) if mileage_limit else None
+        pct = _pct_of_limit(shoe.current_mileage, mileage_limit)
         mileage_line = f"{round(shoe.current_mileage)}km / {round(mileage_limit)}km ({pct}%)" if mileage_limit else f"{round(shoe.current_mileage)}km"
 
         type_line = f" | **Type:** {shoe.shoe_type}" if shoe.shoe_type else ""
@@ -591,14 +623,22 @@ def shoe_detail_resource(shoe_id: int) -> str:
         return f"{markdown}\n\n```json\n{payload}\n```"
 
 
+# Newest runs embedded in shoes://owned/{id}/runs. Older runs are paged via get_shoe_runs.
+_RUNS_RESOURCE_CAP = 50
+
+
 @mcp.resource(
     "shoes://owned/{shoe_id}/runs",
     name="Shoe Run History",
-    description="Complete run history for a specific owned shoe",
+    description="Newest 50 runs for a specific owned shoe (use get_shoe_runs with offset for older runs)",
     mime_type="application/json",
 )
 def shoe_runs_resource(shoe_id: int) -> str:
-    """Complete run history for a specific owned shoe, newest first"""
+    """Newest `_RUNS_RESOURCE_CAP` runs for a specific owned shoe, newest first.
+
+    The header count and `total_runs` are the true lifetime count. When more runs
+    exist, a footer points at get_shoe_runs for the older ones.
+    """
     import json
 
     with _core.get_session() as db:
@@ -612,14 +652,16 @@ def shoe_runs_resource(shoe_id: int) -> str:
             .options(contains_eager(ShoeRun.activity))
             .filter(ShoeRun.owned_shoe_id == shoe_id)
             .order_by(desc(Activity.run_date), desc(ShoeRun.created_at))
+            .limit(_RUNS_RESOURCE_CAP)
             .all()
         )
+        stats = rotation.compute_lifetime_stats(db, shoe_id)
         label = shoe.nickname or ""
         name = f"{shoe.brand} {shoe.model}" + (f" ({label})" if label else "")
 
         md_lines = [
             f"# Run History — {name}",
-            f"_{len(runs)} run{'s' if len(runs) != 1 else ''} logged_",
+            f"_{stats.total_runs} run{'s' if stats.total_runs != 1 else ''} logged_",
             "",
             "| Date | Distance | Pace | HR | Source |",
             "|------|----------|------|----|--------|",
@@ -632,12 +674,18 @@ def shoe_runs_resource(shoe_id: int) -> str:
             source_badge = _SOURCE_BADGES.get(a.source, "✍ manual")
             md_lines.append(f"| {date_str} | {a.distance_km:.1f}km | {pace} | {hr} | {source_badge} |")
 
-        stats = rotation.compute_lifetime_stats(db, shoe_id)
+        if stats.total_runs > _RUNS_RESOURCE_CAP:
+            older = stats.total_runs - _RUNS_RESOURCE_CAP
+            md_lines += [
+                "",
+                f"_{older} older runs: use get_shoe_runs(owned_shoe_id={shoe_id}, offset={_RUNS_RESOURCE_CAP})._",
+            ]
+
         markdown = "\n".join(md_lines)
         payload = json.dumps(
             {
                 "shoe_id": shoe_id,
-                "runs": [_shoe_run_payload(r) for r in runs],
+                "runs": [_shoe_run_brief(r) for r in runs],
                 "lifetime_avg_pace": stats.lifetime_avg_pace,
                 "lifetime_avg_hr": stats.lifetime_avg_hr,
                 "total_runs": stats.total_runs,

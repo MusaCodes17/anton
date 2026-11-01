@@ -659,3 +659,19 @@ def test_settings_subagent_gate_is_affected_scope_and_tests_run_async():
     post = {_script_name(h["command"]): h for h in by_event["PostToolUse"]}
     assert post["post_edit_tests.py"].get("asyncRewake") is True
     assert not post["post_edit.py"].get("asyncRewake")
+
+
+def test_test_running_pytest_commands_disable_warnings(repo, monkeypatch):
+    """The hooks show Claude only the tail of pytest output, and the Pydantic
+    deprecation warnings summary would push the real failure out of it. Every
+    command that runs tests must pass --disable-warnings (the --collect-only
+    count call is exempt: its output is not shown as a failure tail)."""
+    calls = []
+    monkeypatch.setattr(_lib, "run", lambda cmd, cwd, timeout=None: calls.append(cmd) or (0, ""))
+    py = Path("/fake/venv/bin/python")
+    post_edit_tests.run_tests(py, ["tests/test_foo.py"], repo / "backend")
+    stop_gate.run_pytest(py, None, repo / "backend", 1)
+    stop_gate.run_pytest(py, ["tests/test_foo.py"], repo / "backend", 1)
+    assert len(calls) == 3
+    for cmd in calls:
+        assert "--disable-warnings" in cmd, cmd

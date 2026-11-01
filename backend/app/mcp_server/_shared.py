@@ -37,9 +37,54 @@ def _deal_to_dict(deal: Deal) -> dict:
     }
 
 
+def _deal_brief(deal: Deal) -> dict:
+    """LLM projection of a deal (R14 T5c); the REST schema is the full record.
+
+    Sits beside `_deal_to_dict`, which stays the full flat projection for `detail=True`.
+    `id` is the value draft_purchase_from_deal takes. Drops msrp, target_price,
+    savings_amount, in_stock, sizes_available, colorway, shoe_type and detected_at.
+    """
+    return {
+        "id": deal.id,
+        "shoe_id": deal.shoe_id,
+        "shoe": f"{deal.shoe.brand} {deal.shoe.model}",
+        "retailer": deal.retailer.name,
+        "price": deal.current_price,
+        "savings_percent": deal.savings_percent,
+        "size_fit": getattr(deal, "size_fit", None),  # same rule as _deal_to_dict
+        "url": deal.product_url,
+    }
+
+
 def _watchlist_entry_payload(entry) -> dict:
     """Watchlist row via the REST schema (`WatchlistItem`) so MCP and REST can't drift."""
     return WatchlistItem.model_validate(entry).model_dump(mode="json")
+
+
+def _watchlist_brief(entry) -> dict:
+    """LLM projection of a watchlist entry (R14 T5a); the REST schema is the full record.
+
+    Drops image_url, best_ever_at, last_seen and the other best_deal fields: the
+    per-retailer last-seen list is what made get_watchlist ~24k tokens. Reads the
+    service dataclass attributes directly (`watchlist_svc.build_watchlist`) and runs no query.
+    """
+    deal = entry.best_deal
+    return {
+        "shoe_id": entry.shoe_id,
+        "brand": entry.brand,
+        "model": entry.model,
+        "shoe_type": entry.shoe_type,
+        "msrp": entry.msrp,
+        "target_price": entry.target_price,
+        "on_sale": entry.on_sale,
+        "best_deal": None if deal is None else {
+            "deal_id": deal.deal_id,
+            "retailer_name": deal.retailer_name,
+            "current_price": deal.current_price,
+            "savings_percent": deal.savings_percent,
+        },
+        "best_ever_price": entry.best_ever_price,
+    }
 
 
 def _owned_shoe_payload(db: Session, shoe: OwnedShoe) -> dict:
@@ -62,6 +107,81 @@ def _shoe_run_payload(run: ShoeRun) -> dict:
     """Attribution row via `ShoeRunResponse`, projected by `rotation.shoe_run_payload`
     from the joined Activity, so callers that loop should eager-load `ShoeRun.activity`."""
     return ShoeRunResponse.model_validate(rotation.shoe_run_payload(run)).model_dump(mode="json")
+
+
+def _pct_of_limit(current_km: float, limit_km: Optional[float]) -> Optional[int]:
+    """Whole-percent mileage against the retirement limit; None when there is no limit.
+
+    Shared by the shoe resource and the LLM brief so the two can't round differently.
+    """
+    return round(current_km / limit_km * 100) if limit_km else None
+
+
+def _owned_shoe_brief(shoe: OwnedShoe) -> dict:
+    """LLM projection of an owned shoe (R14 T1); the REST schema is the full record.
+
+    Reads `shoe.total_runs`, which `rotation.attach_computed_fields_bulk` sets, so the
+    caller must attach first. Runs no query.
+    """
+    label = shoe.nickname or ""
+    return {
+        "id": shoe.id,
+        "name": f"{shoe.brand} {shoe.model}" + (f" ({label})" if label else ""),
+        "shoe_type": shoe.shoe_type,
+        "status": shoe.status,
+        "current_mileage_km": round(shoe.current_mileage, 1),
+        "mileage_limit_km": shoe.mileage_limit,
+        "pct_of_limit": _pct_of_limit(shoe.current_mileage, shoe.mileage_limit),
+        "total_runs": shoe.total_runs,
+    }
+
+
+def _shoe_run_brief(run: ShoeRun) -> dict:
+    """LLM projection of an attributed run (R14 T1); the REST schema is the full record.
+
+    `run_id` is the ShoeRun id (what delete_shoe_run takes). The caller eager-loads
+    `ShoeRun.activity`.
+    """
+    a = run.activity
+    return {
+        "run_id": run.id,
+        "date": a.run_date.isoformat(),
+        "distance_km": a.distance_km,
+        "avg_pace": rotation.seconds_to_pace(a.avg_pace_s_per_km) if a.avg_pace_s_per_km is not None else None,
+        "avg_hr": a.avg_hr,
+        "activity_tag": a.activity_tag,
+        "source": a.source,
+    }
+
+
+def _scrape_health_brief(health: dict) -> dict:
+    """LLM projection of `scrape_history.scrape_health` (R14 T5b); the REST schema is the full record.
+
+    Keeps each retailer's verdict, latest-run outcome, a newest-first product-count trend and
+    the watchdog fields, plus the two top-level attention lists. Drops the per-run records in
+    `trend` and the flat `recent_runs` log. Copies values from the service dict only and runs no query.
+    """
+    retailers = []
+    for row in health["retailers"]:
+        latest = row["latest_run"]
+        retailers.append({
+            "retailer_id": row["retailer_id"],
+            "name": row["name"],
+            "health": row["health"],
+            "scraping_enabled": row["scraping_enabled"],
+            "last_status": latest["status"] if latest else None,
+            "last_run_at": latest["started_at"] if latest else None,
+            "products_found": latest["products_found"] if latest else None,
+            "error": latest["error"] if latest else None,
+            "products_trend": [r["products_found"] for r in row["trend"]],
+            "watchdog_alert": row["watchdog_alert"],
+            "watchdog_reason": row["watchdog_reason"],
+        })
+    return {
+        "retailers": retailers,
+        "retailers_needing_attention": health["retailers_needing_attention"],
+        "needs_onboarding": health["needs_onboarding"],
+    }
 
 
 # ---------------------------------------------------------------------------
