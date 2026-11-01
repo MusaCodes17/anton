@@ -19,7 +19,7 @@ Cross-cutting the domains is the **assistant surface** (Son of Anton in-app; Cla
 
 **Actors:**
 - **The runner** (the sole user) — the only human, the final authority on all ambiguous decisions.
-- **Retailers** (8 storefronts) — external, unreliable sources of price truth.
+- **Retailers** (the `retailers` rows; scrapers mapped in `scrapers/registry.py`) — external, unreliable sources of price truth.
 - **The COROS watch** — source of new run data, arriving via sync.
 - **The Strava archive** — a frozen, one-time historical record (8 years, ~700 runs), now fully absorbed.
 - **LLM assistants** — actors that may read broadly but write only through sanctioned, confirmation-gated paths.
@@ -167,6 +167,22 @@ Cost-per-km, lifetime pace, retirement percentage, race countdowns, required rac
 - Pace below 0.5 km of distance is meaningless and left null rather than computed.
 - **America/Toronto is the calendar**: a run's date is its local date, and getting this wrong is known to shift 145 historical evening runs across day boundaries.
 
+### 4.13 Invariant → test map
+The INV-1…INV-10 rules themselves live in `AGENTS.md` §14 (loaded every session). This table holds their enforcement detail and covering tests, moved here 2026-10-31 so the always-loaded guide stays short. **Before changing code on an invariant's path, read its row and run its tests.** Keep this table and §14 in step: a new invariant gets a line in both.
+
+| Invariant | Enforcement detail | Covering tests |
+|---|---|---|
+| **INV-1** Mileage ledger | Sole writers: `rotation.log_run` (increment), `delete_run` (decrement, floored at 0), `adjust_mileage` (sole manual override, journals the drift; `POST /owned-shoes/{id}/adjust-mileage`), `reassign_attribution` (moves a run's km between two shoes). `PUT /owned-shoes/{id}` drops `current_mileage`/`starting_mileage` (C1, fixed 2026-07-07). The COROS poller and `pending_coros_runs` inbox never write `activities`, `shoe_runs` or mileage (R5.7); only a confirm (`coros.confirm_run` → `rotation.log_run`) moves the ledger. The best-efforts scan writes only `start_lat`/`start_lng`. `exclude_from_analysis` never touches ledger, attribution or volume totals (R11.4). | `tests/test_rotation.py` (increment) · `tests/test_activities_model.py` (delete round-trip) · `tests/test_owned_shoes.py` (PUT drops ledger fields; adjust sets + notes) · `tests/test_activity_edit.py` (reassignment moves km on both shoes) · `tests/test_coros_poller.py::test_poller_never_writes_runs_or_mileage` · `tests/test_activity_exclusion.py` |
+| **INV-2** Single run writer | Escape hatches on `log_run` (`increment_mileage=False`, `commit=False`), never parallel paths. The one known breach (writable PUT ledger) was fixed 2026-07-07. | **None possible** — convention + review |
+| **INV-3** Attribution uniqueness | DB constraint `shoe_runs.activity_id` UNIQUE, migration `c3d4e5f6a7b8`; `activities ↔ shoe_runs` is `uselist=False`. | `tests/test_activities_model.py` |
+| **INV-4** Strava archive preservation | `rotation.delete_run` on `source='strava'` removes the attribution only; the archive row survives (§4.8). | `tests/test_activities_model.py::test_delete_run_keeps_strava_archive` |
+| **INV-5** Never count a run twice | `strava_activity_id` UNIQUE; COROS keys on `coros_activity_id`, fallback same date + distance within 0.1 km (`coros.is_already_logged`); re-confirm returns `None` (silent no-op) and still resolves the inbox row (§4.7). | `tests/test_strava_import.py` · `tests/test_activities_model.py::test_coros_dedup_on_activity_coros_id` · `tests/test_coros_mcp_tools.py` (app/Claude double-confirm cases) |
+| **INV-6** Deal qualification | `MIN_DEAL_DISCOUNT_PCT` (env-tunable, default 5%) in `scrapers/orchestrator.py`, applied via `DealStore`; savings vs MSRP; retailer compare-at price not consulted (§4.1, B9-v3). | `tests/test_orchestrator.py` (threshold boundary, penny-artifact, deep-discount) · `tests/test_deals.py` · `tests/test_deal_store.py` (retirement/requalification, all three orphan-guard cases, promo manual-beats-scraped) |
+| **INV-7** Derived-never-stored | Stored exceptions: the ledger (INV-1), the deal's qualifying-savings snapshot, best efforts (`activity_best_efforts`, B19) and per-km splits (`activity_splits`, B28) — rebuilt by re-scanning, cascade-deleted with the run. Weather and run location are copied source projections, not exceptions (B22, B23). See §4.11, design_decisions B13, B19. | **None** — convention + review |
+| **INV-8** Confirmation gate | Encoded in the MCP protocol (`sync_coros_runs` prompt; `confirm_pending_coros_runs` requires an explicit `owned_shoe_id` per run, C15) and C9; no confidence exception (§4.9). | **None** — prompt-and-review |
+| **INV-9** Single Uvicorn worker | D4's scrape lock, E8's rate limiter, the APScheduler in `services/schedule.py` (nightly scrape + COROS poll job), the poll tick lock and the COROS token-refresh lock are all in-process. COROS rotates refresh tokens, so two refreshing processes burn the token. Pinned in `backend/Dockerfile` CMD (`--workers 1`) and `docker-compose.yml`. More workers need D4/E8 redesigned first. | **None** — verify in `docker ps` / `uvicorn` logs on any restart |
+| **INV-10** Public surface allowlist | `middleware/auth.py` `PUBLIC_PATHS` (exact match); `GET /api/public/deals` returns `PublicDeal`, built field by field (never `from_attributes`), carrying no `notes`, `target_price`, `size_fit` or watchlist data (E20). | `tests/test_public_surface.py` (pinned set; every other route 401s) · `tests/test_public_deals.py` (leak test) |
+
 ---
 
 ## 5. Ownership Boundaries
@@ -227,9 +243,8 @@ Gear Mapping:   built once during import (human-reviewed) → dormant reference
 
 ### Assistant context
 ```
-Chat conversation:  lives in the runner's browser only (localStorage, capped at 50) —
-                    currently outside the platform's custody; a known boundary decision
-                    slated for revisit (architecture.md §16.7)
+Chat conversation:  stored server-side since R2.6 (2026-07-08), so it follows the runner
+                    across devices (see architecture.md for tables and endpoints)
 ```
 
 The asymmetry is deliberate and worth stating: **the deal domain forgets on command** (delete a tracked shoe, its history goes), while **the training domain is engineered never to forget** (append-only notes, frozen archive, retirement-not-deletion, ledger reversibility). One records shopping interest; the other records a runner's life.

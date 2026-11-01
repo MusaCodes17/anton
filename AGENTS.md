@@ -1,13 +1,17 @@
 # AGENTS.md — Anton Development Guide
 
-**Read with:** `docs/project_state.md` (what's true right now — read it first) and `docs/roadmap.md` (what's next). Deep references: `docs/architecture.md`, `docs/domain_model.md`, `docs/design_decisions.md`, `docs/dependency_graph.md`.
-**Session changelog lives at `docs/changelog.md`** — append a session entry at the top after every working session. This file is the *stable* guide; the changelog is the *running* history.
+**Reference docs** (`docs/`): `project_state.md` (what's true now), `roadmap.md` (what's next), `architecture.md`, `domain_model.md`, `design_decisions.md`, `dependency_graph.md`, `changelog.md` (session history; append an entry at the top after every working session). This file is the *stable* guide; the changelog is the *running* history.
+
+**Reading the docs — they are large (60–380 KB each); never read one in full:**
+- `project_state.md`: read §2 and §11 only, and only when you need the current priority (`/project:status`, `/project:next`, planning). A scoped task doesn't need it.
+- `changelog.md`: read the top ~60 lines for the newest entry (live suite count, last session). Grep for anything older.
+- `roadmap.md`, `design_decisions.md`, `architecture.md`: grep for the §, ID (`R12`, `C9`, `E4`) or term you need and read that section.
 
 ---
 
 ## 1. Project Overview
 
-Anton is a **single-user personal running platform**: **deal watching** (8 Canadian retailers), **rotation & training** (canonical `activities` table from Strava archive + COROS sync + manual runs, attribution to owned shoes, wear/retirement, analytics), and **AI surfaces** (an MCP server at `/mcp`, plus the embedded assistant **Son of Anton**, an MCP *client* of that same server).
+Anton is a **single-user personal running platform**: **deal watching** (Canadian retailers; bespoke + Shopify/Algolia scrapers in `scrapers/registry.py`), **rotation & training** (canonical `activities` table from Strava archive + COROS sync + manual runs, attribution to owned shoes, wear/retirement, analytics), and **AI surfaces** (an MCP server at `/mcp`, plus the embedded assistant **Son of Anton**, an MCP *client* of that same server).
 
 Stack: FastAPI + SQLAlchemy 2 + SQLite + Alembic; React 18 + Vite + Tailwind + React Query (JSX); `mcp[cli]` FastMCP. One process, one user, internet-facing behind default-deny auth (session cookie for the SPA, named bearer tokens, OAuth 2.1 for the claude.ai connector) with one deliberately public read path, `GET /api/public/deals` — never widen exposure casually.
 
@@ -68,7 +72,7 @@ Placement: business logic → `services/` (never a router, MCP tool, or React co
 3. **Aggregate-per-page endpoints.** One round trip per page (`/api/home`, `/api/watchlist`). Derived fields attach at the boundary (`_attach_computed_fields`, `attach_derived`), never recomputed client-side.
 4. **Seams over rewrites.** `activities.unified_activities()` is the model: a read seam whose internals changed with zero caller changes.
 5. **Graceful degradation.** Missing credentials disable a feature ("not configured", don't raise); failed enrichment falls back.
-6. **Single-process assumptions are real.** Scrape lock and SSE state are in-memory. Read `docs/design_decisions.md` D4/D5/E5 before adding workers, schedulers, or daemons.
+6. **Single-process assumptions are real.** The scrape lock, SSE state and the one APScheduler instance (`services/schedule.py`: nightly scrape + COROS poll) are in-process (INV-9). New periodic work is a job on that scheduler, never a second scheduler or daemon. Read `docs/design_decisions.md` D4/D5 and INV-9 before adding workers.
 
 ---
 
@@ -86,7 +90,7 @@ Placement: business logic → `services/` (never a router, MCP tool, or React co
 - Tailwind **design tokens** (`index.css`, theme), no hard-coded hex; reuse `components/ui/`.
 - No new heavy dependencies; charts stay on recharts. Every UI change passes desktop **and** ~380 px mobile.
 
-**Both:** small diffs; phase-prefixed commits (`p5: canonical activities migration`), one per numbered task.
+**Both:** small diffs; phase-prefixed commits (`r12: inbox batch resolve`), one per numbered task.
 
 ---
 
@@ -147,7 +151,7 @@ Placement: business logic → `services/` (never a router, MCP tool, or React co
 
 - pytest in `backend/tests/`, one module per feature area: **test the rules, not the plumbing**, naming boundary cases (exactly 75% is *in* the pipeline; empty week reads 0).
 - **Backend endpoints land with their tests before the consuming UI task.**
-- Suite green at session end. The live count is in the newest `docs/changelog.md` entry; a session that lowers it isn't done.
+- Suite green at session end. The live count is in the newest `docs/changelog.md` entry; a session that lowers it isn't done. Removed features take their tests with them (the Stop hook's count guard allows a drop only when a test module is deleted).
 - **CI is the gate** (`.github/workflows/ci.yml`, E15): every PR and push to `main` runs the backend suite (Python 3.11, no `backend/.env`) and `vite build`; merge only with both green. Tests must not depend on a local `.env` or test order (import-time env is set in `tests/conftest.py`).
 - Local verification hooks (`.claude/settings.json`, `.claude/hooks/`) run affected tests after edits, guard the live DB, migrations and dependency pins, and gate Stop/SubagentStop. They are a pre-CI convenience; CI remains the merge gate. `/hooks` shows them; `disableAllHooks` in `settings.local.json` turns them off for a one-off.
 - No frontend test harness: the bar is `vite build` clean, **0 console errors**, desktop + ~380 px pass, stated in the changelog.
@@ -187,7 +191,7 @@ Placement: business logic → `services/` (never a router, MCP tool, or React co
 
 ## Session Checklist (end of every working session)
 
-1. Full pytest suite green locally **and** both CI checks green; note the count.
+1. Full pytest suite green locally (the Stop hook runs only affected tests, so run it via `/project:wrapup` or by hand) **and** both CI checks green; note the count.
 2. `vite build` clean; 0 console errors; desktop + ~380 px pass for UI changes.
 3. Migration for any schema change (reversible + backed up if it moves data).
 4. Changelog entry at top of `docs/changelog.md`.
@@ -199,15 +203,15 @@ Placement: business logic → `services/` (never a router, MCP tool, or React co
 
 ## 14. Invariants
 
-One line per invariant: rule → owning code → covering test. The narrative is in `docs/domain_model.md` §4. Canonical "never break these" list (§6 is the separate *mechanical traps* list); verify relevant lines when touching their paths.
+Canonical "never break these" list: rule → owning code (§6 is the separate *mechanical traps* list). **Covering tests are mapped in `docs/domain_model.md` §4.13** — read that table before changing code on an invariant's path, and run those tests. "No test" means review is the only guard.
 
-- **INV-1 · Mileage ledger:** `current_mileage = starting_mileage + Σ attributed distances`, maintained, never recomputed → `rotation.log_run` / `delete_run` / `adjust_mileage` (sole manual override) / `reassign_attribution` → `tests/test_rotation.py`, `tests/test_activities_model.py` (delete round-trip), `tests/test_owned_shoes.py` (PUT drops `current_mileage`/`starting_mileage`), `tests/test_activity_edit.py`. `PUT /owned-shoes/{id}` cannot write the ledger; only `POST .../adjust-mileage` can. The COROS poller and `pending_coros_runs` inbox are **non-writers** of `activities`, `shoe_runs` and mileage (`tests/test_coros_poller.py::test_poller_never_writes_runs_or_mileage`); only a confirm (`coros.confirm_run` → `rotation.log_run`) moves the ledger. The best-efforts scan writes only `start_lat`/`start_lng`. `exclude_from_analysis` never touches ledger, attribution or volume totals (`tests/test_activity_exclusion.py`).
-- **INV-2 · Single run writer:** every Activity + Attribution pair is born via `rotation.log_run` (escape hatches, never parallel paths) → `rotation.py` → **documentation-only**; enforced by convention + review.
-- **INV-3 · Attribution uniqueness:** one shoe per activity (`shoe_runs.activity_id` UNIQUE) → DB constraint, migration `c3d4e5f6a7b8` → `tests/test_activities_model.py`.
-- **INV-4 · Strava archive preservation:** `delete_run` on a `source='strava'` activity removes only the attribution → `rotation.delete_run` → `tests/test_activities_model.py::test_delete_run_keeps_strava_archive`.
-- **INV-5 · Dedup, never count a run twice:** `strava_activity_id` UNIQUE; COROS keys on `coros_activity_id` with date + distance-within-0.1 km fallback → `coros.confirm_run` / the Strava importer → `tests/test_strava_import.py`, `tests/test_activities_model.py::test_coros_dedup_on_activity_coros_id`.
-- **INV-6 · Deal qualification:** a deal exists iff `msrp IS NOT NULL` and price is at least `MIN_DEAL_DISCOUNT_PCT` (default 5%, env-tunable) below MSRP — a minimum-discount **floor**, not merely `price < msrp`, so penny artifacts aren't 0%-OFF deals → `scrapers/orchestrator.py` `MIN_DEAL_DISCOUNT_PCT` (via `DealStore`) → `tests/test_orchestrator.py` (boundary, penny-artifact, deep-discount), `tests/test_deals.py`, `tests/test_deal_store.py` (retirement/requalification, orphan-guard cases, promo manual-beats-scraped).
-- **INV-7 · Derived-never-stored:** cost/km, countdowns, retirement %, weekly volume are computed at read time → convention across `services/`; exceptions: the ledger (INV-1), the deal savings snapshot, best efforts (`activity_best_efforts`) and splits (`activity_splits`), which are rebuilt by re-scanning and cascade-deleted with the run. Weather and run location are copied projections, not exceptions → **no test**; see `docs/design_decisions.md` B13, B19.
-- **INV-8 · Confirmation gate:** no externally-sourced or AI-initiated run is logged without explicit human confirmation; no confidence exception → MCP protocol (`sync_coros_runs` prompt; design_decisions C9) → **no automated test**; prompt-and-review.
-- **INV-9 · Single Uvicorn worker:** exactly one worker at all times — D4's scrape lock, E8's rate limiter, the COROS poll job (`schedule.py`'s shared scheduler), poll tick lock and COROS token-refresh lock are all in-process (COROS rotates refresh tokens, so two refreshers burn the token) → `backend/Dockerfile` CMD (`--workers 1`) and `docker-compose.yml` → **no automated test**; verify in `docker ps` / `uvicorn` logs on restart. More workers need D4/E8 redesigned first.
-- **INV-10 · Public surface is a pinned allowlist:** the only unauthenticated paths are the exact strings in `PUBLIC_PATHS`, and the only unauthenticated *data* path, `GET /api/public/deals`, returns `PublicDeal`, built field by field (never `from_attributes`) with no personal fields (`notes`, `target_price`, `size_fit`, watchlist) → `middleware/auth.py` `PUBLIC_PATHS` + `PublicDeal` allowlist → `tests/test_public_surface.py` (pinned set; every other route 401s), `tests/test_public_deals.py` (leak test). A new public path means editing the pinned set in the test; see design_decisions E20.
+- **INV-1 · Mileage ledger:** `current_mileage = starting_mileage + Σ attributed distances`, maintained, never recomputed → only `rotation.log_run` / `delete_run` / `adjust_mileage` (sole manual override, via `POST .../adjust-mileage`) / `reassign_attribution`. `PUT /owned-shoes/{id}` can't write it; the COROS poller and inbox, the best-efforts scan and `exclude_from_analysis` never touch it.
+- **INV-2 · Single run writer:** every Activity + Attribution pair is born via `rotation.log_run` (escape hatches, never parallel paths) → `rotation.py` → **no test**.
+- **INV-3 · Attribution uniqueness:** one shoe per activity → `shoe_runs.activity_id` UNIQUE.
+- **INV-4 · Strava archive preservation:** `delete_run` on a `source='strava'` activity removes only the attribution → `rotation.delete_run`.
+- **INV-5 · Never count a run twice:** `strava_activity_id` UNIQUE; COROS on `coros_activity_id` + date/distance-within-0.1 km fallback; re-confirm is a silent no-op → `coros.confirm_run`, the Strava importer.
+- **INV-6 · Deal qualification:** a deal exists iff `msrp IS NOT NULL` and price is ≥ `MIN_DEAL_DISCOUNT_PCT` (default 5%) below MSRP — a floor, not `price < msrp` → `scrapers/orchestrator.py` via `DealStore`.
+- **INV-7 · Derived-never-stored:** computed at read time → `services/`; the only stored exceptions are the ledger, the deal savings snapshot, best efforts and splits → **no test**.
+- **INV-8 · Confirmation gate:** no externally-sourced or AI-initiated run is logged without explicit human confirmation, no confidence exception → MCP protocol (`sync_coros_runs`, C9) → **no test**.
+- **INV-9 · Single Uvicorn worker:** the scrape lock, rate limiter, scheduler (scrape + COROS poll), poll tick lock and COROS token-refresh lock are all in-process → `backend/Dockerfile` `--workers 1` + `docker-compose.yml` → **no test**; check on restart.
+- **INV-10 · Public surface is a pinned allowlist:** unauthenticated paths are exactly `PUBLIC_PATHS`; `GET /api/public/deals` returns `PublicDeal`, built field by field with no personal fields → `middleware/auth.py`. A new public path means editing the pinned set in the test (E20).
