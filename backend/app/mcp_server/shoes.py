@@ -12,7 +12,7 @@ from app.utils.activity_tags import ACTIVITY_TAGS, is_valid_tag
 from app.services import rotation
 from app.mcp_server import _core
 from app.mcp_server._core import mcp
-from app.mcp_server._shared import _SOURCE_BADGES, _format_mileage_bar, _owned_shoe_payload, _owned_shoes_payload, _shoe_note_payload, _shoe_run_payload
+from app.mcp_server._shared import _SOURCE_BADGES, _format_mileage_bar, _owned_shoe_payload, _owned_shoes_payload, _pct_of_limit, _shoe_note_payload, _shoe_run_payload
 
 
 @mcp.tool()
@@ -530,7 +530,7 @@ def shoe_detail_resource(shoe_id: int) -> str:
         mileage_limit = shoe.mileage_limit
         label = shoe.nickname or ""
         name = f"{shoe.brand} {shoe.model}" + (f" ({label})" if label else "")
-        pct = round(shoe.current_mileage / mileage_limit * 100) if mileage_limit else None
+        pct = _pct_of_limit(shoe.current_mileage, mileage_limit)
         mileage_line = f"{round(shoe.current_mileage)}km / {round(mileage_limit)}km ({pct}%)" if mileage_limit else f"{round(shoe.current_mileage)}km"
 
         type_line = f" | **Type:** {shoe.shoe_type}" if shoe.shoe_type else ""

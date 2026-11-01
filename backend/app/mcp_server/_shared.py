@@ -64,6 +64,51 @@ def _shoe_run_payload(run: ShoeRun) -> dict:
     return ShoeRunResponse.model_validate(rotation.shoe_run_payload(run)).model_dump(mode="json")
 
 
+def _pct_of_limit(current_km: float, limit_km: Optional[float]) -> Optional[int]:
+    """Whole-percent mileage against the retirement limit; None when there is no limit.
+
+    Shared by the shoe resource and the LLM brief so the two can't round differently.
+    """
+    return round(current_km / limit_km * 100) if limit_km else None
+
+
+def _owned_shoe_brief(shoe: OwnedShoe) -> dict:
+    """LLM projection of an owned shoe (R14 T1); the REST schema is the full record.
+
+    Reads `shoe.total_runs`, which `rotation.attach_computed_fields_bulk` sets, so the
+    caller must attach first. Runs no query.
+    """
+    label = shoe.nickname or ""
+    return {
+        "id": shoe.id,
+        "name": f"{shoe.brand} {shoe.model}" + (f" ({label})" if label else ""),
+        "shoe_type": shoe.shoe_type,
+        "status": shoe.status,
+        "current_mileage_km": round(shoe.current_mileage, 1),
+        "mileage_limit_km": shoe.mileage_limit,
+        "pct_of_limit": _pct_of_limit(shoe.current_mileage, shoe.mileage_limit),
+        "total_runs": shoe.total_runs,
+    }
+
+
+def _shoe_run_brief(run: ShoeRun) -> dict:
+    """LLM projection of an attributed run (R14 T1); the REST schema is the full record.
+
+    `run_id` is the ShoeRun id (what delete_shoe_run takes). The caller eager-loads
+    `ShoeRun.activity`.
+    """
+    a = run.activity
+    return {
+        "run_id": run.id,
+        "date": a.run_date.isoformat(),
+        "distance_km": a.distance_km,
+        "avg_pace": rotation.seconds_to_pace(a.avg_pace_s_per_km) if a.avg_pace_s_per_km is not None else None,
+        "avg_hr": a.avg_hr,
+        "activity_tag": a.activity_tag,
+        "source": a.source,
+    }
+
+
 # ---------------------------------------------------------------------------
 # Formatting helpers (private — used only by resource functions below)
 # ---------------------------------------------------------------------------
