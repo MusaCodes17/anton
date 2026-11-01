@@ -1,7 +1,85 @@
 # Anton — Session Changelog
 
-**Last Updated:** 2026-10-31
+**Last Updated:** 2026-11-01
 **Status / current focus:** see `docs/project_state.md` (the perishable snapshot). This file is the append-only session log — the authoritative record of *what happened*; the `docs/` suite is the reference material.
+
+---
+
+## R14 — Lean MCP read payloads — 2026-11-01
+
+Branch `r14-lean-mcp-payloads` (T0–T5c, then the T7 wrap-up). No migration, no REST or schema change, no frontend. Decision: `design_decisions.md` E27.
+
+**[ADDED]**
+- Brief LLM projections in `mcp_server/_shared.py` for owned shoes, runs, watchlist entries, scrape health and deals. Each is the default for its tool or resource; `detail=True` keeps the full record.
+- A `detail` argument on `get_owned_shoes`, `get_shoe_runs`, `get_watchlist`, `scrape_health` and `get_deals`; `limit` and `offset` on `get_shoe_runs` and `get_watchlist`, with `has_more` (and `total` on the watchlist).
+- `backend/scripts/mcp_payload_sizes.py`, moved from `scripts/spikes/` and kept as the tool for measuring MCP payloads before trimming.
+- `backend/tests/test_mcp_projections.py` (70 tests).
+
+**[CHANGED]**
+- `get_owned_shoes`: brief row by default (id, name, shoe_type, status, mileage, pct_of_limit, total_runs).
+- `get_shoe_runs`: brief rows, paged in SQL (20 by default, max 200), with `has_more`.
+- `get_watchlist`: returns `{"entries", "total", "has_more"}` with brief entries, 20 per page by default.
+- `scrape_health`: brief per-retailer verdicts by default.
+- `get_deals`: brief deals by default (id, shoe_id, shoe, retailer, price, savings_percent, size_fit, url).
+- `shoes://rotation`: the JSON block uses the brief owned-shoe projection.
+- `shoes://owned/{id}/runs`: newest 50 runs, with a footer pointing at `get_shoe_runs` for older ones.
+- `deals://watchlist` embeds brief watchlist JSON; `shoes://deals/active` embeds brief deal JSON.
+- `shoes://deals/{brand}`: capped at 50 deals, with a footer.
+
+**[REMOVED]**
+- The R14 plan doc, `docs/LEAN_MCP_PAYLOADS_PLAN.md`. Its findings are in E27 and this entry.
+
+**Before and after** (≈tokens = characters ÷ 4, one DB copy; "after" is the default unless the args say otherwise)
+
+| Tool or resource | args | before | after |
+| --- | --- | ---: | ---: |
+| `deals://watchlist` | — | 25,219 | 4,119 |
+| `get_watchlist` | default (first 20) | 24,239 | 1,477 |
+| `shoes://deals/{brand}` | brand='Adidas' | 12,287 | 3,854 |
+| `scrape_health` | default | 7,403 | 1,255 |
+| `shoes://owned/{id}/runs` | shoe_id=11 | 5,440 | 2,533 |
+| `get_shoe_runs` | owned_shoe_id=11, default (20 per page) | 4,430 | 733 |
+| `shoes://rotation` | — | 4,248 | 1,620 |
+| `get_owned_shoes` | default | 3,754 | 1,126 |
+| `shoes://deals/active` | — | 3,181 | 1,603 |
+| `get_deals` | default (limit=20) | 2,817 | 1,239 |
+| `get_owned_shoes` | status_filter='active' | 2,104 | 616 |
+
+`detail=True` returns the before payload: `get_watchlist` 24,239, `scrape_health` 7,403, `get_owned_shoes` 3,754, `get_deals` 2,817, and `get_shoe_runs` with `limit=200` 4,435.
+
+**Still over 1,500 tokens, unchanged:** see the R14 follow-up in `roadmap.md` §R14.
+
+**Measured under 1,500 tokens and left alone** (18 rows, tools and resources): `get_training_summary` 1,377, `shoes://retailers` 1,100, `get_shoe_insights` 1,068, `get_personal_bests` 925, `get_training_trends` 738, `get_retailers` 617, `shoes://owned/{id}` 569, `training://summary` 460, `fetch_unsynced_coros_runs` 390, `get_weekly_summary` 301, `training://fitness` 130, `get_coros_sync_status` 93, `get_onboarding_queue` 60, `get_dashboard_stats` 55, `strava://runs/{year}/{month}` 47, `shoes://review/{id}` 44, `shoes://owned/{id}/notes` 24, `get_shoe_notes` 0. The script skips `get_deal_alerts` and `get_planned_races` because both write.
+
+**Decisions and departures from the plan:**
+- `include_retired` left out: retired shoes were 43.9% of the payload, and the plan's condition was that they dominate.
+- T5 took `get_watchlist`, `scrape_health` and `get_deals`. `get_race_block_context` (4,205 before) was skipped in favour of `get_deals`, because the brief deal also shrinks `shoes://deals/active`, which loads into Son of Anton's system prompt, and `shoes://deals/{brand}`.
+- Beyond the plan: `deals://watchlist` and `shoes://deals/active` embed brief JSON, and `shoes://deals/{brand}` is capped at 50 with a footer. The brief deal also carries `shoe_id`, which `get_price_history` needs.
+- `get_deals` stays a plain list without `total` or `has_more`: it was already bounded and `list_deals` has no count seam.
+- `detail=True` differs from today only in these ways: `get_shoe_runs` adds `has_more` and is paged (use `limit=200` for the old full list); `get_watchlist` with `detail=True` is the old unpaged plain list, so its return shape differs from the brief dict.
+- `get_shoe_deals` is unchanged.
+
+**T6 consumer audit:** no prompt, `chat_service`, `chat_proposals` or setup-doc reader uses a detail-only field. Chat loads resources as plain text. Son of Anton check on a scratch DB copy, in-process, Haiku 4.5, run through `stream_chat` in a throwaway script rather than by tapping through the app UI: "how many km on my Evo SL" was answered from the loaded rotation context with no tool call, and the assistant asked which of three pairs was meant; "show my last 5 runs in the AP4" called `get_shoe_runs` without `detail` and gave the five runs.
+
+**R13 hook live checks** (run in this session):
+
+| Check | Result | Notes |
+| --- | --- | --- |
+| H1 pre-guard, `sqlite3` on the live DB | ⚠️ partial | `sqlite3 -readonly` passes. Run by hand, the guard returns `ask` for the unflagged form, with its reason. The unflagged command did run in the session, and whether a prompt appeared could not be seen from inside the session. |
+| H2 pre-guard, a Write to `backend/.env` | ✅ | A Write to `backend/.env.r14probe` was denied with the guard's reason; no file was created. A first Edit probe on `backend/.env` stopped at tool validation before the hook, so it proved nothing. |
+| H3 PostToolUse test wake | ✅ | The wake arrived right after a subagent's red test file. It wakes the main session, not the subagent that edited, and can arrive late, after the file is gone. |
+| H4 post-edit syntax check | ✅ | An unclosed bracket was reported right after the Write. |
+| H5 SubagentStop gate | ✅ | SubagentStop blocked a subagent ending with a red test, naming the test. |
+| H6 Stop gate | ⚠️ partial | Stop blocked a real turn end with the failure tail. The let-go after repeated failures was not driven live, because it would have ended the session on a red tree; `test_claude_hooks.py` covers it. |
+| H7 silence on green | ✅ | No hook output on green edits and stops. |
+| H8 worktree checkout | ✅ | In a `.claude/worktrees/` checkout the block fired, state landed in the worktree's `.claude/hooks/.state/`, and tests ran with the main checkout's venv. |
+| H9 colour check | ✅ | A throwaway component with `#ff0000` was flagged. |
+
+**Defect found and fixed:** the pytest warnings summary filled the 40-line tail and pushed out the failure. Fixed in `30f74a5` with `--disable-warnings`, plus a test.
+
+**Verified:** backend suite 1190 + 1 skipped → **1261 + 1 skipped** (70 projection tests, 1 hook test). Frontend untouched, so no `vite build` check was needed for this work.
+
+**Not verified:** claude.ai and Claude Desktop clients against the new shapes. Not deployed.
 
 ---
 

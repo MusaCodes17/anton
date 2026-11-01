@@ -1,9 +1,8 @@
-"""R14 T0 spike (throwaway, read-only): measure how large every Anton MCP read
-tool and resource payload is, so the lean-payload work trims the right ones.
-Not imported by the app.
+"""Measure how large each Anton MCP read tool and resource payload is, before
+trimming it (kept tool, from R14 T0). Read-only; not imported by the app.
 
 Usage (on a COPY of the live DB, already at alembic head):
-    cd backend && DATABASE_URL="sqlite:////abs/path/to/COPY.db" venv/bin/python scripts/spikes/mcp_payload_sizes.py
+    cd backend && DATABASE_URL="sqlite:////abs/path/to/COPY.db" venv/bin/python scripts/mcp_payload_sizes.py
 
 Make the copy with (never point the script at the live DB):
     sqlite3 -readonly ~/anton-data/shoe_deals.db ".backup /abs/path/to/COPY.db"
@@ -41,7 +40,7 @@ if not _DB_URL or "anton-data" in _DB_URL:
     )
     sys.exit(1)
 
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from app.mcp_server import _core  # noqa: E402
 from app.mcp_server import (  # noqa: E402
@@ -137,12 +136,13 @@ def _cell(text: str) -> str:
 def main() -> None:
     S = _active_shoe_with_most_mileage()
 
-    deal_rows = _try(get_deals, limit=1) or []
+    deal_rows = _try(get_deals, limit=1, detail=True) or []
     first_deal = deal_rows[0] if deal_rows else {}
     brand = first_deal.get("brand", "")
     model = first_deal.get("model", "")
 
-    watchlist = _try(get_watchlist) or []
+    # Brief get_watchlist returns {"entries", "total", "has_more"}.
+    watchlist = (_try(get_watchlist) or {}).get("entries", [])
     W = watchlist[0].get("shoe_id") if watchlist else None
 
     year, month = str(date.today().year), f"{date.today().month:02d}"
@@ -151,11 +151,14 @@ def main() -> None:
         _run("get_coros_sync_status", "default", get_coros_sync_status),
         _run("fetch_unsynced_coros_runs", "default", fetch_unsynced_coros_runs),
         _run("get_deals", "default (limit=20)", get_deals),
+        _run("get_deals", "detail=True (limit=20)", get_deals, (), {"detail": True}),
         _run("get_shoe_deals", f"brand={brand!r}, model={model!r}", get_shoe_deals, (brand, model)),
         _run("get_watchlist", "default", get_watchlist),
+        _run("get_watchlist", "detail=True", get_watchlist, (), {"detail": True}),
         _run("get_shoes", "default", get_shoes),
         _run("get_retailers", "default", get_retailers),
         _run("scrape_health", "default", scrape_health),
+        _run("scrape_health", "detail=True", scrape_health, (), {"detail": True}),
         _run("get_dashboard_stats", "default", get_dashboard_stats),
     ]
     if W is None:
@@ -167,7 +170,10 @@ def main() -> None:
         _run("get_coupon_opportunities", "default", get_coupon_opportunities),
         _run("get_owned_shoes", "default (status_filter=None)", get_owned_shoes),
         _run("get_owned_shoes", "status_filter='active'", get_owned_shoes, (), {"status_filter": "active"}),
+        _run("get_owned_shoes", "detail=True (status_filter=None)", get_owned_shoes, (), {"detail": True}),
         _run("get_shoe_runs", f"owned_shoe_id={S}", get_shoe_runs, (S,)),
+        _run("get_shoe_runs", f"owned_shoe_id={S}, limit=200, detail=True", get_shoe_runs, (S,),
+             {"limit": 200, "detail": True}),
         _run("get_shoe_notes", f"owned_shoe_id={S}", get_shoe_notes, (S,)),
         _run("get_shoe_insights", f"owned_shoe_id={S}", get_shoe_insights, (S,)),
         _run("get_rotation_insights", "default", get_rotation_insights),
