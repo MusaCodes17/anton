@@ -53,7 +53,7 @@ def run_tests(py: Path, tests: list[str], backend_dir: Path) -> tuple[int, str]:
     """Run the given test modules with the venv python. Separate function so
     tests can stub it."""
     return _lib.run(
-        [str(py), "-m", "pytest", "-q", "--tb=short", *tests],
+        [str(py), "-m", "pytest", "-q", "--tb=short", "--disable-warnings", *tests],
         backend_dir,
         timeout=TEST_TIMEOUT_S,
     )

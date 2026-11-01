@@ -72,7 +72,7 @@ MIGRATIONS_RE = re.compile(r"^backend/alembic/versions/[^/]+\.py$")
 def run_pytest(py: Path, tests: list[str] | None, backend_dir: Path,
                timeout: int) -> tuple[int, str]:
     """Run pytest; ``tests=None`` means the whole suite."""
-    cmd = [str(py), "-m", "pytest", "-q", "--tb=short", *(tests or [])]
+    cmd = [str(py), "-m", "pytest", "-q", "--tb=short", "--disable-warnings", *(tests or [])]
     return _lib.run(cmd, backend_dir, timeout=timeout)
 
 
