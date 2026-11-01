@@ -12,7 +12,7 @@ from app.utils.activity_tags import ACTIVITY_TAGS, is_valid_tag
 from app.services import rotation
 from app.mcp_server import _core
 from app.mcp_server._core import mcp
-from app.mcp_server._shared import _SOURCE_BADGES, _format_mileage_bar, _owned_shoe_brief, _owned_shoe_payload, _owned_shoes_payload, _pct_of_limit, _shoe_note_payload, _shoe_run_brief, _shoe_run_payload
+from app.mcp_server._shared import _SOURCE_BADGES, _format_mileage_bar, _owned_shoe_brief, _owned_shoe_payload, _owned_shoes_payload, _pct_of_limit, _rotation_insights_brief, _shoe_note_payload, _shoe_run_brief, _shoe_run_payload
 
 
 @mcp.tool()
@@ -872,7 +872,7 @@ def get_shoe_insights(owned_shoe_id: int) -> dict:
 
 
 @mcp.tool()
-def get_rotation_insights() -> dict:
+def get_rotation_insights(detail: bool = False) -> dict:
     """
     Rotation-wide analytics: `models` compares shoe models by their steady-run
     medians (metres per heartbeat, pace s/km, avg HR) pooled across pairs, and
@@ -882,13 +882,23 @@ def get_rotation_insights() -> dict:
     Steady runs only (untagged or Easy / Long Run, 5 km+, with heart rate, no
     long stops); a heuristic. Pace by shoe mostly reflects what the shoe was
     used for, so ALWAYS give the run counts (`runs`, `steady_runs`) and the
-    `caveat` when answering. A null median means not enough data
+    top-level `caveat` when answering. A null median means not enough data
     (`enough_data` false) — say so. The suggested limit is advisory: never
     apply it without the runner's confirmation (set_shoe_mileage_limit).
     Read-only.
+
+    By default the result is a brief: the `caveat`, `min_steady_runs` (the
+    steady-run count below which medians are withheld) and `heuristic` are
+    stated once at the top level, not on every model row.
+
+    Args:
+        detail: True returns the full payload, identical to
+            `GET /api/insights/rotation`: each model row also carries
+            `pair_ids` plus its own `min_steady_runs`, `heuristic` and `caveat`.
     """
     from dataclasses import asdict
     from app.models.schemas.insights import RotationInsightsResponse
     from app.services import insights
     with _core.get_session() as db:
-        return RotationInsightsResponse(**asdict(insights.rotation_insights(db))).model_dump()
+        full = RotationInsightsResponse(**asdict(insights.rotation_insights(db))).model_dump()
+    return full if detail else _rotation_insights_brief(full)

@@ -5,6 +5,7 @@ from app.models.models import Activity
 from app.services import rotation, strava_stats, races as races_svc, fitness as fitness_svc, weekly_summary as weekly_summary_svc, race_advisor as race_advisor_svc, training_trends as training_trends_svc
 from app.mcp_server import _core
 from app.mcp_server._core import mcp
+from app.mcp_server._shared import _race_block_brief
 
 
 @mcp.tool()
@@ -571,10 +572,19 @@ fitness card will now show the updated metrics."
 
 
 @mcp.tool()
-def get_race_block_context(weeks_back: int = 12, as_of: Optional[str] = None) -> dict:
+def get_race_block_context(weeks_back: int = 12, as_of: Optional[str] = None, detail: bool = False) -> dict:
     """
     Compile the race-block training context for the advisor prompt (R3.6), and
     answer "am I ready for my next race?" (R8.4.4).
+
+    By default the result is a brief. detail=False drops: the checklist's
+    `evidence`, `period_from`, `period_to` and `age_days`; `readiness.long_runs`,
+    `recent_efforts`, `consistency` and `taper` (the checklist's info items carry
+    their numbers); the estimate's `sources`, `backtest` and `backtest_skipped`
+    (with its other bookkeeping fields); and from each past build the full `race`
+    and its `consistency` and `taper` (a flat race_name, race_date and status
+    remain). The weekly rows also lose avg_hr and the pipeline rows their forecast
+    fields. The paragraphs below that name a dropped field apply to detail=True only.
 
     Returns a structured snapshot covering:
     - Next upcoming race: name, date, distance, days/weeks to race, target pace.
@@ -600,7 +610,8 @@ def get_race_block_context(weeks_back: int = 12, as_of: Optional[str] = None) ->
       number was computed over), `evidence` (the runs behind the number:
       {activity_id, run_date, distance_km, name, segment} — `segment` true
       means the number is a stretch inside a longer run) and, for key_effort,
-      `age_days` (days since that effort). Quote the numbers
+      `age_days` (days since that effort). [detail=True only: period_from,
+      period_to, evidence and age_days are dropped by default.] Quote the numbers
       and the rule; it is a heuristic checklist, NOT a score — never sum it
       into one. The `race_shoe` item (R11.5) is the shoe picked for the race:
       `readiness.race_shoe` ({shoe_id, label, status, current_mileage,
@@ -610,8 +621,8 @@ def get_race_block_context(weeks_back: int = 12, as_of: Optional[str] = None) ->
       uses the current ledger). It is `not_met` only when that projection will
       pass the runner's own mileage_limit; `met` at or under it; `info` when no
       limit is set; `n/a` when no shoe is picked. The block is `block_start`→`block_end` (a fixed number of
-      weeks ending race week, by race distance); `recent_efforts` carry
-      `vs_target_s_per_km` (negative = faster than target pace).
+      weeks ending race week, by race distance); `recent_efforts` (detail=True
+      only) carry `vs_target_s_per_km` (negative = faster than target pace).
       `readiness.past_builds` lists the past completed/DNF races of the same
       class, newest first, each with its block cut the same number of days
       before its race as today (`readiness.days_before_race`): `km`, `runs`,
@@ -620,7 +631,9 @@ def get_race_block_context(weeks_back: int = 12, as_of: Optional[str] = None) ->
       a DNF). Compare them to the current `block_km`, `block_runs`,
       `long_runs`, `longest_run`, `peak_week`. Present them beside the current
       numbers; never rank builds or say more km is better.
-      Once the block has started, `readiness.consistency` ({weeks_elapsed,
+      [Default brief: past builds are flat rows {race_name, race_date, status,
+      result_vs_target_s, km, runs, long_runs, longest_km, peak_week_km}.]
+      With detail=True, once the block has started, `readiness.consistency` ({weeks_elapsed,
       weeks_with_runs, median_runs_per_week, gaps: [{start, end, days}]} — gaps
       are 7+ consecutive days without a run) and, only inside the final 3 weeks
       (21 days) of the race, `readiness.taper` ({peak_week_km, weeks: [{offset
@@ -634,7 +647,8 @@ def get_race_block_context(weeks_back: int = 12, as_of: Optional[str] = None) ->
       `readiness.long_run_finishes` (R11.6) lists each long run in the block,
       oldest first, with its second-half vs first-half moving pace
       (`split_diff_s_per_km`, negative = faster second half), last km vs the
-      run average and second half vs target pace; `has_splits` false means the
+      run average and second half vs target pace (the brief omits the activity
+      id, name and the raw moving/last-km paces); `has_splits` false means the
       run hasn't been scanned yet. The `fast_finish` info item counts the faster
       second halves.
       `readiness.estimate` (R11.7) is the finish-time range for the next race
@@ -645,7 +659,9 @@ def get_race_block_context(weeks_back: int = 12, as_of: Optional[str] = None) ->
       `grade_reasons` in words, `sources` (the efforts behind it, `sets_estimate`
       marks the one that sets the number, `segment` true = a stretch inside a
       longer run), and `backtest` (each past race: predicted vs actual, error)
-      with `backtest_skipped` (races left out and why). `target_position` says
+      with `backtest_skipped` (races left out and why) — `sources`, `backtest` and
+      `backtest_skipped` are detail=True only; the brief keeps `backtest_n`.
+      `target_position` says
       whether the target time is faster than, inside, or slower than the range.
       Present it as a RANGE with its own historical error and grade, never as a
       single predicted time, and never as a promise. When `state` is not `ok`
@@ -664,6 +680,9 @@ def get_race_block_context(weeks_back: int = 12, as_of: Optional[str] = None) ->
         weeks_back: Number of recent weekly buckets to include (default 12, max 52).
         as_of: ISO date to answer for (default today). Use a past date to ask
             "was I ready for <race>?" — a completed race still counts before its date.
+        detail: True returns the full readiness payload, identical to
+            `GET /api/races/readiness`, plus the unabridged weekly and pipeline rows.
+            Default False returns the brief described above.
     """
     from dataclasses import asdict
     from datetime import date as _date
@@ -734,7 +753,7 @@ def get_race_block_context(weeks_back: int = 12, as_of: Optional[str] = None) ->
             "captured_at": f.captured_at,
         }
 
-    return result
+    return result if detail else _race_block_brief(result)
 
 
 @mcp.tool()

@@ -12,7 +12,17 @@ from app.services import settings as settings_svc, scrape_history as scrape_hist
 from app.models.schemas import PurchaseDraftResponse
 from app.mcp_server import _core
 from app.mcp_server._core import mcp
-from app.mcp_server._shared import _deal_brief, _deal_to_dict, _format_relative_time, _scrape_health_brief, _watchlist_brief, _watchlist_entry_payload
+from app.mcp_server._shared import (
+    _coupon_opportunities_brief,
+    _deal_brief,
+    _deal_to_dict,
+    _format_relative_time,
+    _price_record_brief,
+    _scrape_health_brief,
+    _tracked_shoe_brief,
+    _watchlist_brief,
+    _watchlist_entry_payload,
+)
 
 _WATCHLIST_MAX_LIMIT = 200  # hard cap per page so one call can't dump the whole watchlist into context
 _BRAND_DEALS_RESOURCE_CAP = 50  # top-N by savings per brand resource; the footer points to get_deals for the rest
@@ -72,19 +82,26 @@ def get_deals(
 
 
 @mcp.tool()
-def get_shoe_deals(brand: str, model: str) -> List[dict]:
+def get_shoe_deals(brand: str, model: str, detail: bool = False) -> List[dict]:
     """
     Find all active deals for a specific shoe model, sorted by biggest
     discount first. Use this when the user asks "are there any deals on
     my Adios Pro 4?" or "what's the best price on the Vaporfly 3 right now?".
 
+    Each brief deal has: id, shoe_id, shoe ("Brand Model"), retailer, price,
+    savings_percent, size_fit and url.
+
     Args:
         brand: Shoe brand, e.g. "Adidas" (case-insensitive substring match).
         model: Shoe model, e.g. "Adizero Adios Pro 4" (case-insensitive substring match).
+        detail: True adds msrp, target_price, savings_amount, in_stock,
+            sizes_available, colorway, shoe_type and detected_at to each deal.
     """
     with _core.get_session() as db:
         deals = deals_svc.list_deals(db, brand=brand, model=model)
-        return [_deal_to_dict(d) for d in deals]
+        if detail:
+            return [_deal_to_dict(d) for d in deals]
+        return [_deal_brief(d) for d in deals]
 
 
 @mcp.tool()
@@ -160,22 +177,30 @@ def get_watchlist(limit: int = 20, offset: int = 0, detail: bool = False) -> Uni
 
 
 @mcp.tool()
-def get_shoes(is_active: Optional[bool] = True) -> List[dict]:
+def get_shoes(is_active: Optional[bool] = True, detail: bool = False) -> List[dict]:
     """
     List tracked shoes and their target/retail prices.
 
     Use this to answer "what shoes are we tracking" or to look up a shoe's
-    ID before calling another tool that needs one.
+    ID before calling another tool that needs one. Each brief shoe has: id,
+    shoe ("Brand Model"), shoe_type, msrp and target_price. is_active is
+    included only when is_active=None (all shoes), so inactive rows can be
+    told apart. Notes are not included.
 
     Args:
         is_active: Filter by whether the shoe is actively monitored.
-            Defaults to True (only actively-tracked shoes). Pass None for all.
+            Defaults to True (only actively-tracked shoes). Pass None for all,
+            which also adds is_active to each brief shoe.
+        detail: True returns brand and model as separate fields, adds
+            is_active, and adds each shoe's free-text notes.
     """
     with _core.get_session() as db:
         query = db.query(Shoe)
         if is_active is not None:
             query = query.filter(Shoe.is_active == is_active)
         shoes = query.order_by(Shoe.brand, Shoe.model).all()
+        if not detail:
+            return [_tracked_shoe_brief(s, include_active=is_active is None) for s in shoes]
         return [
             {
                 "id": s.id,
@@ -401,15 +426,20 @@ def get_dashboard_stats() -> dict:
 
 
 @mcp.tool()
-def get_price_history(shoe_id: int, limit: int = 50) -> List[dict]:
+def get_price_history(shoe_id: int, limit: int = 50, detail: bool = False) -> List[dict]:
     """
     Get recent scraped prices for one shoe across all retailers, newest
     first. Use this to answer "how has the price of X moved" or "what's
     the lowest it's been at retailer Y" type questions.
 
+    Each brief row has: retailer, price and date (the scrape's calendar
+    date). Rows are one per scrape record, not deduplicated.
+
     Args:
         shoe_id: ID of the shoe (from get_shoes).
         limit: Max number of price records to return (default 50, capped at 200).
+        detail: True adds original_price, in_stock and colorway, and the full
+            scraped_at timestamp in place of date.
     """
     limit = max(1, min(limit, 200))
     with _core.get_session() as db:
@@ -423,6 +453,8 @@ def get_price_history(shoe_id: int, limit: int = 50) -> List[dict]:
             .limit(limit)
             .all()
         )
+        if not detail:
+            return [_price_record_brief(r) for r in records]
         return [
             {
                 "retailer": r.retailer.name,
@@ -761,7 +793,7 @@ No new deal events since [since if set, else "the last 7 days"]. All quiet.
 # ---------------------------------------------------------------------------
 
 @mcp.tool()
-def get_coupon_opportunities() -> dict:
+def get_coupon_opportunities(detail: bool = False) -> dict:
     """
     Return active promo codes per retailer, annotated with active deals.
 
@@ -769,17 +801,28 @@ def get_coupon_opportunities() -> dict:
     least one active deal (price below MSRP) right now — applying the code
     on top of the deal compounds the saving.
 
-    Returns:
-        all_retailers      every active retailer with ≥1 active promo code
-        stackable          subset that also has active deals (the opportunities)
+    Returns (brief by default):
+        all_retailers      every active retailer with ≥1 active promo code:
+                           retailer_id, name, promo_codes, deals_total
+        stackable          subset that also has active deals: retailer_id, name,
+                           promo_codes, deals (top 5 by savings_percent),
+                           deals_total (full count)
         total_active_codes count of active promo codes across all retailers
         stackable_count    len(stackable)
+        Each promo code has: code, description, discount_percent, last_seen_at.
+
+    Args:
+        detail: True returns every deal per retailer and the full promo code
+            record (including source), with no deal cap.
 
     Read-only — no scraping triggered. Call hunt_coupons first if the codes
     feel stale (check last_seen_at in each promo code entry).
     """
     with _core.get_session() as db:
-        return coupon_hunter_svc.get_stacking_opportunities(db)
+        opps = coupon_hunter_svc.get_stacking_opportunities(db)
+        if detail:
+            return opps
+        return _coupon_opportunities_brief(opps)
 
 
 @mcp.tool()
@@ -828,7 +871,10 @@ apply the code at checkout for a compound saving.
 3. Report the `stackable` retailers — for each one show:
    - **Retailer name**
    - Active promo codes: code, description, estimated % off
-   - Active deals: shoe name, current price, % below MSRP, product URL
+   - Active deals: shoe name, current price, % below MSRP, product URL.
+     `deals` holds the top 5 by savings and `deals_total` gives the full
+     count; say so when `deals_total` is larger. If the runner wants every
+     deal, call `get_coupon_opportunities(detail=True)`.
    - Estimated combined saving (deal % + promo %, noting they may not simply
      add — present the math honestly, e.g. "20% off already-sale price")
 
