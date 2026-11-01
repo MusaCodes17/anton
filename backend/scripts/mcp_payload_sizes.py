@@ -153,9 +153,12 @@ def main() -> None:
         _run("get_deals", "default (limit=20)", get_deals),
         _run("get_deals", "detail=True (limit=20)", get_deals, (), {"detail": True}),
         _run("get_shoe_deals", f"brand={brand!r}, model={model!r}", get_shoe_deals, (brand, model)),
+        _run("get_shoe_deals", f"brand={brand!r}, model={model!r}, detail=True", get_shoe_deals,
+             (brand, model), {"detail": True}),
         _run("get_watchlist", "default", get_watchlist),
         _run("get_watchlist", "detail=True", get_watchlist, (), {"detail": True}),
         _run("get_shoes", "default", get_shoes),
+        _run("get_shoes", "detail=True", get_shoes, (), {"detail": True}),
         _run("get_retailers", "default", get_retailers),
         _run("scrape_health", "default", scrape_health),
         _run("scrape_health", "detail=True", scrape_health, (), {"detail": True}),
@@ -165,9 +168,12 @@ def main() -> None:
         entries.append(_skip("get_price_history", "shoe_id=<first watchlist shoe>", "no watchlist shoe"))
     else:
         entries.append(_run("get_price_history", f"shoe_id={W}", get_price_history, (W,)))
+        entries.append(_run("get_price_history", f"shoe_id={W}, detail=True", get_price_history, (W,),
+                            {"detail": True}))
     entries += [
         _skip("get_deal_alerts", "default", SKIP_DEAL_ALERTS),
         _run("get_coupon_opportunities", "default", get_coupon_opportunities),
+        _run("get_coupon_opportunities", "detail=True", get_coupon_opportunities, (), {"detail": True}),
         _run("get_owned_shoes", "default (status_filter=None)", get_owned_shoes),
         _run("get_owned_shoes", "status_filter='active'", get_owned_shoes, (), {"status_filter": "active"}),
         _run("get_owned_shoes", "detail=True (status_filter=None)", get_owned_shoes, (), {"detail": True}),
@@ -177,12 +183,14 @@ def main() -> None:
         _run("get_shoe_notes", f"owned_shoe_id={S}", get_shoe_notes, (S,)),
         _run("get_shoe_insights", f"owned_shoe_id={S}", get_shoe_insights, (S,)),
         _run("get_rotation_insights", "default", get_rotation_insights),
+        _run("get_rotation_insights", "detail=True", get_rotation_insights, (), {"detail": True}),
         _run("get_training_summary", "default (period='monthly')", get_training_summary),
         _run("get_training_trends", "default", get_training_trends),
         _run("get_personal_bests", "default", get_personal_bests),
         _skip("get_planned_races", "default", SKIP_PLANNED_RACES),
         _run("get_weekly_summary", "default", get_weekly_summary),
         _run("get_race_block_context", "default", get_race_block_context),
+        _run("get_race_block_context", "detail=True", get_race_block_context, (), {"detail": True}),
         _run("get_block_comparison", "default (race_class='marathon')", get_block_comparison),
         _run("get_onboarding_queue", "default", get_onboarding_queue),
         # resources (measured as str length)

@@ -857,3 +857,546 @@ def test_brand_resource_over_cap_keeps_top_by_savings_and_shows_footer(mcp_db):
 def test_brand_resource_with_no_deals_returns_the_no_deals_message(mcp_db):
     _dl_brand_batch(mcp_db, 1, brand="Nike")
     assert brand_deals_resource("Asics") == "No active deals found for Asics"
+
+
+# --- 13. brief defaults for get_shoe_deals, get_shoes, get_price_history, get_coupon_opportunities (R14 E27) ---
+
+from datetime import datetime, timezone
+
+from app.models.models import PriceRecord, PromoCode, Retailer, Shoe
+from app.mcp_server._shared import _coupon_opportunities_brief
+from app.services import coupon_hunter
+
+SHOE_BRIEF_KEYS = {"id", "shoe", "shoe_type", "msrp", "target_price"}
+SHOE_BRIEF_ALL_KEYS = SHOE_BRIEF_KEYS | {"is_active"}  # is_active only when is_active=None
+PRICE_BRIEF_KEYS = {"retailer", "price", "date"}
+COUPON_ALL_RETAILER_KEYS = {"retailer_id", "name", "promo_codes", "deals_total"}
+COUPON_STACKABLE_KEYS = {"retailer_id", "name", "promo_codes", "deals", "deals_total"}
+COUPON_PROMO_KEYS = {"code", "description", "discount_percent", "last_seen_at"}
+COUPON_DEAL_KEYS = {"shoe", "price", "savings_percent", "product_url"}
+
+
+def _shoe_row(db, model, *, brand="Nike", is_active=True, notes=None, target=180.0):
+    shoe = Shoe(brand=brand, model=model, shoe_type="daily", msrp=200.0, target_price=target,
+                is_active=is_active, notes=notes)
+    db.add(shoe)
+    db.commit()
+    return shoe
+
+
+def _price_row(db, shoe, retailer, *, price=150.0, scraped_at=None):
+    rec = PriceRecord(shoe_id=shoe.id, retailer_id=retailer.id, product_url="https://p.example/x",
+                      price=price, original_price=200.0, in_stock=True, colorway="Black",
+                      scraped_at=scraped_at or datetime(2026, 7, 1, 12, 0, tzinfo=timezone.utc))
+    db.add(rec)
+    db.commit()
+    return rec
+
+
+def _promo(db, retailer, code, *, discount=20.0, source="scraped", seen=None):
+    pc = PromoCode(retailer_id=retailer.id, code=code, description=f"{code} off", discount_percent=discount,
+                   source=source, is_active=True,
+                   last_seen_at=seen or datetime(2026, 7, 1, tzinfo=timezone.utc))
+    db.add(pc)
+    db.commit()
+    return pc
+
+
+# get_shoe_deals ----------------------------------------------------------------
+
+def test_shoe_deals_default_rows_have_exactly_the_brief_keys(mcp_db):
+    _dl_deal(mcp_db, _dl_retailer(mcp_db), "Adios Pro 4", brand="Adidas", savings=30.0)
+    out = mcp_server.get_shoe_deals("Adidas", "Adios")
+    assert len(out) == 1
+    assert set(out[0]) == DEAL_BRIEF_KEYS
+
+
+def test_shoe_deals_brief_values_match_the_full_record(mcp_db):
+    _dl_deal(mcp_db, _dl_retailer(mcp_db), "Adios Pro 4", brand="Adidas", savings=30.0, sizes=["9"])
+    brief = mcp_server.get_shoe_deals("Adidas", "Adios")[0]
+    full = _deal_to_dict(_dl_list(mcp_db, brand="Adidas", model="Adios")[0])
+    assert brief["id"] == full["id"]
+    assert brief["price"] == full["current_price"]
+    assert brief["savings_percent"] == full["savings_percent"]
+    assert brief["url"] == full["product_url"]
+    assert brief["shoe"] == "Adidas Adios Pro 4"
+
+
+def test_shoe_deals_detail_true_equals_the_full_flat_projection_regression_lock(mcp_db):
+    _dl_deal(mcp_db, _dl_retailer(mcp_db), "Adios Pro 4", brand="Adidas", savings=30.0)
+    _dl_deal(mcp_db, _dl_retailer(mcp_db, "TLH"), "Adios Pro 5", brand="Adidas", savings=10.0)
+    out = mcp_server.get_shoe_deals("Adidas", "Adios", detail=True)
+    assert out == [_deal_to_dict(d) for d in _dl_list(mcp_db, brand="Adidas", model="Adios")]
+    assert all("msrp" in row and "colorway" in row for row in out)
+
+
+def test_shoe_deals_unknown_model_is_empty_in_both_modes(mcp_db):
+    _dl_deal(mcp_db, _dl_retailer(mcp_db), "Pegasus 41")
+    assert mcp_server.get_shoe_deals("Nike", "NoSuchModel") == []
+    assert mcp_server.get_shoe_deals("Nike", "NoSuchModel", detail=True) == []
+
+
+# get_shoes ---------------------------------------------------------------------
+
+def test_shoes_default_rows_have_exactly_the_brief_keys_and_no_notes_or_is_active(mcp_db):
+    _shoe_row(mcp_db, "Pegasus 41", notes="long note")
+    out = mcp_server.get_shoes()
+    assert len(out) == 1
+    assert set(out[0]) == SHOE_BRIEF_KEYS
+    assert "notes" not in out[0] and "is_active" not in out[0]
+
+
+def test_shoes_is_active_false_rows_have_exactly_the_brief_keys(mcp_db):
+    _shoe_row(mcp_db, "Old Model", is_active=False)
+    out = mcp_server.get_shoes(is_active=False)
+    assert [r["shoe"] for r in out] == ["Nike Old Model"]
+    assert set(out[0]) == SHOE_BRIEF_KEYS
+
+
+def test_shoes_brief_values_match_the_full_record(mcp_db):
+    shoe = _shoe_row(mcp_db, "Pegasus 41", notes="long note", target=165.0)
+    brief = mcp_server.get_shoes()[0]
+    full = mcp_server.get_shoes(detail=True)[0]
+    assert brief == {
+        "id": shoe.id, "shoe": "Nike Pegasus 41", "shoe_type": "daily",
+        "msrp": full["msrp"], "target_price": full["target_price"],
+    }
+    assert brief["id"] == full["id"] and brief["shoe"] == f"{full['brand']} {full['model']}"
+    assert brief["target_price"] == 165.0 and brief["msrp"] == 200.0
+
+
+def test_shoes_detail_true_keeps_notes_brand_model_and_is_active(mcp_db):
+    _shoe_row(mcp_db, "Pegasus 41", notes="long note", target=165.0)
+    out = mcp_server.get_shoes(detail=True)
+    assert out == [{"id": out[0]["id"], "brand": "Nike", "model": "Pegasus 41", "shoe_type": "daily",
+                    "target_price": 165.0, "msrp": 200.0, "is_active": True, "notes": "long note"}]
+
+
+def test_shoes_is_active_none_includes_is_active_with_false_on_inactive(mcp_db):
+    _shoe_row(mcp_db, "Pegasus 41", is_active=True)
+    _shoe_row(mcp_db, "Old Model", is_active=False)
+    default_out = mcp_server.get_shoes()
+    all_out = mcp_server.get_shoes(is_active=None)
+    assert [r["shoe"] for r in default_out] == ["Nike Pegasus 41"]
+    assert {r["shoe"]: r["is_active"] for r in all_out} == {"Nike Pegasus 41": True, "Nike Old Model": False}
+    assert all(set(r) == SHOE_BRIEF_ALL_KEYS for r in all_out)
+
+
+# get_price_history -------------------------------------------------------------
+
+def test_price_history_default_rows_have_exactly_the_brief_keys(mcp_db):
+    shoe = _shoe_row(mcp_db, "Pegasus 41")
+    _price_row(mcp_db, shoe, _dl_retailer(mcp_db))
+    out = mcp_server.get_price_history(shoe.id)
+    assert len(out) == 1
+    assert set(out[0]) == PRICE_BRIEF_KEYS
+
+
+def test_price_history_brief_values_match_the_full_record(mcp_db):
+    shoe = _shoe_row(mcp_db, "Pegasus 41")
+    retailer = _dl_retailer(mcp_db, "TLH")
+    _price_row(mcp_db, shoe, retailer, price=151.5,
+               scraped_at=datetime(2026, 7, 2, 9, 30, tzinfo=timezone.utc))
+    brief = mcp_server.get_price_history(shoe.id)[0]
+    full = mcp_server.get_price_history(shoe.id, detail=True)[0]
+    assert brief == {"retailer": "TLH", "price": 151.5, "date": "2026-07-02"}
+    assert brief["retailer"] == full["retailer"] and brief["price"] == full["price"]
+    assert full["scraped_at"].startswith("2026-07-02T09:30")
+
+
+def test_price_history_detail_true_keeps_the_six_key_rows(mcp_db):
+    shoe = _shoe_row(mcp_db, "Pegasus 41")
+    _price_row(mcp_db, shoe, _dl_retailer(mcp_db))
+    out = mcp_server.get_price_history(shoe.id, detail=True)
+    assert set(out[0]) == {"retailer", "price", "original_price", "in_stock", "colorway", "scraped_at"}
+    assert out[0]["original_price"] == 200.0 and out[0]["colorway"] == "Black" and out[0]["in_stock"] is True
+
+
+def test_price_history_row_with_no_scraped_at_has_date_none(mcp_db):
+    shoe = _shoe_row(mcp_db, "Pegasus 41")
+    rec = _price_row(mcp_db, shoe, _dl_retailer(mcp_db))
+    mcp_db.query(PriceRecord).filter(PriceRecord.id == rec.id).update({"scraped_at": None})
+    mcp_db.commit()
+    out = mcp_server.get_price_history(shoe.id)
+    assert out[0]["date"] is None
+    assert out[0]["price"] == 150.0
+
+
+def test_price_history_unknown_shoe_is_empty_in_both_modes(mcp_db):
+    assert mcp_server.get_price_history(9999) == []
+    assert mcp_server.get_price_history(9999, detail=True) == []
+
+
+def test_price_history_limit_caps_brief_rows(mcp_db):
+    shoe = _shoe_row(mcp_db, "Pegasus 41")
+    retailer = _dl_retailer(mcp_db)
+    for day in (1, 2, 3):
+        _price_row(mcp_db, shoe, retailer, price=float(100 + day),
+                   scraped_at=datetime(2026, 7, day, tzinfo=timezone.utc))
+    out = mcp_server.get_price_history(shoe.id, limit=2)
+    assert [r["date"] for r in out] == ["2026-07-03", "2026-07-02"]
+
+
+# get_coupon_opportunities ------------------------------------------------------
+
+def test_coupon_detail_true_equals_the_service_result(mcp_db):
+    retailer = _dl_retailer(mcp_db)
+    _promo(mcp_db, retailer, "TWENTY")
+    _dl_deal(mcp_db, retailer, "Pegasus 41", savings=25.0)
+    assert mcp_server.get_coupon_opportunities(detail=True) == coupon_hunter.get_stacking_opportunities(mcp_db)
+
+
+def test_coupon_default_has_the_brief_key_sets(mcp_db):
+    retailer = _dl_retailer(mcp_db)
+    _promo(mcp_db, retailer, "TWENTY")
+    _dl_deal(mcp_db, retailer, "Pegasus 41", savings=25.0)
+    out = mcp_server.get_coupon_opportunities()
+    assert set(out) == {"all_retailers", "stackable", "total_active_codes", "stackable_count"}
+    assert all(set(r) == COUPON_ALL_RETAILER_KEYS for r in out["all_retailers"])
+    assert all(set(r) == COUPON_STACKABLE_KEYS for r in out["stackable"])
+    assert all(set(p) == COUPON_PROMO_KEYS for r in out["stackable"] for p in r["promo_codes"])
+    assert all(set(d) == COUPON_DEAL_KEYS for r in out["stackable"] for d in r["deals"])
+
+
+def test_coupon_brief_values_match_the_full_record(mcp_db):
+    retailer = _dl_retailer(mcp_db)
+    _promo(mcp_db, retailer, "TWENTY", discount=20.0, source="manual")
+    _dl_deal(mcp_db, retailer, "Pegasus 41", savings=25.0)
+    brief = mcp_server.get_coupon_opportunities()
+    full = mcp_server.get_coupon_opportunities(detail=True)
+    b_row, f_row = brief["stackable"][0], full["stackable"][0]
+    assert b_row["retailer_id"] == f_row["retailer_id"] and b_row["name"] == f_row["name"]
+    assert b_row["promo_codes"][0] == {k: f_row["promo_codes"][0][k] for k in COUPON_PROMO_KEYS}
+    assert "source" in f_row["promo_codes"][0] and "source" not in b_row["promo_codes"][0]
+    assert b_row["deals"] == f_row["deals"]
+    assert b_row["deals_total"] == len(f_row["deals"]) == 1
+    assert brief["total_active_codes"] == full["total_active_codes"] == 1
+    assert brief["stackable_count"] == full["stackable_count"] == 1
+
+
+def test_coupon_retailer_with_exactly_five_deals_keeps_all_five(mcp_db):
+    retailer = _dl_retailer(mcp_db)
+    _promo(mcp_db, retailer, "FIVE")
+    for i in range(5):
+        _dl_deal(mcp_db, retailer, f"Model {i}", savings=float(10 + i))
+    row = mcp_server.get_coupon_opportunities()["stackable"][0]
+    assert len(row["deals"]) == 5
+    assert row["deals_total"] == 5
+
+
+def test_coupon_retailer_with_six_deals_keeps_top_five_and_full_total(mcp_db):
+    retailer = _dl_retailer(mcp_db)
+    _promo(mcp_db, retailer, "SIX")
+    for i in range(6):
+        _dl_deal(mcp_db, retailer, f"Model {i}", savings=float(10 + i))
+    row = mcp_server.get_coupon_opportunities()["stackable"][0]
+    assert [d["savings_percent"] for d in row["deals"]] == [15.0, 14.0, 13.0, 12.0, 11.0]
+    assert row["deals_total"] == 6
+    full = mcp_server.get_coupon_opportunities(detail=True)["stackable"][0]
+    assert len(full["deals"]) == 6
+
+
+def test_coupon_deal_with_savings_none_sorts_last_and_ties_by_shoe_name():
+    opps = {
+        "all_retailers": [],
+        "stackable": [{
+            "retailer_id": 1, "name": "TLH", "promo_codes": [],
+            "deals": [
+                {"shoe": "Zeta", "price": 1.0, "savings_percent": None, "product_url": "u"},
+                {"shoe": "Beta", "price": 1.0, "savings_percent": 20.0, "product_url": "u"},
+                {"shoe": "Alpha", "price": 1.0, "savings_percent": 20.0, "product_url": "u"},
+                {"shoe": "Gamma", "price": 1.0, "savings_percent": 30.0, "product_url": "u"},
+            ],
+        }],
+        "total_active_codes": 0,
+        "stackable_count": 1,
+    }
+    row = _coupon_opportunities_brief(opps)["stackable"][0]
+    assert [d["shoe"] for d in row["deals"]] == ["Gamma", "Alpha", "Beta", "Zeta"]
+    assert row["deals_total"] == 4
+
+
+def test_coupon_retailer_with_codes_and_no_deals_is_in_all_retailers_only(mcp_db):
+    retailer = _dl_retailer(mcp_db, "Codes Only")
+    _promo(mcp_db, retailer, "NODEALS")
+    out = mcp_server.get_coupon_opportunities()
+    assert [r["name"] for r in out["all_retailers"]] == ["Codes Only"]
+    assert out["all_retailers"][0]["deals_total"] == 0
+    assert "deals" not in out["all_retailers"][0]
+    assert out["stackable"] == []
+    assert out["stackable_count"] == 0
+
+
+def test_coupon_no_active_codes_gives_empty_lists_and_zero_counts(mcp_db):
+    retailer = _dl_retailer(mcp_db)
+    _dl_deal(mcp_db, retailer, "Pegasus 41", savings=25.0)
+    out = mcp_server.get_coupon_opportunities()
+    assert out == {"all_retailers": [], "stackable": [], "total_active_codes": 0, "stackable_count": 0}
+
+
+# --- 14. brief defaults for get_rotation_insights and get_race_block_context (R14 E27) ---
+
+import copy
+from dataclasses import asdict
+
+from app.mcp_server._shared import _race_block_brief
+from app.models.models import PlannedRace
+from app.routers.insights import get_rotation_insights as rest_rotation_insights
+from app.routers.races import get_race_readiness
+from app.services import insights as insights_svc
+from tests.test_finish_estimate import history, past_race
+from tests.test_race_readiness import AS_OF, effort as _effort, race as _race, run as _plain_run, splits as _splits
+
+ROTATION_TOP_KEYS = {"models", "wear_by_type", "caveat", "min_steady_runs", "heuristic"}
+ROTATION_MODEL_KEYS = {"brand", "model", "runs", "km", "steady_runs", "median_m_per_beat",
+                       "median_pace_s_per_km", "median_avg_hr", "enough_data"}
+RACE_WEEK_KEYS = {"period", "total_km", "run_count", "avg_pace"}
+RACE_PIPELINE_KEYS = {"brand", "model", "nickname", "shoe_type", "pct", "current_mileage",
+                      "mileage_limit", "replacement_deals"}
+CHECKLIST_KEYS = {"key", "label", "status", "rule", "value", "target", "unit"}
+PAST_BUILD_KEYS = {"race_name", "race_date", "status", "result_vs_target_s", "km", "runs",
+                   "long_runs", "longest_km", "peak_week_km"}
+FINISH_KEYS = {"run_date", "distance_km", "has_splits", "first_half_pace_s_per_km",
+               "second_half_pace_s_per_km", "split_diff_s_per_km", "last_km_vs_avg_s_per_km",
+               "second_half_vs_target_s_per_km"}
+ESTIMATE_KEYS = {"state", "message", "estimate_s", "low_s", "high_s", "band_pct", "grade",
+                 "grade_reasons", "target_position", "backtest_n", "coros_prediction_s",
+                 "coros_captured_at", "heuristic"}
+READINESS_KEPT_KEYS = {"has_race", "as_of", "race", "race_class", "block_weeks", "block_start",
+                       "block_end", "block_started", "block_km", "block_runs", "peak_week",
+                       "current_week", "longest_run", "long_run_km", "long_runs_needed", "key_effort",
+                       "race_shoe", "days_before_race", "heuristic", "checklist", "past_builds",
+                       "long_run_finishes", "estimate"}
+READINESS_DROPPED_KEYS = {"long_runs", "effort_window_start", "recent_efforts", "consistency", "taper"}
+
+
+def _owned(db, brand, model, n_runs):
+    shoe = OwnedShoe(brand=brand, model=model, shoe_type="daily", starting_mileage=0.0, current_mileage=0.0)
+    db.add(shoe)
+    db.commit()
+    for i in range(n_runs):
+        rotation.log_run(db, shoe.id, distance_km=10.0, run_date=date(2026, 3, 2) + timedelta(days=i),
+                         avg_hr=150, moving_time_s=3300)
+    return shoe
+
+
+def test_rotation_default_has_exactly_the_brief_keys_and_row_keys(mcp_db):
+    _owned(mcp_db, "Nike", "Pegasus 41", 10)
+    _owned(mcp_db, "Hoka", "Clifton 9", 3)
+    out = mcp_server.get_rotation_insights()
+    assert set(out) == ROTATION_TOP_KEYS
+    assert len(out["models"]) == 2
+    for row in out["models"]:
+        assert set(row) == ROTATION_MODEL_KEYS
+    assert out["heuristic"] is True
+    assert out["caveat"] == insights_svc.PERFORMANCE_CAVEAT
+    assert out["min_steady_runs"] == insights_svc.MIN_SHOE_STEADY_RUNS
+
+
+def test_rotation_brief_row_values_match_the_detail_rows(mcp_db):
+    _owned(mcp_db, "Nike", "Pegasus 41", 10)
+    _owned(mcp_db, "Hoka", "Clifton 9", 3)
+    brief = mcp_server.get_rotation_insights()
+    full = mcp_server.get_rotation_insights(detail=True)
+    assert [{k: r[k] for k in ROTATION_MODEL_KEYS} for r in full["models"]] == brief["models"]
+    assert brief["wear_by_type"] == full["wear_by_type"]
+    assert "pair_ids" in full["models"][0] and "caveat" in full["models"][0]
+
+
+def test_rotation_with_zero_models_still_has_caveat_and_threshold(mcp_db):
+    out = mcp_server.get_rotation_insights()
+    assert out["models"] == [] and out["wear_by_type"] == []
+    assert out["caveat"] == insights_svc.PERFORMANCE_CAVEAT
+    assert out["min_steady_runs"] == insights_svc.MIN_SHOE_STEADY_RUNS
+
+
+def test_rotation_detail_true_equals_the_rest_payload(mcp_db):
+    _owned(mcp_db, "Nike", "Pegasus 41", 10)
+    assert mcp_server.get_rotation_insights(detail=True) == rest_rotation_insights(db=mcp_db).model_dump()
+
+
+def _full_race_payload():
+    """A hand-built get_race_block_context(detail=True) result with every key populated."""
+    race = {"id": 1, "name": "Beneva Marathon", "race_date": "2026-10-11", "distance_km": 42.195,
+            "status": "planned", "days_to_race": 2, "weeks_to_race": 0, "target_time_s": 10800,
+            "target_pace": "4:16/km", "target_pace_s_per_km": 256}
+    week = {"period": "2026-W41", "total_km": 40.0, "run_count": 4}
+    long_run = {"run_date": "2026-09-13", "distance_km": 32.0, "name": "Long", "activity_id": 7}
+    item = {"key": "longest_run", "label": "Longest run", "status": "met", "rule": "r", "value": 32.0,
+            "target": 32.0, "unit": "km", "period_from": "2026-06-22", "period_to": "2026-10-08",
+            "evidence": [{"activity_id": 7, "run_date": "2026-09-13", "distance_km": 32.0,
+                          "name": "Long", "segment": False}], "age_days": 3}
+    finish = {"activity_id": 7, "run_date": "2026-09-13", "name": "Long", "distance_km": 32.0,
+              "has_splits": True, "moving_pace_s_per_km": 300, "first_half_pace_s_per_km": 305,
+              "second_half_pace_s_per_km": 295, "split_diff_s_per_km": -10, "last_km_pace_s_per_km": 290,
+              "last_km_vs_avg_s_per_km": -10, "second_half_vs_target_s_per_km": 39}
+    build = {"race": {"id": 2, "name": "Ottawa", "race_date": "2025-05-25", "distance_km": 42.195,
+                      "status": "completed", "result_time_s": 11000, "result_pace": "4:21/km",
+                      "target_time_s": 10800, "target_pace": "4:16/km"},
+             "result_vs_target_s": 200, "cut_date": "2025-05-23", "km": 900.5, "runs": 70, "long_runs": 3,
+             "longest_km": 32.0, "peak_week_km": 80.0,
+             "consistency": {"weeks_elapsed": 14, "weeks_with_runs": 14, "median_runs_per_week": 5.0, "gaps": []},
+             "taper": None}
+    estimate = {"state": "ok", "message": None, "race_class": "marathon", "race_km": 42.195,
+                "riegel_k": 1.06, "window_from": "2026-06-22", "window_to": "2026-10-08",
+                "estimate_s": 10900, "low_s": 10500, "high_s": 11300, "band_pct": 0.04, "grade": "strong",
+                "grade_reasons": ["two sources"], "spread_pct": 0.01, "target_time_s": 10800,
+                "target_position": "inside", "sources": [{"kind": "best_effort"}],
+                "backtest": [{"name": "Ottawa"}], "backtest_skipped": [{"name": "x"}], "backtest_n": 3,
+                "backtest_mean_abs_pct": 0.03, "backtest_max_abs_pct": 0.04, "coros_prediction_s": 10700,
+                "coros_captured_at": "2026-10-01", "heuristic": True}
+    readiness = {"has_race": True, "as_of": "2026-10-09", "race": race, "race_class": "marathon",
+                 "block_weeks": 16, "block_start": "2026-06-22", "block_end": "2026-10-09",
+                 "block_started": True, "block_km": 800.0, "block_runs": 60, "peak_week": week,
+                 "current_week": week, "longest_run": long_run, "long_run_km": 28.0, "long_runs_needed": 3,
+                 "long_runs": [long_run], "effort_window_start": "2026-08-14", "key_effort": "half",
+                 "recent_efforts": [{"label": "half"}], "checklist": [item],
+                 "race_shoe": {"shoe_id": 3, "label": "Vaporfly"}, "days_before_race": 2,
+                 "past_builds": [build], "consistency": {"weeks_elapsed": 16}, "long_run_finishes": [finish],
+                 "taper": {"peak_week_km": 80.0, "weeks": []}, "estimate": estimate, "heuristic": True}
+    return {
+        "readiness": readiness, "has_next_race": True,
+        "next_race": {"name": "Beneva Marathon", "race_date": "2026-10-11", "distance_km": 42.195,
+                      "days_to_race": 2, "weeks_to_race": 0, "target_pace": "4:16/km", "target_time_s": 10800},
+        "recent_weeks": [{"period": "2026-W41", "total_km": 40.0, "run_count": 4, "avg_pace": "5:00/km",
+                          "avg_hr": 150}],
+        "avg_weekly_km": 41.5,
+        "pipeline": [{"shoe_id": 3, "brand": "Nike", "model": "Vaporfly", "nickname": "V", "shoe_type": "Race",
+                      "pct": 0.8, "current_mileage": 320.0, "mileage_limit": 400.0, "replacement_deals": 2,
+                      "forecast_status": "on_track", "weekly_km": 20.0, "weeks_to_limit": 4.0,
+                      "projected_limit_date": "2026-11-06"}],
+        "has_fitness": True,
+        "fitness": {"vo2max": 60.0, "threshold_pace": "3:55/km", "race_predictions": {"42.195": 10700},
+                    "running_level": 80.0, "captured_at": "2026-10-01"},
+    }
+
+
+def test_race_brief_row_key_sets_on_a_hand_built_payload():
+    full = _full_race_payload()
+    out = _race_block_brief(full)
+    assert set(out) == set(full)
+    assert [set(w) for w in out["recent_weeks"]] == [RACE_WEEK_KEYS]
+    assert [set(p) for p in out["pipeline"]] == [RACE_PIPELINE_KEYS]
+    rd = out["readiness"]
+    assert set(rd) == READINESS_KEPT_KEYS
+    assert not READINESS_DROPPED_KEYS & set(rd)
+    assert [set(i) for i in rd["checklist"]] == [CHECKLIST_KEYS]
+    assert [set(b) for b in rd["past_builds"]] == [PAST_BUILD_KEYS]
+    assert [set(f) for f in rd["long_run_finishes"]] == [FINISH_KEYS]
+    assert set(rd["estimate"]) == ESTIMATE_KEYS
+
+
+def test_race_brief_copies_values_and_leaves_unchanged_parts_alone():
+    full = _full_race_payload()
+    out = _race_block_brief(full)
+    for key in ("next_race", "fitness", "has_next_race", "has_fitness", "avg_weekly_km"):
+        assert out[key] == full[key]
+    assert out["recent_weeks"][0] == {"period": "2026-W41", "total_km": 40.0, "run_count": 4, "avg_pace": "5:00/km"}
+    assert out["pipeline"][0]["replacement_deals"] == 2 and out["pipeline"][0]["pct"] == 0.8
+    frd, rd = full["readiness"], out["readiness"]
+    for key in READINESS_KEPT_KEYS - {"checklist", "past_builds", "long_run_finishes", "estimate"}:
+        assert rd[key] == frd[key]
+    assert rd["checklist"][0] == {k: frd["checklist"][0][k] for k in CHECKLIST_KEYS}
+    assert rd["past_builds"][0] == {
+        "race_name": "Ottawa", "race_date": "2025-05-25", "status": "completed", "result_vs_target_s": 200,
+        "km": 900.5, "runs": 70, "long_runs": 3, "longest_km": 32.0, "peak_week_km": 80.0}
+    assert rd["long_run_finishes"][0]["split_diff_s_per_km"] == -10
+    assert rd["estimate"] == {k: frd["estimate"][k] for k in ESTIMATE_KEYS}
+
+
+def test_race_brief_does_not_mutate_the_full_payload():
+    full = _full_race_payload()
+    snapshot = copy.deepcopy(full)
+    _race_block_brief(full)
+    assert full == snapshot
+
+
+def test_race_brief_readiness_none_stays_none():
+    full = _full_race_payload()
+    full["readiness"] = None
+    out = _race_block_brief(full)
+    assert out["readiness"] is None and set(out) == set(full)
+
+
+def test_race_brief_with_no_race_and_no_estimate():
+    full = _full_race_payload()
+    full["readiness"] = {
+        "has_race": False, "as_of": "2026-10-09", "race": None, "race_class": None, "block_weeks": None,
+        "block_start": None, "block_end": None, "block_started": False, "block_km": 0.0, "block_runs": 0,
+        "peak_week": None, "current_week": None, "longest_run": None, "long_run_km": None,
+        "long_runs_needed": 3, "long_runs": [], "effort_window_start": None, "key_effort": None,
+        "recent_efforts": [], "checklist": [], "race_shoe": None, "days_before_race": None,
+        "past_builds": [], "consistency": None, "long_run_finishes": [], "taper": None, "estimate": None,
+        "heuristic": True}
+    full["has_next_race"], full["next_race"] = False, None
+    rd = _race_block_brief(full)["readiness"]
+    assert rd["has_race"] is False and rd["estimate"] is None
+    assert rd["checklist"] == [] and rd["past_builds"] == [] and rd["long_run_finishes"] == []
+    assert set(rd) == READINESS_KEPT_KEYS
+
+
+@pytest.fixture()
+def seeded_race(mcp_db):
+    """A marathon on the calendar with a long run (splits), a 10k effort, race history and a past marathon."""
+    _race(mcp_db)
+    history(mcp_db)
+    lr = _plain_run(mcp_db, date(2026, 9, 13), 32.0)
+    _splits(mcp_db, lr, [300, 300, 290, 290])
+    _effort(mcp_db, AS_OF - timedelta(days=20), "10k", 2400)
+    past_race(mcp_db, date(2025, 5, 25), km=42.195, result_s=11000, name="Ottawa")
+    return mcp_db
+
+
+def test_race_tool_default_is_the_brief_of_the_detail_payload(seeded_race):
+    brief = mcp_server.get_race_block_context(as_of=AS_OF.isoformat())
+    full = mcp_server.get_race_block_context(as_of=AS_OF.isoformat(), detail=True)
+    assert brief == _race_block_brief(full)
+    rd = brief["readiness"]
+    assert set(rd) == READINESS_KEPT_KEYS and rd["has_race"] is True
+    assert rd["checklist"] and all(set(i) == CHECKLIST_KEYS for i in rd["checklist"])
+    assert rd["long_run_finishes"] and all(set(f) == FINISH_KEYS for f in rd["long_run_finishes"])
+    assert rd["past_builds"] and all(set(b) == PAST_BUILD_KEYS for b in rd["past_builds"])
+    assert set(rd["estimate"]) == ESTIMATE_KEYS
+    assert len(str(brief)) < len(str(full))
+
+
+def test_race_tool_detail_true_readiness_equals_rest(seeded_race):
+    rest = get_race_readiness(as_of=AS_OF, db=seeded_race).model_dump()
+    assert mcp_server.get_race_block_context(as_of=AS_OF.isoformat(), detail=True)["readiness"] == rest
+
+
+def test_race_brief_keeps_every_field_the_advisor_prompt_reads(seeded_race):
+    # Every name below must still appear in the prompt text; a prompt edit that reads a new field is
+    # not covered until it is added here.
+    prompt = mcp_server.race_block_advisor()
+    top = ["has_next_race", "next_race", "recent_weeks", "avg_weekly_km", "pipeline", "has_fitness", "fitness"]
+    week = ["period", "total_km", "run_count", "avg_pace"]
+    shoe = ["brand", "model", "nickname", "pct", "current_mileage", "mileage_limit", "shoe_type", "replacement_deals"]
+    next_race = ["name", "race_date", "days_to_race", "weeks_to_race", "distance_km", "target_pace"]
+    fitness = ["vo2max", "threshold_pace", "race_predictions", "running_level"]
+    ready = ["has_race", "checklist", "long_run_finishes", "estimate"]
+    check = ["label", "value", "unit", "target", "status", "rule"]
+    finish = ["has_splits", "first_half_pace_s_per_km", "second_half_pace_s_per_km", "split_diff_s_per_km",
+              "last_km_vs_avg_s_per_km"]
+    est = ["state", "low_s", "high_s", "estimate_s", "band_pct", "backtest_n", "grade", "grade_reasons",
+           "target_position", "message", "coros_prediction_s"]
+    for name in top + week + shoe + next_race + fitness + ready + check + est + ["has_splits"]:
+        assert name in prompt, f"{name} is not in the prompt; update this lock"
+
+    # A shoe at 80% of a 400 km limit puts one row in the pipeline.
+    shoe_row = OwnedShoe(brand="Nike", model="Vaporfly", nickname="V", shoe_type="Race", starting_mileage=320.0,
+                         current_mileage=320.0, mileage_limit=400.0)
+    seeded_race.add(shoe_row)
+    seeded_race.commit()
+    brief = mcp_server.get_race_block_context(as_of=AS_OF.isoformat())
+    assert set(top) <= set(brief)
+    assert brief["pipeline"] and all(set(shoe) <= set(p) for p in brief["pipeline"])
+    assert brief["recent_weeks"] and all(set(week) <= set(w) for w in brief["recent_weeks"])
+    assert set(next_race) <= set(brief["next_race"])
+    rd = brief["readiness"]
+    assert set(ready) <= set(rd)
+    assert all(set(check) <= set(i) for i in rd["checklist"])
+    assert rd["long_run_finishes"] and all(set(finish) <= set(f) for f in rd["long_run_finishes"])
+    assert set(est) <= set(rd["estimate"])
+    # fitness is copied whole when present; pin its keys on the hand-built payload.
+    assert set(fitness) <= set(_race_block_brief(_full_race_payload())["fitness"])

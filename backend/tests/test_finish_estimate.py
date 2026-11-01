@@ -357,7 +357,7 @@ def test_readiness_estimate_over_rest_and_mcp(db, monkeypatch):
         yield db
     monkeypatch.setattr(mcp_server._core, "get_session", fake_session)
     rest = get_race_readiness(as_of=AS_OF, db=db).model_dump()
-    mcp = mcp_server.get_race_block_context(as_of=AS_OF.isoformat())["readiness"]
+    mcp = mcp_server.get_race_block_context(as_of=AS_OF.isoformat(), detail=True)["readiness"]
     assert rest["estimate"] == mcp["estimate"]
     assert rest["estimate"]["state"] == "ok" and rest["estimate"]["backtest_n"] == 3
     assert set(rest["estimate"]) >= {"state", "message", "estimate_s", "low_s", "high_s", "band_pct", "grade",

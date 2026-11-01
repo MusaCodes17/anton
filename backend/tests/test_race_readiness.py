@@ -309,7 +309,7 @@ def test_endpoint_and_mcp_tool_agree(db, monkeypatch):
     monkeypatch.setattr(mcp_server._core, "get_session", fake_session)
 
     rest = get_race_readiness(as_of=AS_OF, db=db).model_dump()
-    mcp = mcp_server.get_race_block_context(as_of=AS_OF.isoformat())["readiness"]
+    mcp = mcp_server.get_race_block_context(as_of=AS_OF.isoformat(), detail=True)["readiness"]
     assert rest == mcp
     assert rest["has_race"] is True and rest["heuristic"] is True
     assert rest["estimate"] is not None and rest["estimate"] == mcp["estimate"]   # R11.7 rides the payload

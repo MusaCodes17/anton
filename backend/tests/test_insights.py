@@ -129,6 +129,6 @@ def test_endpoints_and_mcp_tools_agree(db, monkeypatch):
 
     assert get_shoe_insights(s.id, db=db).model_dump() == mcp_server.get_shoe_insights(s.id)
     rest = get_rotation_insights(db=db).model_dump()
-    assert rest == mcp_server.get_rotation_insights()
+    assert rest == mcp_server.get_rotation_insights(detail=True)
     assert rest["wear_by_type"][0]["suggested_limit_km"] == 410.0
     assert "error" in mcp_server.get_shoe_insights(999)
