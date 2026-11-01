@@ -45,7 +45,7 @@ def test_owned_shoes_tool_matches_rest(mcp_db):
 
 def test_shoe_runs_tool_keeps_legacy_keys(mcp_db):
     shoe = _shoe_with_run_and_note(mcp_db)
-    runs = mcp_server.get_shoe_runs(shoe.id)["runs"]
+    runs = mcp_server.get_shoe_runs(shoe.id, detail=True)["runs"]
     assert len(runs) == 1
     assert {"id", "owned_shoe_id", "distance_km", "run_date", "source", "avg_pace", "avg_hr", "notes"} <= set(runs[0])
     assert runs[0]["run_date"] == "2026-07-01" and runs[0]["distance_km"] == 12.0

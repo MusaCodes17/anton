@@ -6,12 +6,15 @@ missing pace/HR, exact percentage), and that no brief value disagrees with the f
 REST-shaped payload it is a projection of.
 """
 from contextlib import contextmanager
-from datetime import date
+from datetime import date, timedelta
 
 import pytest
+from sqlalchemy import event
 
 from app import mcp_server
 from app.models.models import OwnedShoe, ShoeRun
+from app.models.schemas import ShoeRunResponse
+from app.routers import owned_shoes as owned_shoes_router
 from app.services import rotation
 from app.utils.activity_tags import ACTIVITY_TAGS
 from app.mcp_server._shared import (
@@ -233,3 +236,132 @@ def test_get_owned_shoes_brief_total_runs_counts_logged_runs(mcp_db):
     _run(mcp_db, shoe, distance_km=8.0)
     row = next(r for r in mcp_server.get_owned_shoes() if r["id"] == shoe.id)
     assert row["total_runs"] == 2
+
+
+# --- 9. get_shoe_runs paging (R14 T3) -----------------------------------------
+
+def _many_runs(db, shoe, n):
+    """n runs on distinct dates (so newest-first order is unambiguous); returns nothing."""
+    base = date(2025, 1, 1)
+    for i in range(n):
+        rotation.log_run(db, shoe.id, distance_km=5.0 + i * 0.01, run_date=base + timedelta(days=i),
+                         avg_pace="5:00/km", avg_hr=150, commit=False)
+    db.commit()
+
+
+def test_shoe_runs_exactly_limit_runs_returns_all_and_has_more_false(mcp_db):
+    shoe = _shoe(mcp_db)
+    _many_runs(mcp_db, shoe, 5)
+    out = mcp_server.get_shoe_runs(shoe.id, limit=5)
+    assert len(out["runs"]) == 5 and out["has_more"] is False and out["total_runs"] == 5
+
+
+def test_shoe_runs_limit_plus_one_runs_returns_limit_and_has_more_true(mcp_db):
+    shoe = _shoe(mcp_db)
+    _many_runs(mcp_db, shoe, 6)
+    out = mcp_server.get_shoe_runs(shoe.id, limit=5)
+    assert len(out["runs"]) == 5 and out["has_more"] is True and out["total_runs"] == 6
+
+
+def test_shoe_runs_offset_past_the_end_is_empty_with_correct_total(mcp_db):
+    shoe = _shoe(mcp_db)
+    _many_runs(mcp_db, shoe, 3)
+    out = mcp_server.get_shoe_runs(shoe.id, offset=10)
+    assert out["runs"] == [] and out["has_more"] is False and out["total_runs"] == 3
+
+
+def test_shoe_runs_limit_500_clamps_to_200_and_has_more_true_with_201_runs(mcp_db):
+    shoe = _shoe(mcp_db)
+    _many_runs(mcp_db, shoe, 201)
+    out = mcp_server.get_shoe_runs(shoe.id, limit=500)
+    assert len(out["runs"]) == 200 and out["has_more"] is True and out["total_runs"] == 201
+
+
+def test_shoe_runs_limit_0_clamps_to_1(mcp_db):
+    shoe = _shoe(mcp_db)
+    _many_runs(mcp_db, shoe, 3)
+    out = mcp_server.get_shoe_runs(shoe.id, limit=0)
+    assert len(out["runs"]) == 1 and out["has_more"] is True
+
+
+def test_shoe_runs_negative_offset_clamps_to_0(mcp_db):
+    shoe = _shoe(mcp_db)
+    _many_runs(mcp_db, shoe, 3)
+    assert mcp_server.get_shoe_runs(shoe.id, offset=-5)["runs"] == mcp_server.get_shoe_runs(shoe.id, offset=0)["runs"]
+
+
+def test_shoe_runs_pages_concatenate_newest_first_without_overlap(mcp_db):
+    shoe = _shoe(mcp_db)
+    _many_runs(mcp_db, shoe, 7)
+    whole = mcp_server.get_shoe_runs(shoe.id, limit=200)["runs"]
+    p1 = mcp_server.get_shoe_runs(shoe.id, limit=4, offset=0)["runs"]
+    p2 = mcp_server.get_shoe_runs(shoe.id, limit=4, offset=4)["runs"]
+    assert p1 + p2 == whole and len(whole) == 7
+    assert len({r["run_id"] for r in p1 + p2}) == 7
+    dates = [r["date"] for r in whole]
+    assert dates == sorted(dates, reverse=True)
+
+
+def test_shoe_runs_lifetime_stats_ignore_the_page(mcp_db):
+    shoe = _shoe(mcp_db)
+    _many_runs(mcp_db, shoe, 7)
+    stats = rotation.compute_lifetime_stats(mcp_db, shoe.id)
+    keys = ("lifetime_avg_pace", "lifetime_avg_hr", "total_runs")
+    pages = [mcp_server.get_shoe_runs(shoe.id, limit=3, offset=0),
+             mcp_server.get_shoe_runs(shoe.id, limit=3, offset=3),
+             mcp_server.get_shoe_runs(shoe.id, limit=200)]
+    for out in pages:
+        assert {k: out[k] for k in keys} == {"lifetime_avg_pace": stats.lifetime_avg_pace,
+                                              "lifetime_avg_hr": stats.lifetime_avg_hr,
+                                              "total_runs": stats.total_runs}
+    assert stats.total_runs == 7
+
+
+def test_shoe_runs_default_rows_have_exactly_the_brief_keys(mcp_db):
+    shoe = _shoe(mcp_db)
+    _many_runs(mcp_db, shoe, 2)
+    out = mcp_server.get_shoe_runs(shoe.id)
+    assert set(out) == {"owned_shoe_id", "runs", "total_runs", "has_more", "lifetime_avg_pace", "lifetime_avg_hr"}
+    assert all(set(r) == RUN_BRIEF_KEYS for r in out["runs"])
+
+
+def test_shoe_runs_detail_true_matches_pre_change_output_regression_lock(mcp_db):
+    shoe = _shoe(mcp_db)
+    _many_runs(mcp_db, shoe, 4)
+    _run(mcp_db, shoe, avg_pace="4:50/km", avg_hr=160)
+    out = mcp_server.get_shoe_runs(shoe.id, limit=200, detail=True)
+    # has_more is the only key added by T3; removing it must leave the pre-change shape exactly.
+    out.pop("has_more")
+    assert list(out) == ["owned_shoe_id", "runs", "lifetime_avg_pace", "lifetime_avg_hr", "total_runs"]
+    stats = rotation.compute_lifetime_stats(mcp_db, shoe.id)
+    rest_rows = [ShoeRunResponse.model_validate(r).model_dump(mode="json")
+                 for r in owned_shoes_router.get_shoe_runs(shoe.id, db=mcp_db)]
+    assert out == {
+        "owned_shoe_id": shoe.id,
+        "runs": rest_rows,
+        "lifetime_avg_pace": stats.lifetime_avg_pace,
+        "lifetime_avg_hr": stats.lifetime_avg_hr,
+        "total_runs": stats.total_runs,
+    }
+    assert len(rest_rows) == 5
+
+
+def test_shoe_runs_query_is_limited_in_sql_not_sliced_in_python(mcp_db):
+    shoe = _shoe(mcp_db)
+    _many_runs(mcp_db, shoe, 8)
+    seen = []
+
+    def grab(conn, cursor, statement, parameters, context, executemany):
+        if "FROM shoe_runs" in statement and "JOIN activities" in statement:
+            seen.append(statement)
+
+    engine = mcp_db.get_bind()
+    event.listen(engine, "after_cursor_execute", grab)
+    try:
+        out = mcp_server.get_shoe_runs(shoe.id, limit=3, offset=2)
+    finally:
+        event.remove(engine, "after_cursor_execute", grab)
+    assert len(out["runs"]) == 3
+    runs_stmts = [s for s in seen if "ORDER BY" in s]
+    assert runs_stmts, "runs statement not captured"
+    assert all("LIMIT" in s and "OFFSET" in s for s in runs_stmts)

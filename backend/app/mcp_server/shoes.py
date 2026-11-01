@@ -12,7 +12,7 @@ from app.utils.activity_tags import ACTIVITY_TAGS, is_valid_tag
 from app.services import rotation
 from app.mcp_server import _core
 from app.mcp_server._core import mcp
-from app.mcp_server._shared import _SOURCE_BADGES, _format_mileage_bar, _owned_shoe_brief, _owned_shoe_payload, _owned_shoes_payload, _pct_of_limit, _shoe_note_payload, _shoe_run_payload
+from app.mcp_server._shared import _SOURCE_BADGES, _format_mileage_bar, _owned_shoe_brief, _owned_shoe_payload, _owned_shoes_payload, _pct_of_limit, _shoe_note_payload, _shoe_run_brief, _shoe_run_payload
 
 
 @mcp.tool()
@@ -44,15 +44,31 @@ def get_owned_shoes(status_filter: Optional[str] = None, detail: bool = False) -
         return [_owned_shoe_brief(s) for s in shoes]
 
 
+_SHOE_RUNS_MAX_LIMIT = 200  # hard cap per page so one call can't dump a whole archive into context
+
+
 @mcp.tool()
-def get_shoe_runs(owned_shoe_id: int) -> dict:
+def get_shoe_runs(owned_shoe_id: int, limit: int = 20, offset: int = 0, detail: bool = False) -> dict:
     """
-    Get the run history logged against an owned shoe (newest first), plus
-    that shoe's lifetime average pace, average heart rate, and run count.
+    Get the run history logged against an owned shoe, newest first, plus that
+    shoe's lifetime average pace, average heart rate, and run count.
+
+    By default returns the newest 20 runs as brief rows: run_id, date,
+    distance_km, avg_pace, avg_hr, activity_tag and source. run_id is what
+    delete_shoe_run takes. total_runs and has_more tell you whether more runs
+    exist beyond this page; fetch them by raising offset (page size up to
+    limit=200). Pass detail=True to add notes, COROS activity id and
+    timestamps to each run. lifetime_avg_pace, lifetime_avg_hr and total_runs
+    always cover every run on the shoe, regardless of the page requested.
 
     Args:
         owned_shoe_id: ID of the owned shoe (from get_owned_shoes).
+        limit: Runs per page (default 20, clamped to 1-200).
+        offset: Number of newest runs to skip (default 0, clamped to >= 0).
+        detail: True for full run records instead of brief rows.
     """
+    limit = max(1, min(limit, _SHOE_RUNS_MAX_LIMIT))
+    offset = max(0, offset)
     with _core.get_session() as db:
         runs = (
             db.query(ShoeRun)
@@ -60,15 +76,19 @@ def get_shoe_runs(owned_shoe_id: int) -> dict:
             .options(contains_eager(ShoeRun.activity))
             .filter(ShoeRun.owned_shoe_id == owned_shoe_id)
             .order_by(desc(Activity.run_date), desc(ShoeRun.created_at))
+            .offset(offset)
+            .limit(limit)
             .all()
         )
         stats = rotation.compute_lifetime_stats(db, owned_shoe_id)
+        project = _shoe_run_payload if detail else _shoe_run_brief
         return {
             "owned_shoe_id": owned_shoe_id,
-            "runs": [_shoe_run_payload(r) for r in runs],
+            "runs": [project(r) for r in runs],
             "lifetime_avg_pace": stats.lifetime_avg_pace,
             "lifetime_avg_hr": stats.lifetime_avg_hr,
             "total_runs": stats.total_runs,
+            "has_more": offset + len(runs) < stats.total_runs,
         }
 
 
