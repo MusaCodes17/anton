@@ -774,6 +774,30 @@ Supporting choices:
 
 ---
 
+### E26. Verification hooks are local and silent on success; CI stays authoritative (R13, 2026-10-31)
+
+**Chosen:**
+- The hooks are committed in `.claude/settings.json` with scripts in `.claude/hooks/`, so every session and worktree gets them. They run affected tests after each edit, guard the live DB, migrations and pins, and gate Stop and SubagentStop.
+- A passing check prints nothing. A failure shows only the tail of the output.
+- Stop runs the affected tests. It runs the full suite only when a core file changed (`models/models.py`, `database.py`, `tests/conftest.py`, `requirements.txt`, `alembic/**`). The full suite otherwise stays with session wrap-up and CI.
+- The count guard uses `pytest --collect-only` (about 9 s, whole suite), not the `N passed` line, because an affected run reports only a subset. The baseline is per branch.
+- `stop_hook_active` alone does not stand the gate down, or a fix after a block would go unverified. The stand-down limbs are a per-tree fail counter (2) and a consecutive cap (4).
+- Stop stands down silently while `background_tasks` holds a subagent, so an orchestrator paused with workers mid-edit is not tested on a half-changed tree.
+
+**Why:** the orchestrator spent tokens reasoning about whether code runs, which a machine can answer for free. The full suite (54–68 s here at T0) straddles a one-minute Stop budget, so Stop takes the affected set and the full run stays with wrap-up and CI.
+
+**Advantages:** no context cost on a pass. `test_claude_hooks.py` (63 tests, run in CI) proves the guards and the loop guard with real git, so the hooks cannot rot silently.
+
+**Trade-offs and known limits:**
+- `affected_tests` follows imports in test files only. A test that reaches a module only through HTTP is not selected (a `coros_inbox` change does not select `test_coros_connection.py`); CI catches those.
+- Parallel subagents' SubagentStop gates see each other's edits. The loop guard bounds this, not removes it.
+- `background_tasks` comes from the hook docs and has not yet been seen in a live session.
+- The hook tests use real git and add 8–13 s to the local run (79 s total after the change).
+
+**Verdict:** 🔁 Provisional. Stop and SubagentStop have fired live and passed silently; PreToolUse, PostToolUse, the `asyncRewake` wake and a real block have not been seen live.
+
+---
+
 ### E25. The Training page is three fixed tabs; the section Customize is retired (2026-10-20 — supersedes E16)
 
 **Chosen:**

@@ -49,6 +49,7 @@ frontend/src/
 .claude/skills/    flat reference docs, NOT auto-loaded as skills — read the relevant
                    file before that kind of work (add-api-endpoint, add-mcp-tool, data-migration, …)
 .claude/commands/  project commands (`/project:<name>`); create-pr is the PR path
+.claude/hooks/     local verification hooks (R13, E26), wired in `.claude/settings.json`
 ```
 
 **Run locally** (the setup):
@@ -148,6 +149,7 @@ Placement: business logic → `services/` (never a router, MCP tool, or React co
 - **Backend endpoints land with their tests before the consuming UI task.**
 - Suite green at session end. The live count is in the newest `docs/changelog.md` entry; a session that lowers it isn't done.
 - **CI is the gate** (`.github/workflows/ci.yml`, E15): every PR and push to `main` runs the backend suite (Python 3.11, no `backend/.env`) and `vite build`; merge only with both green. Tests must not depend on a local `.env` or test order (import-time env is set in `tests/conftest.py`).
+- Local verification hooks (`.claude/settings.json`, `.claude/hooks/`) run affected tests after edits, guard the live DB, migrations and dependency pins, and gate Stop/SubagentStop. They are a pre-CI convenience; CI remains the merge gate. `/hooks` shows them; `disableAllHooks` in `settings.local.json` turns them off for a one-off.
 - No frontend test harness: the bar is `vite build` clean, **0 console errors**, desktop + ~380 px pass, stated in the changelog.
 - Scrapers: verify live via the no-DB smoke endpoints / `POST /shoes/test` dry-run; no HTML-fixture tests.
 
