@@ -42,6 +42,32 @@ def _watchlist_entry_payload(entry) -> dict:
     return WatchlistItem.model_validate(entry).model_dump(mode="json")
 
 
+def _watchlist_brief(entry) -> dict:
+    """LLM projection of a watchlist entry (R14 T5a); the REST schema is the full record.
+
+    Drops image_url, best_ever_at, last_seen and the other best_deal fields: the
+    per-retailer last-seen list is what made get_watchlist ~24k tokens. Reads the
+    service dataclass attributes directly (`watchlist_svc.build_watchlist`) and runs no query.
+    """
+    deal = entry.best_deal
+    return {
+        "shoe_id": entry.shoe_id,
+        "brand": entry.brand,
+        "model": entry.model,
+        "shoe_type": entry.shoe_type,
+        "msrp": entry.msrp,
+        "target_price": entry.target_price,
+        "on_sale": entry.on_sale,
+        "best_deal": None if deal is None else {
+            "deal_id": deal.deal_id,
+            "retailer_name": deal.retailer_name,
+            "current_price": deal.current_price,
+            "savings_percent": deal.savings_percent,
+        },
+        "best_ever_price": entry.best_ever_price,
+    }
+
+
 def _owned_shoe_payload(db: Session, shoe: OwnedShoe) -> dict:
     """Owned shoe via `OwnedShoeResponse` after `rotation.attach_computed_fields` (same as REST)."""
     return OwnedShoeResponse.model_validate(rotation.attach_computed_fields(db, shoe)).model_dump(mode="json")

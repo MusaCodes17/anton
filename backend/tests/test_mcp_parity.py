@@ -7,8 +7,9 @@ import pytest
 
 from app import mcp_server
 from app.models.models import OwnedShoe, Retailer, Shoe, ShoeNote
-from app.models.schemas import OwnedShoeResponse, ShoeNoteResponse
+from app.models.schemas import OwnedShoeResponse, ShoeNoteResponse, WatchlistItem
 from app.routers import owned_shoes as owned_shoes_router
+from app.routers import watchlist as watchlist_router
 from app.services import rotation
 
 
@@ -62,7 +63,11 @@ def test_watchlist_tool_keeps_legacy_keys(mcp_db):
     mcp_db.add(Shoe(brand="Adidas", model="Adios Pro 3", msrp=300.0, is_active=True))
     mcp_db.add(Retailer(name="R", base_url="https://r.example"))
     mcp_db.commit()
-    entries = mcp_server.get_watchlist()
+    entries = mcp_server.get_watchlist(detail=True)
     assert len(entries) == 1
     assert {"shoe_id", "brand", "model", "shoe_type", "msrp", "target_price", "image_url", "on_sale",
             "best_deal", "best_ever_price", "best_ever_at", "last_seen"} <= set(entries[0])
+    # detail=True must stay the REST shape exactly (regression lock for the brief split, R14 T5a).
+    rest = [WatchlistItem.model_validate(e).model_dump(mode="json")
+            for e in watchlist_router.get_watchlist(db=mcp_db)]
+    assert entries == rest

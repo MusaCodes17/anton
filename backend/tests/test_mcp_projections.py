@@ -439,3 +439,195 @@ def test_runs_resource_json_rows_have_exactly_the_brief_keys(mcp_db):
     data = _embedded_json(shoe_runs_resource(shoe.id))
     assert set(data) == {"shoe_id", "runs", "lifetime_avg_pace", "lifetime_avg_hr", "total_runs"}
     assert all(set(r) == RUN_BRIEF_KEYS for r in data["runs"])
+
+
+# --- 11. get_watchlist brief + paging (R14 T5a) -------------------------------
+
+import asyncio as _asyncio
+from datetime import datetime as _datetime
+
+from app.mcp_server.deals import deals_watchlist_resource
+from app.models.models import Deal, PriceRecord, Retailer, Shoe
+from app.services.chat_service import call_tool_once
+
+WATCHLIST_BRIEF_KEYS = {"shoe_id", "brand", "model", "shoe_type", "msrp", "target_price",
+                        "on_sale", "best_deal", "best_ever_price"}
+BEST_DEAL_KEYS = {"deal_id", "retailer_name", "current_price", "savings_percent"}
+
+
+def _wl_shoe(db, model, *, brand="Nike"):
+    s = Shoe(brand=brand, model=model, target_price=180.0, msrp=220.0, is_active=True)
+    db.add(s)
+    db.flush()
+    return s
+
+
+def _wl_retailer(db, name="TLH"):
+    r = Retailer(name=name, base_url=f"https://{name.lower()}.example")
+    db.add(r)
+    db.flush()
+    return r
+
+
+def _wl_on_sale(db, shoe, retailer, *, price=150.0):
+    db.add(Deal(shoe_id=shoe.id, retailer_id=retailer.id, current_price=price, target_price=180.0,
+                savings_amount=220.0 - price, savings_percent=round((220.0 - price) / 220.0 * 100, 1),
+                product_url=f"https://d.example/{shoe.id}", in_stock=True, is_active=True))
+
+
+def _wl_many(db, n):
+    retailer = _wl_retailer(db)
+    shoes = [_wl_shoe(db, f"Model {i:03d}") for i in range(n)]
+    for s in shoes:
+        db.add(PriceRecord(shoe_id=s.id, retailer_id=retailer.id, product_url=f"p{s.id}",
+                           price=200.0, in_stock=True, scraped_at=_datetime(2026, 6, 1)))
+    db.commit()
+    return shoes
+
+
+def _embedded_watchlist_json(text):
+    return json.loads(text.split("```json\n", 1)[1].rsplit("\n```", 1)[0])
+
+
+import json  # noqa: E402  (used by the resource and session tests below)
+
+
+def _decode_json_stream(text):
+    """Decode back-to-back JSON values (one per MCP text block) into a list."""
+    dec, i, out = json.JSONDecoder(), 0, []
+    while i < len(text):
+        if text[i].isspace():
+            i += 1
+            continue
+        obj, i = dec.raw_decode(text, i)
+        out.append(obj)
+    return out
+
+
+def test_watchlist_default_entries_have_exactly_the_brief_keys(mcp_db):
+    _wl_many(mcp_db, 2)
+    out = mcp_server.get_watchlist()
+    assert set(out) == {"entries", "total", "has_more"}
+    assert out["entries"] and all(set(e) == WATCHLIST_BRIEF_KEYS for e in out["entries"])
+
+
+def test_watchlist_best_deal_has_exactly_the_brief_deal_keys(mcp_db):
+    retailer = _wl_retailer(mcp_db, "Altitude")
+    shoe = _wl_shoe(mcp_db, "Pegasus")
+    _wl_on_sale(mcp_db, shoe, retailer, price=140.0)
+    mcp_db.commit()
+    entry = mcp_server.get_watchlist()["entries"][0]
+    assert entry["on_sale"] is True
+    assert set(entry["best_deal"]) == BEST_DEAL_KEYS
+    assert entry["best_deal"]["current_price"] == 140.0
+    assert entry["best_deal"]["retailer_name"] == "Altitude"
+
+
+def test_watchlist_best_deal_is_null_for_a_shoe_with_no_deal(mcp_db):
+    _wl_many(mcp_db, 1)
+    entry = mcp_server.get_watchlist()["entries"][0]
+    assert entry["best_deal"] is None and entry["on_sale"] is False
+
+
+def test_watchlist_exactly_limit_entries_has_more_false(mcp_db):
+    _wl_many(mcp_db, 5)
+    out = mcp_server.get_watchlist(limit=5)
+    assert len(out["entries"]) == 5 and out["total"] == 5 and out["has_more"] is False
+
+
+def test_watchlist_limit_plus_one_entries_has_more_true(mcp_db):
+    _wl_many(mcp_db, 6)
+    out = mcp_server.get_watchlist(limit=5)
+    assert len(out["entries"]) == 5 and out["total"] == 6 and out["has_more"] is True
+
+
+def test_watchlist_second_page_returns_the_remainder(mcp_db):
+    _wl_many(mcp_db, 6)
+    first = mcp_server.get_watchlist(limit=5)
+    second = mcp_server.get_watchlist(limit=5, offset=5)
+    assert len(second["entries"]) == 1 and second["has_more"] is False
+    assert second["entries"][0]["shoe_id"] not in {e["shoe_id"] for e in first["entries"]}
+
+
+def test_watchlist_offset_past_the_end_is_empty_with_correct_total(mcp_db):
+    _wl_many(mcp_db, 3)
+    out = mcp_server.get_watchlist(limit=20, offset=10)
+    assert out == {"entries": [], "total": 3, "has_more": False}
+
+
+def test_watchlist_limit_500_clamps_to_200(mcp_db):
+    _wl_many(mcp_db, 201)
+    out = mcp_server.get_watchlist(limit=500)
+    assert len(out["entries"]) == 200 and out["total"] == 201 and out["has_more"] is True
+
+
+def test_watchlist_limit_0_clamps_to_1(mcp_db):
+    _wl_many(mcp_db, 3)
+    out = mcp_server.get_watchlist(limit=0)
+    assert len(out["entries"]) == 1 and out["has_more"] is True
+
+
+def test_watchlist_negative_offset_clamps_to_0(mcp_db):
+    _wl_many(mcp_db, 3)
+    assert mcp_server.get_watchlist(offset=-4) == mcp_server.get_watchlist(offset=0)
+
+
+def test_watchlist_on_sale_sorts_first_in_the_brief(mcp_db):
+    retailer = _wl_retailer(mcp_db, "Altitude")
+    _wl_shoe(mcp_db, "Aaa Plain")  # alphabetically first, not on sale
+    onsale = _wl_shoe(mcp_db, "Zzz Sale")  # alphabetically last, on sale
+    _wl_on_sale(mcp_db, onsale, retailer)
+    mcp_db.commit()
+    entries = mcp_server.get_watchlist()["entries"]
+    assert entries[0]["model"] == "Zzz Sale" and entries[0]["on_sale"] is True
+    assert entries[1]["model"] == "Aaa Plain"
+
+
+def test_watchlist_detail_true_is_a_plain_full_list_ignoring_paging(mcp_db):
+    _wl_many(mcp_db, 3)
+    out = mcp_server.get_watchlist(limit=1, offset=2, detail=True)
+    assert isinstance(out, list) and len(out) == 3
+    assert all("last_seen" in e and "image_url" in e and "best_ever_at" in e for e in out)
+    assert all(e["last_seen"] for e in out)
+
+
+def test_watchlist_brief_values_match_the_full_entry(mcp_db):
+    retailer = _wl_retailer(mcp_db, "Altitude")
+    shoe = _wl_shoe(mcp_db, "Pegasus")
+    _wl_on_sale(mcp_db, shoe, retailer, price=140.0)
+    mcp_db.commit()
+    brief = mcp_server.get_watchlist()["entries"][0]
+    full = mcp_server.get_watchlist(detail=True)[0]
+    top = WATCHLIST_BRIEF_KEYS - {"best_deal"}
+    assert {k: brief[k] for k in top} == {k: full[k] for k in top}
+    assert brief["best_deal"] == {k: full["best_deal"][k] for k in BEST_DEAL_KEYS}
+
+
+def test_watchlist_resource_json_has_brief_keys_and_every_shoe(mcp_db):
+    _wl_many(mcp_db, 25)
+    data = _embedded_watchlist_json(deals_watchlist_resource())
+    assert len(data["entries"]) == 25  # resource is not paged
+    assert all(set(e) == WATCHLIST_BRIEF_KEYS for e in data["entries"])
+
+
+def test_watchlist_resource_markdown_still_lists_the_shoes(mcp_db):
+    _wl_many(mcp_db, 2)
+    text = deals_watchlist_resource()
+    assert text.startswith("# Deals Watchlist (2 shoes tracked)")
+
+
+def test_watchlist_mixed_return_type_works_over_a_real_mcp_session(mcp_db):
+    # Through the in-process MCP session the assistant uses (FastMCP, same tool
+    # registration, structured output). Proves the Union return annotation serializes both shapes.
+    _wl_many(mcp_db, 3)
+    text, ok = _asyncio.run(call_tool_once("get_watchlist", {}))
+    assert ok is True, text
+    brief = json.loads(text)
+    assert brief["total"] == 3 and len(brief["entries"]) == 3 and brief["has_more"] is False
+    assert all(set(e) == WATCHLIST_BRIEF_KEYS for e in brief["entries"])
+
+    text, ok = _asyncio.run(call_tool_once("get_watchlist", {"detail": True}))
+    assert ok is True, text
+    # FastMCP sends a list return as one JSON block per item, joined by newlines.
+    full = _decode_json_stream(text)
+    assert len(full) == 3 and "last_seen" in full[0]

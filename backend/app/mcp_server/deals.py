@@ -1,6 +1,6 @@
 """Deal-watching MCP surface: deals, watchlist, retailers, scraping, price history, coupons."""
 from dataclasses import asdict
-from typing import List, Optional
+from typing import List, Optional, Union
 from datetime import datetime
 
 from mcp.server.fastmcp import Context
@@ -12,7 +12,9 @@ from app.services import settings as settings_svc, scrape_history as scrape_hist
 from app.models.schemas import PurchaseDraftResponse
 from app.mcp_server import _core
 from app.mcp_server._core import mcp
-from app.mcp_server._shared import _deal_to_dict, _format_relative_time, _watchlist_entry_payload
+from app.mcp_server._shared import _deal_to_dict, _format_relative_time, _watchlist_brief, _watchlist_entry_payload
+
+_WATCHLIST_MAX_LIMIT = 200  # hard cap per page so one call can't dump the whole watchlist into context
 
 
 @mcp.tool()
@@ -109,26 +111,43 @@ def draft_purchase_from_deal(deal_id: int) -> dict:
 
 
 @mcp.tool()
-def get_watchlist() -> List[dict]:
+def get_watchlist(limit: int = 20, offset: int = 0, detail: bool = False) -> Union[dict, List[dict]]:
     """
-    List every tracked shoe with its current deal status, best-ever price,
-    and last-seen prices per retailer.
-
+    List tracked shoes with their current deal status and best-ever price.
     Use this to answer "what am I watching?", "what's the best price ever
     on X?", "which tracked shoes are currently on sale?", or to look up
-    a shoe_id before calling trigger_scrape. On-sale shoes sort first
-    (deepest discount first), then the rest alphabetically by brand/model.
+    a shoe_id before calling trigger_scrape.
 
-    Each entry includes:
-    - shoe_id, brand, model, shoe_type, msrp, target_price
-    - on_sale: True if there's at least one active deal below MSRP
-    - best_deal: the current lowest active deal price with savings %, or null
-    - best_ever_price / best_ever_at: historical best price across all scrapes
-    - last_seen: most recent scraped price per retailer (cheapest first)
+    By default returns the first 20 brief entries as {"entries", "total",
+    "has_more"}. Each brief entry has: shoe_id, brand, model, shoe_type, msrp,
+    target_price, on_sale, best_deal (null, or deal_id, retailer_name,
+    current_price, savings_percent) and best_ever_price. On-sale shoes come
+    first (deepest discount first), so if you are looking up a shoe_id, page
+    with offset or raise limit (up to 200) until it appears.
+
+    Pass detail=True to get every shoe as a plain list (limit and offset are
+    ignored) with the full record: image, best-ever date, and last-seen
+    prices per retailer.
+
+    Args:
+        limit: Entries per page (default 20, clamped to 1-200).
+        offset: Number of entries to skip (default 0, clamped to >= 0).
+        detail: True for every shoe with the full record, as a plain list.
     """
     with _core.get_session() as db:
+        if detail:
+            return [_watchlist_entry_payload(e) for e in watchlist_svc.build_watchlist(db)]
+        # Slices the aggregate in Python: build_watchlist has no SQL paging seam, and the
+        # service is left unchanged on purpose. The list is personal scale (tens of shoes).
+        limit = max(1, min(limit, _WATCHLIST_MAX_LIMIT))
+        offset = max(0, offset)
         entries = watchlist_svc.build_watchlist(db)
-        return [_watchlist_entry_payload(e) for e in entries]
+        page = entries[offset:offset + limit]
+        return {
+            "entries": [_watchlist_brief(e) for e in page],
+            "total": len(entries),
+            "has_more": offset + len(page) < len(entries),
+        }
 
 
 @mcp.tool()
@@ -490,7 +509,7 @@ def deals_watchlist_resource() -> str:
             md_lines.append(f"| {name} | {type_tag} | {msrp} | {best_ever} |")
 
     markdown = "\n".join(md_lines)
-    payload = json.dumps({"entries": [_watchlist_entry_payload(e) for e in entries]}, default=str)
+    payload = json.dumps({"entries": [_watchlist_brief(e) for e in entries]}, default=str)
     return f"{markdown}\n\n```json\n{payload}\n```"
 
 
