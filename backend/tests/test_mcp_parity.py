@@ -38,7 +38,7 @@ def test_owned_shoes_tool_matches_rest(mcp_db):
     shoe = _shoe_with_run_and_note(mcp_db)
     rest = [OwnedShoeResponse.model_validate(s).model_dump(mode="json")
             for s in owned_shoes_router.get_owned_shoes(db=mcp_db)]
-    mcp = mcp_server.get_owned_shoes()
+    mcp = mcp_server.get_owned_shoes(detail=True)
     assert [m for m in mcp if m["id"] == shoe.id] == [r for r in rest if r["id"] == shoe.id]
     assert mcp[0]["total_runs"] == 1 and mcp[0]["cost_per_km"] is not None
 

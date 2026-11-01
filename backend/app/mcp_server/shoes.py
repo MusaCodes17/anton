@@ -12,26 +12,36 @@ from app.utils.activity_tags import ACTIVITY_TAGS, is_valid_tag
 from app.services import rotation
 from app.mcp_server import _core
 from app.mcp_server._core import mcp
-from app.mcp_server._shared import _SOURCE_BADGES, _format_mileage_bar, _owned_shoe_payload, _owned_shoes_payload, _pct_of_limit, _shoe_note_payload, _shoe_run_payload
+from app.mcp_server._shared import _SOURCE_BADGES, _format_mileage_bar, _owned_shoe_brief, _owned_shoe_payload, _owned_shoes_payload, _pct_of_limit, _shoe_note_payload, _shoe_run_payload
 
 
 @mcp.tool()
-def get_owned_shoes(status_filter: Optional[str] = None) -> List[dict]:
+def get_owned_shoes(status_filter: Optional[str] = None, detail: bool = False) -> List[dict]:
     """
     List shoes in the user's personal rotation with current mileage and
     status. Use this for "what shoes do I have", "which shoes are near
     retirement", or to look up an owned_shoe_id before calling another tool.
 
+    By default each shoe is a brief row: id, name (brand, model and nickname),
+    shoe_type, status, current_mileage_km, mileage_limit_km, pct_of_limit and
+    total_runs. Pass detail=True only when you need the full record.
+
     Args:
         status_filter: Filter by status — "active", "retired", or
             "for_sale". Omit for all shoes regardless of status.
+        detail: False (default) returns the brief row per shoe. True adds the
+            full record: purchase details, starting mileage, lifetime pace and
+            heart rate, cost per km, review draft, images and dates.
     """
     with _core.get_session() as db:
         query = db.query(OwnedShoe)
         if status_filter:
             query = query.filter(OwnedShoe.status == status_filter)
         shoes = query.order_by(OwnedShoe.created_at.desc()).all()
-        return _owned_shoes_payload(db, shoes)
+        if detail:
+            return _owned_shoes_payload(db, shoes)
+        rotation.attach_computed_fields_bulk(db, shoes)
+        return [_owned_shoe_brief(s) for s in shoes]
 
 
 @mcp.tool()

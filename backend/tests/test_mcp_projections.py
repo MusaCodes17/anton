@@ -5,8 +5,12 @@ pin three rules: the exact key set, the formatting boundaries (nickname, roundin
 missing pace/HR, exact percentage), and that no brief value disagrees with the full
 REST-shaped payload it is a projection of.
 """
+from contextlib import contextmanager
 from datetime import date
 
+import pytest
+
+from app import mcp_server
 from app.models.models import OwnedShoe, ShoeRun
 from app.services import rotation
 from app.utils.activity_tags import ACTIVITY_TAGS
@@ -21,6 +25,16 @@ from app.mcp_server._shared import (
 OWNED_BRIEF_KEYS = {"id", "name", "shoe_type", "status", "current_mileage_km",
                     "mileage_limit_km", "pct_of_limit", "total_runs"}
 RUN_BRIEF_KEYS = {"run_id", "date", "distance_km", "avg_pace", "avg_hr", "activity_tag", "source"}
+
+
+@pytest.fixture()
+def mcp_db(db, monkeypatch):
+    # Same pattern as test_mcp_parity.py: patch _core.get_session, the name the tools use.
+    @contextmanager
+    def fake_session():
+        yield db
+    monkeypatch.setattr(mcp_server._core, "get_session", fake_session)
+    return db
 
 
 def _shoe(db, *, nickname=None, current=10.0, limit=None, shoe_type="daily"):
@@ -183,3 +197,39 @@ def test_run_brief_activity_tag_passes_through_vocabulary_value(db):
     tag = ACTIVITY_TAGS[0]
     run = _run(db, shoe, activity_tag=tag)
     assert _shoe_run_brief(run)["activity_tag"] == tag
+
+
+# --- 8. get_owned_shoes tool: brief by default, detail=True for the full record
+
+def test_get_owned_shoes_default_rows_have_exactly_the_brief_keys(mcp_db):
+    _shoe(mcp_db)
+    rows = mcp_server.get_owned_shoes()
+    assert rows and all(set(r) == OWNED_BRIEF_KEYS for r in rows)
+
+
+def test_get_owned_shoes_detail_rows_keep_the_full_record(mcp_db):
+    _shoe(mcp_db)
+    rows = mcp_server.get_owned_shoes(detail=True)
+    assert rows and "purchase_price" in rows[0] and "cost_per_km" in rows[0]
+
+
+def test_get_owned_shoes_status_filter_in_both_modes(mcp_db):
+    active = _shoe(mcp_db)
+    retired = _shoe(mcp_db)
+    retired.status = "retired"
+    mcp_db.commit()
+    for detail in (False, True):
+        ids_all = {r["id"] for r in mcp_server.get_owned_shoes(detail=detail)}
+        ids_active = {r["id"] for r in mcp_server.get_owned_shoes(status_filter="active", detail=detail)}
+        ids_retired = {r["id"] for r in mcp_server.get_owned_shoes(status_filter="retired", detail=detail)}
+        assert {active.id, retired.id} <= ids_all
+        assert retired.id not in ids_active and active.id in ids_active
+        assert ids_retired == {retired.id}
+
+
+def test_get_owned_shoes_brief_total_runs_counts_logged_runs(mcp_db):
+    shoe = _shoe(mcp_db)
+    _run(mcp_db, shoe, distance_km=5.0)
+    _run(mcp_db, shoe, distance_km=8.0)
+    row = next(r for r in mcp_server.get_owned_shoes() if r["id"] == shoe.id)
+    assert row["total_runs"] == 2
