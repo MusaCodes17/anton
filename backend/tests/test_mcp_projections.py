@@ -365,3 +365,77 @@ def test_shoe_runs_query_is_limited_in_sql_not_sliced_in_python(mcp_db):
     runs_stmts = [s for s in seen if "ORDER BY" in s]
     assert runs_stmts, "runs statement not captured"
     assert all("LIMIT" in s and "OFFSET" in s for s in runs_stmts)
+
+
+# --- 10. lean MCP resources (R14 T4) -----------------------------------------
+# The embedded ```json block is the machine-readable half of both resources.
+
+import json as _json
+
+from app.mcp_server.shoes import _RUNS_RESOURCE_CAP, shoe_rotation_resource, shoe_runs_resource
+
+
+def _embedded_json(text):
+    return _json.loads(text.rsplit("```json\n", 1)[1].rsplit("\n```", 1)[0])
+
+
+def _table_rows(text):
+    return [line for line in text.splitlines() if line.startswith("| ") and "km |" in line]
+
+
+def test_rotation_json_rows_have_exactly_the_brief_keys_and_include_retired(mcp_db):
+    _shoe(mcp_db, nickname="Daily")
+    retired = _shoe(mcp_db, current=500.0)
+    retired.status = "retired"
+    mcp_db.commit()
+    shoes = _embedded_json(shoe_rotation_resource())["shoes"]
+    assert len(shoes) == 2
+    assert all(set(row) == OWNED_BRIEF_KEYS for row in shoes)
+    assert retired.id in {row["id"] for row in shoes}
+
+
+def test_rotation_markdown_still_shows_pace_and_run_count_for_active_shoe(mcp_db):
+    shoe = _shoe(mcp_db)
+    _run(mcp_db, shoe, distance_km=10.0, avg_pace="5:00/km", avg_hr=150)
+    text = shoe_rotation_resource()
+    assert "Avg pace: 5:00/km" in text
+    assert "1 runs" in text
+    row = next(r for r in _embedded_json(text)["shoes"] if r["id"] == shoe.id)
+    assert row["total_runs"] == 1
+
+
+def test_runs_resource_at_cap_returns_all_rows_and_no_older_line(mcp_db):
+    shoe = _shoe(mcp_db)
+    _many_runs(mcp_db, shoe, _RUNS_RESOURCE_CAP)
+    text = shoe_runs_resource(shoe.id)
+    data = _embedded_json(text)
+    assert len(_table_rows(text)) == _RUNS_RESOURCE_CAP
+    assert len(data["runs"]) == _RUNS_RESOURCE_CAP
+    assert data["total_runs"] == _RUNS_RESOURCE_CAP
+    assert f"_{_RUNS_RESOURCE_CAP} runs logged_" in text
+    assert "older runs" not in text
+
+
+def test_runs_resource_over_cap_shows_newest_page_and_offset_footer(mcp_db):
+    shoe = _shoe(mcp_db)
+    _many_runs(mcp_db, shoe, _RUNS_RESOURCE_CAP + 1)
+    text = shoe_runs_resource(shoe.id)
+    data = _embedded_json(text)
+    assert len(_table_rows(text)) == _RUNS_RESOURCE_CAP
+    assert len(data["runs"]) == _RUNS_RESOURCE_CAP
+    assert data["total_runs"] == _RUNS_RESOURCE_CAP + 1
+    assert f"_{_RUNS_RESOURCE_CAP + 1} runs logged_" in text
+    assert "1 older runs" in text
+    assert f"offset={_RUNS_RESOURCE_CAP}" in text
+    # Newest-first: the 50 kept are the most recent; the oldest run (2025-01-01) is dropped.
+    dates = [r["date"] for r in data["runs"]]
+    assert dates[0] == "2025-02-20" and dates[-1] == "2025-01-02"
+    assert dates == sorted(dates, reverse=True)
+
+
+def test_runs_resource_json_rows_have_exactly_the_brief_keys(mcp_db):
+    shoe = _shoe(mcp_db)
+    _many_runs(mcp_db, shoe, 3)
+    data = _embedded_json(shoe_runs_resource(shoe.id))
+    assert set(data) == {"shoe_id", "runs", "lifetime_avg_pace", "lifetime_avg_hr", "total_runs"}
+    assert all(set(r) == RUN_BRIEF_KEYS for r in data["runs"])
