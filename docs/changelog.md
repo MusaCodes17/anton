@@ -5,6 +5,54 @@
 
 ---
 
+## R14 follow-up — six more lean MCP read tools — 2026-11-01
+
+Branch `claude/lucid-cartwright-73a683`. Six of the seven tools in the R14 measurement now default to brief projections; `get_block_comparison` is left full (see Decisions). No migration, no REST or schema change, no frontend. Decision: `design_decisions.md` E27 (extended).
+
+**[ADDED]**
+- Brief builders in `mcp_server/_shared.py`: `_tracked_shoe_brief`, `_price_record_brief`, `_coupon_opportunities_brief`, `_rotation_insights_brief`, `_race_block_brief`.
+- `detail: bool = False` on `get_shoes`, `get_shoe_deals`, `get_price_history`, `get_coupon_opportunities`, `get_rotation_insights` and `get_race_block_context`. `detail=True` returns the old output.
+- `detail=True` size rows for these six tools in `backend/scripts/mcp_payload_sizes.py`.
+- 35 tests added to `backend/tests/test_mcp_projections.py`, including a `detail=True` lock per tool and a lock on every field `race_block_advisor` reads.
+
+**[CHANGED]**
+- `get_shoes`: id, shoe, shoe_type, msrp, target_price. Brand and model merge into `shoe`. `is_active` only when `is_active=None`.
+- `get_shoe_deals`: uses the `_deal_brief` rows.
+- `get_price_history`: retailer, price, date, one row per record.
+- `get_coupon_opportunities`: top 5 deals per stackable retailer with `deals_total`; `all_retailers` rows carry the count, not the deals; promo codes drop `source`. The `coupon_digest` prompt says so.
+- `get_rotation_insights`: `caveat`, `min_steady_runs` and `heuristic` once at the top level; model rows drop `pair_ids`.
+- `get_race_block_context`: drops checklist evidence and periods, `long_runs`, `recent_efforts`, `consistency`, `taper`, estimate sources and backtest; flat `past_builds`; trimmed weekly and pipeline rows.
+- `test_insights.py`, `test_race_readiness.py` and `test_finish_estimate.py` now call the tools with `detail=True`, because they compare with REST.
+
+**Before and after** (≈tokens = characters ÷ 4, one DB copy, a read-only backup of the live DB)
+
+| Tool | args | before | after |
+| --- | --- | ---: | ---: |
+| `get_race_block_context` | default | 4,204 | 1,717 |
+| `get_coupon_opportunities` | default | 2,913 | 391 |
+| `get_price_history` | shoe_id=15 | 2,304 | 888 |
+| `get_rotation_insights` | default | 2,300 | 1,172 |
+| `get_shoes` | default | 2,100 | 1,340 |
+| `get_shoe_deals` | brand='Adidas', model='Adizero Takumi Sen 11' | 1,553 | 678 |
+| `get_block_comparison` | default (marathon) | 2,452 | 2,452 (unchanged) |
+
+`detail=True` measured the same as "before" for all six tools.
+
+**Decisions and departures from the plan**
+- `get_block_comparison` left unchanged. The claude.ai Training dashboard's Race blocks page reads it live with only `race_class` and no `detail`, through two datasets (`blocks`, `block_weeks`). It reads `race`, `weeks` and nearly every summary field, and its loader throws if `weeks` is missing. `weeks` is about 86% of the payload, so a brief without it would break the page. Reading the dashboard's stored datasets and loaders was how this was checked; nothing on the dashboard was changed.
+- The dashboard reads no other tool changed here: its other datasets call `get_personal_bests`, `get_training_trends` and `get_training_summary`.
+- `get_race_block_context` stays at 1,717, slightly over the 1,500 mark. It was measured 7 days before a race, inside the taper window, when the checklist has all 11 items. The advisor reads most of what remains, so it was left there.
+- `get_shoes` first came in at 1,732 with `is_active` on every row, so the brief merges brand and model into `shoe` and carries `is_active` only for `is_active=None`.
+- `get_price_history`'s `date` is the calendar date of the stored `scraped_at`, not converted to Toronto time. It is a scrape date, not a run date.
+
+**Audit:** `race_block_advisor`, `coupon_digest`, `chat_service` and the setup doc read no dropped field, apart from the `coupon_digest` deal cap, which the prompt now states. No other prompt reads these tools.
+
+**Verified:** backend suite 1261 + 1 skipped → **1296 passed + 1 skipped** (35 new tests). Frontend untouched.
+
+**Not verified:** claude.ai and Claude Desktop clients against the new shapes, same limit as E27. Not deployed.
+
+---
+
 ## R14 — Lean MCP read payloads — 2026-11-01
 
 Branch `r14-lean-mcp-payloads` (T0–T5c, then the T7 wrap-up). No migration, no REST or schema change, no frontend. Decision: `design_decisions.md` E27.

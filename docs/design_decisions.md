@@ -777,7 +777,7 @@ Supporting choices:
 ### E27. MCP read tools default to brief LLM projections; `detail=True` returns the REST record; lists are paged (R14, 2026-11-01)
 
 **Chosen:**
-- Every MCP read tool or resource that carries owned shoes, runs, watchlist entries, scrape health or deals returns a brief LLM projection by default. The builders sit in `mcp_server/_shared.py` beside the existing ones: `_owned_shoe_brief`, `_shoe_run_brief`, `_watchlist_brief`, `_scrape_health_brief`, `_deal_brief`.
+- Every MCP read tool or resource that carries owned shoes, runs, watchlist entries, scrape health or deals returns a brief LLM projection by default. The builders sit in `mcp_server/_shared.py` beside the existing ones: `_owned_shoe_brief`, `_shoe_run_brief`, `_watchlist_brief`, `_scrape_health_brief`, `_deal_brief`. The R14 follow-up adds `_tracked_shoe_brief`, `_price_record_brief`, `_coupon_opportunities_brief`, `_rotation_insights_brief` and `_race_block_brief` beside them.
 - `detail=True` returns the full record: the REST schema for owned shoes, runs, notes and watchlist entries, and the flat `_deal_to_dict` for deals.
 - Lists are paged or capped. `get_shoe_runs` takes `limit` and `offset` (max 200) and returns `has_more`. `get_watchlist` returns `{"entries", "total", "has_more"}`. `shoes://owned/{id}/runs` embeds the newest 50, and `shoes://deals/{brand}` is capped at 50; both carry a footer that points at the paged tool.
 - REST schemas are unchanged. REST and `detail=True` return the same record, so REST/MCP parity stays capability parity: every REST field is still reachable from MCP, just not by default.
@@ -792,6 +792,8 @@ Supporting choices:
 - A brief drops fields on purpose. Check the field list in `_shared.py` before a question depends on a field a brief lacks. `include_retired` was left out because retired shoes did not dominate the payload (43.9%).
 - `get_watchlist` changes shape with `detail`: the brief is a dict with `entries`, and `detail=True` is the old plain list. A client must read `["entries"]` by default.
 - `get_deals` stays a plain list without `total` or `has_more`: it was already bounded, and `list_deals` has no count seam.
+- `get_block_comparison` stays full by default (R14 follow-up). The claude.ai Training dashboard reads its fields live with no `detail` argument, so a brief default would break that page. A client that reads a tool as a data source counts as a consumer: check dashboards before trimming a tool.
+- `get_shoes` carries `is_active` only with `is_active=None`, so its key set depends on the filter.
 - Not verified against the claude.ai or Claude Desktop clients; the new shapes were checked in-process and through Son of Anton only.
 
 **Verdict:** 🔁 Provisional until the claude.ai and Claude Desktop clients have been checked against the new shapes after deploy.

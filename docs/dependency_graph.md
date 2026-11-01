@@ -119,7 +119,7 @@ mcp_server.{deals,shoes,coros,training,onboarding} → _core, _shared
            → scrapers.{orchestrator, lock} — trigger_scrape
            → services.{rotation, coros, settings, strava_stats, races}
 ```
-Deal/shoe/retailer/price-history tools query the ORM directly (no service exists for those reads); rotation/training/races tools go through services. Owned shoes, runs, notes and watchlist entries render through the shared Pydantic schemas (`models/schemas/`) when `detail=True`; by default the owned-shoe, run, watchlist, scrape-health and deal reads return brief LLM projections in `mcp_server/_shared.py` (R14, E27). `_deal_to_dict` remains the deliberate flat deal projection for `detail=True` (2026-10-10; R14 2026-11-01).
+Deal/shoe/retailer/price-history tools query the ORM directly (no service exists for those reads); rotation/training/races tools go through services. Owned shoes, runs, notes and watchlist entries render through the shared Pydantic schemas (`models/schemas/`) when `detail=True`; by default the owned-shoe, run, watchlist, scrape-health and deal reads return brief LLM projections in `mcp_server/_shared.py` (R14, E27). The R14 follow-up adds tracked shoes, price history, coupons, rotation insights and race context to that set; `get_block_comparison` stays full. `_deal_to_dict` remains the deliberate flat deal projection for `detail=True` (2026-10-10; R14 2026-11-01).
 
 ### Chat gateway
 ```
