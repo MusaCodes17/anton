@@ -12,7 +12,7 @@ from app.services import settings as settings_svc, scrape_history as scrape_hist
 from app.models.schemas import PurchaseDraftResponse
 from app.mcp_server import _core
 from app.mcp_server._core import mcp
-from app.mcp_server._shared import _deal_to_dict, _format_relative_time, _watchlist_brief, _watchlist_entry_payload
+from app.mcp_server._shared import _deal_to_dict, _format_relative_time, _scrape_health_brief, _watchlist_brief, _watchlist_entry_payload
 
 _WATCHLIST_MAX_LIMIT = 200  # hard cap per page so one call can't dump the whole watchlist into context
 
@@ -271,7 +271,7 @@ def delete_shoe(shoe_id: int) -> dict:
 
 
 @mcp.tool()
-def scrape_health() -> dict:
+def scrape_health(detail: bool = False) -> dict:
     """
     Report each retailer's scrape health so you can answer "is any retailer
     quietly broken?" without triggering a scrape.
@@ -291,18 +291,24 @@ def scrape_health() -> dict:
     `retailers_needing_attention` list summarises retailers where the watchdog
     fired so you can spot trouble at a glance without scanning every entry.
 
-    Also returns `recent_runs`, a newest-first log across all retailers. This
-    reads the durable scrape_runs history, so it reflects trends across past
-    scrapes, not just the current job. Use it before trigger_scrape to decide
-    whether a retailer is worth investigating.
+    By default each retailer entry is brief: its verdict, the latest run's
+    `last_status`, `last_run_at`, `products_found` and `error`, a newest-first
+    `products_trend` of recent product counts, and the watchdog fields. Use it
+    before trigger_scrape to decide whether a retailer is worth investigating.
 
-    Finally, `needs_onboarding` lists active retailers with no working scraper
+    `needs_onboarding` lists active retailers with no working scraper
     that haven't been declared unscrapable (R4.6) — new retailers awaiting
     setup, distinct from the watchdog's "quietly broken" cases. Run the
     `retailer_onboarding` prompt (or probe_retailer) to resolve them.
+
+    Args:
+        detail: True for the full record: each retailer's complete per-run
+            history (`trend`, with every run's status, timestamps and counts)
+            and the `recent_runs` log, newest first, across all retailers.
     """
     with _core.get_session() as db:
-        return scrape_history_svc.scrape_health(db)
+        health = scrape_history_svc.scrape_health(db)
+        return health if detail else _scrape_health_brief(health)
 
 
 @mcp.tool()

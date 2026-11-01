@@ -135,6 +135,36 @@ def _shoe_run_brief(run: ShoeRun) -> dict:
     }
 
 
+def _scrape_health_brief(health: dict) -> dict:
+    """LLM projection of `scrape_history.scrape_health` (R14 T5b); the REST schema is the full record.
+
+    Keeps each retailer's verdict, latest-run outcome, a newest-first product-count trend and
+    the watchdog fields, plus the two top-level attention lists. Drops the per-run records in
+    `trend` and the flat `recent_runs` log. Copies values from the service dict only and runs no query.
+    """
+    retailers = []
+    for row in health["retailers"]:
+        latest = row["latest_run"]
+        retailers.append({
+            "retailer_id": row["retailer_id"],
+            "name": row["name"],
+            "health": row["health"],
+            "scraping_enabled": row["scraping_enabled"],
+            "last_status": latest["status"] if latest else None,
+            "last_run_at": latest["started_at"] if latest else None,
+            "products_found": latest["products_found"] if latest else None,
+            "error": latest["error"] if latest else None,
+            "products_trend": [r["products_found"] for r in row["trend"]],
+            "watchdog_alert": row["watchdog_alert"],
+            "watchdog_reason": row["watchdog_reason"],
+        })
+    return {
+        "retailers": retailers,
+        "retailers_needing_attention": health["retailers_needing_attention"],
+        "needs_onboarding": health["needs_onboarding"],
+    }
+
+
 # ---------------------------------------------------------------------------
 # Formatting helpers (private — used only by resource functions below)
 # ---------------------------------------------------------------------------

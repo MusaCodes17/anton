@@ -631,3 +631,89 @@ def test_watchlist_mixed_return_type_works_over_a_real_mcp_session(mcp_db):
     # FastMCP sends a list return as one JSON block per item, joined by newlines.
     full = _decode_json_stream(text)
     assert len(full) == 3 and "last_seen" in full[0]
+
+
+# --- 12. scrape_health brief + detail (R14 T5b) -------------------------------
+
+from app.models.models import ScrapeRun  # noqa: E402
+from app.services import scrape_history as scrape_history_svc  # noqa: E402
+
+SCRAPE_TOP_KEYS = {"retailers", "retailers_needing_attention", "needs_onboarding"}
+SCRAPE_ROW_KEYS = {"retailer_id", "name", "health", "scraping_enabled", "last_status", "last_run_at",
+                   "products_found", "error", "products_trend", "watchdog_alert", "watchdog_reason"}
+
+
+def _sh_retailer(db, name):
+    r = Retailer(name=name, base_url=f"https://{name.lower()}.example", is_active=True, scraping_enabled=True)
+    db.add(r)
+    db.flush()
+    return r
+
+
+def _sh_run(db, retailer, *, minute, status="success", products_found=5, error=None):
+    run = ScrapeRun(retailer_id=retailer.id, status=status, trigger="manual", products_found=products_found,
+                    error=error, started_at=_datetime(2026, 6, 1, 12, minute),
+                    finished_at=_datetime(2026, 6, 1, 12, minute, 30))
+    db.add(run)
+    db.commit()
+    return run
+
+
+def _sh_row(out, name):
+    return next(r for r in out["retailers"] if r["name"] == name)
+
+
+def test_scrape_health_default_has_three_top_keys_and_no_recent_runs(mcp_db):
+    _sh_run(mcp_db, _sh_retailer(mcp_db, "Altitude"), minute=0)
+    out = mcp_server.scrape_health()
+    assert set(out) == SCRAPE_TOP_KEYS
+    assert "recent_runs" not in out
+
+
+def test_scrape_health_default_retailer_rows_have_exactly_the_brief_keys(mcp_db):
+    _sh_run(mcp_db, _sh_retailer(mcp_db, "Altitude"), minute=0)
+    out = mcp_server.scrape_health()
+    assert out["retailers"] and all(set(r) == SCRAPE_ROW_KEYS for r in out["retailers"])
+
+
+def test_scrape_health_never_scraped_retailer_has_null_latest_fields(mcp_db):
+    _sh_retailer(mcp_db, "Newbie")
+    row = _sh_row(mcp_server.scrape_health(), "Newbie")
+    assert row["health"] == "unknown"
+    assert row["last_status"] is None
+    assert row["last_run_at"] is None
+    assert row["products_found"] is None
+    assert row["error"] is None
+    assert row["products_trend"] == []
+
+
+def test_scrape_health_products_trend_is_newest_first_and_matches_runs(mcp_db):
+    r = _sh_retailer(mcp_db, "Altitude")
+    _sh_run(mcp_db, r, minute=0, products_found=10)
+    _sh_run(mcp_db, r, minute=1, products_found=20)
+    latest = _sh_run(mcp_db, r, minute=2, products_found=30)
+    row = _sh_row(mcp_server.scrape_health(), "Altitude")
+    assert row["products_trend"] == [30, 20, 10]
+    assert row["products_found"] == 30
+    assert row["last_status"] == "success"
+    assert row["last_run_at"] == latest.started_at.isoformat()
+    assert row["health"] == "ok"
+
+
+def test_scrape_health_watchdog_fields_pass_through_after_three_failures(mcp_db):
+    r = _sh_retailer(mcp_db, "Broken")
+    for minute in range(3):
+        _sh_run(mcp_db, r, minute=minute, status="error", products_found=0, error="boom")
+    out = mcp_server.scrape_health()
+    row = _sh_row(out, "Broken")
+    assert row["watchdog_alert"] is True
+    assert isinstance(row["watchdog_reason"], str) and row["watchdog_reason"]
+    assert row["last_status"] == "error" and row["error"] == "boom"
+    assert "Broken" in [a["name"] for a in out["retailers_needing_attention"]]
+
+
+def test_scrape_health_detail_equals_the_service_payload_regression_lock(mcp_db):
+    r = _sh_retailer(mcp_db, "Altitude")
+    _sh_run(mcp_db, r, minute=0, products_found=10)
+    _sh_run(mcp_db, r, minute=1, status="error", products_found=0, error="boom")
+    assert mcp_server.scrape_health(detail=True) == scrape_history_svc.scrape_health(mcp_db)
