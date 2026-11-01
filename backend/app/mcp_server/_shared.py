@@ -37,6 +37,25 @@ def _deal_to_dict(deal: Deal) -> dict:
     }
 
 
+def _deal_brief(deal: Deal) -> dict:
+    """LLM projection of a deal (R14 T5c); the REST schema is the full record.
+
+    Sits beside `_deal_to_dict`, which stays the full flat projection for `detail=True`.
+    `id` is the value draft_purchase_from_deal takes. Drops msrp, target_price,
+    savings_amount, in_stock, sizes_available, colorway, shoe_type and detected_at.
+    """
+    return {
+        "id": deal.id,
+        "shoe_id": deal.shoe_id,
+        "shoe": f"{deal.shoe.brand} {deal.shoe.model}",
+        "retailer": deal.retailer.name,
+        "price": deal.current_price,
+        "savings_percent": deal.savings_percent,
+        "size_fit": getattr(deal, "size_fit", None),  # same rule as _deal_to_dict
+        "url": deal.product_url,
+    }
+
+
 def _watchlist_entry_payload(entry) -> dict:
     """Watchlist row via the REST schema (`WatchlistItem`) so MCP and REST can't drift."""
     return WatchlistItem.model_validate(entry).model_dump(mode="json")

@@ -717,3 +717,143 @@ def test_scrape_health_detail_equals_the_service_payload_regression_lock(mcp_db)
     _sh_run(mcp_db, r, minute=0, products_found=10)
     _sh_run(mcp_db, r, minute=1, status="error", products_found=0, error="boom")
     assert mcp_server.scrape_health(detail=True) == scrape_history_svc.scrape_health(mcp_db)
+
+
+# --- 12. deal brief + get_deals detail + deal resources (R14 T5c) -------------
+
+from app.mcp_server._shared import _deal_brief, _deal_to_dict
+from app.mcp_server.deals import _BRAND_DEALS_RESOURCE_CAP, active_deals_resource, brand_deals_resource
+from app.services import deals as deals_svc
+
+DEAL_BRIEF_KEYS = {"id", "shoe_id", "shoe", "retailer", "price", "savings_percent", "size_fit", "url"}
+
+
+def _dl_retailer(db, name="Altitude"):
+    r = Retailer(name=name, base_url=f"https://{name.lower()}.example")
+    db.add(r)
+    db.flush()
+    return r
+
+
+def _dl_deal(db, retailer, model, *, brand="Nike", savings=30.0, sizes=None):
+    shoe = Shoe(brand=brand, model=model, msrp=200.0, is_active=True)
+    db.add(shoe)
+    db.flush()
+    price = round(200.0 * (1 - savings / 100), 2)
+    deal = Deal(shoe_id=shoe.id, retailer_id=retailer.id, current_price=price, target_price=180.0,
+                savings_amount=200.0 - price, savings_percent=savings,
+                product_url=f"https://d.example/{model}", in_stock=True, is_active=True,
+                sizes_available=sizes, colorway="Black / White")
+    db.add(deal)
+    db.commit()
+    return deal
+
+
+def _dl_list(db, **kw):
+    """The rows get_deals(detail=True) is built from, with get_deals' default args."""
+    args = {"min_savings_percent": None, "brand": None, "shoe_type": None, "size": None, "limit": 20}
+    args.update(kw)
+    return deals_svc.list_deals(db, **args)
+
+
+def test_deal_brief_has_exactly_the_brief_keys_and_matches_full_record(mcp_db):
+    deal = _dl_deal(mcp_db, _dl_retailer(mcp_db), "Pegasus 41", sizes=["9", "10"])
+    full = _deal_to_dict(_dl_list(mcp_db)[0])
+    brief = _deal_brief(_dl_list(mcp_db)[0])
+    assert set(brief) == DEAL_BRIEF_KEYS
+    assert brief["id"] == full["id"] == deal.id
+    assert brief["shoe_id"] == full["shoe_id"]
+    assert brief["shoe"] == f"{full['brand']} {full['model']}" == "Nike Pegasus 41"
+    assert brief["retailer"] == full["retailer"]
+    assert brief["price"] == full["current_price"]
+    assert brief["savings_percent"] == full["savings_percent"]
+    assert brief["size_fit"] == full["size_fit"]
+    assert brief["url"] == full["product_url"]
+
+
+def test_get_deals_default_rows_have_exactly_the_brief_keys(mcp_db):
+    _dl_deal(mcp_db, _dl_retailer(mcp_db), "Pegasus 41")
+    _dl_deal(mcp_db, _dl_retailer(mcp_db, "TLH"), "Vaporfly 3", savings=40.0)
+    out = mcp_server.get_deals()
+    assert len(out) == 2
+    assert all(set(row) == DEAL_BRIEF_KEYS for row in out)
+
+
+def test_get_deals_detail_true_equals_the_full_flat_projection_regression_lock(mcp_db):
+    _dl_deal(mcp_db, _dl_retailer(mcp_db), "Pegasus 41", savings=25.0, sizes=["9"])
+    _dl_deal(mcp_db, _dl_retailer(mcp_db, "TLH"), "Vaporfly 3", savings=40.0)
+    out = mcp_server.get_deals(detail=True)
+    assert out == [_deal_to_dict(d) for d in _dl_list(mcp_db)]
+    assert all("msrp" in row and "target_price" in row and "colorway" in row for row in out)
+
+
+def test_get_deals_brand_filter_works_in_brief_mode(mcp_db):
+    retailer = _dl_retailer(mcp_db)
+    _dl_deal(mcp_db, retailer, "Pegasus 41", brand="Nike")
+    _dl_deal(mcp_db, retailer, "Adios Pro 4", brand="Adidas")
+    out = mcp_server.get_deals(brand="adidas")
+    assert [row["shoe"] for row in out] == ["Adidas Adios Pro 4"]
+    assert set(out[0]) == DEAL_BRIEF_KEYS
+
+
+def test_get_deals_limit_caps_brief_rows_in_savings_order(mcp_db):
+    retailer = _dl_retailer(mcp_db)
+    for i, pct in enumerate([10.0, 30.0, 20.0]):
+        _dl_deal(mcp_db, retailer, f"Model {i}", savings=pct)
+    out = mcp_server.get_deals(limit=2)
+    assert [row["savings_percent"] for row in out] == [30.0, 20.0]
+
+
+def test_active_deals_resource_json_rows_have_exactly_the_brief_keys_and_total(mcp_db):
+    retailer = _dl_retailer(mcp_db)
+    _dl_deal(mcp_db, retailer, "Pegasus 41", savings=10.0)
+    _dl_deal(mcp_db, retailer, "Vaporfly 3", savings=40.0)
+    text = active_deals_resource()
+    data = _embedded_json(text)
+    assert data["total"] == 2
+    assert len(data["deals"]) == 2
+    assert all(set(row) == DEAL_BRIEF_KEYS for row in data["deals"])
+    assert "# Active Deals (2 deals)" in text
+
+
+def _brand_rows(text):
+    return sum(1 for line in text.splitlines() if line.startswith("| ") and "% off |" in line)
+
+
+def _dl_brand_batch(db, n, brand="Nike"):
+    # Savings 1..n, so the highest-savings rows are the last ones inserted.
+    retailer = _dl_retailer(db, "Bulk")
+    for pct in range(1, n + 1):
+        _dl_deal(db, retailer, f"Model {pct:03d}", brand=brand, savings=float(pct))
+
+
+def test_brand_resource_at_cap_returns_all_rows_and_no_more_line(mcp_db):
+    _dl_brand_batch(mcp_db, _BRAND_DEALS_RESOURCE_CAP)
+    text = brand_deals_resource("Nike")
+    data = _embedded_json(text)
+    assert data["total"] == _BRAND_DEALS_RESOURCE_CAP
+    assert len(data["deals"]) == _BRAND_DEALS_RESOURCE_CAP
+    assert _brand_rows(text) == _BRAND_DEALS_RESOURCE_CAP
+    assert f"# Active Deals — Nike ({_BRAND_DEALS_RESOURCE_CAP} deals)" in text
+    assert "more deals" not in text
+
+
+def test_brand_resource_over_cap_keeps_top_by_savings_and_shows_footer(mcp_db):
+    _dl_brand_batch(mcp_db, _BRAND_DEALS_RESOURCE_CAP + 1)
+    text = brand_deals_resource("Nike")
+    data = _embedded_json(text)
+    assert data["total"] == _BRAND_DEALS_RESOURCE_CAP + 1
+    assert len(data["deals"]) == _BRAND_DEALS_RESOURCE_CAP
+    assert _brand_rows(text) == _BRAND_DEALS_RESOURCE_CAP
+    assert f"# Active Deals — Nike ({_BRAND_DEALS_RESOURCE_CAP + 1} deals)" in text
+    assert "_1 more deals: use get_deals(brand=\"Nike\", limit=100)._" in text
+    # The 1% deal is the one dropped; the kept rows run 51% down to 2%.
+    savings = [row["savings_percent"] for row in data["deals"]]
+    assert savings == sorted(savings, reverse=True)
+    assert savings[0] == float(_BRAND_DEALS_RESOURCE_CAP + 1) and savings[-1] == 2.0
+    assert set(data["deals"][0]) == DEAL_BRIEF_KEYS
+
+
+def test_brand_resource_with_no_deals_returns_the_no_deals_message(mcp_db):
+    _dl_brand_batch(mcp_db, 1, brand="Nike")
+    assert brand_deals_resource("Asics") == "No active deals found for Asics"

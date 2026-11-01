@@ -12,9 +12,10 @@ from app.services import settings as settings_svc, scrape_history as scrape_hist
 from app.models.schemas import PurchaseDraftResponse
 from app.mcp_server import _core
 from app.mcp_server._core import mcp
-from app.mcp_server._shared import _deal_to_dict, _format_relative_time, _scrape_health_brief, _watchlist_brief, _watchlist_entry_payload
+from app.mcp_server._shared import _deal_brief, _deal_to_dict, _format_relative_time, _scrape_health_brief, _watchlist_brief, _watchlist_entry_payload
 
 _WATCHLIST_MAX_LIMIT = 200  # hard cap per page so one call can't dump the whole watchlist into context
+_BRAND_DEALS_RESOURCE_CAP = 50  # top-N by savings per brand resource; the footer points to get_deals for the rest
 
 
 @mcp.tool()
@@ -24,6 +25,7 @@ def get_deals(
     size: Optional[str] = None,
     shoe_type: Optional[str] = None,
     limit: int = 20,
+    detail: bool = False,
 ) -> List[dict]:
     """
     List active running shoe deals, biggest discount first.
@@ -32,6 +34,9 @@ def get_deals(
     a deal on Adidas", or "what's on sale in size 10.5". Only returns deals
     that are genuinely marked down (not just shoes sitting at full price
     that happen to be at or below target) and currently active.
+
+    Each brief deal has: id (pass it to draft_purchase_from_deal), shoe_id,
+    shoe ("Brand Model"), retailer, price, savings_percent, size_fit and url.
 
     Args:
         min_savings_percent: Only include deals discounted by at least this
@@ -44,6 +49,8 @@ def get_deals(
             "daily_trainer", "tempo", "trail", "recovery", "intervals",
             "short_distance_racer".
         limit: Max number of deals to return (default 20, capped at 100).
+        detail: True adds msrp, target_price, savings_amount, in_stock,
+            sizes_available, colorway, shoe_type and detected_at to each deal.
 
     Each deal carries size_fit ("in" | "out" | "unknown") against the runner's
     saved shoe size; null means no size is saved. Prefer "in" deals when
@@ -59,7 +66,9 @@ def get_deals(
             size=size,
             limit=limit,
         )
-        return [_deal_to_dict(d) for d in deals]
+        if detail:
+            return [_deal_to_dict(d) for d in deals]
+        return [_deal_brief(d) for d in deals]
 
 
 @mcp.tool()
@@ -459,7 +468,7 @@ def active_deals_resource() -> str:
             md_lines.append(f"| {shoe_name} | {d.retailer.name} | ${d.current_price:.2f} | {savings} |")
 
         markdown = "\n".join(md_lines)
-        payload = json.dumps({"total": total, "deals": [_deal_to_dict(d) for d in deals]}, default=str)
+        payload = json.dumps({"total": total, "deals": [_deal_brief(d) for d in deals]}, default=str)
         return f"{markdown}\n\n```json\n{payload}\n```"
 
 
@@ -565,23 +574,23 @@ def retailers_resource() -> str:
     mime_type="application/json",
 )
 def brand_deals_resource(brand: str) -> str:
-    """Active deals for a specific brand, sorted by savings percentage"""
+    """Top 50 active deals for a brand by savings percentage"""
     import json
 
     with _core.get_session() as db:
-        deals = (
+        base = (
             db.query(Deal)
             .join(Deal.shoe)
             .filter(Deal.is_active == True, Shoe.brand.ilike(f"%{brand}%"))
-            .order_by(desc(Deal.savings_percent))
-            .all()
         )
+        total = base.count()
+        deals = base.order_by(desc(Deal.savings_percent)).limit(_BRAND_DEALS_RESOURCE_CAP).all()
 
         if not deals:
             return f"No active deals found for {brand}"
 
         md_lines = [
-            f"# Active Deals — {brand} ({len(deals)} deal{'s' if len(deals) != 1 else ''})",
+            f"# Active Deals — {brand} ({total} deal{'s' if total != 1 else ''})",
             "",
             "| Shoe | Retailer | Price | Savings |",
             "|------|----------|-------|---------|",
@@ -590,9 +599,11 @@ def brand_deals_resource(brand: str) -> str:
             shoe_name = f"{d.shoe.brand} {d.shoe.model}"
             savings = f"{round(d.savings_percent)}% off"
             md_lines.append(f"| {shoe_name} | {d.retailer.name} | ${d.current_price:.2f} | {savings} |")
+        if total > len(deals):
+            md_lines += ["", f"_{total - len(deals)} more deals: use get_deals(brand=\"{brand}\", limit=100)._"]
 
         markdown = "\n".join(md_lines)
-        payload = json.dumps({"brand": brand, "deals": [_deal_to_dict(d) for d in deals]}, default=str)
+        payload = json.dumps({"brand": brand, "total": total, "deals": [_deal_brief(d) for d in deals]}, default=str)
         return f"{markdown}\n\n```json\n{payload}\n```"
 
 
