@@ -13,7 +13,9 @@ Champs Sports (retailer id 20) has never recorded a product in production: every
 
 **[CHANGED] `champs_sports.py`:** a search page with no product tiles now raises `ValueError` with the page title and size, and a missing page raises too. A real search page always has tiles (a gibberish query returns 20 fallback tiles), so this cannot fire on an unstocked model. Tiles that match nothing still return `[]`. The raise lands in the orchestrator's per-shoe handler, so the run ends `error`, `scrape_health` shows the page title, and orphan retirement is skipped.
 
-**[VERIFIED]** 4 new tests in `tests/test_champs_sports.py`; full suite 1300 passed + 1 skipped. **Not verified:** the new error has not run in production, and Champs still returns no shoes. Reaching the Canadian store needs a North American egress, which is a hosting decision; spoofing location headers is out under D3.
+**[VERIFIED]** 4 new tests in `tests/test_champs_sports.py`; full suite 1300 passed + 1 skipped. **Not verified:** the new error has not run in production.
+
+**[CHANGED] Production data:** Champs Sports (id 20) marked unscrapable by the runner's decision, with the reason on the row; scraping is off and the watchdog stops flagging it. Reaching the Canadian store needs a North American egress, and spoofing location headers is out under D3. To bring it back, confirm the egress reaches the store, then clear the flag. The scraper code stays.
 
 ---
 
