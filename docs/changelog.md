@@ -9,11 +9,11 @@
 
 Champs Sports (retailer id 20) has never recorded a product in production: every run since the 2026-10-15 host-lookup fix ended `success` with 0 products. The site has plenty of stock and the scraper works from a residential connection. A live local run found 3 Vomero 18 and 6 Pegasus 42 men's listings, some on sale ($129.99 against $190).
 
-**Diagnosis, partly inferred:** Champs runs take about 110 s for 49 shoes, or 2.25 s per shoe. `_fetch_with_requests` sleeps 2 s only after a successful response, and a 403 path would retry for about 4 s per shoe, so production is getting a fast HTTP 200 with no tiles. The likely cause is the Hetzner IP or its location being served an interstitial page. The body of that response has not been seen.
+**Root cause, confirmed from the production container:** a geo-redirect, not a bot block. A search from Hetzner ends at `https://www.footlocker.eu/gdpr?c=FI&l=` (HTTP 200, 24 KB, no tiles), because the server is in Finland. `requests` follows the redirect, and the scraper recorded that page as a clean zero. Run timing agreed: about 110 s for 49 shoes is 2.25 s per shoe, which is the 2 s sleep after a successful fetch. The site is behind Fastly and sets no cookies from a Canadian connection, so no country preference is visible to send.
 
 **[CHANGED] `champs_sports.py`:** a search page with no product tiles now raises `ValueError` with the page title and size, and a missing page raises too. A real search page always has tiles (a gibberish query returns 20 fallback tiles), so this cannot fire on an unstocked model. Tiles that match nothing still return `[]`. The raise lands in the orchestrator's per-shoe handler, so the run ends `error`, `scrape_health` shows the page title, and orphan retirement is skipped.
 
-**[VERIFIED]** 4 new tests in `tests/test_champs_sports.py`; full suite 1300 passed + 1 skipped. **Not verified:** nothing has run in production, so Champs still returns no shoes. The next scrape after deploy will report what production receives. If it shows a bot wall or geo block, the D3 answer applies (no paid bypass), which leaves marking the retailer unscrapable or scraping it from a home box (the D0 escape hatch).
+**[VERIFIED]** 4 new tests in `tests/test_champs_sports.py`; full suite 1300 passed + 1 skipped. **Not verified:** the new error has not run in production, and Champs still returns no shoes. Reaching the Canadian store needs a North American egress, which is a hosting decision; spoofing location headers is out under D3.
 
 ---
 
