@@ -9,6 +9,7 @@ fixtures (CLAUDE.md §10: retailer DOMs are verified live via the dry-run). The 
   - the bespoke registration takes the retailer out of the onboarding queue;
   - a row named differently (production's "Champs Sports") still resolves by host.
 """
+import pytest
 from bs4 import BeautifulSoup
 
 from app.models.models import Retailer
@@ -80,3 +81,38 @@ def test_unknown_host_is_not_matched(db):
                    platform="custom", is_active=True)
     assert bespoke_class_for(row) is None
     assert get_scraper(row) is None
+
+
+_MATCHING_TILE = ('<div data-testid="ProductCardV3"><a data-productcard=\'{"name": "Nike Vomero 18 - Men&#39;s"}\' '
+                  'href="/en/product/x/1.html"></a><div data-testid="ProductPrice"><span>$190.00</span></div></div>')
+
+
+def test_page_with_no_tiles_raises_with_title(monkeypatch):
+    scraper = ChampsSportsScraper()
+    html = "<html><head><title>Please wait - Queue</title></head><body>waiting</body></html>"
+    monkeypatch.setattr(scraper, "fetch_page", lambda url, use_browser=False: html)
+    with pytest.raises(ValueError, match="Please wait - Queue"):
+        scraper.search_products("Nike", "Vomero 18")
+
+
+def test_no_page_returned_raises(monkeypatch):
+    scraper = ChampsSportsScraper()
+    monkeypatch.setattr(scraper, "fetch_page", lambda url, use_browser=False: None)
+    with pytest.raises(ValueError):
+        scraper.search_products("Nike", "Vomero 18")
+
+
+def test_tiles_that_do_not_match_return_empty_without_raising(monkeypatch):
+    scraper = ChampsSportsScraper()
+    html = _MATCHING_TILE.replace("Vomero 18", "Pegasus 41")
+    monkeypatch.setattr(scraper, "fetch_page", lambda url, use_browser=False: html)
+    assert scraper.search_products("Nike", "Vomero 18") == []
+
+
+def test_matching_tile_returns_one_result(monkeypatch):
+    scraper = ChampsSportsScraper()
+    monkeypatch.setattr(scraper, "fetch_page", lambda url, use_browser=False: _MATCHING_TILE)
+    results = scraper.search_products("Nike", "Vomero 18")
+    assert len(results) == 1
+    assert results[0]["price"] == 190.0
+    assert results[0]["product_url"].endswith("/en/product/x/1.html")

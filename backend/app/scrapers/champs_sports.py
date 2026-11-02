@@ -22,8 +22,10 @@ Foot Locker's Canadian banner. Probed 2026-10-15 (S05 add-retailer):
   Sizes are not in the JSON-LD; they are the `Size: X` buttons inside
   `ProductDetailsSizesV3`. Disabled size buttons are treated as sold out.
 - A Queue-it waiting room script is on every page. We saw no queue at probe
-  time. If one ever intercepts a request, the search returns no tiles and the
-  scrape records zero results rather than a stale or invented price.
+  time. A real search page always has tiles (even a gibberish query returns 20
+  fallback tiles), so a page with none raises and the failure shows in
+  `scrape_health` rather than passing as a clean zero. No stale or invented
+  price is ever recorded either way.
 """
 import json
 import logging
@@ -109,8 +111,18 @@ class ChampsSportsScraper(BaseScraper):
 
     def _parse_cards(self, html_text: str, brand: str, model: str) -> List[Dict]:
         soup = BeautifulSoup(html_text, "html.parser")
+        tiles = soup.select('[data-testid="ProductCardV3"]')
+        # A real search page always has tiles (a gibberish query still gets 20
+        # fallback tiles), so none means a blocked, queued or redesigned page.
+        # Raise so scrape_health shows the failure instead of a clean zero.
+        if not tiles:
+            title = soup.title.get_text(strip=True)[:80] if soup.title else None
+            raise ValueError(
+                f"Search page has no product tiles (title={title!r}, {len(html_text)} bytes): "
+                "blocked, queued or redesigned"
+            )
         results = []
-        for card in soup.select('[data-testid="ProductCardV3"]'):
+        for card in tiles:
             link = card.select_one("a[data-productcard]")
             if link is None or not link.get("href"):
                 continue
@@ -142,7 +154,9 @@ class ChampsSportsScraper(BaseScraper):
         url = f"{self.base_url}/en/search?query={quote_plus(query)}"
         logger.info(f"[{self.retailer_name}] Searching: {url}")
         html_text = self.fetch_page(url, use_browser=False)
-        results = self._parse_cards(html_text, brand, model) if html_text else []
+        if not html_text:
+            raise ValueError(f"No page returned for {url}")
+        results = self._parse_cards(html_text, brand, model)
         self.log_scrape_attempt(brand, model, len(results))
         return results
 
