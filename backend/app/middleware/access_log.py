@@ -14,6 +14,11 @@ Redacted params: code, state, access_token, token, refresh_token.
 No request headers are ever logged — the Authorization header in particular
 must never appear in any log line (RA1.3 hard requirement).
 
+Log-forging guard (CWE-117): the server percent-decodes the request target into
+scope["path"], so `%0a` arrives as a literal newline. Every request-derived
+value is passed through `log_safe()` before it reaches the plain-text formatter,
+so an anonymous request can't write a fabricated standalone log line.
+
 This middleware wraps the response using a non-buffering send wrapper: it
 intercepts `http.response.start` to capture the status code, then forwards all
 messages immediately so SSE, MCP streaming, and other unbuffered transports are
@@ -35,6 +40,23 @@ logger = logging.getLogger(__name__)
 _REDACT_PARAMS: frozenset[str] = frozenset({
     "code", "state", "access_token", "token", "refresh_token",
 })
+
+
+def log_safe(value: str) -> str:
+    """Return `value` with every non-printable character backslash-escaped.
+
+    Used for request-derived text (paths, query strings) written to the log, by
+    this middleware and by BearerAuthMiddleware's warning lines. Printable text
+    — including non-ASCII letters — passes through unchanged, so ordinary paths
+    log exactly as before; CR, LF, ESC, U+2028 and the like become `\\r`, `\\n`,
+    `\\x1b`, `\\u2028`, so they can't start a new line or drive a terminal.
+    """
+    if value.isprintable():
+        return value
+    return "".join(
+        ch if ch.isprintable() else ch.encode("unicode_escape").decode("ascii")
+        for ch in value
+    )
 
 
 def _redact_query(path: str, qs: str) -> str:
@@ -83,7 +105,8 @@ class AccessLogMiddleware:
         path = scope.get("path", "?")
         qs_bytes = scope.get("query_string", b"")
         qs = qs_bytes.decode("latin-1") if qs_bytes else ""
-        full_path = _redact_query(path, qs)
+        # Escape after redaction so the param-name match sees the raw query.
+        full_path = log_safe(_redact_query(path, qs))
         client = scope.get("anton_client", "anon")
 
         logger.info("%s %s [%s] → %d %.0fms", method, full_path, client, status_code, duration_ms)
