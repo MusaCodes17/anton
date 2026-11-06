@@ -4,6 +4,9 @@ Tests for the OAuth 2.1 authorization server (RA1.1b).
 Covers the key security invariants:
   - Correct password → auth code issued, redirect to redirect_uri
   - Wrong password → 401, form re-rendered
+  - /oauth/login GET/POST refuse (400, no code, no redirect) a client_id or
+    redirect_uri that is not the registered client's — a direct link to the
+    login page skips the SDK's /authorize check
   - Auth code replay rejected (exchange marks code used)
   - Expired auth code rejected
   - Expired access token rejected by verify_access_token_sync
@@ -213,6 +216,118 @@ def test_login_post_correct_password_writes_code_to_db():
     assert row is not None
     assert not row.used
     assert row.scopes == "mcp"
+
+
+# --------------------------------------------------------------------------- #
+# Login page — client_id / redirect_uri must be the registered client's        #
+# (a direct /oauth/login link skips the SDK's /authorize redirect_uri check)   #
+# --------------------------------------------------------------------------- #
+
+def _auth_code_count() -> int:
+    from app.models.models import OAuthAuthCode
+    db = _Session()
+    try:
+        return db.query(OAuthAuthCode).count()
+    finally:
+        db.close()
+
+
+@pytest.mark.parametrize(
+    "client_id, redirect_uri",
+    [
+        ("test-client", "https://evil.example/cb"),
+        # Prefix / lookalike of the registered URI is not a match.
+        ("test-client", "https://test.example.com/callback.evil.example"),
+        ("test-client", "https://test.example.com/callback/../evil"),
+        ("test-client", ""),
+        ("other-client", "https://test.example.com/callback"),
+        ("", "https://test.example.com/callback"),
+    ],
+)
+def test_login_post_unregistered_redirect_rejected_without_code(
+    monkeypatch, client_id, redirect_uri
+):
+    """Even with the CORRECT password, a crafted client_id/redirect_uri gets a
+    400 with no Location header, and no auth code is minted."""
+    from app.services.rate_limit import KeyedRateLimiter
+    import app.routers.oauth as oauth_router_mod
+
+    # Own generous per-IP limiter: don't deplete the shared singleton (burst 5)
+    # that the other login tests in this module rely on.
+    monkeypatch.setattr(oauth_router_mod, "_login_failure_limiter",
+                        KeyedRateLimiter(capacity=1000, refill_per_s=1000))
+    before = _auth_code_count()
+    r = call(
+        "POST",
+        "/oauth/login",
+        follow=False,
+        data={
+            "password": "correct-horse-battery-staple",
+            "code_challenge": "attacker-challenge",
+            "redirect_uri": redirect_uri,
+            "redirect_uri_provided_explicitly": "1",
+            "client_id": client_id,
+            "state": "x",
+            "scope": "",
+            "resource": "",
+        },
+    )
+    assert r.status_code == 400
+    assert "location" not in r.headers
+    assert b"code=" not in r.content
+    assert _auth_code_count() == before
+
+
+def test_login_get_unregistered_redirect_rejected():
+    """The password form is not rendered for a link carrying a foreign redirect_uri."""
+    r = call(
+        "GET",
+        "/oauth/login?code_challenge=abc&redirect_uri=https%3A%2F%2Fevil.example%2Fcb"
+        "&client_id=test-client&redirect_uri_provided_explicitly=1&state=x",
+        follow=False,
+    )
+    assert r.status_code == 400
+    assert b"<form" not in r.content
+    assert b'name="password"' not in r.content
+    assert b"evil.example" not in r.content  # nothing reflected
+
+
+def test_login_get_rejected_when_client_not_configured(monkeypatch):
+    """Fail closed: with no registered client, no redirect_uri is acceptable."""
+    monkeypatch.delenv("ANTON_OAUTH_CLIENT_ID", raising=False)
+    r = call(
+        "GET",
+        "/oauth/login?code_challenge=abc&redirect_uri=https%3A%2F%2Ftest.example.com%2Fcallback"
+        "&client_id=test-client&redirect_uri_provided_explicitly=1",
+        follow=False,
+    )
+    assert r.status_code == 400
+    assert b"<form" not in r.content
+
+
+@pytest.mark.parametrize("explicit_redirect", [True, False])
+def test_authorize_hop_reaches_login_form(explicit_redirect):
+    """The legitimate path still works: whatever /authorize forwards (with or
+    without an explicit redirect_uri) is accepted by the login page's check."""
+    from urllib.parse import urlencode as _urlencode
+
+    q = {
+        "response_type": "code",
+        "client_id": "test-client",
+        "code_challenge": "a" * 43,
+        "code_challenge_method": "S256",
+        "state": "st",
+    }
+    if explicit_redirect:
+        q["redirect_uri"] = "https://test.example.com/callback"
+    r = call("GET", "/authorize?" + _urlencode(q), follow=False)
+    assert r.status_code == 302
+    location = r.headers["location"]
+    assert location.startswith("/oauth/login?")
+
+    r2 = call("GET", location, follow=False)
+    assert r2.status_code == 200
+    assert b'name="password"' in r2.content
 
 
 # --------------------------------------------------------------------------- #
