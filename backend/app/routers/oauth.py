@@ -22,6 +22,7 @@ The ANTON_LOGIN_PASSWORD is compared via secrets.compare_digest (timing-safe).
 """
 from __future__ import annotations
 
+import html
 import logging
 import os
 import secrets
@@ -150,17 +151,25 @@ def _render_login(
     resource: str = "",
     error: str = "",
 ) -> str:
+    # Every value comes from the query string or form body of a public,
+    # same-origin page, so it is attacker-controlled: HTML-escape it (quotes
+    # included) before it lands in a value="..." attribute, or a crafted link
+    # breaks out of the attribute and runs script on the Anton origin.  The
+    # browser decodes the entities on submit, so the POSTed values are unchanged.
+    def esc(value: str) -> str:
+        return html.escape(value, quote=True)
+
     error_block = (
-        f'<div class="error">{error}</div>' if error else ""
+        f'<div class="error">{esc(error)}</div>' if error else ""
     )
     return _PAGE_TEMPLATE.format(
-        code_challenge=code_challenge,
-        redirect_uri=redirect_uri,
-        redirect_uri_provided_explicitly=redirect_uri_provided_explicitly,
-        client_id=client_id,
-        state=state,
-        scope=scope,
-        resource=resource,
+        code_challenge=esc(code_challenge),
+        redirect_uri=esc(redirect_uri),
+        redirect_uri_provided_explicitly=esc(redirect_uri_provided_explicitly),
+        client_id=esc(client_id),
+        state=esc(state),
+        scope=esc(scope),
+        resource=esc(resource),
         error_block=error_block,
     )
 

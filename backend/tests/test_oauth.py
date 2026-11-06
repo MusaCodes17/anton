@@ -161,6 +161,57 @@ def test_login_post_wrong_password_rerenders_form():
     assert b"challenge-xyz" in r.content  # params preserved in hidden inputs
 
 
+_XSS = '"><script>alert(1)</script>'
+
+
+def test_login_get_escapes_reflected_params():
+    """Query params are reflected into value="..." attributes: they must be
+    HTML-escaped so a crafted link cannot break out and inject script."""
+    from urllib.parse import quote
+    # client_id/redirect_uri must be the registered client's (F1 refuses
+    # anything else before rendering), so the payload rides in state.
+    r = call(
+        "GET",
+        "/oauth/login?client_id=test-client"
+        f"&redirect_uri={quote('https://test.example.com/callback')}"
+        f"&state={quote(_XSS)}&code_challenge={quote(_XSS)}",
+        follow=False,
+    )
+    assert r.status_code == 200
+    assert b"<script>alert(1)</script>" not in r.content
+    assert b'value="&quot;&gt;&lt;script&gt;alert(1)&lt;/script&gt;"' in r.content
+
+
+def test_login_post_wrong_password_escapes_reflected_params(monkeypatch):
+    """The 401 re-render reflects form fields the same way: also escaped."""
+    from app.services.rate_limit import KeyedRateLimiter, TokenBucket
+    import app.routers.oauth as oauth_router_mod
+
+    # Fresh limiters so this test neither spends nor depends on the shared budget.
+    monkeypatch.setattr(oauth_router_mod, "_login_failure_limiter",
+                        KeyedRateLimiter(capacity=10, refill_per_s=1.0))
+    monkeypatch.setattr(oauth_router_mod, "_login_global_limiter",
+                        TokenBucket(capacity=10, refill_per_s=1.0))
+    r = call(
+        "POST",
+        "/oauth/login",
+        follow=False,
+        data={
+            "password": "bad",
+            "code_challenge": _XSS,
+            "redirect_uri": "https://test.example.com/callback",
+            "redirect_uri_provided_explicitly": "1",
+            "client_id": "test-client",
+            "state": _XSS,
+            "scope": "",
+            "resource": "",
+        },
+    )
+    assert r.status_code == 401
+    assert b"<script>alert(1)</script>" not in r.content
+    assert b'value="&quot;&gt;&lt;script&gt;alert(1)&lt;/script&gt;"' in r.content
+
+
 # --------------------------------------------------------------------------- #
 # Login page — POST correct password → redirect with code                      #
 # --------------------------------------------------------------------------- #
