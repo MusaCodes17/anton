@@ -7,6 +7,8 @@ The rules under test:
   - the chat loop never runs a held call — it emits a `proposal` and ends the turn;
   - Confirm runs exactly the held call, at most once (double tap is a no-op);
   - Cancel runs nothing; cancelled/expired proposals can't be confirmed;
+  - the onboard_retailer card shows every scraper_config key it will store,
+    decoded as the tool will receive it;
   - INV-8 end to end: a chat-proposed run log writes nothing until Confirm,
     then exactly one activity with the right mileage delta.
 """
@@ -18,7 +20,7 @@ from datetime import date, timedelta
 import pytest
 
 from app import mcp_server
-from app.models.models import Activity, OwnedShoe, PendingCorosRun, ShoeRun
+from app.models.models import Activity, OwnedShoe, PendingCorosRun, Retailer, ShoeRun
 from app.services import chat_proposals as cp
 from app.services.chat_service import BaseLLMProvider, _ToolCall
 
@@ -103,6 +105,38 @@ def test_unknown_tool_falls_back_to_raw_args(db):
     p = cp.create(db, "some_future_tool", {"x": 1, "name": "y"})
     assert p.title == "Some future tool"
     assert {"label": "x", "value": "1"} in p.fields
+
+
+def _retailer(db):
+    r = Retailer(name="New Shop", base_url="https://newshop.example", platform="custom", scraping_enabled=False)
+    db.add(r)
+    db.commit()
+    return r
+
+
+def test_onboard_card_shows_every_scraper_config_key_it_will_store(db):
+    r = _retailer(db)
+    p = cp.create(db, "onboard_retailer", {
+        "retailer_id": r.id, "platform": "algolia", "confirm": True,
+        "scraper_config": {
+            "algolia_app_id": "attacker.example/x#", "algolia_api_key": "search-key-abcd1234",
+            "algolia_index": "products", "proxy": "evil​",
+        },
+    })
+    fields = {f["label"]: f["value"] for f in p.fields}
+    assert fields["Retailer"] == "New Shop"
+    assert fields["App ID"] == "attacker.example/x#"
+    assert fields["Index"] == "products"
+    assert fields["API key"] == "••••1234"  # masked
+    assert fields["Other config"] == '{"proxy": "evil\\u200b"}'  # unknown keys shown, invisible chars escaped
+
+
+def test_onboard_card_flags_a_config_the_tool_will_reject(db):
+    p = cp.create(db, "onboard_retailer", {
+        "retailer_id": 1, "platform": "algolia", "confirm": True, "scraper_config": ["x"],
+    })
+    assert p.fields[-1]["label"] == "Scraper config"
+    assert p.fields[-1]["value"].startswith("Invalid")
 
 
 def _pending(db, label_id="coros-1", km=8.2, run_day=date(2026, 10, 30)):
@@ -371,6 +405,32 @@ def test_cancelled_run_writes_nothing(db, shoe, in_process_mcp):
     db.expire_all()
     assert _runs(db) == (0, 0)
     assert db.get(OwnedShoe, shoe.id).current_mileage == 500.0
+
+
+def _unicode_escaped(text):
+    return "".join(f"\\u{ord(c):04x}" for c in text)
+
+
+def test_onboard_card_shows_the_config_a_json_string_decodes_to(db, in_process_mcp):
+    """FastMCP json-decodes a string scraper_config before the tool runs; the
+    card must show that decoded config, however the string is escaped."""
+    r = _retailer(db)
+    config = {"algolia_app_id": "attacker.example/x#", "algolia_api_key": "k", "algolia_index": "i"}
+    blob = "{" + ", ".join(f'"{_unicode_escaped(k)}": "{_unicode_escaped(v)}"' for k, v in config.items()) + "}"
+    assert json.loads(blob) == config and "attacker" not in blob
+
+    p = cp.create(db, "onboard_retailer", {
+        "retailer_id": r.id, "platform": "algolia", "confirm": True, "scraper_config": blob,
+    })
+    fields = {f["label"]: f["value"] for f in p.fields}
+    assert fields["App ID"] == "attacker.example/x#"
+    assert fields["Index"] == "i"
+    assert p.args["scraper_config"] == config  # held decoded: nothing left for a later layer to reinterpret
+
+    done = run(cp.confirm(p.id, executor=in_process_mcp))
+    db.expire_all()
+    assert done.result["success"] is True, done.result
+    assert db.get(Retailer, r.id).scraper_config == config
 
 
 def test_system_prompt_carries_toronto_date():
