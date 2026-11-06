@@ -49,6 +49,15 @@ NO_CONFIRM_TOOLS = frozenset({
     "sync_coros_now",
 })
 
+# The only tools that declare a `confirm` parameter and write nothing when it
+# is False (a preview). Every other tool's argument model silently drops an
+# unknown `confirm` key and runs the write, so a model-supplied confirm=False
+# must only skip the card for these (INV-8).
+PREVIEW_TOOLS = frozenset({
+    "onboard_retailer",
+    "mark_retailer_unscrapable",
+})
+
 PROPOSAL_TTL = timedelta(minutes=30)   # a card older than this can't be confirmed; ask again
 CONFIRM_WAIT_S = 20.0                  # confirm() returns "executing" after this; the card polls
 MAX_HELD = 200                         # defensive cap on the in-memory registry
@@ -81,12 +90,13 @@ _proposals: dict[str, Proposal] = {}
 def requires_confirmation(tool: str, args: dict) -> bool:
     """True when a tool call would change data and must wait for the runner.
 
-    Default-deny: unknown tools are held. A call with `confirm=False` (the
-    onboarding tools' preview mode) writes nothing, so it runs immediately.
+    Default-deny: unknown tools are held. A call with `confirm=False` to one of
+    the PREVIEW_TOOLS (the onboarding tools' preview mode) writes nothing, so it
+    runs immediately; on any other tool `confirm` is ignored and the call is held.
     """
     if tool.startswith("get_") or tool in READ_ONLY_TOOLS or tool in NO_CONFIRM_TOOLS:
         return False
-    if args.get("confirm") is False:
+    if tool in PREVIEW_TOOLS and args.get("confirm") is False:
         return False
     return True
 

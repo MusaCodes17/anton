@@ -66,6 +66,14 @@ def run(coro):
     ("trigger_scrape", {}, True),
     ("onboard_retailer", {"retailer_id": 1, "confirm": False}, False),  # preview writes nothing
     ("onboard_retailer", {"retailer_id": 1, "confirm": True}, True),
+    ("mark_retailer_unscrapable", {"retailer_id": 1, "confirm": False}, False),
+    ("mark_retailer_unscrapable", {"retailer_id": 1, "confirm": True}, True),
+    # confirm=False only previews on the tools that declare it; elsewhere the
+    # key is dropped and the write runs, so it must not skip the card (INV-8).
+    ("delete_shoe", {"shoe_id": 1, "confirm": False}, True),
+    ("log_run_to_shoe", {"owned_shoe_id": 1, "confirm": False}, True),
+    ("trigger_scrape", {"confirm": False}, True),
+    ("some_future_tool", {"confirm": False}, True),
     ("some_future_tool", {}, True),  # default-deny: unknown tools are held
 ])
 def test_requires_confirmation(tool, args, held):
