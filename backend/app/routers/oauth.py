@@ -13,12 +13,16 @@ POST /oauth/login  — check the per-IP rate limit (RA1.3), then validate the
 
 All OAuth params are passed stateless through the form's hidden inputs (not
 session state). The code_challenge is not secret; secrecy lives in the client's
-code_verifier. The TLS layer (Caddy) prevents eavesdropping.
+code_verifier. The TLS layer (Caddy) prevents eavesdropping. Because the params
+are client-supplied, both handlers re-check client_id and redirect_uri against
+the registered client (services.oauth.is_registered_redirect) and answer 400,
+never a redirect, when they don't match.
 
 The ANTON_LOGIN_PASSWORD is compared via secrets.compare_digest (timing-safe).
 """
 from __future__ import annotations
 
+import html
 import logging
 import os
 import secrets
@@ -28,7 +32,7 @@ from fastapi import APIRouter, Form, Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 
 from app.middleware.auth import _client_ip as _get_client_ip
-from app.services.oauth import create_auth_code
+from app.services.oauth import create_auth_code, is_registered_redirect
 from app.services.rate_limit import login_failure_limiter, login_global_limiter
 
 logger = logging.getLogger(__name__)
@@ -127,6 +131,14 @@ _PAGE_TEMPLATE = """<!DOCTYPE html>
 </body>
 </html>"""
 
+# Returned (400, no redirect) when client_id / redirect_uri are not the
+# registered client's. Static text: nothing from the request is reflected, and
+# we never redirect to an unverified redirect_uri (that is the attack).
+_INVALID_REQUEST_PAGE = (
+    "<html><body><p>Invalid authorization request. Start the connection again "
+    "from the connector.</p></body></html>"
+)
+
 
 def _render_login(
     *,
@@ -139,26 +151,43 @@ def _render_login(
     resource: str = "",
     error: str = "",
 ) -> str:
+    # Every value comes from the query string or form body of a public,
+    # same-origin page, so it is attacker-controlled: HTML-escape it (quotes
+    # included) before it lands in a value="..." attribute, or a crafted link
+    # breaks out of the attribute and runs script on the Anton origin.  The
+    # browser decodes the entities on submit, so the POSTed values are unchanged.
+    def esc(value: str) -> str:
+        return html.escape(value, quote=True)
+
     error_block = (
-        f'<div class="error">{error}</div>' if error else ""
+        f'<div class="error">{esc(error)}</div>' if error else ""
     )
     return _PAGE_TEMPLATE.format(
-        code_challenge=code_challenge,
-        redirect_uri=redirect_uri,
-        redirect_uri_provided_explicitly=redirect_uri_provided_explicitly,
-        client_id=client_id,
-        state=state,
-        scope=scope,
-        resource=resource,
+        code_challenge=esc(code_challenge),
+        redirect_uri=esc(redirect_uri),
+        redirect_uri_provided_explicitly=esc(redirect_uri_provided_explicitly),
+        client_id=esc(client_id),
+        state=esc(state),
+        scope=esc(scope),
+        resource=esc(resource),
         error_block=error_block,
     )
 
 
 @router.get("/oauth/login", response_class=HTMLResponse)
-async def login_get(request: Request) -> str:
-    """Render the password form, forwarding all OAuth params as hidden inputs."""
+async def login_get(request: Request) -> HTMLResponse:
+    """Render the password form, forwarding all OAuth params as hidden inputs.
+
+    Refuses (400) unless client_id/redirect_uri are the registered client's, so
+    the owner is never shown the real password page for a crafted link whose
+    code would go to someone else's redirect_uri.
+    """
     p = request.query_params
-    return _render_login(
+    if not is_registered_redirect(
+        client_id=p.get("client_id", ""), redirect_uri=p.get("redirect_uri", "")
+    ):
+        return HTMLResponse(_INVALID_REQUEST_PAGE, status_code=400)
+    return HTMLResponse(_render_login(
         code_challenge=p.get("code_challenge", ""),
         redirect_uri=p.get("redirect_uri", ""),
         redirect_uri_provided_explicitly=p.get("redirect_uri_provided_explicitly", "1"),
@@ -166,7 +195,7 @@ async def login_get(request: Request) -> str:
         state=p.get("state", ""),
         scope=p.get("scope", ""),
         resource=p.get("resource", ""),
-    )
+    ))
 
 
 @router.post("/oauth/login", response_class=HTMLResponse)
@@ -192,6 +221,7 @@ async def login_post(
     peeked (not spent). When exhausted, every IP gets the same 429 the per-IP
     throttle returns. Only a WRONG password spends from it.
 
+    client_id/redirect_uri not the registered client's → 400, no code, no redirect.
     On success: create an auth code, redirect to redirect_uri?code=...&state=...
     On failure: re-render the form with a generic error (C9 — no oracle for
     which field was wrong).
@@ -218,6 +248,15 @@ async def login_post(
             status_code=429,
             headers={"Retry-After": retry},
         )
+
+    # The form fields are attacker-controllable (this endpoint is reachable
+    # without passing /authorize), so re-check client_id and redirect_uri
+    # against the registered client before any code is minted or redirect is
+    # issued. Checked before the password so it is never a password oracle and
+    # never spends the global failure ceiling.
+    if not is_registered_redirect(client_id=client_id, redirect_uri=redirect_uri):
+        logger.warning("login rejected from %s: unregistered client_id/redirect_uri", ip)
+        return HTMLResponse(_INVALID_REQUEST_PAGE, status_code=400)
 
     expected = os.getenv("ANTON_LOGIN_PASSWORD", "").strip()
     # Refuse entirely if the password is unconfigured.

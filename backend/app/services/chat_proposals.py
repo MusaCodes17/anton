@@ -31,6 +31,7 @@ from typing import Any, Awaitable, Callable, Optional
 from sqlalchemy.orm import Session
 
 from app.models.models import OwnedShoe, PendingCorosRun, Retailer, Shoe, ShoeRun
+from app.models.schemas import ScraperConfig
 
 logger = logging.getLogger(__name__)
 
@@ -47,6 +48,15 @@ READ_ONLY_TOOLS = frozenset({
 # runner) and saves COROS's fitness reading as-is (design decisions C13).
 NO_CONFIRM_TOOLS = frozenset({
     "sync_coros_now",
+})
+
+# The only tools that declare a `confirm` parameter and write nothing when it
+# is False (a preview). Every other tool's argument model silently drops an
+# unknown `confirm` key and runs the write, so a model-supplied confirm=False
+# must only skip the card for these (INV-8).
+PREVIEW_TOOLS = frozenset({
+    "onboard_retailer",
+    "mark_retailer_unscrapable",
 })
 
 PROPOSAL_TTL = timedelta(minutes=30)   # a card older than this can't be confirmed; ask again
@@ -81,12 +91,13 @@ _proposals: dict[str, Proposal] = {}
 def requires_confirmation(tool: str, args: dict) -> bool:
     """True when a tool call would change data and must wait for the runner.
 
-    Default-deny: unknown tools are held. A call with `confirm=False` (the
-    onboarding tools' preview mode) writes nothing, so it runs immediately.
+    Default-deny: unknown tools are held. A call with `confirm=False` to one of
+    the PREVIEW_TOOLS (the onboarding tools' preview mode) writes nothing, so it
+    runs immediately; on any other tool `confirm` is ignored and the call is held.
     """
     if tool.startswith("get_") or tool in READ_ONLY_TOOLS or tool in NO_CONFIRM_TOOLS:
         return False
-    if args.get("confirm") is False:
+    if tool in PREVIEW_TOOLS and args.get("confirm") is False:
         return False
     return True
 
@@ -180,6 +191,84 @@ def _batch_fields(db: Session, items: Any) -> list[dict]:
     return fields
 
 
+# onboard_retailer's scraper_config is stored as given and drives where the
+# Algolia scraper sends traffic (the app id is part of the request host), so
+# the card shows every key that will be written, not just Retailer/Platform.
+_SCRAPER_CONFIG_LABELS = {
+    "algolia_app_id": "App ID",
+    "algolia_index": "Index",
+    "algolia_product_path": "Product path",
+}
+
+
+def _stored_scraper_config(raw: Any) -> tuple[Optional[dict], Optional[str]]:
+    """(the dict onboard_retailer will store, None), or (None, the raw value as
+    JSON) when the tool will reject it. (None, None) means no config.
+
+    FastMCP json-decodes a string argument whose annotation isn't `str` before
+    validating it (mcp func_metadata.pre_parse_json), so a JSON-encoded string
+    — however it is escaped — reaches the tool as a dict. Decode it the same
+    way here, then apply the tool's own validation (`ScraperConfig.as_stored`).
+    """
+    value = raw
+    if isinstance(raw, str):
+        try:
+            decoded = json.loads(raw)
+        except (ValueError, RecursionError):
+            decoded = raw
+        if decoded is None or isinstance(decoded, dict):
+            value = decoded
+    if value is None:
+        return None, None
+    try:
+        return ScraperConfig.model_validate(value).as_stored(), None
+    except (ValueError, RecursionError):  # pydantic's ValidationError is a ValueError
+        return None, json.dumps(raw, default=str)
+
+
+def _literal(value: Any) -> str:
+    """Printable ASCII as-is; anything else (invisible or non-ASCII characters,
+    edge whitespace, non-strings) as escaped JSON, so nothing renders hidden."""
+    if isinstance(value, str) and value and value.isascii() and value.isprintable() and value == value.strip():
+        return value
+    return json.dumps(value, default=str)
+
+
+def _scraper_config_fields(raw: Any) -> list[dict]:
+    """One field per stored key (API key masked, unknown keys as JSON). Reads only."""
+    config, rejected = _stored_scraper_config(raw)
+    if rejected is not None:
+        return [{"label": "Scraper config", "value": f"Invalid, the tool will reject this call: {rejected}"}]
+    fields: list[dict] = []
+    other: dict = {}
+    for key, value in (config or {}).items():
+        if key == "algolia_api_key":
+            text = str(value)
+            masked = f"••••{_literal(text[-4:])}" if len(text) >= 12 else "••••"
+            fields.append({"label": "API key", "value": masked})
+        elif key in _SCRAPER_CONFIG_LABELS:
+            fields.append({"label": _SCRAPER_CONFIG_LABELS[key], "value": _literal(value)})
+        else:
+            other[key] = value
+    if other:
+        fields.append({"label": "Other config", "value": json.dumps(other, default=str)})
+    return fields
+
+
+def _held_args(tool: str, args: dict) -> dict:
+    """The arguments to hold and later replay: a copy of `args`, with
+    onboard_retailer's scraper_config replaced by the dict the tool would store,
+    so the card and the executed call read the same value and no later parsing
+    step can reinterpret it. An invalid config is held as given (it is rejected
+    either way)."""
+    held = dict(args)
+    if tool == "onboard_retailer" and held.get("scraper_config") is not None:
+        config, rejected = _stored_scraper_config(held["scraper_config"])
+        if rejected is None:
+            held["scraper_config"] = config
+    return held
+
+
 def describe(db: Session, tool: str, args: dict) -> tuple[str, list[dict], Optional[dict]]:
     """Title, display fields and optional Edit prefill for a held call.
 
@@ -259,7 +348,9 @@ def describe(db: Session, tool: str, args: dict) -> tuple[str, list[dict], Optio
             pass
         name = retailer.name if retailer else f"#{args.get('retailer_id')} (not found)"
         if tool == "onboard_retailer":
-            return "Onboard retailer", _fields(("Retailer", name), ("Platform", args.get("platform"))), None
+            return "Onboard retailer", _fields(
+                ("Retailer", name), ("Platform", args.get("platform")),
+            ) + _scraper_config_fields(args.get("scraper_config")), None
         return "Mark retailer unscrapable", _fields(("Retailer", name), ("Reason", args.get("reason"))), None
 
     if tool == "trigger_scrape":
@@ -299,11 +390,12 @@ def create(db: Session, tool: str, args: dict) -> Proposal:
     if len(_proposals) >= MAX_HELD:
         oldest = min(_proposals.values(), key=lambda p: p.created_at)
         _proposals.pop(oldest.id, None)
-    title, fields, edit = describe(db, tool, args)
+    held = _held_args(tool, args)
+    title, fields, edit = describe(db, tool, held)
     proposal = Proposal(
         id=uuid.uuid4().hex,
         tool=tool,
-        args=dict(args),
+        args=held,
         title=title,
         fields=fields,
         edit=edit,

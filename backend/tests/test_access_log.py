@@ -19,7 +19,7 @@ import logging
 
 import pytest
 
-from app.middleware.access_log import AccessLogMiddleware, _redact_query
+from app.middleware.access_log import AccessLogMiddleware, _redact_query, log_safe
 
 
 # --------------------------------------------------------------------------- #
@@ -65,6 +65,23 @@ def test_no_query_string_returns_path():
 def test_empty_value_param_not_redacted():
     # An empty credential value is not a credential; key is kept as-is.
     assert _redact_query("/api", "code=") == "/api?code="
+
+
+# --------------------------------------------------------------------------- #
+# log_safe unit tests (CWE-117 log forging)                                    #
+# --------------------------------------------------------------------------- #
+
+def test_log_safe_leaves_printable_paths_unchanged():
+    assert log_safe("/api/owned-shoes/3?limit=10") == "/api/owned-shoes/3?limit=10"
+    assert log_safe("/api/shoes/Café Run") == "/api/shoes/Café Run"
+
+
+def test_log_safe_escapes_cr_lf():
+    assert log_safe("/api/x\r\nINFO:forged") == "/api/x\\r\\nINFO:forged"
+
+
+def test_log_safe_escapes_other_control_and_line_separators():
+    assert log_safe("/a\x1b[31m\x00 \x85") == "/a\\x1b[31m\\x00\\u2028\\x85"
 
 
 # --------------------------------------------------------------------------- #
@@ -153,6 +170,19 @@ def test_access_log_does_not_log_authorization_header(caplog):
     for record in caplog.records:
         assert "super-secret-token" not in record.message
         assert "Authorization" not in record.message
+
+
+def test_access_log_escapes_newlines_in_decoded_path(caplog):
+    """The server percent-decodes `%0a` into scope["path"]; an anonymous 401/404
+    must not be able to forge a standalone line in the access log."""
+    scope = _make_scope(path="/api/x\nINFO:app.services.auth_admin:sign-out-everywhere",
+                        qs=b"code=abc123")
+    with caplog.at_level(logging.INFO, logger="app.middleware.access_log"):
+        asyncio.run(_run_middleware(scope, response_status=401))
+    msg = caplog.records[-1].getMessage()
+    assert "\n" not in msg
+    assert "/api/x\\nINFO:app.services.auth_admin:sign-out-everywhere?code=***" in msg
+    assert "abc123" not in msg
 
 
 def test_access_log_captures_non_200_status(caplog):

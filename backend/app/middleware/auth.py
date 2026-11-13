@@ -59,6 +59,8 @@ import logging
 import os
 import secrets
 
+from app.middleware.access_log import log_safe
+
 logger = logging.getLogger(__name__)
 
 # Paths reachable without a token: liveness probes, OAuth protocol endpoints, and
@@ -212,7 +214,8 @@ class BearerAuthMiddleware:
             # and OAuth clients carry no cookie and are exempt.
             if client == "session" and not self._csrf_ok(scope):
                 method = scope.get("method", "?")
-                path = scope.get("path", "?")
+                # Decoded path can carry CR/LF (%0a) — escape before logging.
+                path = log_safe(scope.get("path", "?"))
                 logger.warning("csrf reject: %s %s from %s",
                                method, path, _client_ip(scope))
                 await self._reject_csrf(send)
@@ -223,7 +226,9 @@ class BearerAuthMiddleware:
         # Auth failed — log and apply per-IP throttle.
         ip = _client_ip(scope)
         method = scope.get("method", "?")
-        path = scope.get("path", "?")
+        # Decoded path can carry CR/LF (%0a) from an anonymous client — escape
+        # it so these lines can't be used to forge log entries.
+        path = log_safe(scope.get("path", "?"))
         result = self._failure_limiter.take(ip)
         if not result.allowed:
             logger.warning("auth rate-limited: %s %s from %s", method, path, ip)

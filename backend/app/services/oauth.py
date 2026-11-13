@@ -96,6 +96,31 @@ def get_static_client() -> OAuthClientInformationFull | None:
     )
 
 
+def is_registered_redirect(*, client_id: str, redirect_uri: str) -> bool:
+    """
+    True iff `client_id` is the statically-registered client and `redirect_uri`
+    exactly equals one of that client's registered redirect URIs.
+
+    Why: the login page (routers/oauth.py) receives client_id and redirect_uri
+    as plain query/form fields, so a request can reach it directly without the
+    SDK's /authorize check (AuthorizationHandler → validate_redirect_uri). The
+    SDK's /token handler only compares the code row against the same /token
+    request, so a code minted for an unchecked redirect_uri would be delivered
+    to — and redeemable by — whoever chose that URI. The login page must
+    therefore re-check before rendering the form or issuing a code.
+
+    Compared as exact strings against str(AnyUrl) of each registered URI: that
+    is the form authorize() forwards (str(params.redirect_uri)), so the
+    legitimate /authorize → /oauth/login hop always matches. No prefix match.
+
+    Pure check; touches no DB, owns no commit. Never raises.
+    """
+    client = get_static_client()
+    if client is None or not client_id or client_id != client.client_id:
+        return False
+    return redirect_uri in {str(u) for u in (client.redirect_uris or [])}
+
+
 class AntonOAuthProvider:
     """
     Single-user OAuthAuthorizationServerProvider for the Anton MCP server.

@@ -1,7 +1,24 @@
 # Anton — Session Changelog
 
-**Last Updated:** 2026-11-01
+**Last Updated:** 2026-11-06
 **Status / current focus:** see `docs/project_state.md` (the perishable snapshot). This file is the append-only session log — the authoritative record of *what happened*; the `docs/` suite is the reference material.
+
+---
+
+## Security scan of `backend/app`: five fixes — 2026-11-06
+
+Branch `claude/claude-security-4c6548`. A Claude Security scan of `backend/app` at medium effort (commit 45b3a84) reported 6 findings, each confirmed by a three-member panel: 2 HIGH, 4 LOW. Five are fixed here, one commit each. No migration, no schema or REST shape change, no frontend change.
+
+**[CHANGED]**
+- **F1 (HIGH, CWE-601).** `/oauth/login` returns a static 400 unless `client_id` and `redirect_uri` exactly match the registered client (`services/oauth.is_registered_redirect`, fail-closed). Before, a crafted direct link plus the owner's password sent an auth code to any host. A bare `GET /oauth/login` with no params now returns 400 instead of an empty form.
+- **F2 (HIGH, CWE-79).** `_render_login` HTML-escapes every reflected value, which closes reflected XSS on the SPA's origin.
+- **F3 (LOW, CWE-807).** `confirm=False` skips the chat card only for `onboard_retailer` and `mark_retailer_unscrapable` (`PREVIEW_TOOLS`). Before, a model-supplied `confirm: false` let any write tool bypass INV-8.
+- **F4 (LOW, CWE-451).** The `onboard_retailer` card shows the `scraper_config` it will store: App ID, Index, Product path, a masked API key and any other keys. The held args are the decoded, validated dict, so the card and the executed call match even for a JSON-string config.
+- **F5 (LOW, CWE-117).** `log_safe()` escapes control characters in logged request paths, in the access log and in the auth middleware's 401, rate-limited and csrf-reject warnings.
+
+**[BLOCKED] F6 (LOW, CWE-918), scraper SSRF.** Not fixed. Retailer hrefs and redirects are fetched with no host or address pin. Two fix attempts were rejected. Pinning `fetch_page` alone leaves the Shopify probe, the headless-browser Algolia rediscovery and DNS-to-internal routes open. The wider fix changed legitimate behaviour, and Playwright does not route redirect hops. Fully closing it needs a decision: an egress firewall for the container, or turning off automatic browser rediscovery. The reviewers also noted, outside this change: external MCP clients can call `onboard_retailer` without the card; `algolia_app_id` has no format check; the full Algolia key is kept in chat history.
+
+**[VERIFIED]** Full suite 1327 passed + 1 skipped (was 1300 + 1), run locally on the main checkout's Python 3.10 venv; CI (3.11) is the gate. On first run, F2's two new tests failed against F1. They injected into `client_id`/`redirect_uri`, which F1 now refuses before rendering. They now send the registered client and carry the payload in `state`/`code_challenge`. **Not verified:** the OAuth connector flow end to end against claude.ai.
 
 ---
 

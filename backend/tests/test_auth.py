@@ -256,6 +256,46 @@ def test_repeated_auth_failures_trigger_429():
     assert s3 == 429  # bucket exhausted → rate limited
 
 
+def test_auth_failure_logs_escape_newlines_in_path(caplog):
+    """CWE-117: the server percent-decodes `%0a` into scope["path"]; an anonymous
+    request must not be able to write a forged standalone line into the 401 or
+    the rate-limited warning. Driven directly with a fresh limiter so the shared
+    singleton's state (other tests' 401s) can't change which line is logged."""
+    import logging
+    from app.middleware.auth import BearerAuthMiddleware
+    from app.services.rate_limit import KeyedRateLimiter
+
+    async def fake_app(scope, receive, send):
+        pass  # never reached on auth failure
+
+    middleware = BearerAuthMiddleware(fake_app)
+    middleware._failure_limiter = KeyedRateLimiter(capacity=1, refill_per_s=0.001)
+    forged = "/api/x\r\nINFO:app.services.auth_admin:sign-out-everywhere from cli"
+
+    async def run():
+        async def send(msg):
+            pass
+
+        async def recv():
+            return {}
+
+        for _ in range(2):  # first → 401 line, second → rate-limited line
+            scope = {
+                "type": "http", "method": "GET", "path": forged, "headers": [],
+                "client": ("10.0.0.98", 54321), "query_string": b"",
+            }
+            await middleware(scope, recv, send)
+
+    with caplog.at_level(logging.WARNING, logger="app.middleware.auth"):
+        asyncio.run(run())
+    msgs = [r.getMessage() for r in caplog.records if r.name == "app.middleware.auth"]
+    assert any(m.startswith("auth 401: ") for m in msgs)
+    assert any(m.startswith("auth rate-limited: ") for m in msgs)
+    for m in msgs:
+        assert "\n" not in m and "\r" not in m
+        assert "/api/x\\r\\nINFO:app.services.auth_admin" in m
+
+
 # --- RA2.1: session-cookie auth (the SPA's third credential type) --------------
 #
 # These drive BearerAuthMiddleware directly (as the rate-limit test above does)
@@ -387,6 +427,20 @@ def test_csrf_post_wrong_origin_rejected():
     )
     assert status == 403
     assert reached is False
+
+
+def test_csrf_reject_log_escapes_newlines_in_path(caplog):
+    """CWE-117: a decoded `%0a` in the path must not forge a line in the CSRF log."""
+    import logging
+    with caplog.at_level(logging.WARNING, logger="app.middleware.auth"):
+        status, _ = _drive_cookie(
+            cookie="valid", method="POST", path="/api/x\nINFO:forged line",
+            origin="https://evil.example.com", host_url=HOST,
+        )
+    assert status == 403
+    record = next(r for r in caplog.records if "csrf reject" in r.getMessage())
+    assert "\n" not in record.getMessage()
+    assert "/api/x\\nINFO:forged line" in record.getMessage()
 
 
 def test_csrf_post_missing_origin_rejected():
